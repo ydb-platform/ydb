@@ -81,7 +81,7 @@ ydbops restart --started >2024-03-13T17:00:00Z
 
 It might be convenient to restart only the nodes that have been up for over a few minutes, as the others have just restarted recently.
 
-### Restarting based on version
+### Restarting based on {{ ydb-short-name }} version
 
 It is possible to restart only the nodes which version is equal, not equal, more, or less than desired:
 

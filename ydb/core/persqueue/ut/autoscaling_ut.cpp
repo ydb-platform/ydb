@@ -622,16 +622,17 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        auto writeSession = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
         UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
         UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(5));
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
 
-        auto writeSession2 = CreateWriteSession(client, "producer-1", 1);
+        auto writeSession2 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
         UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
-        Sleep(TDuration::Seconds(10));
+        UNIT_ASSERT(writeSession2->Write(Msg(msg, 4)));
+        Sleep(TDuration::Seconds(5));
         auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
     }

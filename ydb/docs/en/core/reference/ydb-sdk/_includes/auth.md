@@ -103,8 +103,9 @@ If the last step of the algorithm is selecting the **Metadata** mode, you can de
 
 ## File format for OAuth 2.0 token exchange authentication mode parameters {#oauth2-key-file-format}
 
-Description of fields of json-file with **OAuth 2.0 token exchange** authentication mode parameters.
-`creds_json` is json which holds parameters for token that is exchanged into access token. Two type are supported: `JWT` and `FIXED`,
+Description of fields of JSON file with **OAuth 2.0 token exchange** authentication mode parameters. The set of fields depends on the original token type, `JWT` and `FIXED`.
+
+In the table below, `creds_json` means a JSON with parameters for exchanging the original token for an access token. 
 
 | Field | Type | Description | Default value/optionality |
 |:-----:|:----:|:-----------:|:-------------------------:|

@@ -50,23 +50,29 @@ public:
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
         if (resultSetIndex >= ResultSets_.size()) {
             ResultSets_.resize(resultSetIndex + 1);
+            ResultSetSizes_.resize(resultSetIndex + 1, 0);
         }
 
         if (!ResultSets_[resultSetIndex].truncated()) {
+            ui64& resultSetSize = ResultSetSizes_[resultSetIndex];
             for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
                 if (static_cast<ui64>(ResultSets_[resultSetIndex].rows_size()) >= ResultRowsLimit_) {
                     ResultSets_[resultSetIndex].set_truncated(true);
                     break;
                 }
 
-                if (ResultSets_[resultSetIndex].ByteSizeLong() + row.ByteSizeLong() > ResultSizeLimit_) {
+                auto rowSize = row.ByteSizeLong();
+                if (resultSetSize + rowSize > ResultSizeLimit_) {
                     ResultSets_[resultSetIndex].set_truncated(true);
                     break;
                 }
 
+                resultSetSize += rowSize;
                 *ResultSets_[resultSetIndex].add_rows() = std::move(row);
             }
-            *ResultSets_[resultSetIndex].mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+            if (!ResultSets_[resultSetIndex].columns_size()) {
+                *ResultSets_[resultSetIndex].mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+            }
         }
 
         Send(ev->Sender, response.Release());
@@ -89,6 +95,7 @@ private:
     ui64 ResultRowsLimit_;
     ui64 ResultSizeLimit_;
     std::vector<Ydb::ResultSet>& ResultSets_;
+    std::vector<ui64> ResultSetSizes_;
     TProgressCallback ProgressCallback_;
 };
 

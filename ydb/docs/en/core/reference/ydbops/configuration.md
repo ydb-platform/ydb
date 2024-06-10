@@ -72,7 +72,7 @@ my-profile:
 ```
 ## Environment variables {#environment-variables}
 
-There is also an option to specify several environment variables instead of passing command line arguments.
+Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-files).
 
 For an explanation which options take precedence, please invoke `ydbops --help`.
 

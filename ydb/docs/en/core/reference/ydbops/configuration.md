@@ -7,10 +7,10 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 {% endnote %}
 
 
-`ydbops` can be run, specifying all the necessary command line arguments in the command invocation. But if you find yourself executing `ydbops` often, it might be simpler to take advantage of: 
+`ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
 
-- config file feature
-- environment variables
+- [Config file](#config-file)
+- [Environment variables](#environment-variables)
 
 ### Config file
 

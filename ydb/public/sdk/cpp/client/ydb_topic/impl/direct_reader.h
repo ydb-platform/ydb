@@ -210,7 +210,6 @@ private:
 };
 
 class TDirectReadSessionManager {
-    friend TDirectReadSession;
 public:
     using TSelf = TDirectReadSessionManager;
     using TPtr = std::shared_ptr<TSelf>;

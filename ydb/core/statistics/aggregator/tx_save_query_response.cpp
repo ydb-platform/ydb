@@ -12,25 +12,21 @@ struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SAVE_QUERY_RESPONSE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Execute");
-
-        NIceDb::TNiceDb db(txc.DB);
-
-        Self->RescheduleScanTable(db);
-        Self->ResetScanState(db);
-
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Complete");
 
         if (Self->ReplyToActorId) {
             ctx.Send(Self->ReplyToActorId, new TEvStatistics::TEvScanTableResponse);
         }
 
-        Self->ScheduleNextScan();
+        NIceDb::TNiceDb db(txc.DB);
+        Self->FinishScan(db);
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Complete");
     }
 };
 void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {

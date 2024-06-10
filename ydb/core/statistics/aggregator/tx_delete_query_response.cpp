@@ -12,20 +12,21 @@ struct TStatisticsAggregator::TTxDeleteQueryResponse : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_DELETE_QUERY_RESPONSE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDeleteQueryResponse::Execute");
 
-        NIceDb::TNiceDb db(txc.DB);
+        if (Self->ReplyToActorId) {
+            ctx.Send(Self->ReplyToActorId, new TEvStatistics::TEvScanTableResponse);
+        }
 
-        Self->ResetScanState(db);
+        NIceDb::TNiceDb db(txc.DB);
+        Self->FinishScan(db);
 
         return true;
     }
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDeleteQueryResponse::Complete");
-
-        Self->ScheduleNextScan();
     }
 };
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {

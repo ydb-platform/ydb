@@ -133,6 +133,22 @@
 |`token`|string|Значение токена||
 |`token-type`|string|Значение типа токена. Это значение попадёт в параметр `subject_token_type/actor_token_type` в [запросе обмена токена](https://www.rfc-editor.org/rfc/rfc8693)||
 
+### Пример
+
+Пример для обмена JWT токена
+
+```json
+{
+   "subject-credentials": {
+      "type": "JWT",
+      "alg": "RS256",
+      "private-key": "-----BEGIN RSA PRIVATE KEY-----\n...-----END RSA PRIVATE KEY-----\n",
+      "kid": "my_key_id",
+      "sub": "account_id"
+   }
+}
+```
+
 ## Особенности {{ ydb-short-name }} Python SDK v2 (устаревшая версия)
 
 {% note warning %}

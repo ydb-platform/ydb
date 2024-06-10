@@ -134,6 +134,22 @@ Fields not described in this table are ignored.
 |`token`|string|Token value||
 |`token-type`|string|Token type value. It will become `subject_token_type/actor_token_type` parameter in [token exchange request](https://www.rfc-editor.org/rfc/rfc8693).||
 
+### Example
+
+An example for JWT token exchange
+
+```json
+{
+   "subject-credentials": {
+      "type": "JWT",
+      "alg": "RS256",
+      "private-key": "-----BEGIN RSA PRIVATE KEY-----\n...-----END RSA PRIVATE KEY-----\n",
+      "kid": "my_key_id",
+      "sub": "account_id"
+   }
+}
+```
+
 ## Peculiarities of {{ ydb-short-name }} Python SDK v2 (deprecated version)
 
 {% note warning %}

@@ -70,7 +70,7 @@ Or by supplying node ids directly:
 ydbops restart --hosts=1,2,3
 ```
 
-### Restarting based on uptime
+### Restarting based on node uptime
 
 It is possible to restart only the nodes that have specific uptime by using the `--started` option:
 

@@ -97,8 +97,6 @@ public:
     TMaybe<TDirectReadId> LastDirectReadId = Nothing();
     TMaybe<i64> CommittedOffset = Nothing();
 
-    // TODO(qyryq) min read id, partition id, done read id?
-
     TDirectReadClientMessage MakeStartRequest() const;
     bool TransitionTo(EState);
 };

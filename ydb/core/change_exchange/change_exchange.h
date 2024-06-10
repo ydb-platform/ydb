@@ -11,15 +11,11 @@
 namespace NKikimr {
 
 namespace NDataShard {
-
-class TChangeRecord;
-
+    class TChangeRecord;
 }
 
 namespace NReplication::NService {
-
-class TChangeRecord;
-
+    class TChangeRecord;
 }
 
 struct TBaseChangeRecordContainer {

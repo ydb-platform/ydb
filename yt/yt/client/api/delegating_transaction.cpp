@@ -299,6 +299,16 @@ DELEGATE_METHOD(TFuture<void>, AdvanceConsumer, (
     const NYT::NApi::TAdvanceConsumerOptions& options),
     (consumer, queue, partitionIndex, oldOffset, newOffset, options))
 
+DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TString& sessionId,
+    i64 epoch,
+    NTableClient::TNameTablePtr nameTable,
+    TSharedRange<NTableClient::TUnversionedRow> rows,
+    const TPushQueueProducerOptions& options),
+    (producerPath, queuePath, sessionId, epoch, nameTable, rows, options))
+
 #undef DELEGATE_METHOD
 
 ////////////////////////////////////////////////////////////////////////////////

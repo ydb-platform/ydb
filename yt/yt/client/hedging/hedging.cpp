@@ -6,6 +6,7 @@
 #include "rpc.h"
 
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/queue_transaction.h>
 
 #include <yt/yt/client/misc/method_helpers.h>
 

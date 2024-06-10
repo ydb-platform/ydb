@@ -243,6 +243,15 @@ public:
         i64 newOffset,
         const NYT::NApi::TAdvanceConsumerOptions& options) override;
 
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        i64 epoch,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TPushQueueProducerOptions& options) override;
+
 protected:
     const ITransactionPtr Underlying_;
 };

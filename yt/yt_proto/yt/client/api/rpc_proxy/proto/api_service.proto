@@ -658,6 +658,29 @@ message TRspAdvanceConsumer
 {
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPushQueueProducer
+{
+    optional NYT.NProto.TGuid transaction_id = 1;
+    optional string producer_path = 2;
+    optional string queue_path = 3;
+    optional string session_id = 4;
+    optional int64 epoch = 5;
+    optional bytes user_meta = 6; // YSON
+    optional int64 sequence_number = 7;
+
+    required TRowsetDescriptor rowset_descriptor = 200;
+}
+
+message TRspPushQueueProducer
+{
+    optional int64 last_sequence_number = 1;
+    optional int64 skipped_row_count = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TRowBatchReadOptions
 {
     optional int64 max_row_count = 1;
@@ -770,8 +793,8 @@ message TReqCreateQueueProducerSession
 
 message TRspCreateQueueProducerSession
 {
-    optional uint64 sequence_number = 1;
-    optional uint64 epoch = 2;
+    optional int64 sequence_number = 1;
+    optional int64 epoch = 2;
     optional bytes user_meta = 3; // YSON
 }
 

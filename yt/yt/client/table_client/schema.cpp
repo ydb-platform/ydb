@@ -962,6 +962,31 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     }
 }
 
+TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
+{
+    std::vector<TColumnSchema> columns;
+    if (IsSorted()) {
+        for (const auto& column : Columns()) {
+            if (!column.Expression()) {
+                columns.push_back(column);
+            }
+        }
+    } else {
+        columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
+            .SetSortOrder(ESortOrder::Ascending));
+        columns.push_back(TColumnSchema(SequenceNumberColumnName, ESimpleLogicalValueType::Int64));
+        for (const auto& column : Columns()) {
+            if (column.StableName().Underlying() != TimestampColumnName &&
+                column.StableName().Underlying() != CumulativeDataWeightColumnName)
+            {
+                columns.push_back(column);
+            }
+        }
+    }
+    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
+        ETableSchemaModification::None, DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::ToWrite() const
 {
     std::vector<TColumnSchema> columns;

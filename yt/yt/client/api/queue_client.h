@@ -79,8 +79,8 @@ struct TCreateQueueProducerSessionOptions
 
 struct TCreateQueueProducerSessionResult
 {
-    ui64 SequenceNumber;
-    ui64 Epoch;
+    i64 SequenceNumber;
+    i64 Epoch;
     std::optional<NYson::TYsonString> UserMeta;
 };
 
@@ -145,7 +145,7 @@ struct IQueueClient
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
         const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const std::optional<NYson::TYsonString>& userMeta = {},
         const TCreateQueueProducerSessionOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveQueueProducerSession(

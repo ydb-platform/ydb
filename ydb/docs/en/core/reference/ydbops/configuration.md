@@ -50,7 +50,7 @@ Here is an example of a configuration file with all possible options that can be
 
 ```
 # a special key `current-profile` can be specified to 
-# avoid specifying the active profile in the CLI invocation
+# be used as the default active profile in the CLI invocation
 current-profile: my-profile
 
 my-profile:

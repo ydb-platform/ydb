@@ -395,6 +395,11 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
  }
 
 void TPartitionFamily::Merge(TPartitionFamily* other) {
+    ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "merge family with  " << other->DebugStr());
+
+    Y_VERIFY(this != other);
+
     Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
     UpdatePartitionMapping(other->Partitions);
     other->Partitions.clear();
@@ -760,7 +765,9 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     return !newFamilies.empty();
 }
 
-TPartitionFamily* TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+    Y_VERIFY(lhs != rhs);
+
     if (lhs->IsFree() && rhs->IsFree() ||
         lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||
         lhs->IsRelesing() && rhs->IsRelesing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
@@ -768,7 +775,7 @@ TPartitionFamily* TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFami
         lhs->Merge(rhs);
         rhs->Destroy(ctx);
 
-        return lhs;
+        return {lhs, true};
     }
 
     if (lhs->IsFree() && (rhs->IsActive() || rhs->IsRelesing())) {
@@ -781,7 +788,7 @@ TPartitionFamily* TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFami
         rhs->Partitions.clear();
         rhs->Destroy(ctx);
 
-        return lhs;
+        return {lhs, true};
     }
 
     if (lhs->IsActive() && rhs->IsActive()) { // lhs->Session != rhs->Session
@@ -792,14 +799,14 @@ TPartitionFamily* TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFami
     }
     if (lhs->IsActive() && rhs->IsRelesing() && rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
         rhs->TargetStatus = TPartitionFamily::ETargetStatus::Merge;
-        rhs->MergeTo = rhs->Id;
+        rhs->MergeTo = lhs->Id;
 
-        return lhs;
+        return {lhs, false};
     }
 
     // In this case, one of the families is either already being merged or is being destroyed. In any case, they cannot be merged.
 
-    return lhs;
+    return {lhs, false};
 }
 
 void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
@@ -979,16 +986,32 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     if (partition.NeedReleaseChildren()) {
         for (auto id : newPartitions) {
             auto* node = GetPartitionGraph().GetPartition(id);
+            bool allParentsMerged = true;
             if (node->Parents.size() > 1) {
                 // The partition was obtained as a result of the merge.
                 for (auto* c : node->Parents) {
                     auto* other = FindFamily(c->Id);
-                    if (other && other != family) {
-                        family = MergeFamilies(family, other, ctx);
+                    if (!other) {
+                        allParentsMerged = false;
+                        continue;
+                    }
+
+                    if (other != family) {
+                        auto [f, v] = MergeFamilies(family, other, ctx);
+                        allParentsMerged = v;
+                        family = f;
                     }
                 }
-            } else {
-                family->AttachePartitions({id}, ctx);
+            }
+
+            if (allParentsMerged) {
+                auto* other = FindFamily(id);
+                if (other && other != family) {
+                    auto [f, _] = MergeFamilies(family, other, ctx);
+                    family = f;
+                } else {
+                    family->AttachePartitions({id}, ctx);
+                }
             }
         }
     } else {
@@ -1022,7 +1045,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
         }
 
         if (!family->IsLonely()) {
-            family->Release(ctx);
+            BreakUpFamily(family, partitionId, false, ctx);
             return;
         }
 

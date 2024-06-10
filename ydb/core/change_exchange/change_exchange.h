@@ -34,7 +34,10 @@ struct TChangeRecordContainer {};
 
 namespace NKikimr::NChangeExchange {
 
-using TChangeRecordVector = std::variant<std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>, std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>>;
+using TChangeRecordVector = std::variant<
+    std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
+    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>
+>;
 
 struct TEvChangeExchange {
     enum EEv {

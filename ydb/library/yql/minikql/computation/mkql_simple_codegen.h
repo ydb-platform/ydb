@@ -34,7 +34,7 @@ public:
         return Type::getInt64Ty(context);
     }
 
-    static Value* LLVMFromFetchResult(Value *fetchRes, const Twine& name, BasicBlock* block) {
+    static Value* LLVMFromFetchResult(Value* fetchRes, const Twine& name, BasicBlock* block) {
         return new ZExtInst(fetchRes, LLVMType(fetchRes->getContext()), name, block);
     }
 
@@ -65,7 +65,7 @@ protected:
 #ifndef MKQL_DISABLE_CODEGEN
     virtual ICodegeneratorInlineWideNode::TGenerateResult DispatchGenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const = 0;
 
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValuesBase(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const;
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValuesBase(const NKikimr::NMiniKQL::TCodegenContext& ctx, llvm::Value* statePtrVal, llvm::BasicBlock*& genToBlock) const;
 #endif
 
     IComputationWideFlowNode* const SourceFlow;
@@ -130,7 +130,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext& ctx, llvm::Value* statePtrVal, llvm::BasicBlock*& genToBlock) const {
         return DoGenGetValuesBase(ctx, statePtrVal, genToBlock);
     }
 #endif
@@ -169,7 +169,7 @@ protected:
 
 public:
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-         NUdf::TUnboxedValue *const stub = nullptr;
+        NUdf::TUnboxedValue *const stub = nullptr;
         if (!output && !OutWidth) {
             output = &stub;
         }
@@ -183,7 +183,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::BasicBlock *&genToBlock) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext& ctx, llvm::BasicBlock*& genToBlock) const {
         return DoGenGetValuesBase(ctx, nullptr, genToBlock);
     }
 #endif

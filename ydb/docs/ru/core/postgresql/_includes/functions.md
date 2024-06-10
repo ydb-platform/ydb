@@ -3830,7 +3830,7 @@ SELECT * FROM unnest(ARRAY[1,2]) as a → [
 2
 ]
 
-#SELECT * FROM unnest(ARRAY[['foo','bar'],['baz','quux']]) as a → [
+SELECT * FROM unnest(ARRAY[['foo','bar'],['baz','quux']]) as a → [
 foo
 bar
 baz
@@ -4420,9 +4420,9 @@ SELECT last_value(x) OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
 ]
 ```||
 ||nth_value ( value anyelement, n integer ) → anyelement|
-Returns value evaluated at the row that is the n'th row of the window frame (counting from 1); returns NULL if there is no such row. (NOT SUPPORTED)|
+Returns value evaluated at the row that is the n'th row of the window frame (counting from 1); returns NULL if there is no such row.|
 ```sql
-#SELECT nth_value(x,2) OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
+SELECT nth_value(x,2) OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
 NULL
 5
 5

@@ -239,7 +239,6 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="Greenplum",
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
-                    PROTOCOL="NATIVE",
                     USE_TLS="{use_tls}"
                     {schema}
                 )",

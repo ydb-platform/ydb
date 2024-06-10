@@ -494,16 +494,11 @@ message PostgreSQLCluster {
 
 message GreenplumCluster {
     string database_id = 1 [(Ydb.length).le = 1024];
-    string database_name = 8 [(Ydb.length).le = 1024];
-    string login = 2 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
-    string password = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
-    string schema = 9 [(Ydb.length).le = 1024];
-    IamAuth auth = 4;
-
-    // Just for the sake of simmetry with existing ClickHouse code
-    string host = 5 [(Ydb.length).le = 1024];
-    int32 port = 6 [(Ydb.value) = "[0; 65536]"];
-    bool secure = 7;
+    string database_name = 2 [(Ydb.length).le = 1024];
+    string login = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string password = 4 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string schema = 5 [(Ydb.length).le = 1024];
+    IamAuth auth = 6;
 }
 
 message ConnectionSetting {

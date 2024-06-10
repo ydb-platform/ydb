@@ -22,11 +22,11 @@ Calling the `ydbops restart` command without a profile:
 
 ```
 ydbops restart \
- -e grpc://some.host.in.some.domain:2135 \
+ -e grpc://<hostname>:2135 \
  --kubeconfig ~/.kube/config \
- --k8s-namespace your-k8s-namespace \
+ --k8s-namespace <k8s-namespace> \
  --user admin \
- --password-file ~/my-password-file \
+ --password-file ~/<password-file> \
  --tenant --tenant-list=my-tenant
 ```
 

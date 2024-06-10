@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FourWayJoinLeftFirst) {
+    Y_UNIT_TEST_TWIN(FourWayJoinLeftFirst, StreamLookupJoin) {
 
         auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();

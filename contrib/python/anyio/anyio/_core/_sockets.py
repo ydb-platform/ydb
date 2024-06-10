@@ -53,8 +53,7 @@ async def connect_tcp(
     tls_standard_compatible: bool = ...,
     tls_hostname: str,
     happy_eyeballs_delay: float = ...,
-) -> TLSStream:
-    ...
+) -> TLSStream: ...
 
 
 # ssl_context given
@@ -68,8 +67,7 @@ async def connect_tcp(
     tls_standard_compatible: bool = ...,
     tls_hostname: str | None = ...,
     happy_eyeballs_delay: float = ...,
-) -> TLSStream:
-    ...
+) -> TLSStream: ...
 
 
 # tls=True
@@ -84,8 +82,7 @@ async def connect_tcp(
     tls_standard_compatible: bool = ...,
     tls_hostname: str | None = ...,
     happy_eyeballs_delay: float = ...,
-) -> TLSStream:
-    ...
+) -> TLSStream: ...
 
 
 # tls=False
@@ -100,8 +97,7 @@ async def connect_tcp(
     tls_standard_compatible: bool = ...,
     tls_hostname: str | None = ...,
     happy_eyeballs_delay: float = ...,
-) -> SocketStream:
-    ...
+) -> SocketStream: ...
 
 
 # No TLS arguments
@@ -112,8 +108,7 @@ async def connect_tcp(
     *,
     local_host: IPAddressType | None = ...,
     happy_eyeballs_delay: float = ...,
-) -> SocketStream:
-    ...
+) -> SocketStream: ...
 
 
 async def connect_tcp(

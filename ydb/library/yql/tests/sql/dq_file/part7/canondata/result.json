@@ -490,6 +490,50 @@
         }
     ],
     "test.test[blocks-combine_hashed_minmax_nested--Results]": [],
+    "test.test[blocks-date_sub_interval--Analyze]": [
+        {
+            "checksum": "11c133b61ea9a2a4a8789bb92fb0f8b1",
+            "size": 5207,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Debug]": [
+        {
+            "checksum": "359d9d8ce2325c445d431d29f70952da",
+            "size": 3069,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Plan]": [
+        {
+            "checksum": "11c133b61ea9a2a4a8789bb92fb0f8b1",
+            "size": 5207,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Results]": [],
+    "test.test[blocks-date_sub_interval_scalar--Analyze]": [
+        {
+            "checksum": "3907ee7540799aa802dd3a6c2503639b",
+            "size": 4973,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Debug]": [
+        {
+            "checksum": "b934590ea9323970c041923afd06f7cd",
+            "size": 4391,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Plan]": [
+        {
+            "checksum": "3907ee7540799aa802dd3a6c2503639b",
+            "size": 4973,
+            "uri": "https://{canondata_backend}/1871102/4e21780039cfd055a35d3741651fac7b5d2c3ebc/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Results]": [],
     "test.test[column_order-insert--Analyze]": [
         {
             "checksum": "66c7e677ca50f835e2a8ac1095e79c99",

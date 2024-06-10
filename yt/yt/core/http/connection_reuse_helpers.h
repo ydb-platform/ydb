@@ -4,9 +4,9 @@
 
 #include <yt/yt/core/net/public.h>
 
-////////////////////////////////////////////////////////////////////////////////
-
 namespace NYT::NHttp::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
 
 //! Responsible for returning the connection to the owning pool
 //! if it could be reused
@@ -39,9 +39,9 @@ private:
     TReusableConnectionStatePtr ReusableState_;
 };
 
-} // namespace NDetail
-
 ////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NHttp::NDetail
 
 #define CONNECTION_REUSE_HELPERS_INL_H
 #include "connection_reuse_helpers-inl.h"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Generator
-from typing import Any
+from typing import Any, cast
 
 from ._eventloop import get_async_backend
 
@@ -45,8 +45,12 @@ class TaskInfo:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(id={self.id!r}, name={self.name!r})"
 
-    def _unwrap(self) -> TaskInfo:
-        return self
+    def has_pending_cancellation(self) -> bool:
+        """
+        Return ``True`` if the task has a cancellation pending, ``False`` otherwise.
+
+        """
+        return False
 
 
 def get_current_task() -> TaskInfo:
@@ -66,7 +70,7 @@ def get_running_tasks() -> list[TaskInfo]:
     :return: a list of task info objects
 
     """
-    return get_async_backend().get_running_tasks()
+    return cast("list[TaskInfo]", get_async_backend().get_running_tasks())
 
 
 async def wait_all_tasks_blocked() -> None:

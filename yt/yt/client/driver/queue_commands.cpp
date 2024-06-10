@@ -155,7 +155,7 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TPullConsumerCommand::Register(TRegistrar registrar)
+void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("consumer_path", &TThis::ConsumerPath);
 
@@ -194,11 +194,11 @@ void TPullConsumerCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
-void TPullConsumerCommand::DoExecute(ICommandContextPtr context)
+void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
-    auto result = WaitFor(client->PullConsumer(
+    auto result = WaitFor(client->PullQueueConsumer(
         ConsumerPath,
         QueuePath,
         Offset,

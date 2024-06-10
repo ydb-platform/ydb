@@ -177,6 +177,7 @@ bool operator== (const TRichYPath& lhs, const TRichYPath& rhs);
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ToString(const TRichYPath& path);
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec);
 
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths);
 

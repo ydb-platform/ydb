@@ -83,14 +83,10 @@
   - alloca.h:      contrib/tools/bison/lib/platform/win64/alloca.h
   - getopt.h:      contrib/tools/bison/lib/platform/win64/getopt.h
   - fcntl.h:       contrib/tools/bison/lib/platform/win64/fcntl.h
-  - langinfo.h:    contrib/tools/bison/lib/platform/win64/langinfo.h
-  - locale.h:      contrib/tools/bison/lib/platform/win64/locale.h
-  - math.h:        contrib/tools/bison/lib/platform/win64/math.h
   - sched.h:       contrib/tools/bison/lib/platform/win64/sched.h
   - signal.h:      contrib/tools/bison/lib/platform/win64/signal.h
   - spawn.h:       contrib/tools/bison/lib/platform/win64/spawn.h
   - sys/stat.h:    contrib/tools/bison/lib/platform/win64/sys/stat.h
-  - sys/time.h:    contrib/tools/bison/lib/platform/win64/sys/time.h
   - sys/wait.h:    contrib/tools/bison/lib/platform/win64/sys/wait.h
   - unistd.h:      contrib/tools/bison/lib/platform/win64/unistd.h
 

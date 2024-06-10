@@ -420,8 +420,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotOverloadUnderlyingWhenTh
         .Times(AtMost(9))
         .WillRepeatedly(DoAll(
             [&] { lastRequest = requests.emplace_back(NewPromise<void>()); },
-            ReturnPointee(&lastRequest)
-        ));
+            ReturnPointee(&lastRequest)));
 
     for (int i = 0; i < 100; ++i) {
         replies.emplace_back(Throttler_->Throttle(1));
@@ -441,8 +440,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
         .Times(AtLeast(2))
         .WillRepeatedly(DoAll(
             [&] { lastRequest = requests.emplace_back(NewPromise<void>()); },
-            ReturnPointee(&lastRequest)
-        ));
+            ReturnPointee(&lastRequest)));
 
     auto failedRequest = Throttler_->Throttle(10);
     requests[0].Set(TError(NYT::EErrorCode::Generic, "Test error"));
@@ -539,8 +537,7 @@ TEST_P(TPrefetchingStressTest, Stress)
                     ++underlyingRequestCount;
                     iterationUnderlyingAmount += lastUnderlyingAmount;
                 },
-                ReturnPointee(&lastRequest)
-            ));
+                ReturnPointee(&lastRequest)));
 
         auto processUnderlyingRequest = [&] (double errorProbability) {
             if (!requests.empty()) {

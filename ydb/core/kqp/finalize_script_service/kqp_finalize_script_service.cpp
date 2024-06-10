@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NKqp {
 

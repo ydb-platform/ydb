@@ -1,5 +1,7 @@
 #include "store.h"
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
 TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
@@ -134,7 +136,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
     StorageConfig = descriptionProto.GetStorageConfig();
     // Make it easier by having data channel count always specified internally
     if (!StorageConfig.HasDataChannelCount()) {
-        StorageConfig.SetDataChannelCount(1);
+        StorageConfig.SetDataChannelCount(64);
     }
 
     size_t protoIndex = 0;

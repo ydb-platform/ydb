@@ -273,10 +273,7 @@ public:
         return *LastWeight;
     }
 
-    ui64 GetMemLimit() const {
-        return HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
-    }
-
+    ui64 GetMemLimit() const;
 
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,

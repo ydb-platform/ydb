@@ -286,6 +286,12 @@ TString ToString(const TLogicalType& logicalType)
     YT_ABORT();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize and express ToString using this.
+    FormatValue(builder, ToString(logicalType), spec);
+}
+
 void PrintTo(ELogicalMetatype metatype, std::ostream* os)
 {
     *os << ToString(metatype);
@@ -2189,8 +2195,7 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     static_cast<size_t>(logicalType.AsDecimalTypeRef().GetPrecision()),
-                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())
-                ),
+                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())),
                 typeHash);
         case ELogicalMetatype::Optional:
             return CombineHashes((*this)(*logicalType.AsOptionalTypeRef().GetElement()), typeHash);
@@ -2208,15 +2213,13 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     (*this)(*logicalType.AsDictTypeRef().GetKey()),
-                    (*this)(*logicalType.AsDictTypeRef().GetValue())
-                ),
+                    (*this)(*logicalType.AsDictTypeRef().GetValue())),
                 typeHash);
         case ELogicalMetatype::Tagged:
             return CombineHashes(
                 CombineHashes(
                     THash<TString>()(logicalType.AsTaggedTypeRef().GetTag()),
-                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())
-                ),
+                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())),
                 typeHash);
     }
     YT_ABORT();

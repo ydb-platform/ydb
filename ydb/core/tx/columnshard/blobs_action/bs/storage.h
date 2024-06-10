@@ -12,7 +12,6 @@ private:
     using TBase = IBlobsStorageOperator;
     std::shared_ptr<TBlobManager> Manager;
     const TActorId BlobCacheActorId;
-    mutable ui64 PerGenerationCounter = 1;
     const TActorId TabletActorId;
 protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) override;

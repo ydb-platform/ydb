@@ -11,6 +11,7 @@ private:
     mutable TRWMutex RWMutex;
     bool Initialized = false;
     bool Finished = false;
+    std::optional<ui64> Generation;
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
@@ -25,13 +26,18 @@ public:
     static const inline TString MemoryStorageId = NBlobOperations::TGlobal::MemoryStorageId;
     virtual ~IStoragesManager() = default;
 
-    void Initialize() {
+    void Initialize(const ui64 generation) {
+        Generation = generation;
         AFL_VERIFY(!Initialized);
         Initialized = true;
         DoInitialize();
     }
 
-    IStoragesManager() = default;
+    ui64 GetGeneration() const {
+        AFL_VERIFY(Generation);
+        return *Generation;
+    }
+
     const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const {
         AFL_VERIFY(Initialized);
         return DoGetSharedBlobsManager();

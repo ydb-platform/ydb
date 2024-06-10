@@ -135,6 +135,38 @@ public:
     }
 };
 
+class TSelfPingActor : public NActors::TActorBootstrapped<TSelfPingActor> {
+    TDuration Latency;
+    TInstant time;
+
+public:
+    TSelfPingActor(const TDuration& latency)
+        : Latency(latency)
+    {}
+
+    void Bootstrap() {
+        time = TInstant::Now();
+        Become(&TSelfPingActor::StateFunc);
+        Send(SelfId(), std::make_unique<NActors::TEvents::TEvWakeup>());
+    }
+
+    STRICT_STFUNC(StateFunc, {
+        cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
+    });
+
+    void HandleWakeup() {
+        auto now = TInstant::Now();
+        TDuration delta = now - time;
+        Y_VERIFY(delta <= Latency, "Latency error");
+        time = now;
+        Send(SelfId(), std::make_unique<NActors::TEvents::TEvWakeup>());
+    }
+};
+
+THolder<NActors::IActor> CreateSelfPingActor(const TDuration& latency) {
+    return MakeHolder<TSelfPingActor>(latency);
+}
+
 THolder<NActors::IActor> CreateReadActor(std::istream& strm, NActors::TActorId recipient) {
     return MakeHolder<TReadActor>(strm, recipient);
 }

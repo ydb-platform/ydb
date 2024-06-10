@@ -1,14 +1,16 @@
 # INSERT INTO
 
+{% note warning %}
+
 {% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 
-{% note info %}
-
-Для загрузки данных в колоночные таблицы используются: 
+{% cut "Способы загрузки данных в колоночные таблицы" %}
 * [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md)
 * [Пакетная вставка данных](../../../../recipes/ydb-sdk/bulk-upsert.md)
-* [Yandex Data Transfer](https://yandex.cloud/ru/docs/ydb/tutorials/mmy-ydb-migration)
 * [FluentBit](../../../../integrations/fluent-bit.md)
+* [Yandex Data Transfer](https://yandex.cloud/ru/services/data-transfer)
+
+{% endcut %}
 
 {% endnote %}
 

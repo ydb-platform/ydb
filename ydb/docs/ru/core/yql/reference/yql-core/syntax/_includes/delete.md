@@ -1,10 +1,14 @@
 # DELETE FROM
 
+{% note warning %}
+
 {% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 
-{% note info %}
+{% cut "Удаление данных из таблиц с помощью TTL" %}
 
-Удалить данные из колоночной таблицы можно с помощью [TTL](../../../../concepts/ttl.md), который можно задать при [создании таблицы](../create_table.md) (`CREATE TABLE`) или при [изменении таблицы](../alter_table.md) (`ALTER TABLE`).
+Удалить данные из строковой и колоночной таблицы можно с помощью [TTL](../../../../concepts/ttl.md), который можно задать при [создании таблицы](../create_table.md) (`CREATE TABLE`) или при [изменении таблицы](../alter_table.md) (`ALTER TABLE`).
+
+{% endcut %}
 
 {% endnote %}
 

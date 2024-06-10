@@ -13,16 +13,16 @@ namespace NActors::NQueueBench {
         virtual std::optional<ui32> TryPop() = 0;
     };
 
-    template <ui32 SizeBits>
-    using TTryPush = bool (TMPMCRingQueue<SizeBits>::*)(ui32 value);
-    template <ui32 SizeBits>
-    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits>::*)();
+    template <ui32 SizeBits, typename TStats>
+    using TTryPush = bool (TMPMCRingQueue<SizeBits, TStats>::*)(ui32 value);
+    template <ui32 SizeBits, typename TStats>
+    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits, TStats>::*)();
 
-    template <ui32 SizeBits, TTryPush<SizeBits> TryPushMethod, TTryPop<SizeBits> TryPopMethod>
+    template <ui32 SizeBits, typename TStats, TTryPush<SizeBits, TStats> TryPushMethod, TTryPop<SizeBits, TStats> TryPopMethod>
     struct TMPMCQueueBase : IQueue {
-        TMPMCRingQueue<SizeBits> *Queue;
+        TMPMCRingQueue<SizeBits, TStats> *Queue;
 
-        TMPMCQueueBase(TMPMCRingQueue<SizeBits> *queue)
+        TMPMCQueueBase(TMPMCRingQueue<SizeBits, TStats> *queue)
             : Queue(queue)
         {}
 
@@ -34,27 +34,27 @@ namespace NActors::NQueueBench {
         }
     };
 
-    template <ui32 SizeBits>
-    using TVerySlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopReallySlow>;
+    template <ui32 SizeBits, typename TStats=void>
+    using TVerySlowQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPushSlow, &TMPMCRingQueue<SizeBits, TStats>::TryPopReallySlow>;
 
-    template <ui32 SizeBits>
-    using TSlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopSlow>;
+    template <ui32 SizeBits, typename TStats=void>
+    using TSlowQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPushSlow, &TMPMCRingQueue<SizeBits, TStats>::TryPopSlow>;
 
-    template <ui32 SizeBits>
-    using TFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopFast>;
+    template <ui32 SizeBits, typename TStats=void>
+    using TFastQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopFast>;
 
-    template <ui32 SizeBits>
-    using TVeryFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopReallyFast>;
+    template <ui32 SizeBits, typename TStats=void>
+    using TVeryFastQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopReallyFast>;
 
-    template <ui32 SizeBits>
-    using TSingleQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopSingleConsumer>;
+    template <ui32 SizeBits, typename TStats=void>
+    using TSingleQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopSingleConsumer>;
 
-    template <ui32 SizeBits>
+    template <ui32 SizeBits, typename TStats=void>
     struct TAdaptiveQueue : IQueue {
-        TMPMCRingQueue<SizeBits> *Queue;
-        typename TMPMCRingQueue<SizeBits>::EPopMode State = TMPMCRingQueue<SizeBits>::EPopMode::ReallySlow;
+        TMPMCRingQueue<SizeBits, TStats> *Queue;
+        typename TMPMCRingQueue<SizeBits, TStats>::EPopMode State = TMPMCRingQueue<SizeBits, TStats>::EPopMode::ReallySlow;
 
-        TAdaptiveQueue(TMPMCRingQueue<SizeBits> *queue)
+        TAdaptiveQueue(TMPMCRingQueue<SizeBits, TStats> *queue)
             : Queue(queue)
         {}
 
@@ -64,6 +64,16 @@ namespace NActors::NQueueBench {
         std::optional<ui32> TryPop() final {
             return Queue->TryPop(State);
         }
+    };
+
+
+    template <ui32 SizeBits>
+    using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TMPMCRingQueueStats>;
+
+    template <template <ui32, typename> typename TAdaptor>
+    struct TAdaptorWithStats {
+        template <ui32 SizeBits>
+        using Type = TAdaptor<SizeBits, TMPMCRingQueueStats>;
     };
 
 

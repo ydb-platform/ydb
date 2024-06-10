@@ -1,5 +1,7 @@
 #include "queue.h"
 #include "worker.h"
+#include "bench_cases.h"
+#include "queue_tracer.h"
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/getopt/last_getopt.h>

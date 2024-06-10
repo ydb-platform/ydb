@@ -6,6 +6,8 @@ ENDIF()
 
 SRCS(
     main.cpp
+
+    probes.cpp
 )
 
 PEERDIR(

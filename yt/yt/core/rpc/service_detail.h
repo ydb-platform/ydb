@@ -196,7 +196,7 @@ public:
         }
 
         Request_->Context_ = underlyingContext.Get();
-        auto tracker = Request_->Context_->GetMemoryUsageTracker();
+        const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
 
         const auto& requestHeader = this->GetRequestHeader();
         // COMPAT(danilalexeev): legacy RPC codecs

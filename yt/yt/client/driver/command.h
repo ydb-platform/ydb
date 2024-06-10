@@ -73,7 +73,7 @@ class TCommandBase
     , public ICommand
 {
 protected:
-    NLogging::TLogger Logger = DriverLogger;
+    NLogging::TLogger Logger = DriverLogger();
 
     virtual void DoExecute(ICommandContextPtr ) { };
     virtual bool HasResponseParameters() const;

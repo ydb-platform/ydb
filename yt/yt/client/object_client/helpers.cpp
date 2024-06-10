@@ -263,18 +263,25 @@ bool IsCypressTransactionType(EObjectType type)
 {
     return
         type == EObjectType::Transaction ||
-        type == EObjectType::NestedTransaction ||
-        type == EObjectType::ExternalizedTransaction ||
-        type == EObjectType::ExternalizedNestedTransaction ||
-        type == EObjectType::UploadTransaction ||
-        type == EObjectType::UploadNestedTransaction;
+        type == EObjectType::NestedTransaction;
 }
 
 bool IsSystemTransactionType(EObjectType type)
 {
     return
         type == EObjectType::SystemTransaction ||
-        type == EObjectType::SystemNestedTransaction;
+        type == EObjectType::SystemNestedTransaction ||
+        type == EObjectType::UploadTransaction ||
+        type == EObjectType::UploadNestedTransaction ||
+        type == EObjectType::ExternalizedTransaction ||
+        type == EObjectType::ExternalizedNestedTransaction;
+}
+
+bool IsUploadTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::UploadTransaction ||
+        type == EObjectType::UploadNestedTransaction;
 }
 
 bool HasSchema(EObjectType type)

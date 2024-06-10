@@ -17,7 +17,7 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 // archives stored as native binary - this should be the fastest way
-// to archive the state of a group of obects.  It makes no attempt to
+// to archive the state of a group of objects.  It makes no attempt to
 // convert to any canonical form.
 
 // IN GENERAL, ARCHIVES CREATED WITH THIS CLASS WILL NOT BE READABLE
@@ -56,7 +56,7 @@ namespace boost {
 namespace archive {
 
 /////////////////////////////////////////////////////////////////////////
-// class basic_binary_oprimitive - binary output of prmitives
+// class basic_binary_oprimitive - binary output of primitives
 
 template<class Archive, class Elem, class Tr>
 class BOOST_SYMBOL_VISIBLE basic_binary_oprimitive {
@@ -156,7 +156,7 @@ basic_binary_oprimitive<Archive, Elem, Tr>::save_binary(
     // BOOST_ASSERT(count <= std::size_t(boost::integer_traits<std::streamsize>::const_max));
     // note: if the following assertions fail
     // a likely cause is that the output stream is set to "text"
-    // mode where by cr characters recieve special treatment.
+    // mode where by cr characters receive special treatment.
     // be sure that the output stream is opened with ios::binary
     //if(os.fail())
     //    boost::serialization::throw_exception(

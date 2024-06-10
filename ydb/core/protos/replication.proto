@@ -36,6 +36,7 @@ message TReplicationConfig {
             optional string SrcPath = 1;
             optional string DstPath = 2;
             optional string SrcStreamName = 3;
+            optional uint64 Id = 4;
         }
 
         repeated TTarget Targets = 1;
@@ -213,11 +214,19 @@ message TEvStopWorker {
 
 message TEvWorkerStatus {
     enum EStatus {
-        UNKNOWN = 0;
-        RUNNING = 1;
-        STOPPED = 2;
+        STATUS_UNSPECIFIED = 0;
+        STATUS_RUNNING = 1;
+        STATUS_STOPPED = 2;
+    }
+
+    enum EReason {
+        REASON_UNSPECIFIED = 0;
+        REASON_ACK = 1;
+        REASON_ERROR = 2;
     }
 
     optional TWorkerIdentity Worker = 1;
     optional EStatus Status = 2;
+    optional EReason Reason = 3;
+    optional string ErrorDescription = 4;
 }

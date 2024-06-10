@@ -99,24 +99,22 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
         EventsQueue = std::make_shared<TWriteSessionEventsQueue>(Settings);
     }
 
-    ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
             HandleWakeUpImpl();
         }
         InitWriter();
     }
-    Started = true;
-    if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
-        with_lock (Lock) {
+    with_lock (Lock) {
+        ++ConnectionAttemptsDone;
+        Started = true;
+        if (Settings.DirectWriteToPartition_ && (Settings.PartitionId_.Defined() || DirectWriteToPartitionId.Defined())) {
             PreferredPartitionLocation = {};
-            return ConnectToPreferredPartitionLocation(delay);
+            ConnectToPreferredPartitionLocation(delay);
+            return;
         }
     }
-    else
-    {
-        return Connect(delay);
-    }
+    Connect(delay);
 }
 
 // Returns true if we need to switch to another DirectWriteToPartitionId.
@@ -233,6 +231,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         AbortImpl();
         return;
     }
+
+    ++ConnectionGeneration;
 
     prevDescribePartitionContext = std::exchange(DescribePartitionContext, describePartitionContext);
     Y_ASSERT(DescribePartitionContext);
@@ -602,6 +602,10 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+
+        if (Processor) {
+            Processor->Cancel();
+        }
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 

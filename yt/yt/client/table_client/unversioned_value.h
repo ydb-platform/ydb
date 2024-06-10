@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/farmhash/farm_hash.h>
 
+#include <library/cpp/yt/string/format_analyser.h>
+
 #include <util/system/defaults.h>
 
 namespace NYT::NTableClient {
@@ -114,4 +116,13 @@ struct THash<NYT::NTableClient::TUnversionedValue>
     {
         return NYT::NTableClient::TDefaultUnversionedValueHash()(value);
     }
+};
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedValue>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
 };

@@ -2878,7 +2878,76 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
     bool changed = false;
     TExprNode::TPtr unboundedCurrentNode;
 
+    auto hasAnsiCumeDists = [](const TExprNode::TPtr& winOn) {
+        for (ui32 i = 1; i < winOn->ChildrenSize(); ++i) {
+            auto item = winOn->Child(i)->Child(1);
+            if (item->IsCallable("CumeDist") && HasSetting(item->Tail(), "ansi")) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    TExprNodeList ansiCumeDistNodes; // we should isolate them into default RANGE frame
     for (auto& winOn : frames->ChildrenList()) {
+        if (!hasAnsiCumeDists(winOn)) {
+            continue;
+        }
+
+        TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
+        if (frameSettings.GetFrameType() == EFrameType::FrameByRange) {
+            YQL_ENSURE(IsUnbounded(frameSettings.GetFirst()));
+            YQL_ENSURE(IsCurrentRow(frameSettings.GetLast()));
+            continue;
+        }
+
+        TExprNodeList winOnChildrenNormalized;
+        winOnChildrenNormalized.push_back(winOn->HeadPtr());
+        for (ui32 i = 1; i < winOn->ChildrenSize(); ++i) {
+            auto item = winOn->Child(i)->Child(1);
+            if (item->IsCallable("CumeDist") && HasSetting(item->Tail(), "ansi")) {
+                ansiCumeDistNodes.push_back(winOn->ChildPtr(i));
+            } else {
+                winOnChildrenNormalized.push_back(winOn->ChildPtr(i));
+            }
+        }
+
+        if (winOnChildrenNormalized.size() > 1) {
+            normalized.push_back(ctx.ChangeChildren(*winOn, std::move(winOnChildrenNormalized)));
+        }
+    }
+
+    if (!ansiCumeDistNodes.empty()) {
+        ansiCumeDistNodes.insert(ansiCumeDistNodes.begin(), ctx.Builder(frames->Pos())
+            .List()
+                .List(0)
+                    .Atom(0, "begin", TNodeFlags::Default)
+                    .List(1)
+                        .Atom(0, "preceding", TNodeFlags::Default)
+                        .Atom(1, "unbounded", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .List(1)
+                    .Atom(0, "end", TNodeFlags::Default)
+                    .List(1)
+                        .Atom(0, "currentRow", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build());
+
+        normalized.push_back(ctx.NewCallable(frames->Pos(), "WinOnRange", std::move(ansiCumeDistNodes)));
+        return ctx.ChangeChildren(*frames, std::move(normalized));
+    }
+
+    normalized.clear();
+    for (auto& winOn : frames->ChildrenList()) {
+        if (hasAnsiCumeDists(winOn)) {
+            normalized.push_back(winOn);
+            continue;
+        }
+
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
         if (frameSettings.GetFrameType() == EFrameType::FrameByRows) {
             // TODO: maybe we need to rewrite non-trivial ROWS frames also

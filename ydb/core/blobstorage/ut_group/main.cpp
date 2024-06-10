@@ -417,6 +417,7 @@ private:
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = true;
+        vdiskConfig->UseCostTracker = false;
         auto counters = Counters->GetSubgroup("node", ToString(disk.NodeId))->GetSubgroup("vdisk", disk.VDiskId.ToString());
         const TActorId& actorId = runtime.Register(CreateVDisk(vdiskConfig, Info, counters), TActorId(), 0, std::nullopt, disk.NodeId);
         runtime.RegisterService(disk.VDiskActorId, actorId);
@@ -437,7 +438,7 @@ class TActivityActorImpl : public TActorCoroImpl {
 
 public:
     TActivityActorImpl(ui64 tabletId, ui32 groupId, ui32 *doneCounter, ui32 *counter, ui32 maxGen)
-        : TActorCoroImpl(65536)
+        : TActorCoroImpl(65536, true)
         , TabletId(tabletId)
         , GroupId(groupId)
         , MaxGen(maxGen)
@@ -581,6 +582,7 @@ public:
 
 Y_UNIT_TEST_SUITE(GroupStress) {
     Y_UNIT_TEST(Test) {
+        THPTimer timer;
         TAppData::RandomProvider = CreateDeterministicRandomProvider(1);
         SetRandomSeed(1);
         TTestEnv env(9);
@@ -627,6 +629,9 @@ Y_UNIT_TEST_SUITE(GroupStress) {
             };
 
             do {
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::Minutes(5)) {
+                    break;
+                }
                 runtime.Sim([&] {
                     for (auto& [condition, action] : map) {
                         if (condition()) {

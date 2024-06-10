@@ -1019,39 +1019,29 @@ TStateStorageServiceInitializer::TStateStorageServiceInitializer(const TKikimrRu
 }
 
 void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    bool found = false;
-
     TIntrusivePtr<TStateStorageInfo> ssrInfo;
     TIntrusivePtr<TStateStorageInfo> ssbInfo;
     TIntrusivePtr<TStateStorageInfo> sbrInfo;
 
+    std::unique_ptr<IActor> proxyActor;
+
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
-        found = true;
 
         BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);
 
         StartLocalStateStorageReplicas(CreateStateStorageReplica, ssrInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
+
+        proxyActor.reset(CreateStateStorageProxy(ssrInfo, ssbInfo, sbrInfo));
     }
-    if (!found) {
-        auto stubInfo = MakeIntrusive<TStateStorageInfo>();
-        stubInfo->NToSelect = 1;
-        stubInfo->Rings.push_back(TStateStorageInfo::TRing{
-            .IsDisabled = false,
-            .UseRingSpecificNodeSelection = false,
-            .Replicas{
-                TActorId()
-            }
-        });
-        stubInfo->StateStorageVersion = 0;
-        ssrInfo = ssbInfo = sbrInfo = stubInfo;
+    if (!proxyActor) {
+        proxyActor.reset(CreateStateStorageProxyStub());
     }
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
-        TActorSetupCmd(CreateStateStorageProxy(ssrInfo, ssbInfo, sbrInfo),
-        TMailboxType::ReadAsFilled, appData->SystemPoolId)));
+        TActorSetupCmd(proxyActor.release(), TMailboxType::ReadAsFilled, appData->SystemPoolId)));
 
     setup->LocalServices.emplace_back(
         TActorId(),

@@ -139,6 +139,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Leave(bool hardError = false) {
+        LOG_I("Leave"
+            << ": hard error# " << hardError);
+
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();
     }
@@ -214,7 +217,7 @@ class TLocalTableWriter
 
     void LogCritAndLeave(const TString& error) {
         LOG_C(error);
-        Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+        Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
@@ -484,7 +487,7 @@ class TLocalTableWriter
         LOG_D("Handle " << ev->Get()->ToString());
 
         if (ev->Get()->HardError) {
-            Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+            Leave(TEvWorker::TEvGone::SCHEME_ERROR, "Cannot apply changes");
         } else {
             OnGone(ev->Get()->PartitionId);
         }
@@ -494,8 +497,11 @@ class TLocalTableWriter
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
-    void Leave(TEvWorker::TEvGone::EStatus status) {
-        Send(Worker, new TEvWorker::TEvGone(status));
+    template <typename... Args>
+    void Leave(Args&&... args) {
+        LOG_I("Leave");
+
+        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 

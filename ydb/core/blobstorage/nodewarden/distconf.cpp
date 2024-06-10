@@ -5,8 +5,9 @@
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig)
-        : Cfg(std::move(cfg))
+            const NKikimrBlobStorage::TStorageConfig& baseConfig, bool isSelfStatic)
+        : IsSelfStatic(isSelfStatic)
+        , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
         , InitialConfig(baseConfig)
     {
@@ -17,22 +18,32 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
-        // report initial node listing
-        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
-        for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+        // report initial node listing for static node
+        if (IsSelfStatic) {
+            auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+            auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+            for (const auto& [nodeId, item] : ns->StaticNodeTable) {
+                ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+            }
+            Send(SelfId(), ev.release());
         }
-        Send(SelfId(), ev.release());
+
+        // and subscribe for the node list too
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
 
         // generate initial drive set and query stored configuration
-        EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-            DrivesToRead.push_back(drive.GetPath());
-        });
-        std::sort(DrivesToRead.begin(), DrivesToRead.end());
+        if (IsSelfStatic) {
+            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                DrivesToRead.push_back(drive.GetPath());
+            });
+            std::sort(DrivesToRead.begin(), DrivesToRead.end());
 
-        auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
-        Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+            auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
+            Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+        } else {
+            StorageConfigLoaded = true;
+        }
+
         Become(&TThis::StateWaitForInit);
     }
 
@@ -60,7 +71,10 @@ namespace NKikimr::NStorage {
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
                 ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
-            PersistConfig({});
+            if (IsSelfStatic) {
+                PersistConfig({});
+                ApplyConfigUpdateToDynamicNodes();
+            }
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -149,6 +163,9 @@ namespace NKikimr::NStorage {
             if (!sessionId) {
                 okay = true; // may be just obsolete subscription request
             }
+            if (ConnectedDynamicNodes.contains(nodeId)) {
+                okay = true;
+            }
             Y_ABORT_UNLESS(okay);
         }
 
@@ -202,8 +219,12 @@ namespace NKikimr::NStorage {
         }
 
         if (change && NodeListObtained && StorageConfigLoaded) {
-            UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-            IssueNextBindRequest();
+            if (IsSelfStatic) {
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+                IssueNextBindRequest();
+            } else {
+
+            }
             processPendingEvents();
         }
     }
@@ -224,6 +245,9 @@ namespace NKikimr::NStorage {
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
+            fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, HandleDynamicConfigSubscribe);
+            hFunc(TEvNodeWardenDynamicConfigPush, Handle);
+            cFunc(TEvPrivate::EvReconnect, HandleReconnect);
             hFunc(NMon::TEvHttpInfo, Handle);
             fFunc(TEvents::TSystem::Gone, HandleGone);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
@@ -234,10 +258,8 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::StartDistributedConfigKeeper() {
         auto *appData = AppData();
-        if (!appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId) {
-            // start distributed configuration machinery only on static nodes
-            DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig));
-        }
+        const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
+        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {

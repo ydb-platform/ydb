@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
@@ -206,7 +207,7 @@ public:
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
 
-        ScheduleQueryStatusRequest(progressWriter);
+        ScheduleQueryStatusRequest(progressWriter, queryPB.GetQuerySeqNo());
 
         return promise.GetFuture().Apply([=](const TFuture<TResult>& result) {
             if (result.HasException()) {
@@ -281,6 +282,7 @@ public:
         }
 
         queryPB.SetDiscard(discard);
+        queryPB.SetQuerySeqNo(QuerySeqNo++);
 
         int retry = settings->MaxRetries.Get().GetOrElse(5);
 
@@ -327,42 +329,76 @@ public:
         return promise.GetFuture();
     }
 
-    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, bool ok) {
+    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, const std::unordered_map<ui64, IDqGateway::TStageStats>& stats, bool ok, uint64_t querySeqNo) {
         if (ok) {
-            ScheduleQueryStatusRequest(progressWriter);
+            ScheduleQueryStatusRequest(progressWriter, querySeqNo);
             if (!status.empty()) {
-                progressWriter(status);
+                progressWriter(status, stats);
             }
         }
     }
 
-    void RequestQueryStatus(const TDqProgressWriter& progressWriter) {
+    static std::unordered_map<ui64, IDqGateway::TStageStats> ExtractStats(const Yql::DqsProto::QueryStatusResponse& resp) {
+        std::unordered_map<ui64, IDqGateway::TStageStats> ret;
+        for (const auto& metric : resp.GetMetric()) {
+            auto longName = metric.GetName();
+            TString prefix;
+            TString name;
+            std::map<TString, TString> labels;
+            if (!NYql::NCommon::ParseCounterName(&prefix, &labels, &name, longName)) {
+                continue;
+            }
+
+            auto maybeStage = labels.find("Stage");
+            if (maybeStage == labels.end()) {
+                continue;
+            }
+            auto& stage = ret[atoi(maybeStage->second.data())];
+
+            if (name == "OutputRows") {
+                stage.OutputRows += metric.GetSum();
+            }
+            if (name == "InputRows") {
+                stage.InputRows += metric.GetSum();
+            }
+            if (name == "OutputBytes") {
+                stage.OutputBytes += metric.GetSum();
+            }
+            if (name == "InputBytes") {
+                stage.InputBytes += metric.GetSum();
+            }
+        }
+        return ret;
+    }
+
+    void RequestQueryStatus(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         Yql::DqsProto::QueryStatusRequest request;
         request.SetSession(SessionId);
+        request.SetQuerySeqNo(querySeqNo);
         auto self = weak_from_this();
-        auto callback = [self, progressWriter](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
+        auto callback = [self, progressWriter, querySeqNo](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
-            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), status.Ok());
+            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), ExtractStats(resp), status.Ok(), querySeqNo);
         };
 
         Service.DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr);
     }
 
-    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter) {
+    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         auto self = weak_from_this();
-        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter](const TFuture<void>& f) {
+        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter, querySeqNo](const TFuture<void>& f) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
             if (!f.HasException()) {
-                this_->RequestQueryStatus(progressWriter);
+                this_->RequestQueryStatus(progressWriter, querySeqNo);
             }
         });
     }
@@ -377,6 +413,7 @@ private:
     std::optional<TDqProgressWriter> ProgressWriter;
     TString Status;
     TFuture<void> OpenSessionFuture;
+    std::atomic<ui64> QuerySeqNo = 1;
 };
 
 class TDqGatewayImpl: public std::enable_shared_from_this<TDqGatewayImpl> {

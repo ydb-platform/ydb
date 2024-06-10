@@ -252,4 +252,63 @@ void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("producer_path", &TThis::ProducerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("session_id", &TThis::SessionId);
+    registrar.Parameter("user_meta", &TThis::UserMeta)
+        .Optional();
+}
+
+void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    std::optional<NYson::TYsonString> requestUserMeta;
+    if (UserMeta) {
+        requestUserMeta = NYson::ConvertToYsonString(UserMeta);
+    }
+
+    auto result = WaitFor(client->CreateQueueProducerSession(
+        ProducerPath,
+        QueuePath,
+        SessionId,
+        requestUserMeta))
+        .ValueOrThrow();
+
+    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("epoch").Value(result.Epoch)
+                .Item("sequence_number").Value(result.SequenceNumber)
+                .Item("user_meta").Value(result.UserMeta)
+            .EndMap();
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRemoveQueueProducerSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("producer_path", &TThis::ProducerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("session_id", &TThis::SessionId);
+}
+
+void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    WaitFor(client->RemoveQueueProducerSession(
+        ProducerPath,
+        QueuePath,
+        SessionId))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

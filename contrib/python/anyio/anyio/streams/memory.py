@@ -10,9 +10,7 @@ from .. import (
     ClosedResourceError,
     EndOfStream,
     WouldBlock,
-    get_cancelled_exc_class,
 )
-from .._core._compat import DeprecatedAwaitable
 from ..abc import Event, ObjectReceiveStream, ObjectSendStream
 from ..lowlevel import checkpoint
 
@@ -27,7 +25,8 @@ class MemoryObjectStreamStatistics(NamedTuple):
     max_buffer_size: float
     open_send_streams: int  #: number of unclosed clones of the send stream
     open_receive_streams: int  #: number of unclosed clones of the receive stream
-    tasks_waiting_send: int  #: number of tasks blocked on :meth:`MemoryObjectSendStream.send`
+    #: number of tasks blocked on :meth:`MemoryObjectSendStream.send`
+    tasks_waiting_send: int
     #: number of tasks blocked on :meth:`MemoryObjectReceiveStream.receive`
     tasks_waiting_receive: int
 
@@ -104,11 +103,6 @@ class MemoryObjectReceiveStream(Generic[T_co], ObjectReceiveStream[T_co]):
 
             try:
                 await receive_event.wait()
-            except get_cancelled_exc_class():
-                # Ignore the immediate cancellation if we already received an item, so as not to
-                # lose it
-                if not container:
-                    raise
             finally:
                 self._state.waiting_receivers.pop(receive_event, None)
 
@@ -121,8 +115,8 @@ class MemoryObjectReceiveStream(Generic[T_co], ObjectReceiveStream[T_co]):
         """
         Create a clone of this receive stream.
 
-        Each clone can be closed separately. Only when all clones have been closed will the
-        receiving end of the memory stream be considered closed by the sending ends.
+        Each clone can be closed separately. Only when all clones have been closed will
+        the receiving end of the memory stream be considered closed by the sending ends.
 
         :return: the cloned stream
 
@@ -136,8 +130,8 @@ class MemoryObjectReceiveStream(Generic[T_co], ObjectReceiveStream[T_co]):
         """
         Close the stream.
 
-        This works the exact same way as :meth:`aclose`, but is provided as a special case for the
-        benefit of synchronous callbacks.
+        This works the exact same way as :meth:`aclose`, but is provided as a special
+        case for the benefit of synchronous callbacks.
 
         """
         if not self._closed:
@@ -179,7 +173,7 @@ class MemoryObjectSendStream(Generic[T_contra], ObjectSendStream[T_contra]):
     def __post_init__(self) -> None:
         self._state.open_send_channels += 1
 
-    def send_nowait(self, item: T_contra) -> DeprecatedAwaitable:
+    def send_nowait(self, item: T_contra) -> None:
         """
         Send an item immediately if it can be done without waiting.
 
@@ -205,9 +199,19 @@ class MemoryObjectSendStream(Generic[T_contra], ObjectSendStream[T_contra]):
         else:
             raise WouldBlock
 
-        return DeprecatedAwaitable(self.send_nowait)
-
     async def send(self, item: T_contra) -> None:
+        """
+        Send an item to the stream.
+
+        If the buffer is full, this method blocks until there is again room in the
+        buffer or the item can be sent directly to a receiver.
+
+        :param item: the item to send
+        :raises ~anyio.ClosedResourceError: if this send stream has been closed
+        :raises ~anyio.BrokenResourceError: if the stream has been closed from the
+            receiving end
+
+        """
         await checkpoint()
         try:
             self.send_nowait(item)
@@ -218,18 +222,18 @@ class MemoryObjectSendStream(Generic[T_contra], ObjectSendStream[T_contra]):
             try:
                 await send_event.wait()
             except BaseException:
-                self._state.waiting_senders.pop(send_event, None)  # type: ignore[arg-type]
+                self._state.waiting_senders.pop(send_event, None)
                 raise
 
-            if self._state.waiting_senders.pop(send_event, None):  # type: ignore[arg-type]
-                raise BrokenResourceError
+            if self._state.waiting_senders.pop(send_event, None):
+                raise BrokenResourceError from None
 
     def clone(self) -> MemoryObjectSendStream[T_contra]:
         """
         Create a clone of this send stream.
 
-        Each clone can be closed separately. Only when all clones have been closed will the
-        sending end of the memory stream be considered closed by the receiving ends.
+        Each clone can be closed separately. Only when all clones have been closed will
+        the sending end of the memory stream be considered closed by the receiving ends.
 
         :return: the cloned stream
 
@@ -243,8 +247,8 @@ class MemoryObjectSendStream(Generic[T_contra], ObjectSendStream[T_contra]):
         """
         Close the stream.
 
-        This works the exact same way as :meth:`aclose`, but is provided as a special case for the
-        benefit of synchronous callbacks.
+        This works the exact same way as :meth:`aclose`, but is provided as a special
+        case for the benefit of synchronous callbacks.
 
         """
         if not self._closed:

@@ -2146,7 +2146,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(Ddl_Dml) {
+    Y_UNIT_TEST(DdlWithExplicitTransaction) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
@@ -2160,23 +2160,71 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto db = kikimr.GetQueryClient();
 
         {
-            // DDl + DML with explicit transaction
+            // DDl with explicit transaction
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdlDml1 (
                     Key Uint64,
-                    Value1 String,
-                    Value2 String,
                     PRIMARY KEY (Key)
                 );
-                UPSERT INTO TestDdlDml1 (Key, Value1, Value2) VALUES (1, "1", "2");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+        }
+
+        {
+            // DDl with explicit transaction
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdlDml1 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE TestDdlDml2 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+        }
+
+        {
+            // DDl with implicit transaction
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdlDml1 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            // DDl + DML with explicit transaction
+            auto result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdlDml1;
-                ALTER TABLE TestDdlDml1 DROP COLUMN Value2;
-                UPSERT INTO TestDdlDml1 (Key, Value1) VALUES (2, "2");
-                SELECT * FROM TestDdlDml1;
+                CREATE TABLE TestDdlDml2 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM TestDdlDml2;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Queries with mixed data and scheme operations are not supported."));
         }
+    }
+
+    Y_UNIT_TEST(Ddl_Dml) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
 
         {
             // DDl + DML with implicit transaction

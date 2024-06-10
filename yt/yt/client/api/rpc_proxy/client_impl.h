@@ -161,6 +161,19 @@ public:
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options = {}) override;
 
+    TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options = {}) override;
+
+    TFuture<void> RemoveQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options = {}) override;
+
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
         const TString& md5,

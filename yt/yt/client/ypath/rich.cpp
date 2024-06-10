@@ -206,6 +206,16 @@ void TRichYPath::SetForeign(bool value)
     Attributes().Set("foreign", value);
 }
 
+bool TRichYPath::GetReadViaExecNode() const
+{
+    return GetAttribute(*this, "read_via_exec_node", false);
+}
+
+void TRichYPath::SetReadViaExecNode(bool value)
+{
+    Attributes().Set("read_via_exec_node", value);
+}
+
 std::optional<std::vector<TString>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
@@ -768,6 +778,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "cluster",
         "clusters",
         "create",
+        "read_via_exec_node",
     };
     return WellKnownAttributes;
 }

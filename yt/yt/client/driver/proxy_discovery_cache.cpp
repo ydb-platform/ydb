@@ -62,7 +62,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
-            DriverLogger.WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 

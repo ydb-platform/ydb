@@ -32,8 +32,6 @@ protected:
     using TBase = TViewerPipeClient<TThis>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TJsonSettings JsonSettings;
-    bool AllEnums = false;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -71,6 +69,10 @@ public:
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
                 Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
+        }
+        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
 
@@ -128,29 +130,13 @@ public:
 
     void HandleTimeout() {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from NodeWarden"),
+            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
     void PassAway() override {
         TBase::PassAway();
-    }
-
-    void TryToTranslateFromBSC2Human(TString& bscError, bool& forceRetryPossible) {
-        if (IsMatchesWildcard(bscError, "GroupId# * ExpectedStatus# *")) {
-            TStringBuf groupId = TStringBuf(bscError).After(' ').Before(' ');
-            TStringBuf expectedStatus = TStringBuf(bscError).After('#').After('#').After(' ');
-            if (expectedStatus == "DEGRADED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a degraded state";
-                forceRetryPossible = true;
-                return;
-            }
-            if (expectedStatus == "DISINTEGRATED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a dead state";
-                return;
-            }
-        }
-        forceRetryPossible = false;
     }
 
     void ReplyAndPassAway() {
@@ -160,20 +146,23 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error = Response->Record.GetResponse().GetErrorDescription();
+                TString error;
                 bool forceRetryPossible = false;
-                TryToTranslateFromBSC2Human(error, forceRetryPossible);
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
                 json["error"] = error;
-                if (forceRetryPossible) {
+                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
                     json["forceRetryPossible"] = true;
                 }
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
+            TBase::Send(Event->Sender,
+                new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
         } else {
-            json["result"] = false;
-            json["error"] = "No response was received from BSC";
+            TBase::Send(Event->Sender,
+                new NMon::TEvHttpInfoRes(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "No response was received from BSC"),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
-        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 };

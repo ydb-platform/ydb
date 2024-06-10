@@ -764,9 +764,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (settings.has_partitions_count()) {
-            if (settings.partitions_count() > 0) {
-                minParts = settings.partitions_count();
-            }
+            minParts = settings.partitions_count();
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
             if (autoScalteSettings.min_active_partitions() > 0) {
@@ -795,6 +793,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     return code->YdbCode;
                 }
             }
+        }
+        if (minParts <= 0) {
+            error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+            return Ydb::StatusIds::BAD_REQUEST;
         }
         pqDescr->SetTotalGroupCount(minParts);
         pqTabletConfig->SetRequireAuthWrite(true);
@@ -1088,9 +1090,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() > 0) {
-                minParts = settings.min_active_partitions();
+            if (settings.min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
+            minParts = std::max<ui32>(1, settings.min_active_partitions());
             if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();

@@ -774,14 +774,6 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto name = input->Child(4)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
-        if (name != "int4") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
-                "Expected pgint4 type, but got: " << name));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-
         auto arg = input->Child(3)->GetTypeAnn();
         if (arg->IsOptionalOrNull()) {
             input->SetTypeAnn(arg);
@@ -796,6 +788,35 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int8").TypeId));
+    } else if (name == "cume_dist" || name == "percent_rank") {
+        if (input->ChildrenSize() != 3) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected no arguments in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("float8").TypeId));
+    } else if (name == "ntile") {
+        if (input->ChildrenSize() != 4) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected exactly one argument in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            auto name = input->Child(3)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            if (name != "int4") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() <<
+                    "Expected int4 type, but got: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() <<
+                "Expected pg type, but got: " << input->Child(3)->GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId));
     } else {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unsupported function: " << name));

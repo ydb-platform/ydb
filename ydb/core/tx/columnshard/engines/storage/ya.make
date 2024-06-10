@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/optimizer
     ydb/core/tx/columnshard/engines/storage/actualizer
     ydb/core/tx/columnshard/engines/storage/chunks
+    ydb/core/tx/columnshard/engines/storage/indexes
     ydb/core/formats/arrow
 )
 

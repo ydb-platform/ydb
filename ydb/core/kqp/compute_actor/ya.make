@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_compute_actor_factory.cpp
     kqp_compute_actor.cpp
     kqp_compute_actor_helpers.cpp
     kqp_compute_events.cpp

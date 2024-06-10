@@ -320,6 +320,9 @@ public:
     // Clears all the data related to a single bucket
     void ClearBucket(ui64 bucket);
 
+    // Forces bucket to release the space used for underlying containers.
+    void ShrinkBucket(ui64 bucket);
+
     // Clears table content
     void Clear();
 

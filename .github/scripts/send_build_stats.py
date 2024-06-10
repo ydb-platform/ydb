@@ -8,6 +8,8 @@ import subprocess
 
 
 YDBD_PATH = "ydb/apps/ydbd/ydbd"
+DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"
+DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
 
 FROM_ENV_COLUMNS = [
     "github_head_ref",
@@ -59,11 +61,11 @@ def main():
     if not os.path.exists(YDBD_PATH):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
         print("{} not exists, skipping".format(YDBD_PATH))
-        return 1
+        return 0
 
     with ydb.Driver(
-        endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
-        database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
         credentials=ydb.credentials_from_env_variables()
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)

@@ -2695,13 +2695,39 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                     value = ctx.Builder(pos)
                         .Callable("RowNumber")
                             .Callable(0, "TypeOf")
-                            .Add(0, list)
+                                .Add(0, list)
                             .Seal()
                         .Seal()
                         .Build();
-                } else if (name == "rank" || name == "dense_rank") {
+                } else if (name == "cume_dist") {
                     value = ctx.Builder(pos)
-                        .Callable((name == "rank") ? "Rank" : "DenseRank")
+                        .Callable("CumeDist")
+                            .Callable(0, "TypeOf")
+                                .Add(0, list)
+                            .Seal()
+                            .List(1)
+                                .List(0)
+                                    .Atom(0, "ansi")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (name == "ntile") {
+                    value = ctx.Builder(pos)
+                        .Callable("NTile")
+                            .Callable(0, "TypeOf")
+                                .Add(0, list)
+                            .Seal()
+                            .Callable(1, "Unwrap")
+                                .Callable(0, "FromPg")
+                                    .Add(0, p.first->ChildPtr(3))
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (name == "rank" || name == "dense_rank" || name == "percent_rank") {
+                    value = ctx.Builder(pos)
+                        .Callable((name == "rank") ? "Rank" : (name == "dense_rank" ? "DenseRank" : "PercentRank"))
                             .Callable(0, "TypeOf")
                                 .Add(0, list)
                             .Seal()
@@ -2802,6 +2828,32 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                             .Add(0, ret)
                             .Atom(1, "Int64")
                         .Seal()
+                    .Seal()
+                    .Build();
+            } else if (node->Head().Content() == "ntile") {
+                ret = ctx.Builder(node->Pos())
+                    .Callable("ToPg")
+                        .Callable(0, "SafeCast")
+                            .Add(0, ret)
+                            .Atom(1, "Int32")
+                        .Seal()
+                    .Seal()
+                    .Build();
+            } else if (node->Head().Content() == "cume_dist" || node->Head().Content() == "percent_rank") {
+                if (node->Head().Content() == "percent_rank") {
+                    ret = ctx.Builder(node->Pos())
+                        .Callable("Nanvl")
+                            .Add(0, ret)
+                            .Callable(1, "Double")
+                                .Atom(0, "0.0")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+
+                ret = ctx.Builder(node->Pos())
+                    .Callable("ToPg")
+                        .Add(0, ret)
                     .Seal()
                     .Build();
             }

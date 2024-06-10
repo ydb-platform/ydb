@@ -90,8 +90,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
-    NOlap::TNormalizationController::TInitContext initCtx(Info());
-    NormalizerController.InitNormalizers(initCtx);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -836,7 +834,11 @@ void TColumnShard::SetupGC() {
         return;
     }
     for (auto&& i : StoragesManager->GetStorages()) {
-        i.second->StartGC();
+        auto gcTask = i.second->CreateGC();
+        if (!gcTask) {
+            continue;
+        }
+        Execute(new TTxGarbageCollectionStart(this, gcTask, i.second), NActors::TActivationContext::AsActorContext());
     }
 }
 

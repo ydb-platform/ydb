@@ -575,6 +575,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             .ReadySince = slot.ReadySince,
             .VDiskStatus = slot.VDiskStatus,
         });
+        SysViewChangedVSlots.insert(it->first);
     }
     if (!updates.empty()) {
         Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));

@@ -295,7 +295,7 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
     }
     TVector<TExecutorThreadStats> sharedStats;
     if (Shared) {
-        Shared->GetSharedStats(Pool->PoolId, sharedStats);
+        Shared->GetSharedStatsForHarmonizer(Pool->PoolId, sharedStats);
     }
 
     for (ui32 sharedIdx = 0; sharedIdx < SharedInfo.size(); ++sharedIdx) {
@@ -476,16 +476,18 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         if (!pool.BasicPool) {
             continue;
         }
-        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
-            pool.BasicPool->CalcSpinPerThread(avgWakingUpConsumption);
-        } else if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
-            ui64 newSpinThreshold = pool.MovingWaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
-            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
-        } else {
-            ui64 newSpinThreshold = pool.WaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
-            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+        if (pool.BasicPool->ActorSystemProfile != EASProfile::Default) {
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                pool.BasicPool->CalcSpinPerThread(avgWakingUpConsumption);
+            } else if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                ui64 newSpinThreshold = pool.MovingWaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+                pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+            } else {
+                ui64 newSpinThreshold = pool.WaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+                pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+            }
+            pool.BasicPool->ClearWaitingStats();
         }
-        pool.BasicPool->ClearWaitingStats();
     }
 
     std::vector<bool> hasSharedThread(Pools.size());

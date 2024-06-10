@@ -6,13 +6,12 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC11, "TEvNodesInfo");
 
         // create a vector of peer static nodes
-        bool iAmStatic = false;
         std::vector<ui32> nodeIds;
         const ui32 selfNodeId = SelfId().NodeId();
         for (const auto& item : ev->Get()->Nodes) {
             if (item.NodeId == selfNodeId) {
-                iAmStatic = item.IsStatic;
                 SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId);
+                Y_ABORT_UNLESS(IsSelfStatic == item.IsStatic);
             }
             if (item.IsStatic) {
                 nodeIds.push_back(item.NodeId);
@@ -21,8 +20,9 @@ namespace NKikimr::NStorage {
         std::sort(nodeIds.begin(), nodeIds.end());
 
         // do not start configuration negotiation for dynamic nodes
-        if (!iAmStatic) {
+        if (!IsSelfStatic) {
             Y_ABORT_UNLESS(NodeIds.empty());
+            ApplyStaticNodeIds(nodeIds);
             return;
         }
 
@@ -115,6 +115,10 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC14, "TEvNodeConnected", (NodeId, nodeId));
 
+        if (!IsSelfStatic) {
+            return OnStaticNodeConnected(nodeId, sessionId);
+        }
+
         // update subscription information
         const auto [it, inserted] = SubscribedSessions.try_emplace(nodeId, sessionId);
         Y_ABORT_UNLESS(!inserted);
@@ -133,12 +137,18 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
 
+        STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId));
+
+        if (!IsSelfStatic) {
+            return OnStaticNodeDisconnected(nodeId, ev->Sender);
+        }
+
         const auto it = SubscribedSessions.find(nodeId);
         Y_ABORT_UNLESS(it != SubscribedSessions.end());
         Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
         SubscribedSessions.erase(it);
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId));
+        OnDynamicNodeDisconnected(nodeId, ev->Sender);
 
         UnbindNode(nodeId, "disconnection");
 
@@ -161,6 +171,9 @@ namespace NKikimr::NStorage {
             return;
         }
         if (DirectBoundNodes.contains(nodeId)) {
+            return;
+        }
+        if (ConnectedDynamicNodes.contains(nodeId)) {
             return;
         }
         if (const auto it = SubscribedSessions.find(nodeId); it != SubscribedSessions.end() && it->second) {

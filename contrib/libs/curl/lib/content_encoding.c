@@ -45,7 +45,7 @@
 #endif
 
 #ifdef HAVE_ZSTD
-#error #include <zstd.h>
+#include <zstd.h>
 #endif
 
 #include "sendf.h"

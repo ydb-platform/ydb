@@ -68,7 +68,7 @@ namespace NKikimr {
         TString LocalRecoveryErrorStr;
 
         std::unique_ptr<TCostModel> CostModel;
-        std::shared_ptr<TBsCostTracker> CostTracker;
+        std::unique_ptr<TBsCostTracker> CostTracker;
 
         // oos logging
         std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
@@ -104,9 +104,7 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
-                ui64 burstThresholdNs = 1'000'000'000,
-                float diskTimeAvailableScale = 1);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL
@@ -181,7 +179,9 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountDefragRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountDefragRequest(ev);
+            }
         }
 
         template<class TEvent>
@@ -189,7 +189,9 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountScrubRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountScrubRequest(ev);
+            }
         }
 
         template<class TEvent>
@@ -197,12 +199,14 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountCompactionRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountCompactionRequest(ev);
+            }
         }
 
         void UpdateCostModel(std::unique_ptr<TCostModel>&& newCostModel) {
             CostModel = std::move(newCostModel);
-            if (CostModel) {
+            if (CostModel && CostTracker) {
                 CostTracker->UpdateCostModel(*CostModel);
             }
         }

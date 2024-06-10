@@ -22,6 +22,15 @@ bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, 
     return true;
 }
 
+void TGCTask::DoOnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
+    Manager->OnGCStartOnExecute(CollectGenStepInFlight, dbBlobs);
+}
+
+bool TGCTask::DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+    Manager->OnGCStartOnComplete(CollectGenStepInFlight);
+    return true;
+}
+
 TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
     const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters,
     const ui64 tabletId, const ui64 currentGen)
@@ -50,11 +59,14 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const u
     const ui32 channelIdx = IBlobManager::BLOB_CHANNEL;
     auto it = ListsByGroupId.find(groupId);
     AFL_VERIFY(it != ListsByGroupId.end());
-    AFL_VERIFY(++it->second.RequestsCount < 10);
+    AFL_VERIFY(++it->second.RequestsCount < 10)("event", "build_gc_request")("group_id", groupId)("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
+        ("count", it->second.RequestsCount);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "build_gc_request")("group_id", groupId)("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
+        ("count", it->second.RequestsCount);
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
         TabletId, CurrentGen, PerGenerationCounter.Val(),
         channelIdx, true,
-        std::get<0>(CollectGenStepInFlight), std::get<1>(CollectGenStepInFlight),
+        CollectGenStepInFlight.Generation(), CollectGenStepInFlight.Step(),
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),
         TInstant::Max(), true);

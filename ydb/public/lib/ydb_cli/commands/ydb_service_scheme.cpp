@@ -429,14 +429,15 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     }
 
     if (const auto& items = desc.GetItems()) {
-        Cout << Endl << "Items (source [changefeed] => destination):";
+        TPrettyTable table({ "#", "Source", "Changefeed", "Destination" }, TPrettyTableConfig().WithoutRowDelimiters());
         for (const auto& item : items) {
-            Cout << Endl << "  " << item.SrcPath;
-            if (item.SrcChangefeedName) {
-                Cout << " [" << *item.SrcChangefeedName << "]";
-            }
-            Cout << " => " << item.DstPath;
+            table.AddRow()
+                .Column(0, item.Id)
+                .Column(1, item.SrcPath)
+                .Column(2, item.SrcChangefeedName.value_or("n/a"))
+                .Column(3, item.DstPath);
         }
+        Cout << Endl << "Items:" << Endl << table;
     }
 
     Cout << Endl;

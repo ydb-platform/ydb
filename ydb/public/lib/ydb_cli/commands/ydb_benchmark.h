@@ -4,7 +4,7 @@ namespace NYdb::NConsoleClient {
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
-    TWorkloadCommandBenchmark(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
+    TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
 
 protected:

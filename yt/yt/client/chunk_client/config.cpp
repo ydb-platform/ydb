@@ -168,6 +168,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.

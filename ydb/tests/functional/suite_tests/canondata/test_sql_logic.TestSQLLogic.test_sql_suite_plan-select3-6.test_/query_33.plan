@@ -97,6 +97,7 @@
                                                                     "d (-\u221e, +\u221e)",
                                                                     "e (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "sqllogictest_select3-6.test_plan/t1"
                                                             }
                                                         ],
@@ -198,6 +199,7 @@
                                                     "d (-\u221e, +\u221e)",
                                                     "e (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "sqllogictest_select3-6.test_plan/t1"
                                             }
                                         ],

@@ -3,47 +3,55 @@
 body {
   font-family: sans-serif;
   font-size: 0.8em;
-  margin: 2ex 4ex;
+  height: calc(100vh - 20px);
 }
 
-h1 {
-  font-weight: normal;
+.content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1ex;
+}
+
+.header {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  vertical-align: middle;
+}
+
+.header div {
+  padding: 1ex 1em;
+}
+
+.header legend {
+  display: flex;
+  flex-direction: row;
+  gap: 1em;
+  padding: 0;
+}
+
+.header .note {
+  width: 100%;
+  flex-basis: content;
+  flex-grow: 1;
+}
+
+.header .webtreemap-node {
+  flex-basis: max-content;
+  flex-grow: 0;
+  position: relative;
+  text-align: center;
 }
 
 #map {
-  width: 100%;
-  height: 600px;
+  flex-basis: 100%;
+
+  min-width: 300px;
+  min-height: 300px;
 
   position: relative;
   cursor: pointer;
-  -webkit-user-select: none;
-}
-
-legend {
-    float: right;
-    padding: 0;
-}
-
-legend div {
-    display: inline-block;
-    vertical-align: middle;
-    position: static !important;
-}
-
-legend > div {
-    width: 62px;
-    height: 27px;
-}
-
-legend > div > div {
-    width: 50px;
-    height: 15px;
-    margin: 5px;
-    text-align: center;
-}
-
-legend h2 {
-    display: inline-block;
-    font-weight: initial;
-    vertical-align: middle;
+  user-select: none;
 }

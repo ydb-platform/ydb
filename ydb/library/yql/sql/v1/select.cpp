@@ -1220,7 +1220,7 @@ bool InitAndGetGroupKey(TContext& ctx, const TNodePtr& expr, ISource* src, TStri
     if (keyNamePtr && expr->GetLabel().empty()) {
         keyColumn = *keyNamePtr;
         auto sourceNamePtr = expr->GetSourceName();
-        auto columnNode = dynamic_cast<TColumnNode*>(expr.Get());
+        auto columnNode = expr->GetColumnNode();
         if (isJoin && (!columnNode || !columnNode->IsArtificial())) {
             if (!sourceNamePtr || sourceNamePtr->empty()) {
                 if (!src->IsAlias(EExprSeat::GroupBy, keyColumn)) {

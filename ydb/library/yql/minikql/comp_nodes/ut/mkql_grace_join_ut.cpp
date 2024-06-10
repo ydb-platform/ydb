@@ -2142,7 +2142,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));

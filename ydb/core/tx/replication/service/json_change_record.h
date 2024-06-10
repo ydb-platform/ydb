@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/change_exchange/change_exchange.h>
+#include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_sender_resolver.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>

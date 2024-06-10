@@ -3,6 +3,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_sender_resolver.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>

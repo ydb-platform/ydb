@@ -1,6 +1,7 @@
 #pragma once
 
 #include "change_exchange.h"
+#include "change_sender_resolver.h"
 
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 
@@ -104,7 +105,6 @@ class TBaseChangeSender {
         THashSet<ui64> CompletedPartitions;
     };
 
-private:
     void LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
         auto res = senders.emplace(partitionId, TSender{});
         Y_ABORT_UNLESS(res.second);

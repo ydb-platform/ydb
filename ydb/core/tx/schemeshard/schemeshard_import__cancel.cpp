@@ -85,7 +85,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 }
             }
 
-            if (importInfo->State == EState::Cancelled) {
+            if (importInfo->State == TImportInfo::EState::Cancelled) {
                 importInfo->EndTime = TAppData::TimeProvider->Now();
             }
 

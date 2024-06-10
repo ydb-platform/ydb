@@ -93,6 +93,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     TNodeId MaxAllowedNodeId = std::numeric_limits<TNodeId>::max();
     ui32 RequestsBeforeNodeList = 0;
     ui64 HiveId = 0;
+    std::optional<ui64> MaximumDisksPerNode;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -372,6 +373,18 @@ public:
                 for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
                     BaseConfigGroupIndex[group.GetGroupId()] = &group;
                 }
+                std::unordered_map<TNodeId, int> disksPerNode;
+                disksPerNode.reserve(pbConfig.NodeSize());
+                for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : pbConfig.GetPDisk()) {
+                    disksPerNode[pdisk.GetNodeId()]++;
+                }
+                int maximumDisksPerNode = 0;
+                for (const auto& [nodeId, disks] : disksPerNode) {
+                    if (disks > maximumDisksPerNode) {
+                        maximumDisksPerNode = disks;
+                    }
+                }
+                MaximumDisksPerNode = maximumDisksPerNode;
             }
         }
         if (ResolveGroupsToNodes) {
@@ -865,6 +878,10 @@ public:
                     });
                 }
             }
+        }
+
+        if (MaximumDisksPerNode.has_value()) {
+            result.SetMaximumDisksPerNode(MaximumDisksPerNode.value());
         }
 
         TStringStream json;

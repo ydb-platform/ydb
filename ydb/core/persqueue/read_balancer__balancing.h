@@ -86,9 +86,9 @@ struct TPartitionFamily {
     std::unordered_set<ui32> LockedPartitions;
 
     // The number of active partitions in the family.
-    size_t ActivePartitionCount;
+    size_t ActivePartitionCount = 0;
     // The number of inactive partitions in the family.
-    size_t InactivePartitionCount;
+    size_t InactivePartitionCount = 0;
 
     // Reading sessions that have a list of partitions to read and these sessions can read this family
     std::unordered_map<TActorId, TSession*> SpecialSessions;

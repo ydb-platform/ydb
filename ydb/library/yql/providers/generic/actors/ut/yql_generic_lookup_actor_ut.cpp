@@ -17,7 +17,6 @@
 
 using namespace NYql::NConnector;
 using namespace NYql::NConnector::NTest;
-using namespace NYql;
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
@@ -148,16 +147,16 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
 
         NKikimr::NMiniKQL::TStructTypeBuilder keyTypeBuilder{typeEnv};
-        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NUdf::EDataSlot::Uint64, false));
-        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NUdf::EDataSlot::Uint64, true));
+        keyTypeBuilder.Add("id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, false));
+        keyTypeBuilder.Add("optional_id", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::Uint64, true));
         NKikimr::NMiniKQL::TStructTypeBuilder outputypeBuilder{typeEnv};
-        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NUdf::EDataSlot::String, true));
+        outputypeBuilder.Add("string_value", typeBuilder.NewDataType(NYql::NUdf::EDataSlot::String, true));
 
         auto guard = Guard(*alloc.get());
 
         auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
             connectorMock,
-            std::make_shared<NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
+            std::make_shared<NYql::NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
             edge,
             alloc,
             std::move(lookupSourceSettings),
@@ -170,10 +169,10 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         NKikimr::NMiniKQL::TUnboxedValueVector keys;
         for (size_t i = 0; i != 3; ++i) {
-            NUdf::TUnboxedValue* keyItems;
+            NYql::NUdf::TUnboxedValue* keyItems;
             auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
-            keyItems[0] = NUdf::TUnboxedValuePod(ui64(i));
-            keyItems[1] = NUdf::TUnboxedValuePod(ui64(100 + i));
+            keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
+            keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
             keys.push_back(std::move(key));
         }
 
@@ -191,14 +190,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             auto& [k, v] = lookupResult[0];
             UNIT_ASSERT_EQUAL(0, k.GetElement(0).Get<ui64>());
             UNIT_ASSERT_EQUAL(100, k.GetElement(1).Get<ui64>());
-            NUdf::TUnboxedValue val = v.GetElement(0);
+            NYql::NUdf::TUnboxedValue val = v.GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("a"));
         }
         {
             auto& [k, v] = lookupResult[1];
             UNIT_ASSERT_EQUAL(1, k.GetElement(0).Get<ui64>());
             UNIT_ASSERT_EQUAL(101, k.GetElement(1).Get<ui64>());
-            NUdf::TUnboxedValue val = v.GetElement(0);
+            NYql::NUdf::TUnboxedValue val = v.GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("b"));
         }
         {

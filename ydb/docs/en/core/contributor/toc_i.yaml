@@ -15,6 +15,8 @@ items:
     items:
     - name: Locks and transaction change visibility
       href: datashard-locks-and-change-visibility.md
+    - name: Distributed transactions
+      href: datashard-distributed-txs.md
   - name: Testing with load actors
     items:
     - name: Overview

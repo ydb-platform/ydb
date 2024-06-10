@@ -1204,9 +1204,9 @@
     ],
     "test.test[flatten_by-flatten_corr_name_column-default.txt-Debug]": [
         {
-            "checksum": "3a98118c524d24a6dc33985672a9e8dc",
-            "size": 1546,
-            "uri": "https://{canondata_backend}/1937150/b466c661905bdae484e68f0651bb2615aefc377c/resource.tar.gz#test.test_flatten_by-flatten_corr_name_column-default.txt-Debug_/opt.yql"
+            "checksum": "9e6ea71bae1fa934279a4122048364c1",
+            "size": 1578,
+            "uri": "https://{canondata_backend}/1916746/3da0401d11aad7539126d5063642330c3ae29fe8/resource.tar.gz#test.test_flatten_by-flatten_corr_name_column-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[flatten_by-flatten_corr_name_column-default.txt-Plan]": [

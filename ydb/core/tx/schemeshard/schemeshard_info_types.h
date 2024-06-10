@@ -44,6 +44,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 

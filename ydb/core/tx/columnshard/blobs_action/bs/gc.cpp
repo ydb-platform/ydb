@@ -66,7 +66,7 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const u
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
         TabletId, CurrentGen, PerGenerationCounter.Val(),
         channelIdx, true,
-        std::get<0>(CollectGenStepInFlight), std::get<1>(CollectGenStepInFlight),
+        CollectGenStepInFlight.Generation(), CollectGenStepInFlight.Step(),
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),
         TInstant::Max(), true);

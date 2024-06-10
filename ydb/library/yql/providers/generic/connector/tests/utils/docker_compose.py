@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 import shutil
@@ -124,10 +125,29 @@ class DockerComposeHelper:
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
-        try:
-            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+        # let tables initialize
+        # TODO maybe try except where timeout (quick check: to get it set sleep to zero and review error log for ../datasource/ydb -F *optional*)
+        # time.sleep(15)
+
+        # This should be enough for database to initialize
+        #   makes CalledProcessError if database did not initialize it`s first tables before check
+        passed = False
+        err = None
+        start = datetime.now()
+
+        timeout = 15
+        while (datetime.now() - start).total_seconds() < timeout and not passed:
+            try:
+                out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+                passed = True
+            except subprocess.CalledProcessError as e:
+                err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+
+        if not passed:
+            if err is not None:
+                raise err
+            else:
+                raise RuntimeError("docker-compose error: timed out to check cmd output")
 
         data = json.loads(out)
 

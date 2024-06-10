@@ -141,6 +141,7 @@ public:
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
             Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
     void PassAway() override {

@@ -12316,7 +12316,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Rank"] = &WinRankWrapper;
         Functions["DenseRank"] = &WinRankWrapper;
         Functions["PercentRank"] = &WinRankWrapper;
-        Functions["CumeDist"] = &WinRowNumberWrapper;
+        Functions["CumeDist"] = &WinCumeDistWrapper;
         Functions["NTile"] = &WinNTileWrapper;
         Functions["Ascending"] = &PresortWrapper;
         Functions["Descending"] = &PresortWrapper;

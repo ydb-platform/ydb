@@ -130,7 +130,8 @@ class YQv2Extension(ExtensionPoint):
     def apply_to_kikimr_conf(self, request, configuration):
         extra_feature_flags = [
             'enable_external_data_sources',
-            'enable_script_execution_operations'
+            'enable_script_execution_operations',
+            'enable_external_source_schema_inference',
         ]
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')

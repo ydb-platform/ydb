@@ -10,6 +10,8 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 
 struct TEvPersQueue {

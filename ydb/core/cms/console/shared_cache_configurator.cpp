@@ -45,8 +45,8 @@ public:
         }
         if (record.GetConfig().HasSharedCacheConfig()) {
             cfg.MergeFrom(record.GetConfig().GetSharedCacheConfig());
-        } else if (appData->SharedCacheConfigPtr) {
-            cfg.MergeFrom(*appData->SharedCacheConfigPtr);
+        } else {
+            cfg.MergeFrom(appData->SharedCacheConfig);
         }
 
         ApplyConfig(std::move(cfg), ctx);

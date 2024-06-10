@@ -245,6 +245,9 @@ void TDirectReadSessionManager::Close() {
     // TODO(qyryq) Cancel contexts, anything else?
 
     for (auto& [_, nodeSession] : NodeSessions) {
+        if (auto s = nodeSession->LockShared()) {
+            s->Close();
+        }
         nodeSession->Cancel();
     }
 }
@@ -373,6 +376,7 @@ void TDirectReadSession::Start()  {
 
 void TDirectReadSession::Close() {
     with_lock (Lock) {
+        // TODO(qyryq) Close contexts, connections, processors, etc.
         if (State >= EState::CLOSING) {
             return;
         }

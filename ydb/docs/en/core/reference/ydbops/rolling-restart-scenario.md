@@ -26,7 +26,7 @@ The algorithm will always work in two phases:
 
 ## Examples
 
-The following examples assume you have also specified all the required connection options (such as endpoint or credentials).
+The following examples assume you have specified all the required connection options (such as endpoint or credentials).
 
 ### Restarting all nodes in the cluster
 

@@ -6,7 +6,7 @@
 namespace NYdb::NConsoleClient {
 
 TWorkloadCommandImport::TWorkloadCommandImport(NYdbWorkload::TWorkloadParams& workloadParams, NYdbWorkload::TWorkloadDataInitializer::TList initializers)
-    : TClientCommandTree("import", {}, "Fill tables for workload by data.")
+    : TClientCommandTree("import", {}, "Fill tables for workload with data.")
     , WorkloadParams(workloadParams)
 {
     for (auto initializer: initializers) {

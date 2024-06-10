@@ -33,11 +33,8 @@ private:
     TString Query;
     TString QueryFile;
     TString Syntax;
-    TString OperationIdToFetch;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
-    bool RunAsync = false;
-    bool AsyncWait = false;
 };
 
 }

@@ -35,27 +35,6 @@ void TCommandSql::Config(TConfig& config) {
         .StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with script (query) text").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
-    config.Opts->AddLongOption("async", "Execute script (query) asynchronously. "
-            "Operation will be started on server and its Id will be printed. "
-            "To get operation status use \"ydb operation get\" command. "
-            "To fetch query results use \"--fetch <operation_id>\" option of this command.\n"
-            "Note: query results will be stored on server and thus consume storage resources.")
-        .StoreTrue(&RunAsync);
-    config.Opts->AddLongOption("fetch", "Fetch results of existing operation. "
-            "Operation Id should be provided with this option.").RequiredArgument("STRING")
-        .StoreResult(&OperationIdToFetch);
-    config.Opts->AddLongOption("async-wait",
-            "Execute script (query) asynchronously and wait for results (using polling).\n"
-            "The difference between using and not-using this option:\n"
-            "  - If YDB CLI loses connection to the server when running a query without this option, "
-            "the stream breaks and command execution finishes with error. "
-            "If this option is used, the polling process continues and query results may still be received after reconnect.\n"
-            "  - Using this option will probably reduce performance due to artifitial delays between polling requests.\n"
-            "Note: query results will be stored on server and thus consume storage resources.")
-        .StoreTrue(&AsyncWait);
-    config.Opts->AddLongOption("results-ttl", "Amount of time to store query results on server. "
-            "By default it is 86400s (24 hours).").RequiredArgument("SECONDS")
-        .StoreResult(&OperationIdToFetch);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
@@ -134,149 +113,52 @@ int TCommandSql::Run(TConfig& config) {
     return RunCommand(config);
 }
 
-namespace {
-    Ydb::Query::StatsMode StatsModeToProto(NQuery::EStatsMode mode) {
-        switch (mode) {
-            case NQuery::EStatsMode::Unspecified:
-                return Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED;
-            case NQuery::EStatsMode::None:
-                return Ydb::Query::StatsMode::STATS_MODE_NONE;
-                break;
-            case NQuery::EStatsMode::Basic:
-                return Ydb::Query::StatsMode::STATS_MODE_BASIC;
-                break;
-            case NQuery::EStatsMode::Full:
-                return Ydb::Query::StatsMode::STATS_MODE_FULL;
-                break;
-            case NQuery::EStatsMode::Profile:
-                return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
-                break;
-            default:
-                throw TMisuseException() << "Unknown stats collection mode";
-        }
-    }
-}
-
 int TCommandSql::RunCommand(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
     SetInterruptHandlers();
-    
-    if (RunAsync || AsyncWait) {
-        // ExecuteScript
-        NQuery::TExecuteScriptSettings settings;
+    // Single stream execution
+    NQuery::TExecuteQuerySettings settings;
 
-        if (ExplainMode) {
-            // Execute explain request for the query
-            settings.ExecMode(Ydb::Query::EXEC_MODE_EXPLAIN);
-        } else {
-            // Execute query
-            settings.ExecMode(Ydb::Query::EXEC_MODE_EXECUTE);
-            auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
-            auto actualStatsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
-            settings.StatsMode(StatsModeToProto(actualStatsMode));
-        }
-
-        if (!Parameters.empty() || !IsStdinInteractive()) {
-            // Execute query with parameters
-            THolder<TParamsBuilder> paramBuilder;
-            while (!IsInterrupted() && GetNextParams(paramBuilder)) {
-                auto asyncResult = client.ExecuteScript(
-                        Query,
-                        paramBuilder->Build(),
-                        settings
-                    );
-
-                auto result = asyncResult.GetValueSync();
-                ThrowOnError(result);
-                if (AsyncWait) {
-                    WaitForResultAndPrintResponse(driver, client, result);
-                } else {
-                    PrintResponse(result);
-                }
-            }
-        } else {
-            // Execute query without parameters
-            auto asyncResult = client.ExecuteScript(
-                Query,
-                settings
-            );
-
-            auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
-            if (AsyncWait) {
-                WaitForResultAndPrintResponse(driver, client, result);
-            } else {
-                PrintResponse(result);
-            }
-        }
-    } else if (OperationIdToFetch) {
-        // Fetch operation results
-        return FetchResults(driver, client);
+    if (ExplainMode) {
+        // Execute explain request for the query
+        settings.ExecMode(NQuery::EExecMode::Explain);
     } else {
-        // Single stream execution
-        NQuery::TExecuteQuerySettings settings;
-
-        if (ExplainMode) {
-            // Execute explain request for the query
-            settings.ExecMode(NQuery::EExecMode::Explain);
-        } else {
-            // Execute query
-            settings.ExecMode(NQuery::EExecMode::Execute);
-            auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
-            settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
-        }
-        if (!Parameters.empty() || !IsStdinInteractive()) {
-            // Execute query with parameters
-            THolder<TParamsBuilder> paramBuilder;
-            while (!IsInterrupted() && GetNextParams(paramBuilder)) {
-                auto asyncResult = client.StreamExecuteQuery(
-                        Query,
-                        // TODO: NoTx by default
-                        NQuery::TTxControl::BeginTx().CommitTx(),
-                        paramBuilder->Build(),
-                        settings
-                    );
-
-                auto result = asyncResult.GetValueSync();
-                ThrowOnError(result);
-                return PrintResponse(result);
-            }
-        } else {
-            // Execute query without parameters
+        // Execute query
+        settings.ExecMode(NQuery::EExecMode::Execute);
+        auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
+        settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
+    }
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        // Execute query with parameters
+        THolder<TParamsBuilder> paramBuilder;
+        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
             auto asyncResult = client.StreamExecuteQuery(
-                Query,
-                // TODO: NoTx by default
-                NQuery::TTxControl::BeginTx().CommitTx(),
-                settings
-            );
+                    Query,
+                    // TODO: NoTx by default
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    paramBuilder->Build(),
+                    settings
+                );
 
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);
             return PrintResponse(result);
         }
+    } else {
+        // Execute query without parameters
+        auto asyncResult = client.StreamExecuteQuery(
+            Query,
+            // TODO: NoTx by default
+            NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        );
+
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        return PrintResponse(result);
     }
     return EXIT_SUCCESS;
-}
-
-using namespace NJson;
-
-namespace {
-    void PrintJson(const TString &jsonString) {
-        auto stringBuf = TStringBuf(jsonString);
-
-        TJsonValue jsonValue;
-        try {
-            ReadJsonTree(stringBuf, &jsonValue, true/*throw on error*/);
-        }
-        catch (const TJsonException &ex) {
-            Cerr << "Can't parse json: " << ex.what();
-        }
-        NJsonWriter::TBuf w;
-        w.SetIndentSpaces(2);
-        w.WriteJsonValue(&jsonValue);
-        Cout << w.Str() << Endl;
-    }
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
@@ -299,24 +181,11 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             }
 
             if (!streamPart.GetStats().Empty()) {
-                if (OutputFormat == EOutputFormat::JsonUnicode) {
-                    if (streamPart.GetStats()->GetPlan().Defined()) {
-                        Cout << "Plan:" << Endl;
-                        PrintJson(streamPart.GetStats()->GetPlan().GetRef());
-                    }
-                    if (streamPart.GetStats()->GetAst().Defined()) {
-                        Cout << "Ast:" << Endl << streamPart.GetStats()->GetAst().GetRef() << Endl;
-                    }
-                } else if (OutputFormat == EOutputFormat::JsonBase64) {
-                    auto& proto = NYdb::TProtoAccessor::GetProto(*streamPart.GetStats());
-                    Cout << "Stats proto:" << Endl << proto.DebugString() << Endl;
-                } else {
-                    const auto& queryStats = *streamPart.GetStats();
-                    stats = queryStats.ToString();
+                const auto& queryStats = *streamPart.GetStats();
+                stats = queryStats.ToString();
 
-                    if (queryStats.GetPlan()) {
-                        plan = queryStats.GetPlan();
-                    }
+                if (queryStats.GetPlan()) {
+                    plan = queryStats.GetPlan();
                 }
             }
         }
@@ -342,137 +211,6 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
         return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-void TCommandSql::PrintResponse(const NQuery::TScriptExecutionOperation& result) {
-    Cout << "Operation info:" << Endl << result.ToString();
-}
-
-int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
-    // TODO: wait/retry
-
-    NKikimr::NOperationId::TOperationId operationId;
-    try {
-        operationId = TOperationId(OperationIdToFetch);
-    } catch (const yexception& ex) {
-        throw TMisuseException() << "Invalid operation ID to fetch";
-    }
-
-    if (operationId.GetKind() != Ydb::TOperationId::SCRIPT_EXECUTION) {
-        throw TMisuseException() << "Invalid operation kind. Expected kind: SCRIPT_EXECUTION";
-    }
-
-    // Throw exception on getting operation info if it is the first getOperation, then retry
-    bool firstGetOperation = true;
-    NOperation::TOperationClient operationClient(driver);
-    TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
-    int fakeCounter = 0;
-    while (!IsInterrupted()) {
-        NQuery::TScriptExecutionOperation execScriptOperation = operationClient
-            .Get<NQuery::TScriptExecutionOperation>(operationId)
-            .GetValueSync();
-        if (firstGetOperation) {
-            ThrowOnError(execScriptOperation.Status());
-            firstGetOperation = false;
-        }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready() || ++fakeCounter <= 5) {
-            waitingBar.Render();
-            Sleep(TDuration::Seconds(1));
-            continue;
-        }
-        waitingBar.Finish(true);
-        TResultSetPrinter printer(OutputFormat, &IsInterrupted);
-
-        for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
-            TString const* nextFetchToken = nullptr;
-            while (!IsInterrupted()) {
-                NYdb::NQuery::TFetchScriptResultsSettings settings;
-                if (nextFetchToken != nullptr) {
-                    settings.FetchToken(*nextFetchToken);
-                }
-
-                auto asyncResult = client.FetchScriptResults(operationId, resultSetIndex, settings);
-                auto result = asyncResult.GetValueSync();
-
-                if (result.HasResultSet() && !ExplainAnalyzeMode) {
-                    printer.Print(result.ExtractResultSet());
-                }
-
-                if (result.GetNextFetchToken()) {
-                    nextFetchToken = &result.GetNextFetchToken();
-                } else {
-                    break;
-                }
-            }
-        }
-        break;
-    }
-    waitingBar.Finish(false);
-
-    if (IsInterrupted()) {
-        Cerr << "<INTERRUPTED>" << Endl;
-            return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-int TCommandSql::WaitForResultAndPrintResponse(TDriver& driver, NQuery::TQueryClient& client,
-        const NQuery::TScriptExecutionOperation& result) {
-    const TOperation::TOperationId& operationId = result.Id();
-    // Throw exception on getting operation info if it is the first getOperation, then retry
-    bool firstGetOperation = true;
-    NOperation::TOperationClient operationClient(driver);
-    TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
-    int fakeCounter = 0;
-    while (!IsInterrupted()) {
-        NQuery::TScriptExecutionOperation execScriptOperation = firstGetOperation
-            ? result
-            : operationClient
-                .Get<NQuery::TScriptExecutionOperation>(operationId)
-                .GetValueSync();
-        if (firstGetOperation) {
-            ThrowOnError(execScriptOperation.Status());
-            firstGetOperation = false;
-        }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready() || ++fakeCounter <= 5) {
-            waitingBar.Render();
-            Sleep(TDuration::Seconds(1));
-            continue;
-        }
-        waitingBar.Finish(true);
-        TResultSetPrinter printer(OutputFormat, &IsInterrupted);
-
-        for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
-            TString const* nextFetchToken = nullptr;
-            while (!IsInterrupted()) {
-                NYdb::NQuery::TFetchScriptResultsSettings settings;
-                if (nextFetchToken != nullptr) {
-                    settings.FetchToken(*nextFetchToken);
-                }
-
-                auto asyncResult = client.FetchScriptResults(operationId, resultSetIndex, settings);
-                auto result = asyncResult.GetValueSync();
-
-                if (result.HasResultSet() && !ExplainAnalyzeMode) {
-                    printer.Print(result.ExtractResultSet());
-                }
-
-                if (result.GetNextFetchToken()) {
-                    nextFetchToken = &result.GetNextFetchToken();
-                } else {
-                    break;
-                }
-            }
-        }
-        break;
-    }
-    waitingBar.Finish(false);
-
-    if (IsInterrupted()) {
-        Cerr << "<INTERRUPTED>" << Endl;
-            return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 }

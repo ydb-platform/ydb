@@ -89,3 +89,4 @@ ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/tests/functional/rename [test_rename.py */10] chunk chunk
+ydb/tests/fq/pq_async_io sole*

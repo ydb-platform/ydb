@@ -295,6 +295,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
         for (const auto &alter : req->alter_columns()) {
             auto column = desc->AddColumns();
             column->SetName(alter.name());
+            column->SetNotNull(alter.Getnot_null());
             if (!alter.family().empty()) {
                 column->SetFamilyName(alter.family());
             }

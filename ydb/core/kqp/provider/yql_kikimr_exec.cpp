@@ -1323,7 +1323,7 @@ public:
                         bool hasNotNull = false;
                         if (columnTuple.Size() > 2) {
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                            for (const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                                 if (constraint.Name().Value() == "serial") {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
@@ -1434,16 +1434,8 @@ public:
                             }
 
                             auto value = TString(constraint.Item(0).Cast<TCoAtom>());
-
-                            if (value == "not_null") {
-                                // todo:
-                                // alter_columns->set_not_null();
-                            } else if (value = "null") {
-                                // todo:
-                                // alter_columns->set_null();
-                            }
-
-                            return SyncError();
+                            auto notNull = (value == "not_null");
+                            alter_columns->set_not_null(notNull);
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column"));
@@ -1854,7 +1846,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 });
-
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {

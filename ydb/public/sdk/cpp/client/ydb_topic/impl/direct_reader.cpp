@@ -377,11 +377,20 @@ void TDirectReadSession::Start()  {
 
 void TDirectReadSession::Close() {
     with_lock (Lock) {
-        // TODO(qyryq) Close contexts, connections, processors, etc.
         if (State >= EState::CLOSING) {
             return;
         }
         State = EState::CLOSED;
+
+        ::NYdb::NTopic::Cancel(ConnectContext);
+        ::NYdb::NTopic::Cancel(ConnectTimeoutContext);
+        ::NYdb::NTopic::Cancel(ConnectDelayContext);
+        if (Processor) {
+            Processor->Cancel();
+        }
+
+        // TODO(qyryq) Do we need to wait for something here?
+        // TODO(qyryq) Do we need a separate CLOSING state?
     }
 }
 

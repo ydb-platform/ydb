@@ -1,6 +1,8 @@
 #pragma once
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <util/generic/vector.h>
 

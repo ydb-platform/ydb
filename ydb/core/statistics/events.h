@@ -71,6 +71,11 @@ struct TEvStatistics {
 
         EvDeleteStatisticsQueryResponse,
 
+        EvResolvePathResponse,
+        EvScanTableAccepted,
+        EvGetScanStatus,
+        EvGetScanStatusResponse,
+
         EvEnd
     };
 
@@ -174,10 +179,44 @@ struct TEvStatistics {
         EvScanTable>
     {};
 
+    struct TEvScanTableAccepted : public TEventPB<
+        TEvScanTableAccepted,
+        NKikimrStat::TEvScanTableAccepted,
+        EvScanTableAccepted>
+    {};
+
     struct TEvScanTableResponse : public TEventPB<
         TEvScanTableResponse,
         NKikimrStat::TEvScanTableResponse,
         EvScanTableResponse>
+    {};
+
+    struct TEvResolvePathResponse : public TEventLocal<
+        TEvResolvePathResponse,
+        EvResolvePathResponse>
+    {
+        enum EStatus {
+            SUCCESS,
+            PATH_UNKNOWN,
+            INVALID_PATH,
+            PATH_NOT_TABLE,
+            INTERNAL_ERROR
+        };
+        EStatus Status;
+        TPathId PathId;
+        ui64 StatisticsAggregatorId = 0;
+    };
+
+    struct TEvGetScanStatus : public TEventPB<
+        TEvGetScanStatus,
+        NKikimrStat::TEvGetScanStatus,
+        EvGetScanStatus>
+    {};
+
+    struct TEvGetScanStatusResponse : public TEventPB<
+        TEvGetScanStatusResponse,
+        NKikimrStat::TEvGetScanStatusResponse,
+        EvGetScanStatusResponse>
     {};
 
 };

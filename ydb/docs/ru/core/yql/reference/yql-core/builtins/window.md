@@ -13,4 +13,8 @@
 
 {% include [x](_includes/window/rank_dense.md) %}
 
+{% include [x](_includes/window/ntile.md) %}
+
+{% include [x](_includes/window/cume_dist.md) %}
+
 {% include [x](_includes/window/session_state.md) %}

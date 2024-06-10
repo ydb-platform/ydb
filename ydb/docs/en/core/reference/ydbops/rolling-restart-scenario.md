@@ -20,8 +20,9 @@ There are two special filters that are an exception to this rule, `--storage` an
 - However, specifying both selects all nodes and is equivalent to not specifying these two filters.
 
 The algorithm will always work in two phases:
-- first, it will determine whether any storage nodes fit the restart filters and restart these nodes only.
-- after all storage nodes have been restarted (or it has been determined that no storage nodes are selected), the process repeats for tenant nodes.
+
+- First, it will determine whether any storage nodes fit the restart filters and restart these nodes only.
+- After all storage nodes have been restarted or it has been determined that no storage nodes are selected, the process repeats for tenant nodes.
 
 ## Examples
 

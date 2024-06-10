@@ -25,6 +25,7 @@ T_Retval = TypeVar("T_Retval")
 PosArgsT = TypeVarTuple("PosArgsT")
 
 threadlocals = threading.local()
+loaded_backends: dict[str, type[AsyncBackend]] = {}
 
 
 def run(
@@ -150,14 +151,16 @@ def claim_worker_thread(
         del threadlocals.current_token
 
 
-def get_async_backend(asynclib_name: str | None = None) -> AsyncBackend:
+def get_async_backend(asynclib_name: str | None = None) -> type[AsyncBackend]:
     if asynclib_name is None:
         asynclib_name = sniffio.current_async_library()
 
-    modulename = "anyio._backends._" + asynclib_name
+    # We use our own dict instead of sys.modules to get the already imported back-end
+    # class because the appropriate modules in sys.modules could potentially be only
+    # partially initialized
     try:
-        module = sys.modules[modulename]
+        return loaded_backends[asynclib_name]
     except KeyError:
-        module = import_module(modulename)
-
-    return getattr(module, "backend_class")
+        module = import_module(f"anyio._backends._{asynclib_name}")
+        loaded_backends[asynclib_name] = module.backend_class
+        return module.backend_class

@@ -184,7 +184,7 @@ struct TSerializationDumpPodWriter
     template <class C>
     static void Do(C& context, const T& value)
     {
-        if constexpr(TFormatTraits<T>::HasCustomFormatValue) {
+        if constexpr(CFormattable<T>) {
             SERIALIZATION_DUMP_WRITE(context, "pod %v", value);
         } else {
             SERIALIZATION_DUMP_WRITE(context, "pod[%v] %v", sizeof(T), DumpRangeToHex(TRef::FromPod(value)));

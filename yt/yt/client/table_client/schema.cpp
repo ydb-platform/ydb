@@ -924,19 +924,16 @@ TTableSchemaPtr TTableSchema::FromKeyColumns(const TKeyColumns& keyColumns)
 
 TTableSchemaPtr TTableSchema::FromSortColumns(const TSortColumns& sortColumns)
 {
-    TTableSchema schema;
     std::vector<TColumnSchema> columns;
     for (const auto& sortColumn : sortColumns) {
         columns.push_back(
             TColumnSchema(sortColumn.Name, ESimpleLogicalValueType::Any)
                 .SetSortOrder(sortColumn.SortOrder));
     }
-    schema.ColumnInfo_ = std::make_shared<const TColumnInfo>(
-        std::move(columns),
-        std::vector<TDeletedColumn>{});
-    schema.KeyColumnCount_ = sortColumns.size();
-    ValidateTableSchema(schema);
-    return New<TTableSchema>(std::move(schema));
+
+    auto schema = New<TTableSchema>(std::move(columns), /*strict*/ false);
+    ValidateTableSchema(*schema);
+    return schema;
 }
 
 TTableSchemaPtr TTableSchema::ToQuery() const
@@ -1379,11 +1376,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
     builder->AppendChar(']');
 }
 
-TString ToString(const TTableSchema& schema)
-{
-    return ToStringViaBuilder(schema);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec)
 {
     if (schema) {
@@ -1391,11 +1383,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     } else {
         builder->AppendString(TStringBuf("<null>"));
     }
-}
-
-TString ToString(const TTableSchemaPtr& schema)
-{
-    return ToStringViaBuilder(schema);
 }
 
 TString SerializeToWireProto(const TTableSchemaPtr& schema)
@@ -1762,13 +1749,13 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
 
     for (const auto& column : schema.Columns()) {
         try {
-            auto logical_type = column.LogicalType();
+            auto logicalType = column.LogicalType();
             if (column.SortOrder() && !column.IsOfV1Type() &&
-                logical_type->GetMetatype() != ELogicalMetatype::List &&
-                logical_type->GetMetatype() != ELogicalMetatype::Tuple)
+                logicalType->GetMetatype() != ELogicalMetatype::List &&
+                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *logical_type);
+                    *logicalType);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",

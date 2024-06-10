@@ -768,16 +768,17 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     }));
 }
 
-TFuture<IQueueRowsetPtr> TClient::PullConsumer(
+TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
     std::optional<i64> offset,
     int partitionIndex,
     const TQueueRowBatchReadOptions& rowBatchReadOptions,
-    const TPullConsumerOptions& options)
+    const TPullQueueConsumerOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
+    // Use PullConsumer (not PullQueueConsumer) for backward compatibility.
     auto req = proxy.PullConsumer();
     req->SetResponseHeavy(true);
     SetTimeoutOptions(*req, options);
@@ -792,7 +793,7 @@ TFuture<IQueueRowsetPtr> TClient::PullConsumer(
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullConsumerPtr& rsp) -> IQueueRowsetPtr {
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueueConsumerPtr& rsp) -> IQueueRowsetPtr {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
@@ -2535,6 +2536,26 @@ TFuture<TPipelineStatus> TClient::GetPipelineStatus(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
         return TPipelineStatus{
             .State = FromProto<NFlow::EPipelineState>(rsp->state()),
+        };
+    }));
+}
+
+TFuture<TGetFlowViewResult> TClient::GetFlowView(
+    const NYPath::TYPath& pipelinePath,
+    const NYPath::TYPath& viewPath,
+    const TGetFlowViewOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetFlowView();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_view_path(viewPath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
+        return TGetFlowViewResult{
+            .FlowViewPart = TYsonString(rsp->flow_view_part()),
         };
     }));
 }

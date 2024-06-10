@@ -4,11 +4,11 @@
 #include "format_analyser.h"
 #endif
 
-namespace NYT {
+#include "format_arg.h"
+
+namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
 
 consteval bool Contains(std::string_view sv, char symbol)
 {
@@ -93,7 +93,9 @@ consteval void TFormatAnalyser::ValidateFormat(std::string_view fmt)
 template <class TArg>
 consteval auto TFormatAnalyser::GetSpecifiers()
 {
-    static_assert(CFormattable<TArg>, "Your specialization of TFormatArg is broken");
+    if constexpr (!CFormattable<TArg>) {
+        CrashCompilerNotFormattable<TArg>("Your specialization of TFormatArg is broken");
+    }
 
     return TSpecifiers{
         .Conversion = std::string_view{
@@ -105,39 +107,6 @@ consteval auto TFormatAnalyser::GetSpecifiers()
     };
 }
 
-} // namespace NDetail
-
 ////////////////////////////////////////////////////////////////////////////////
-
-template <bool Hot, size_t N, std::array<char, N> List, class TFrom>
-consteval auto TFormatArgBase::ExtendConversion()
-{
-    static_assert(CFormattable<TFrom>);
-    return AppendArrays<Hot, N, List, &TFrom::ConversionSpecifiers>();
-}
-
-template <bool Hot, size_t N, std::array<char, N> List, class TFrom>
-consteval auto TFormatArgBase::ExtendFlags()
-{
-    static_assert(CFormattable<TFrom>);
-    return AppendArrays<Hot, N, List, &TFrom::FlagSpecifiers>();
-}
-
-template <bool Hot, size_t N, std::array<char, N> List, auto* From>
-consteval auto TFormatArgBase::AppendArrays()
-{
-    auto& from = *From;
-    return [] <size_t... I, size_t... J> (
-        std::index_sequence<I...>,
-        std::index_sequence<J...>) {
-            if constexpr (Hot) {
-                return std::array{List[J]..., from[I]...};
-            } else {
-                return std::array{from[I]..., List[J]...};
-            }
-        } (
-            std::make_index_sequence<std::size(from)>(),
-            std::make_index_sequence<N>());
-    }
 
 } // namespace NYT::NDetail

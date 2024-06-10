@@ -44,8 +44,9 @@ TEST(TProtobufYsonSchemaTest, GetMessageSchema)
             {name="required_int32_field";type="int32";required=%true;};
             {name="repeated_int32_field";type={type_name="list";item="int32";};};
             {name="string_to_int32_map";type={type_name="dict";key="utf8";value="int32";};};
-            {name="int32_to_string_map";type={type_name="dict";key="int32";value="utf8";};};];}
-    )";
+            {name="int32_to_string_map";type={type_name="dict";key="int32";value="utf8";};};
+        ];
+    })";
 
     auto expectedNode = NYTree::ConvertToNode(TYsonStringBuf(expected), NYTree::GetEphemeralNodeFactory());
     auto actualNode = NYTree::ConvertToNode(TYsonStringBuf(outputStream.Str()), NYTree::GetEphemeralNodeFactory());

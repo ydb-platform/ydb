@@ -23,8 +23,7 @@ class TestRunner(metaclass=ABCMeta):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
-    ) -> bool | None:
-        ...
+    ) -> bool | None: ...
 
     @abstractmethod
     def run_asyncgen_fixture(

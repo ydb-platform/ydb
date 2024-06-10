@@ -21,12 +21,10 @@ PosArgsT = TypeVarTuple("PosArgsT")
 
 class TaskStatus(Protocol[T_contra]):
     @overload
-    def started(self: TaskStatus[None]) -> None:
-        ...
+    def started(self: TaskStatus[None]) -> None: ...
 
     @overload
-    def started(self, value: T_contra) -> None:
-        ...
+    def started(self, value: T_contra) -> None: ...
 
     def started(self, value: T_contra | None = None) -> None:
         """

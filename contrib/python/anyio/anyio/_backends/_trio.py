@@ -5,6 +5,7 @@ import math
 import socket
 import sys
 import types
+import weakref
 from collections.abc import AsyncIterator, Iterable
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -839,6 +840,24 @@ class TestRunner(abc.TestRunner):
         self._call_in_runner_task(test_func, **kwargs)
 
 
+class TrioTaskInfo(TaskInfo):
+    def __init__(self, task: trio.lowlevel.Task):
+        parent_id = None
+        if task.parent_nursery and task.parent_nursery.parent_task:
+            parent_id = id(task.parent_nursery.parent_task)
+
+        super().__init__(id(task), parent_id, task.name, task.coro)
+        self._task = weakref.proxy(task)
+
+    def has_pending_cancellation(self) -> bool:
+        try:
+            return self._task._cancel_status.effectively_cancelled
+        except ReferenceError:
+            # If the task is no longer around, it surely doesn't have a cancellation
+            # pending
+            return False
+
+
 class TrioBackend(AsyncBackend):
     @classmethod
     def run(
@@ -1040,15 +1059,13 @@ class TrioBackend(AsyncBackend):
     @overload
     async def create_unix_datagram_socket(
         cls, raw_socket: socket.socket, remote_path: None
-    ) -> abc.UNIXDatagramSocket:
-        ...
+    ) -> abc.UNIXDatagramSocket: ...
 
     @classmethod
     @overload
     async def create_unix_datagram_socket(
         cls, raw_socket: socket.socket, remote_path: str | bytes
-    ) -> abc.ConnectedUNIXDatagramSocket:
-        ...
+    ) -> abc.ConnectedUNIXDatagramSocket: ...
 
     @classmethod
     async def create_unix_datagram_socket(
@@ -1127,28 +1144,19 @@ class TrioBackend(AsyncBackend):
     @classmethod
     def get_current_task(cls) -> TaskInfo:
         task = current_task()
-
-        parent_id = None
-        if task.parent_nursery and task.parent_nursery.parent_task:
-            parent_id = id(task.parent_nursery.parent_task)
-
-        return TaskInfo(id(task), parent_id, task.name, task.coro)
+        return TrioTaskInfo(task)
 
     @classmethod
-    def get_running_tasks(cls) -> list[TaskInfo]:
+    def get_running_tasks(cls) -> Sequence[TaskInfo]:
         root_task = current_root_task()
         assert root_task
-        task_infos = [TaskInfo(id(root_task), None, root_task.name, root_task.coro)]
+        task_infos = [TrioTaskInfo(root_task)]
         nurseries = root_task.child_nurseries
         while nurseries:
             new_nurseries: list[trio.Nursery] = []
             for nursery in nurseries:
                 for task in nursery.child_tasks:
-                    task_infos.append(
-                        TaskInfo(
-                            id(task), id(nursery.parent_task), task.name, task.coro
-                        )
-                    )
+                    task_infos.append(TrioTaskInfo(task))
                     new_nurseries.extend(task.child_nurseries)
 
             nurseries = new_nurseries

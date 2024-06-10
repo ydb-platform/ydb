@@ -124,6 +124,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Self->PersistCreateImport(db, importInfo);
 
         importInfo->State = TImportInfo::EState::Waiting;
+        importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, importInfo);
 
         Self->Imports[id] = importInfo;
@@ -510,6 +511,10 @@ private:
             default:
                 break;
             }
+        }
+
+        if (importInfo->State == EState::Cancelled) {
+            importInfo->EndTime = TAppData::TimeProvider->Now();
         }
     }
 
@@ -1004,6 +1009,7 @@ private:
 
         if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
             importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
         }
 
         Self->PersistImportItemState(db, importInfo, itemIdx);

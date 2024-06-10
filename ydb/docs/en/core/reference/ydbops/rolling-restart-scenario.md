@@ -30,7 +30,7 @@ The following examples assume you have specified all the required connection opt
 
 ### Restarting all nodes in the cluster
 
-The invocation would restart all the nodes in the cluster: all storage nodes first, followed by all tenant nodes.
+The command will restart all the nodes in the cluster: all storage nodes first, followed by all tenant nodes.
 
 ```
 ydbops restart 

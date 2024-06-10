@@ -59,7 +59,7 @@ my-profile:
   # if using a custom CA for TLS, CA file can be specified:
   ca-file: /path/to/custom/ca/file
 
-  # when using static credentials, you can specify username and password file:
+  # a username and password file if static credentials are used:
   user: your-ydb-user-name
   password-file: /path/to/password-file
 

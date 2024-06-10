@@ -162,6 +162,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -205,6 +206,14 @@ public:
         }
         SessionId = ev->Get()->Record.GetResponse().GetSessionId();
         BLOG_TRACE("Session created " << SessionId);
+
+        {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
@@ -394,6 +403,10 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         Y_UNUSED(ev);
     }
 

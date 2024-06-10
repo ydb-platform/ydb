@@ -732,6 +732,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
         } else {
             auto& released = *req.mutable_stop_partition_session_response();
             released.set_partition_session_id(partitionStream->GetAssignId());
+
+            // TODO(qyryq) Client must pass graceful value unchanged from the StopPartitionSessionRequest.
+            // released.set_graceful(graceful);
         }
 
         WriteToProcessorImpl(std::move(req));

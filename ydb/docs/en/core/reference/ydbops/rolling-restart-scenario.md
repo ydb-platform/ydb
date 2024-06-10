@@ -53,7 +53,7 @@ ydbops restart --tenant
 Additionally, only specific tenants may be restarted by specifying `--tenant-list`:
 
 ```
-ydbops restart --tenant-list=/domain/database_name_1,/domain/database_name_2
+ydbops restart --tenant-list=</domain/database_name_1>,</domain/database_name_2>,...
 ```
 
 ### Restarting only specific nodes

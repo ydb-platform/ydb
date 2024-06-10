@@ -79,8 +79,7 @@ It is possible to restart only the nodes that have specific uptime by using the 
 ydbops restart --started >2024-03-13T17:00:00Z
 ```
 
-It might be convenient if you want to restart only the nodes which have an uptime of more than several minutes, 
-because the other ones have just restarted recently.
+It might be convenient to restart only the nodes that have been up for over a few minutes, as the others have just restarted recently.
 
 ### Restarting based on version
 

@@ -73,10 +73,6 @@ public:
 
     void Stop();
 
-    bool IsGCInProgress() {
-        return !!CurrentGCAction && CurrentGCAction->IsInProgress();
-    }
-
     const NSplitter::TSplitSettings& GetBlobSplitSettings() const {
         return DoGetBlobSplitSettings();
     }

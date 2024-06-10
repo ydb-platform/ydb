@@ -30,6 +30,7 @@ public:
         , SharingBlobIds(sharingBlobIds)
         , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId))
     {
+        Self->GetStoragesManager()->GetSharedBlobsManager()->StartExternalModification();
         RemoveAction = Self->GetStoragesManager()->GetOperatorVerified(storageId)->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
         auto categories = Manager->BuildRemoveCategories(SharingBlobIds);
         for (auto it = categories.GetDirect().GetIterator(); it.IsValid(); ++it) {

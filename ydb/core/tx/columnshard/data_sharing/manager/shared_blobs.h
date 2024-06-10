@@ -160,11 +160,24 @@ class TSharedBlobsManager {
 private:
     const TTabletId SelfTabletId;
     THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
+    TAtomicCounter ExternalModificationsCount;
 public:
     TSharedBlobsManager(const TTabletId tabletId)
         : SelfTabletId(tabletId)
     {
 
+    }
+
+    void StartExternalModification() {
+        ExternalModificationsCount.Inc();
+    }
+
+    void FinishExternalModification() {
+        AFL_VERIFY(ExternalModificationsCount.Dec() >= 0);
+    }
+
+    bool HasExternalModifications() const {
+        return ExternalModificationsCount.Val();
     }
 
     bool IsTrivialLinks() const {

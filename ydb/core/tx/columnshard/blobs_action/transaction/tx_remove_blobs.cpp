@@ -19,7 +19,10 @@ void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) {
     RemoveAction->OnCompleteTxAfterRemoving(true);
     Manager->RemoveSharedBlobs(SharingBlobIds);
 
-    ctx.Send(InitiatorActorId, new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)Self->TabletID()));
+    ctx.Send(InitiatorActorId, new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)Self->TabletID(),
+        NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::Success));
+
+    Self->GetStoragesManager()->GetSharedBlobsManager()->FinishExternalModification();
 }
 
 }

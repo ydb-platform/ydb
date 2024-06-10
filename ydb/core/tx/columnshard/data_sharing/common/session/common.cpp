@@ -32,7 +32,7 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
         }
     }
 
-    if (shard.GetStoragesManager()->IsGCInProgress()) {
+    if (shard.GetStoragesManager()->GetSharedBlobsManager()->HasExternalModifications()) {
         return false;
     }
 

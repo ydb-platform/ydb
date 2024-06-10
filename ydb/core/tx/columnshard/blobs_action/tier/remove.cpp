@@ -11,7 +11,7 @@ void TDeclareRemovingAction::DoOnCompleteTxAfterRemoving(const bool blobsWroteSu
             } else {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blob_to_delete")
                     ("blob_id", i.first)("tablet_ids", JoinSeq(",", i.second));
-                GCInfo->MutableBlobsToDelete().Add(i.first, i.second);
+                AFL_VERIFY(GCInfo->MutableBlobsToDelete().Add(i.first, i.second));
             }
         }
     }

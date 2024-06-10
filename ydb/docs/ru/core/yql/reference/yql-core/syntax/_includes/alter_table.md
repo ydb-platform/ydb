@@ -15,7 +15,7 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 ```ADD COLUMN``` — добавляет столбец с указанными именем и типом. Приведенный ниже код добавит к таблице ```episodes``` столбец ```views``` с типом данных ```Uint64```.
 
 ```sql
-ALTER TABLE episodes ADD COLUMN views Uint16;
+ALTER TABLE episodes ADD COLUMN views Uint64;
 ```
 
 ```DROP COLUMN``` — удаляет столбец с указанным именем. Приведенный ниже код удалит столбец ```views``` из таблицы ```episodes```.

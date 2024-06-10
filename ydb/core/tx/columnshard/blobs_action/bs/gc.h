@@ -1,5 +1,6 @@
 #pragma once
 
+#include "address.h"
 #include "blob_manager.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
@@ -17,7 +18,7 @@ public:
         THashSet<TLogoBlobID> DontKeepList;
         mutable ui32 RequestsCount = 0;
     };
-    using TGCListsByGroup = THashMap<ui32, TGCLists>;
+    using TGCListsByGroup = THashMap<TBlobAddress, TGCLists>;
 private:
     TGCListsByGroup ListsByGroupId;
     TGenStep CollectGenStepInFlight;
@@ -55,7 +56,7 @@ public:
 
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
 
-    std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> BuildRequest(const ui64 groupId) const;
+    std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> BuildRequest(const TBlobAddress& address) const;
 };
 
 }

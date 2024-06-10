@@ -91,44 +91,47 @@
 
 Выполняется следующий алгоритм, одинаковый для всех SDK:
 
-1. Если задано значение переменной окружения `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, то используется режим аутентификации **System Account Key**, а ключ загружается из файла, имя которого указано в данной переменной
-2. Иначе, если задано значение переменной окружения `YDB_ANONYMOUS_CREDENTIALS`, равное 1, то используется анонимный режим аутентификации
-3. Иначе, если задано значение переменной окружения `YDB_METADATA_CREDENTIALS`, равное 1, то используется режим аутентификации **Metadata**
-4. Иначе, если задано значение переменной окружения `YDB_ACCESS_TOKEN_CREDENTIALS`, то используется режим аутентификации **Access token**, в который передается значение данной переменной
-5. Иначе, если задано значение переменной окружения `YDB_OAUTH2_KEY_FILE`, то используется режим аутентификации **OAuth 2.0 token exchange**, а настройки загружаются из [json-файла](#oauth2-key-file-format), имя которого указано в данной переменной
-6. Иначе используется режим аутентификации **Metadata**
+1. Если задано значение переменной окружения `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, то используется режим аутентификации **System Account Key**, а ключ загружается из файла, указанного в данной переменной.
+2. Иначе, если задано значение переменной окружения `YDB_ANONYMOUS_CREDENTIALS`, равное 1, то используется анонимный режим аутентификации.
+3. Иначе, если задано значение переменной окружения `YDB_METADATA_CREDENTIALS`, равное 1, то используется режим аутентификации **Metadata**.
+4. Иначе, если задано значение переменной окружения `YDB_ACCESS_TOKEN_CREDENTIALS`, то используется режим аутентификации **Access token**, в который передается значение данной переменной.
+5. Иначе, если задано значение переменной окружения `YDB_OAUTH2_KEY_FILE`, то используется режим аутентификации **OAuth 2.0 token exchange**, а настройки загружаются из [JSON файла](#oauth2-key-file-format), указанного в данной переменной.
+6. Иначе используется режим аутентификации **Metadata**.
 
 Наличие последним пунктом алгоритма выбора режима **Metadata** позволяет развернуть рабочее приложение на виртуальных машинах и в Cloud Functions {{ yandex-cloud }} без задания каких-либо переменных окружения.
 
 ## Формат файла настроек для режима аутентификации OAuth 2.0 token exchange {#oauth2-key-file-format}
 
-Описание полей json-файла настроек метода аутентификации **OAuth 2.0 token exchange**.
-`creds_json` является json'ом, в котором описываются параметры для токена, который будет меняться на access token. Поддерживается два вида: `JWT` и `FIXED`.
+Описание полей JSON файла настроек метода аутентификации **OAuth 2.0 token exchange**. Набор полей зависит от типа исходного токена, `JWT` или `FIXED`.
+
+В таблице ниже `creds_json` обозначает JSON с параметрами для исходного токена, обмениваемого на access token.
+
+Поля, не описанные в этой таблице, игнорируются.
 
 | Поле | Тип | Описание | Значение по умолчанию/опциональность |
 |:----:|:---:|:--------:|:------------------------------------:|
-|grant-type|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`|
-|res|string|Resource|опциональное|
-|aud|string \| list of strings|Опция audience для [запроса обмена токена](https://www.rfc-editor.org/rfc/rfc8693)|опциональное|
-|scope|string \| list of strings|Scope|опциональное|
-|requested-token-type|string|Тип получаемого токена|`urn:ietf:params:oauth:token-type:access_token`|
-|subject-credentials|creds_json|Subject credentials|опциональное|
-|actor-credentials|creds_json|Actor credentials|опциональное|
-|token-endpoint|string|Token endpoint. В случае с {{ ydb-short-name }} CLI перезаписывается опцией `--iam-endpoint`|опциональное|
-|**Описание полей creds_json (JWT)**|||||
-|type|string|Тип источника токена. Нужно задать константу `JWT`||
-|alg|string|Алгоритм подписи JWT. Поддерживаются следующие алгоритмы: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
-|private-key|string|(Приватный) ключ в формате PEM для подписи||
-|kid|string|Стандартное поле JWT `kid` (key id)|опциональное|
-|iss|string|Стандартное поле JWT `iss` (issuer)|опциональное|
-|sub|string|Стандартное поле JWT `sub` (subject)|опциональное|
-|aud|string|Стандартное поле JWT `aud` (audience)|опциональное|
-|jti|string|Стандартное поле JWT `jti` (JWT id)|опциональное|
-|ttl|string|Время жизни JWT токена|`1h`|
-|**Описание полей creds_json (FIXED)**|||||
-|type|string|Тип источника токена. Нужно задать константу `FIXED`||
-|token|string|Значение токена||
-|token-type|string|Значение типа токена. Это значение попадёт в параметр subject_token_type/actor_token_type в [запросе обмена токена](https://www.rfc-editor.org/rfc/rfc8693)||
+|`grant-type`|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`|
+|`res`|string|Resource|опциональное|
+|`aud`|string \| list of strings|Опция audience для [запроса обмена токена](https://www.rfc-editor.org/rfc/rfc8693)|опциональное|
+|`scope`|string \| list of strings|Scope|опциональное|
+|`requested-token-type`|string|Тип получаемого токена|`urn:ietf:params:oauth:token-type:access_token`|
+|`subject-credentials`|creds_json|Subject credentials|опциональное|
+|`actor-credentials`|creds_json|Actor credentials|опциональное|
+|`token-endpoint`|string|Token endpoint. В случае с {{ ydb-short-name }} CLI перезаписывается опцией `--iam-endpoint`.|опциональное|
+|**Описание полей `creds_json` (JWT)**|||||
+|`type`|string|Тип источника токена. Нужно задать константу `JWT`||
+|`alg`|string|Алгоритм подписи JWT. Поддерживаются следующие алгоритмы: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
+|`private-key`|string|(Приватный) ключ в формате PEM для подписи||
+|`kid`|string|Стандартное поле JWT `kid` (key id)|опциональное|
+|`iss`|string|Стандартное поле JWT `iss` (issuer)|опциональное|
+|`sub`|string|Стандартное поле JWT `sub` (subject)|опциональное|
+|`aud`|string|Стандартное поле JWT `aud` (audience)|опциональное|
+|`jti`|string|Стандартное поле JWT `jti` (JWT id)|опциональное|
+|`ttl`|string|Время жизни JWT токена|`1h`|
+|**Описание полей `creds_json` (FIXED)**|||||
+|`type`|string|Тип источника токена. Нужно задать константу `FIXED`||
+|`token`|string|Значение токена||
+|`token-type`|string|Значение типа токена. Это значение попадёт в параметр `subject_token_type/actor_token_type` в [запросе обмена токена](https://www.rfc-editor.org/rfc/rfc8693)||
 
 ## Особенности {{ ydb-short-name }} Python SDK v2 (устаревшая версия)
 

@@ -105,7 +105,9 @@ If the last step of the algorithm is selecting the **Metadata** mode, you can de
 
 Description of fields of JSON file with **OAuth 2.0 token exchange** authentication mode parameters. The set of fields depends on the original token type, `JWT` and `FIXED`.
 
-In the table below, `creds_json` means a JSON with parameters for exchanging the original token for an access token. 
+In the table below, `creds_json` means a JSON with parameters for exchanging the original token for an access token.
+
+Fields not described in this table are ignored.
 
 | Field | Type | Description | Default value/optionality |
 |:-----:|:----:|:-----------:|:-------------------------:|
@@ -117,7 +119,7 @@ In the table below, `creds_json` means a JSON with parameters for exchanging the
 |`subject-credentials`|creds_json|Subject credentials|optional|
 |`actor-credentials`|creds_json|Actor credentials|optional|
 |`token-endpoint`|string|Token endpoint. In the case of {{ ydb-short-name }} CLI, it is overridden by the `--iam-endpoint` option.|optional|
-|**Description of fields of creds_json (JWT)**|||||
+|**Description of fields of `creds_json` (JWT)**|||||
 |`type`|string|Token source type. Set `JWT`||
 |`alg`|string|Algorithm for JWT signature. Supported algorithms: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
 |`private-key`|string|(Private) key in PEM format for JWT signature||

@@ -73,7 +73,7 @@ ydbops restart --hosts=1,2,3
 
 ### Restarting based on uptime
 
-It is possible to restart only the nodes that have specific uptime by using `--started` option:
+It is possible to restart only the nodes that have specific uptime by using the `--started` option:
 
 ```
 ydbops restart --started >2024-03-13T17:00:00Z

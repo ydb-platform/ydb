@@ -21,7 +21,7 @@ private:
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
 
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetCurrentOperator() const;
-    std::shared_ptr<TAtomicCounter> StepCounter = std::make_shared<TAtomicCounter>();
+    TAtomicCounter StepCounter;
     void InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager);
     void InitNewExternalOperator();
 

@@ -20,7 +20,7 @@ std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAc
 }
 
 std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), Generation, StepCounter, GCInfo);
+    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), Generation, StepCounter.Inc(), GCInfo);
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {

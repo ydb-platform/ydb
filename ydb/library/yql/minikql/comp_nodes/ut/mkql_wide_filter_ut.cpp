@@ -137,11 +137,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideFilterTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideFilter(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Unwrap(pb.Nth(item, 2U), landmine, __FILE__, __LINE__, 0)}; }),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.Exists(items[1U]); }),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); }
-        ));
+        const auto pgmReturn = pb.Collect(
+            pb.NarrowMap(
+            pb.WideFilter(
+                    pb.ExpandMap(
+                        pb.ToFlow(list),
+                        [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                            return {
+                                pb.Nth(item, 0U), 
+                                pb.Nth(item, 1U), 
+                                pb.Unwrap(pb.Nth(item, 2U), landmine, __FILE__, __LINE__, 0)
+                            };
+                        }
+                    ),
+                    [&](TRuntimeNode::TList items) -> TRuntimeNode {
+                        return pb.Exists(items[1U]);
+                    }
+                ),
+                [&](TRuntimeNode::TList items) -> TRuntimeNode { 
+                    return items.front(); 
+                }
+            )
+        );
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();

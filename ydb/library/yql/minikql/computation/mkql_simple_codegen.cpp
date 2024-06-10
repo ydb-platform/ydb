@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 #ifndef MKQL_DISABLE_CODEGEN
-ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValuesBase(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const  {
+ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValuesBase(const NKikimr::NMiniKQL::TCodegenContext& ctx, llvm::Value* statePtrVal, llvm::BasicBlock*& genToBlock) const  {
     // init stuff (mainly in global entry block)
 
     auto& context = ctx.Codegen.GetContext();

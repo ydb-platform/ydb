@@ -27,6 +27,6 @@ Currently, only building from source is available as an installation option. The
 
 {% note warning %}
 
-This option is not yet available. Please monitor this page for progress.
+This option has yet to be made available.
 
 {% endnote %}

@@ -1467,6 +1467,9 @@ struct Schema : NIceDb::Schema {
         struct State : Column<8, NScheme::NTypeIds::Byte> {};
         struct Issue : Column<9, NScheme::NTypeIds::Utf8> {};
 
+        struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1478,7 +1481,9 @@ struct Schema : NIceDb::Schema {
             Items,
             State,
             Issue,
-            UserSID
+            UserSID,
+            StartTime,
+            EndTime
         >;
     };
 

@@ -1570,7 +1570,7 @@ partitioning_settings {
             }
         )", port));
 
-        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
 
         env.TestWaitNotification(runtime, txId);
 
@@ -1631,7 +1631,7 @@ partitioning_settings {
         )", port));
         const ui64 exportId = txId;
 
-        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
 
         if (!delayed) {
             TDispatchOptions opts;

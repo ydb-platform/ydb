@@ -16745,9 +16745,16 @@
     ],
     "test_sql2yql.test[stream_lookup_join-hint]": [
         {
-            "checksum": "be144e899d650b9def0e2658ea2b8886",
-            "size": 1739,
-            "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_stream_lookup_join-hint_/sql.yql"
+            "checksum": "758311edb6854deb9eb802a2b21acc1e",
+            "size": 1671,
+            "uri": "https://{canondata_backend}/1931696/fece90835a288a95fb18ebe2011f011eae2534cf/resource.tar.gz#test_sql2yql.test_stream_lookup_join-hint_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[stream_lookup_join-hint_narrow_channels]": [
+        {
+            "checksum": "99b4239792beeedf05406996f1761d2a",
+            "size": 1672,
+            "uri": "https://{canondata_backend}/1931696/fece90835a288a95fb18ebe2011f011eae2534cf/resource.tar.gz#test_sql2yql.test_stream_lookup_join-hint_narrow_channels_/sql.yql"
         }
     ],
     "test_sql2yql.test[table_range-concat_empty_sorted_with_key_diff]": [
@@ -32509,9 +32516,16 @@
     ],
     "test_sql_format.test[stream_lookup_join-hint]": [
         {
-            "checksum": "4d31258d5c956ee6f6913405677860b9",
-            "size": 245,
-            "uri": "https://{canondata_backend}/1777230/a91f4d0ac57705f5aa9081e2f90c9cf195af9eb7/resource.tar.gz#test_sql_format.test_stream_lookup_join-hint_/formatted.sql"
+            "checksum": "90feb45d531b9cc8f5f533a33f2b0a37",
+            "size": 184,
+            "uri": "https://{canondata_backend}/1931696/fece90835a288a95fb18ebe2011f011eae2534cf/resource.tar.gz#test_sql_format.test_stream_lookup_join-hint_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[stream_lookup_join-hint_narrow_channels]": [
+        {
+            "checksum": "2198e0bcdee7bba22f75769d5f3dc90c",
+            "size": 185,
+            "uri": "https://{canondata_backend}/1931696/fece90835a288a95fb18ebe2011f011eae2534cf/resource.tar.gz#test_sql_format.test_stream_lookup_join-hint_narrow_channels_/formatted.sql"
         }
     ],
     "test_sql_format.test[table_range-concat_empty_sorted_with_key_diff]": [

@@ -19,7 +19,7 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
 
     return mixedIndex
         ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
-        : BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env);
+        : BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler);
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {

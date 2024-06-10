@@ -98,7 +98,7 @@ namespace {
 
         const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env)) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){})) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
-                return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env);
+                return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             } else {
                 return NTable::BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             }

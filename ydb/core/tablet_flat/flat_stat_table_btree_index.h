@@ -110,7 +110,7 @@ void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* f
     }
 }
 
-bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
+bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     bool ready = true;
 
     if (!part.Slices || part.Slices->empty()) {
@@ -122,6 +122,8 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         auto channel = part->GetGroupChannel(groupId);
         
         for (const auto& slice : *part.Slices) {
+            yieldHandler();
+
             stats.RowCount += slice.EndRowId() - slice.BeginRowId();
             
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
@@ -143,6 +145,8 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         TGroupId groupId{groupIndex};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {
+            yieldHandler();
+            
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
@@ -157,6 +161,8 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         TGroupId groupId{0, true};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {
+            yieldHandler();
+            
             TRowId beginRowId, endRowId;
             bool readySlice = true;
             ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, readySlice);
@@ -175,6 +181,8 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         TGroupId groupId{groupIndex, true};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : historicSlices) {
+            yieldHandler();
+            
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.first, env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.second, env, ready);
             if (ready && endDataSize > beginDataSize) {
@@ -188,20 +196,20 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
 
 }
 
-inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     stats.Clear();
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
-        ready &= AddDataSize(part, stats, env);
+        ready &= AddDataSize(part, stats, env, yieldHandler);
     }
 
     if (!ready) {
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env);
+    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler);
 
     return ready;
 }

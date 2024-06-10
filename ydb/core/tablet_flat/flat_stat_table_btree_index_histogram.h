@@ -127,10 +127,11 @@ private:
     };
 
 public:
-    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env)
+    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, TBuildStatsYieldHandler yieldHandler)
         : Subset(subset)
         , KeyDefaults(*Subset.Scheme->Keys)
         , Env(env)
+        , YieldHandler(yieldHandler)
     {
     }
 
@@ -169,6 +170,8 @@ public:
 private:
     template <typename TGetSize>
     bool SlicePart(TPartNodes& part, const TSlices& slices, TNodeState& node) {
+        YieldHandler();
+
         auto it = slices.LookupBackward(slices.end(), node.EndRowId - 1);
         
         if (it == slices.end() || node.EndRowId <= it->BeginRowId() || it->EndRowId() <= node.BeginRowId) {
@@ -207,6 +210,8 @@ private:
     template <typename TGetSize>
     bool BuildHistogramRecursive(THistogram& histogram, TVector<TPartNodes>& parts, ui64 beginSize, ui64 endSize, ui32 depth) {
         const static ui32 MaxDepth = 100;
+
+        YieldHandler();
 
 #ifndef NDEBUG
         {
@@ -492,6 +497,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
+    TBuildStatsYieldHandler YieldHandler;
     ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
     TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
@@ -499,10 +505,10 @@ private:
 
 }
 
-inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     bool ready = true;
     
-    TTableHistogramBuilderBtreeIndex builder(subset, env);
+    TTableHistogramBuilderBtreeIndex builder(subset, env, yieldHandler);
 
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, rowCountResolution, stats.RowCount);
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);

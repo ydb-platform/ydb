@@ -74,8 +74,14 @@ my-profile:
 
 Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-files).
 
-For an explanation which options take precedence, please invoke `ydbops --help`.
+For an explanation of which options take precedence, please invoke `ydbops --help`.
 
-- `$YDB_TOKEN`, can be passed instead of `--token-file` flag or `token-file` profile option.
-- `$YDB_PASSWORD`, can be passed instead of `--password-file` flag or `password-file` profile option.
-- `$YDB_USER`, can be passed instead of `--user` flag or `user` profile option.
+- `YDB_TOKEN` can be passed instead of the `--token-file` flag or `token-file` profile option.
+- `YDB_PASSWORD` can be passed instead of the `--password-file` flag or `password-file` profile option.
+- `YDB_USER` can be passed instead of the `--user` flag or `user` profile option.
+
+### See also
+
+* [{#T}](index.md)
+* [{#T}](install.md)
+* [{#T}](rolling-restart-scenario.md)

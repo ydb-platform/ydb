@@ -277,7 +277,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
         AbortSession(EStatus::ABORTED, "Driver is stopping");
-        return;
     }
 }
 

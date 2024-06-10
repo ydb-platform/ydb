@@ -69,6 +69,10 @@ NYql::TIssues ValidateConnectionSetting(
         ValidateGenericConnectionSetting(setting.postgresql_cluster(), "postgresql", disableCurrentIam, passwordRequired, issues);
         break;
     }
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+        ValidateGenericConnectionSetting(setting.greenplum_cluster(), "greenplum", disableCurrentIam, passwordRequired, issues);
+        break;
+    }
     case FederatedQuery::ConnectionSetting::kObjectStorage: {
         const FederatedQuery::ObjectStorageConnection objectStorage = setting.object_storage();
         if (!objectStorage.has_auth() || objectStorage.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {

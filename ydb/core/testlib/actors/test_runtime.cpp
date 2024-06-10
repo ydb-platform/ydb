@@ -153,6 +153,10 @@ namespace NActors {
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
+            if (nodeIndex < egg.Icb.size()) {
+                nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+            }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {

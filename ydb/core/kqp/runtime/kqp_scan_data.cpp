@@ -9,9 +9,8 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/postgres.h>
+#include <ydb/library/yql/parser/pg_wrapper/ctors.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
@@ -100,7 +99,7 @@ void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable
     if (shardId) {
         rowItem = NUdf::TUnboxedValuePod(*shardId);
     } else {
-        rowItem = NUdf::TUnboxedValue();
+        rowItem = NUdf::TUnboxedValuePod();
     }
 }
 
@@ -287,20 +286,15 @@ public:
     }
 };
 
-template <class TArrayTypeExt, ui32 PgTypeId, class TValueType = typename TArrayTypeExt::value_type>
-class TPgByValElementAccessor {
+template <class TArrayTypeExt, bool ByVal>
+class TPgElementAccessor {
 public:
     using TArrayType = TArrayTypeExt;
     static NYql::NUdf::TUnboxedValuePod ExtractValue(const TArrayType& array, const ui32 rowIndex) {
-        switch (PgTypeId) {
-            case BOOLOID: return NYql::NUdf::TUnboxedValuePod(ui64(BoolGetDatum(array.Value(rowIndex))));
-            case INT2OID: return NYql::NUdf::TUnboxedValuePod(ui64(Int16GetDatum(array.Value(rowIndex))));
-            case INT4OID: return NYql::NUdf::TUnboxedValuePod(ui64(Int32GetDatum(array.Value(rowIndex))));
-            case INT8OID: return NYql::NUdf::TUnboxedValuePod(ui64(Int64GetDatum(array.Value(rowIndex))));
-            case FLOAT4OID: return NYql::NUdf::TUnboxedValuePod(ui64(Float4GetDatum(array.Value(rowIndex))));
-            case FLOAT8OID: return NYql::NUdf::TUnboxedValuePod(ui64(Float8GetDatum(array.Value(rowIndex))));
-            default: return {};
-        }
+        if constexpr (ByVal)
+            return NYql::ScalarValueToPod(array.Value(rowIndex));
+        else
+            return NYql::ScalarValueToPod(NUdf::TStringRef(array.Value(rowIndex)));
     }
 
     static void Validate(const TArrayType&) { }
@@ -461,16 +455,21 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         }
         case NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
+                case BOOLOID:
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::BooleanArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT2OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int16Array, INT2OID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int16Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int32Array, INT4OID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int32Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int64Array, INT8OID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int64Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::FloatArray, FLOAT4OID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::FloatArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::DoubleArray, FLOAT8OID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::DoubleArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case TEXTOID:
+                case BYTEAARRAYOID:
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::BinaryArray, false>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 default:
                     break;
             }

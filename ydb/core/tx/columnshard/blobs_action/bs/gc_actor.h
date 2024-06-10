@@ -42,7 +42,7 @@ public:
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);
-            SendToBSProxy(ctx, i.first, request.release(), i.first);
+            SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

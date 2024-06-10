@@ -1,4 +1,5 @@
 #include "ydb_workload.h"
+#include <library/cpp/threading/future/async_semaphore.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -9,7 +10,9 @@ public:
 
 private:
     struct TUploadParams {
-        ui32 Threads = 128;
+        TUploadParams();
+        ui32 Threads = 32;
+        ui32 MaxInFly = 128;
     };
     class TUploadCommand;
 
@@ -25,13 +28,15 @@ public:
 private:
     NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
-    TStatus SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const;
-    bool ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, const TAtomic& stop) noexcept;
+    TAsyncStatus SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const;
+    void ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept;
 
     const TUploadParams& UploadParams;
     NYdbWorkload::TWorkloadDataInitializer::TPtr Initializer;
     THolder<TProgressBar> Bar;
     TAdaptiveLock Lock;
+    NThreading::TAsyncSemaphore::TPtr InFlySemaphore;
+    TAtomic HasErrors;
 };
 
 }

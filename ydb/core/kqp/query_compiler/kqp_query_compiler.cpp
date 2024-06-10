@@ -752,7 +752,7 @@ private:
         stageProto.SetOutputsCount(outputsCount);
 
         // Dq sinks
-        bool hasTableSink = false;
+        bool hasTxTableSink = false;
         if (auto maybeOutputsNode = stage.Outputs()) {
             auto outputsNode = maybeOutputsNode.Cast();
             for (size_t i = 0; i < outputsNode.Size(); ++i) {
@@ -764,12 +764,17 @@ private:
                 FillSink(sinkNode, sinkProto, tablesMap, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
 
-                // Only sinks to ydb tables can be considered as effects.
-                hasTableSink |= IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category());
+                if (IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category())) {
+                    // Only sinks with transactions to ydb tables can be considered as effects.
+                    // Inconsistent internal sinks and external sinks (like S3) aren't effects.
+                    auto settings = sinkNode.Settings().Maybe<TKqpTableSinkSettings>();
+                    YQL_ENSURE(settings);
+                    hasTxTableSink |= settings.InconsistentWrite().Cast().StringValue() != "true";
+                }
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTableSink);
+        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,

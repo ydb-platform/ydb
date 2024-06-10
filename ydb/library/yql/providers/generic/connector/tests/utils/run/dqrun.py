@@ -267,7 +267,7 @@ class DqRunner(Runner):
             artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
 
         finally:
-            with open(artifacts.make_path(test_name, "dprun.out"), "w") as f:
+            with open(artifacts.make_path(test_name, "dqrun.out"), "w") as f:
                 f.write(output.decode('utf-8'))
 
         return Result(

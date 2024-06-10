@@ -238,14 +238,11 @@ private:
     using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionContextPtr>;
 
     TDirectReadSessionContextPtr CreateDirectReadSession(TNodeId);
-    void StartPartitionSessionImpl(TDirectReadPartitionSession&&);
     void DeletePartitionSessionImpl(TPartitionSessionId id, TNodeSessionsMap::iterator it);
 
     TStringBuilder GetLogPrefix() const;
 
 private:
-    TAdaptiveLock Lock;
-
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     const TServerSessionId ServerSessionId;
     const NYdbGrpc::IQueueClientContextPtr ClientContext;

@@ -250,14 +250,6 @@ void TDirectReadSessionManager::Close() {
 }
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
-    with_lock (Lock) {
-        StartPartitionSessionImpl(std::move(partitionSession));
-    }
-}
-
-void TDirectReadSessionManager::StartPartitionSessionImpl(TDirectReadPartitionSession&& partitionSession) {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-
     auto nodeId = partitionSession.Location.GetNodeId();
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession);
     TDirectReadSessionContextPtr& session = NodeSessions[nodeId];
@@ -272,8 +264,6 @@ void TDirectReadSessionManager::StartPartitionSessionImpl(TDirectReadPartitionSe
 }
 
 void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty " << nodeId);
 
     auto it = NodeSessions.find(nodeId);
@@ -299,8 +289,6 @@ void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
 }
 
 void TDirectReadSessionManager::DeletePartitionSessionImpl(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId);
 
     if (auto session = it->second->LockShared()) {
@@ -314,44 +302,38 @@ void TDirectReadSessionManager::DeletePartitionSessionImpl(TPartitionSessionId p
 }
 
 void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId partitionSessionId, TPartitionLocation newLocation) {
-    with_lock (Lock) {
-        auto locIt = Locations.find(partitionSessionId);
-        Y_ABORT_UNLESS(locIt != Locations.end());
-        auto oldNodeId = locIt->second.GetNodeId();
+    auto locIt = Locations.find(partitionSessionId);
+    Y_ABORT_UNLESS(locIt != Locations.end());
+    auto oldNodeId = locIt->second.GetNodeId();
 
-        auto sessionIt = NodeSessions.find(oldNodeId);
-        Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
+    auto sessionIt = NodeSessions.find(oldNodeId);
+    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
-        DeletePartitionSessionImpl(partitionSessionId, sessionIt);
+    DeletePartitionSessionImpl(partitionSessionId, sessionIt);
 
-        // TODO(qyryq) std::move an old RetryState?
-        StartPartitionSessionImpl({ .PartitionSessionId = partitionSessionId, .Location = newLocation });
-    }
+    // TODO(qyryq) std::move an old RetryState?
+    StartPartitionSession({ .PartitionSessionId = partitionSessionId, .Location = newLocation });
 }
 
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId partitionSessionId) {
-    with_lock (Lock) {
-        auto locIt = Locations.find(partitionSessionId);
-        Y_ABORT_UNLESS(locIt != Locations.end());
+    auto locIt = Locations.find(partitionSessionId);
+    Y_ABORT_UNLESS(locIt != Locations.end());
 
-        auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
-        Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
+    auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
+    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
-        DeletePartitionSessionImpl(partitionSessionId, sessionIt);
-    }
+    DeletePartitionSessionImpl(partitionSessionId, sessionIt);
 }
 
 void TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSessionId partitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) {
-    with_lock (Lock) {
-        auto locIt = Locations.find(partitionSessionId);
-        Y_ABORT_UNLESS(locIt != Locations.end());
+    auto locIt = Locations.find(partitionSessionId);
+    Y_ABORT_UNLESS(locIt != Locations.end());
 
-        auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
-        Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
+    auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
+    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
-        if (auto session = sessionIt->second->LockShared()) {
-            session->SetLastDirectReadId(partitionSessionId, committedOffset, lastDirectReadId);
-        }
+    if (auto session = sessionIt->second->LockShared()) {
+        session->SetLastDirectReadId(partitionSessionId, committedOffset, lastDirectReadId);
     }
 }
 

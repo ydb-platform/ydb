@@ -25,7 +25,7 @@ TCommandYql::TCommandYql(TString script, TString collectStatsMode)
 void TCommandYql::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
     AddExamplesOption(config);
-    config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]")
+    config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption("flame-graph", "Path for statistics flame graph image, works only with full stats")
             .RequiredArgument("[Path]").StoreResult(&FlameGraphPath);

@@ -63,6 +63,7 @@ set -ex
       col_14_date Date,
       col_15_datetime Datetime,
       col_16_timestamp Timestamp,
+      col_17_json Json,
       PRIMARY KEY (col_00_id)
     );
     COMMIT;
@@ -70,11 +71,13 @@ set -ex
     primitive_types_NATIVE 
                 (col_00_id, col_01_bool, col_02_int8, col_03_int16, col_04_int32, col_05_int64, col_06_uint8, 
                 col_07_uint16, col_08_uint32, col_09_uint64, col_10_float, col_11_double, col_12_string,
-                col_13_utf8, col_14_date, col_15_datetime, col_16_timestamp)
+                col_13_utf8, col_14_date, col_15_datetime, col_16_timestamp, col_17_json)
     VALUES (1, false, 2, 3, 4, 5, 6, 7, 8, 9, 10.10f, 11.11f, "аз", "az",
-            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z")),
+            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z"),
+            @@{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@),
            (2, true, -2, -3, -4, -5, 6, 7, 8, 9, -10.10f, -11.11f, "буки", "buki",
-            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z"));
+            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z"),
+            @@{ "TODO": "unicode" }@@);
     COMMIT;
 
     CREATE TABLE optional_types_NATIVE (
@@ -95,6 +98,7 @@ set -ex
       col_14_date Date,
       col_15_datetime Datetime,
       col_16_timestamp Timestamp,
+      col_17_json Json,
       PRIMARY KEY (col_00_id)
     );
     COMMIT;
@@ -102,13 +106,15 @@ set -ex
     optional_types_NATIVE 
                 (col_00_id, col_01_bool, col_02_int8, col_03_int16, col_04_int32, col_05_int64, col_06_uint8, 
                 col_07_uint16, col_08_uint32, col_09_uint64, col_10_float, col_11_double, col_12_string,
-                col_13_utf8, col_14_date, col_15_datetime, col_16_timestamp)
+                col_13_utf8, col_14_date, col_15_datetime, col_16_timestamp, col_17_json)
     VALUES (1, false, 2, 3, 4, 5, 6, 7, 8, 9, 10.10f, 11.11f, "аз", "az",
-            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z")),
+            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z"),
+            CAST(@@{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@ AS Json)),
            (2, true, -2, -3, -4, -5, 6, 7, 8, 9, -10.10f, -11.11f, "буки", "buki",
-            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z")),
+            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z"),
+            CAST(@@{ "TODO" : "unicode" }@@ AS Json)),
            (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-            NULL, NULL, NULL);
+            NULL, NULL, NULL, NULL);
     COMMIT;
 
     CREATE TABLE constant_NATIVE (col_00_id Int32 NOT NULL, PRIMARY KEY (col_00_id));

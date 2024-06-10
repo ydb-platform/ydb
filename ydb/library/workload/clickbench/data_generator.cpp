@@ -12,7 +12,7 @@ TClickbenchWorkloadDataInitializerGenerator::TClickbenchWorkloadDataInitializerG
 void TClickbenchWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOpts& opts) {
     TWorkloadDataInitializerBase::ConfigureOpts(opts);
     opts.AddLongOption('i', "input",
-        "File or Directory with clickbench dataset. If directory is set, all availible its files will be used."
+        "File or Directory with clickbench dataset. If directory is set, all its availible files will be used."
         "Now supported zipped and unzipped csv and tsv files, that may be downloaded here:  https://datasets.clickhouse.com/hits_compatible/hits.csv.gz, "
         "https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz. "
         "For better perfomanse you may split it to some parts for parrallel upload."
@@ -21,10 +21,10 @@ void TClickbenchWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOp
 
 TBulkDataGeneratorList TClickbenchWorkloadDataInitializerGenerator::DoGetBulkInitialData() {
     if (!DataFiles.IsDefined()) {
-        throw yexception() << "'input' parametr must be set.";
+        throw yexception() << "'input' parameter must be set.";
     }
     if (!DataFiles.Exists()) {
-        throw yexception() << "Invalid 'input' parametr, path is not exist: " << DataFiles;
+        throw yexception() << "Invalid 'input' parameter, path does not exist: " << DataFiles;
     }
     return {std::make_shared<TDataGenerartor>(*this)};
 }

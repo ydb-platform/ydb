@@ -21,7 +21,7 @@ ALTER TABLE episodes ADD COLUMN views Uint64;
 ```DROP COLUMN``` — удаляет столбец с указанным именем. Приведенный ниже код удалит столбец ```views``` из таблицы ```episodes```.
 
 ```sql
-ALTER TABLE episodes DROP column views;
+ALTER TABLE episodes DROP COLUMN views;
 ```
 
 {% if feature_secondary_index %}

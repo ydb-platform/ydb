@@ -53,7 +53,7 @@ struct IDirectReadSessionControlCallbacks {
     virtual void ScheduleCallback(TDuration, std::function<void()>) {}
     virtual void ScheduleCallback(TDuration, std::function<void()>, TDeferredActions<false>&) {}
 
-    virtual void StopPartitionSession(TPartitionSessionId) {}
+    virtual void StopPartitionSession(TPartitionSessionId, [[maybe_unused]] bool graceful) {}
     virtual void DeleteNodeSessionIfEmpty(TNodeId) {}
 };
 
@@ -66,7 +66,7 @@ public:
     void ScheduleCallback(TDuration delay, std::function<void()> callback) override;
     void ScheduleCallback(TDuration delay, std::function<void()> callback, TDeferredActions<false>&) override;
 
-    void StopPartitionSession(TPartitionSessionId) override;
+    void StopPartitionSession(TPartitionSessionId, bool graceful) override;
     void DeleteNodeSessionIfEmpty(TNodeId) override;
 
 private:
@@ -95,7 +95,6 @@ public:
     // If the control session sends StopPartitionSessionRequest(graceful=true, last_direct_read_id),
     // we need to remember the Id, read up to it, and then kill the partition session (and its direct session if it becomes empty).
     TMaybe<TDirectReadId> LastDirectReadId = Nothing();
-    TMaybe<i64> CommittedOffset = Nothing();
 
     TDirectReadClientMessage MakeStartRequest() const;
     bool TransitionTo(EState);
@@ -122,7 +121,7 @@ public:
     void Close();
     void AddPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSessionGeneration(TPartitionSessionId, TPartitionLocation);
-    void SetLastDirectReadId(TPartitionSessionId, i64 committedOffset, TDirectReadId);
+    void SetLastDirectReadId(TPartitionSessionId, TDirectReadId);
     void DeletePartitionSession(TPartitionSessionId);
     bool Empty() const;
 
@@ -228,7 +227,7 @@ public:
     void StartPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
     void StopPartitionSession(TPartitionSessionId);
-    void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId);
+    void StopPartitionSessionGracefully(TPartitionSessionId, TDirectReadId lastDirectReadId);
     void DeleteNodeSessionIfEmpty(TNodeId);
     void Close();
 

@@ -1,10 +1,6 @@
-## ydbops utility overview
+# ydbops utility overview
 
-{% note info %}
-
-The article is being updated. Expect new content to appear and minor fixes to existing content.
-
-{% endnote %}
+{% include [warning.md](_includes/warning.md) %}
 
 `ydbops` utility automates some operational tasks on {{ ydb-short-name }} clusters. It supports clusters deployed using [Ansible](../../devops/ansible/index.md), [Kubernetes](../../devops/kubernetes/index.md), or [manually](../../devops/manual/index.md).
 

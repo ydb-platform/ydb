@@ -1,10 +1,6 @@
-## Performing {{ ydb-short-name }} cluster restart using ydbops
+# Performing {{ ydb-short-name }} cluster restart using ydbops
 
-{% note info %}
-
-The article is being updated. Expect new content to appear and minor fixes to existing content.
-
-{% endnote %}
+{% include [warning.md](_includes/warning.md) %}
 
 `ydbops` can be used to perform the rolling restart operation: restarting all or some of {{ ydb-short-name }} cluster nodes while maintaining cluster availability. Why this is not trivial and requires a special utility is explained in [{#T}](../../devops/manual/maintenance-without-downtime)
 
@@ -32,7 +28,7 @@ The following examples assume you have specified all the required connection opt
 
 The command will restart all the nodes in the cluster: all storage nodes first, followed by all tenant nodes.
 
-```
+```bash
 ydbops restart 
 ```
 
@@ -40,19 +36,19 @@ ydbops restart
 
 It is possible to restart storage nodes only:
 
-```
+```bash
 ydbops restart --storage
 ```
 
 Or tenant nodes only:
 
-```
+```bash
 ydbops restart --tenant
 ```
 
 Additionally, only specific tenants may be restarted by specifying `--tenant-list`:
 
-```
+```bash
 ydbops restart --tenant-list=</domain/database_name_1>,</domain/database_name_2>,...
 ```
 
@@ -60,13 +56,13 @@ ydbops restart --tenant-list=</domain/database_name_1>,</domain/database_name_2>
 
 It is possible to restart nodes only on specific hosts by supplying FQDNs with the `--hosts` option:
 
-```
-ydbops restart --hosts=node1.some.zone,node2.some.zone
+```bash
+ydbops restart --hosts=<node1.some.zone>,<node2.some.zone>
 ```
 
 Or by supplying node ids directly:
 
-```
+```bash
 ydbops restart --hosts=1,2,3
 ```
 
@@ -74,16 +70,23 @@ ydbops restart --hosts=1,2,3
 
 It is possible to restart only the nodes that have specific uptime by using the `--started` option:
 
-```
-ydbops restart --started >2024-03-13T17:00:00Z
+The option argument needs to be enclosed in quotes, otherwise shell might interpret `>` or `<` signs as stream redirections. See the example:
+
+```bash
+ydbops restart --started '>2024-03-13T17:00:00Z'
 ```
 
 It might be convenient to restart only the nodes that have been up for over a few minutes, as the others have just restarted recently.
 
 ### Restarting based on {{ ydb-short-name }} version
 
-It is possible to restart only the nodes which version is equal, not equal, more, or less than desired:
+It is possible to restart only the nodes which version is equal (`==`), not equal (`!=`), more (`>`), or less (`<`) than desired.
 
-```
-ydbops restart --version !=24.1.2
+The option argument needs to be enclosed in quotes, otherwise shell might interpret `>` or `<` signs as stream redirections. See the examples:
+
+```bash
+ydbops restart --version '>24.1.2'
+ydbops restart --version '<24.1.2'
+ydbops restart --version '!=24.1.2'
+ydbops restart --version '==24.1.2'
 ```

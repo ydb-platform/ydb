@@ -1,10 +1,6 @@
 # Configuring ydbops
 
-{% note info %}
-
-The article is being updated. Expect new content to appear and minor fixes to existing content.
-
-{% endnote %}
+{% include [warning.md](_includes/warning.md) %}
 
 
 `ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
@@ -17,10 +13,11 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 The configuration file for `ydbops` is a YAML-formatted file containing multiple profiles. Profiles for `ydbops` work in the same way as profiles in [{{ ydb-short-name }} CLI](../ydb-cli/profile/index.md) do.
 
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
+
 ### Examples
 Calling the `ydbops restart` command without a profile:
 
-```
+```bash
 ydbops restart \
  -e grpc://<hostname>:2135 \
  --kubeconfig ~/.kube/config \
@@ -32,10 +29,22 @@ ydbops restart \
 
 Calling the same `ydbops restart` command with profile options enabled makes the command much shorter:
 
-```
+```bash
 ydbops restart \
  --config-file ./config.yaml \
  --tenant --tenant-list=my-tenant
+```
+
+For the invocation above, the following `config.yaml` is assumed to be present:
+
+```yaml
+current-profile: my-profile
+my-profile:
+  endpoint: grpc://<hostname>:2135
+  user: admin
+  password-file: ~/<password-file>
+  k8s-namespace: <k8s-namespace>
+  kubeconfig: ~/.kube/config
 ```
 
 ### Profile management commands
@@ -48,7 +57,7 @@ The configuration file needs to be created manually.
 
 Here is an example of a configuration file with all possible options that can be specified and example values (most likely, they will not all be needed at the same time):
 
-```
+```yaml
 # a special key `current-profile` can be specified to 
 # be used as the default active profile in the CLI invocation
 current-profile: my-profile
@@ -56,20 +65,21 @@ current-profile: my-profile
 my-profile:
   endpoint: grpc://your.ydb.cluster.fqdn:2135
 
-  # if using a custom CA for TLS, CA file can be specified:
+  # CA file location if using grpcs to the endpoint
   ca-file: /path/to/custom/ca/file
 
   # a username and password file if static credentials are used:
   user: your-ydb-user-name
   password-file: /path/to/password-file
 
-  # when using access
+  # when using access token
   token-file: /path/to/ydb/token
 
-  # if working with YDB clusters in Kubernetes, Kubernetes-specific options can be specified:
+  # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
   kubeconfig: /path/to/kube/config
   k8s-namespace: your-default-k8s-namespace
 ```
+
 ## Environment variables {#environment-variables}
 
 Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-files).
@@ -80,8 +90,8 @@ For an explanation of which options take precedence, please invoke `ydbops --hel
 - `YDB_PASSWORD` can be passed instead of the `--password-file` flag or `password-file` profile option.
 - `YDB_USER` can be passed instead of the `--user` flag or `user` profile option.
 
-### See also
+## See also
 
-* [{#T}](index.md)
-* [{#T}](install.md)
-* [{#T}](rolling-restart-scenario.md)
+- [{#T}](index.md)
+- [{#T}](install.md)
+- [{#T}](rolling-restart-scenario.md)

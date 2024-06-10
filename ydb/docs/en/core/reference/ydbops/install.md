@@ -1,10 +1,6 @@
-## Installing ydbops
+# Installing ydbops
 
-{% note info %}
-
-The article is being updated. Expect new content to appear and minor fixes to existing content.
-
-{% endnote %}
+{% include [warning.md](_includes/warning.md) %}
 
 Currently, only building from source is available as an installation option. The pre-compiled binaries will be available later.
 
@@ -13,12 +9,12 @@ Currently, only building from source is available as an installation option. The
 1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
 
 2. Clone the `ydbops` repository from Github:
-    ```
+    ```bash
     git clone https://github.com/ydb-platform/ydbops.git
     ```
 
 3. Invoke `go build` in the repository root folder:
-    ```
+    ```bash
     go build
     ```
     The binary `ydbops` will be available in the repository root folder.

@@ -20,6 +20,23 @@ private:
 
     virtual void DoOnStart(TColumnShard& owner) override;
 
+    template <class TInfoProto>
+    THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
+        THashSet<ui64> result;
+        for (auto&& i : tables) {
+            AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
+            if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
+                result.emplace(i.GetPathId());
+            }
+        }
+        if (result.size()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "async_schema")("reason", JoinSeq(",", result));
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sync_schema");
+        }
+        return result;
+    }
+
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override;
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {

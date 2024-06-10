@@ -14,7 +14,7 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 
 ## Config file {#config-file}
 
-Configuration file for `ydbops` is a yaml-formatted file containing multiple profiles. Profiles for `ydbops` work in the same way as profiles in [{{ ydb-short-name }} CLI do](../ydb-cli/profile/index.md).
+The configuration file for `ydbops` is a YAML-formatted file containing multiple profiles. Profiles for `ydbops` work in the same way as profiles in [{{ ydb-short-name }} CLI](../ydb-cli/profile/index.md) do.
 
 Certain command line options can be written in the configuration file, instead of specifying them directly in the `ydbops` invocation. 
 

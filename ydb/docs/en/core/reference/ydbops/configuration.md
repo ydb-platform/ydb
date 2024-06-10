@@ -12,7 +12,7 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 - [Config file](#config-file)
 - [Environment variables](#environment-variables)
 
-### Config file
+## Config file {#config-file}
 
 Configuration file for `ydbops` is a yaml-formatted file containing multiple profiles. Profiles for `ydbops` work in the same way as profiles in [{{ ydb-short-name }} CLI do](../ydb-cli/profile/index.md).
 

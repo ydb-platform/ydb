@@ -84,6 +84,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy

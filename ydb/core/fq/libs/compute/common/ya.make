@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/s3/actors_factory
 )
 
 YQL_LAST_ABI_VERSION()

@@ -7,12 +7,12 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
-    contrib/libs/curl
-    library/cpp/lwtrace/protos
     ydb/core/fq/libs/protos
-    ydb/library/mkql_proto/protos
-    ydb/library/yql/dq/actors/protos
+    ydb/library/actors/core
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/common
+    ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/proto
 )
 

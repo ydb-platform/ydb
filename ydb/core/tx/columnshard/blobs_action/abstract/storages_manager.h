@@ -38,9 +38,7 @@ public:
     }
 
     bool LoadIdempotency(NTable::TDatabase& database);
-
     bool HasBlobsToDelete() const;
-
     void Stop();
 
     std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() const {
@@ -51,7 +49,7 @@ public:
         return GetDefaultOperator();
     }
 
-    const THashMap<TString, std::shared_ptr<IBlobsStorageOperator>>& GetStorages() {
+    const THashMap<TString, std::shared_ptr<IBlobsStorageOperator>>& GetStorages() const {
         AFL_VERIFY(Initialized);
         return Constructed;
     }

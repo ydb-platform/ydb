@@ -747,11 +747,10 @@ void TDirectReadSession::OnConnectTimeout(
 }
 
 void TDirectReadSession::OnConnect(
-    TPlainStatus&& st,
+    TPlainStatus&& status,
     IDirectReadProcessor::TPtr&& connection,
     const NYdbGrpc::IQueueClientContextPtr& connectContext
 ) {
-    State = EState::CONNECTED;
     TDeferredActions<false> deferred;
     with_lock (Lock) {
         if (ConnectContext != connectContext) {
@@ -767,7 +766,8 @@ void TDirectReadSession::OnConnect(
             return;
         }
 
-        if (st.Ok()) {
+        if (status.Ok()) {
+            State = EState::CONNECTED;
             Processor = std::move(connection);
             ConnectionAttemptsDone = 0;
             InitImpl(deferred);
@@ -775,15 +775,15 @@ void TDirectReadSession::OnConnect(
         }
     }
 
-    if (!st.Ok()) {
+    if (!status.Ok()) {
         ReadSessionSettings.Counters_->Errors->Inc();
-        if (!Reconnect(st)) {
+        if (!Reconnect(status)) {
             with_lock (Lock) {
                 AbortImpl(TPlainStatus(
-                    st.Status,
+                    status.Status,
                     MakeIssueWithSubIssues(
-                        TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
-                        st.Issues)));
+                        TStringBuilder() << "Failed to establish connection to server \"" << status.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
+                        status.Issues)));
             }
         }
     }

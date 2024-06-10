@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     clickbench.cpp
-#    data_generator.cpp
+    data_generator.cpp
     GLOBAL registrar.cpp
 )
 
@@ -59,7 +59,7 @@ PEERDIR(
     ydb/library/workload/benchmark_base
     library/cpp/http/io
     library/cpp/resource
-#    library/cpp/streams/factory/open_by_signature
+    library/cpp/streams/factory/open_by_signature
 )
 
 END()

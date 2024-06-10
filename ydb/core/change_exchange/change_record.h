@@ -4,10 +4,6 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-
 namespace NKikimr::NChangeExchange {
 
 class IChangeSenderResolver;

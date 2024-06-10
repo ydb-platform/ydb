@@ -10,7 +10,7 @@ Currently, only building from source is available as an installation option. The
 
 ### Building from source
 
-1. [Install Go](https://go.dev/doc/install), minimal required Go version is 1.21
+1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
 
 2. Clone the `ydbops` repository from Github:
     ```

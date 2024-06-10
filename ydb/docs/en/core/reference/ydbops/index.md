@@ -14,8 +14,10 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 * see [configuration reference](configuration.md) for available configuration options.
 * The source code of `ydbops` can be found [on Github](https://github.com/ydb-platform/ydbops).
 
-## Currently supported scenarious
-- performing a [rolling restart of the cluster](rolling-restart-scenario.md).
+## Currently supported scenarios
 
-## Scenarious in development
-- requesting a permission to take out a set of YDB nodes for maintenance without breaking YDB fault model invariants.
+- Performing a [rolling restart of the cluster](rolling-restart-scenario.md).
+
+## Scenarios in development
+
+- Requesting permission to take out a set of {{ ydb-short-name }} nodes for maintenance without breaking {{ ydb-short-name } fault model invariants.

@@ -646,7 +646,10 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got DirectReadResponse " << response.ShortDebugString());
 
-    auto it = PartitionSessions.find(response.partition_session_id());
+    auto partitionSessionId = response.partition_session_id();
+    Y_ABORT_UNLESS(partitionSessionId == response.partition_data().partition_session_id());
+
+    auto it = PartitionSessions.find(partitionSessionId);
     Y_ABORT_UNLESS(it != PartitionSessions.end());
     auto& partitionSession = it->second;
 

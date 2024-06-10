@@ -2522,19 +2522,19 @@ TFuture<void> TClient::PausePipeline(
     return req->Invoke().AsVoid();
 }
 
-TFuture<TPipelineStatus> TClient::GetPipelineStatus(
+TFuture<TPipelineState> TClient::GetPipelineState(
     const NYPath::TYPath& pipelinePath,
-    const TGetPipelineStatusOptions& options)
+    const TGetPipelineStateOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetPipelineStatus();
+    auto req = proxy.GetPipelineState();
     SetTimeoutOptions(*req, options);
 
     req->set_pipeline_path(pipelinePath);
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
-        return TPipelineStatus{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatePtr& rsp) {
+        return TPipelineState{
             .State = FromProto<NFlow::EPipelineState>(rsp->state()),
         };
     }));

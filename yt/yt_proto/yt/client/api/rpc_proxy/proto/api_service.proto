@@ -2909,12 +2909,12 @@ message TRspStopPipeline
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetPipelineStatus
+message TReqGetPipelineState
 {
     required string pipeline_path = 1;
 }
 
-message TRspGetPipelineStatus
+message TRspGetPipelineState
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState

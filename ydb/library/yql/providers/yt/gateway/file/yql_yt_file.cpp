@@ -548,17 +548,19 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            if (options.Prefix().empty()) {
-                for (auto& x : Services_->GetTablesMapping()) {
-                    TVector<TString> parts;
-                    Split(x.first, ".", parts);
-                    if (parts.size() > 2 && parts[0] == YtProviderName) {
-                        if (!parts[2].StartsWith(TStringBuf("Input"))) {
-                            continue;
-                        }
-                        uniqueTables.insert(parts[2]);
-                    }
+            for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
+                TVector<TString> parts;
+                Split(tableName, ".", parts);
+                if (parts.size() != 3) {
+                    continue;
                 }
+                if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
+                    continue;
+                }
+                if (!options.Prefix().Empty() && !parts[2].StartsWith(options.Prefix() + '/')) {
+                    continue;
+                }
+                uniqueTables.insert(parts[2]);
             }
 
             TVector<TFolderResult::TFolderItem> items;

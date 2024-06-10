@@ -1,5 +1,7 @@
 #include "blobstorage_pdisk_ut_env.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
     testCtx.TestResponse<NPDisk::TEvSlayResult>(

@@ -207,6 +207,8 @@ private:
     TLog Log;
 };
 
+
+// TDirectReadSessionManager is NOT thread-safe. Its methods must be used under a lock.
 class TDirectReadSessionManager {
 public:
     using TSelf = TDirectReadSessionManager;
@@ -235,7 +237,7 @@ private:
     using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionContextPtr>;
 
     TDirectReadSessionContextPtr CreateDirectReadSession(TNodeId);
-    void DeletePartitionSessionImpl(TPartitionSessionId id, TNodeSessionsMap::iterator it);
+    void DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it);
 
     TStringBuilder GetLogPrefix() const;
 

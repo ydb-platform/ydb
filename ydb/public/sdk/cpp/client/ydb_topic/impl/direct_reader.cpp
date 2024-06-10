@@ -291,7 +291,7 @@ void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
     }
 }
 
-void TDirectReadSessionManager::DeletePartitionSessionImpl(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
+void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId);
 
     if (auto session = it->second->LockShared()) {
@@ -312,7 +312,7 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId parti
     auto sessionIt = NodeSessions.find(oldNodeId);
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
-    DeletePartitionSessionImpl(partitionSessionId, sessionIt);
+    DeletePartitionSession(partitionSessionId, sessionIt);
 
     // TODO(qyryq) std::move an old RetryState?
     StartPartitionSession({ .PartitionSessionId = partitionSessionId, .Location = newLocation });
@@ -325,7 +325,7 @@ void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId partiti
     auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
-    DeletePartitionSessionImpl(partitionSessionId, sessionIt);
+    DeletePartitionSession(partitionSessionId, sessionIt);
 }
 
 void TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSessionId partitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) {
@@ -807,9 +807,9 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
                                                << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
-    NYdbGrpc::IQueueClientContextPtr delayContext = nullptr;
     NYdbGrpc::IQueueClientContextPtr connectContext = nullptr;
     NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectDelayContext = nullptr;
 
     with_lock (Lock) {
         connectContext = ClientContext->CreateContext();
@@ -850,8 +850,8 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
                 return false;
             }
             delay = *nextDelay;
-            delayContext = ClientContext->CreateContext();
-            if (!delayContext) {
+            connectDelayContext = ClientContext->CreateContext();
+            if (!connectDelayContext) {
                 return false;
             }
         }
@@ -863,7 +863,7 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
-        prevConnectDelayContext = std::exchange(ConnectDelayContext, delayContext);
+        prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
 
         Y_ASSERT(ConnectContext);
         Y_ASSERT(ConnectTimeoutContext);
@@ -895,7 +895,7 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
 
     Y_ASSERT(connectContext);
     Y_ASSERT(connectTimeoutContext);
-    Y_ASSERT((delay == TDuration::Zero()) == !delayContext);
+    Y_ASSERT((delay == TDuration::Zero()) == !connectDelayContext);
     ProcessorFactory->CreateProcessor(
         std::move(connectCallback),
         TRpcRequestSettings::Make(ReadSessionSettings, TEndpointKey(NodeId)),
@@ -904,7 +904,7 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
         std::move(connectTimeoutContext),
         std::move(connectTimeoutCallback),
         delay,
-        std::move(delayContext));
+        std::move(connectDelayContext));
     return true;
 }
 

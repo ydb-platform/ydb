@@ -1076,27 +1076,13 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvDeleteSharedBlobs");
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvDeleteSharedBlobs");
-    auto sharingData = StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(ev->Get()->Record.GetStorageId());
     NOlap::TTabletsByBlob blobs;
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
         auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
         AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
         AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
-    auto categories = sharingData->BuildRemoveCategories(blobs);
-
-    auto removeAction = StoragesManager->GetOperator(ev->Get()->Record.GetStorageId())->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
-    for (auto it = categories.GetDirect().GetIterator(); it.IsValid(); ++it) {
-        removeAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
-    }
-    NOlap::TTabletsByBlob blobsSharing;
-    for (auto it = categories.GetSharing().GetIterator(); it.IsValid(); ++it) {
-        if (!categories.GetDirect().Contains(it.GetTabletId(), it.GetBlobId())) {
-            AFL_VERIFY(blobsSharing.Add(it.GetTabletId(), it.GetBlobId()));
-        }
-    }
-    AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-    Execute(new TTxRemoveSharedBlobs(this, removeAction, blobsSharing, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), sharingData), ctx);
+    Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

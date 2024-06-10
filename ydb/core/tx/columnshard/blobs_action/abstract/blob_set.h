@@ -394,6 +394,14 @@ public:
         }
     }
 
+    ui32 GetSize() const {
+        ui32 result = 0;
+        for (auto&& i : Data) {
+            result += i.second.size();
+        }
+        return result;
+    }
+
     bool IsEmpty() const {
         return Data.empty();
     }

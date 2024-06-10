@@ -21,18 +21,22 @@ private:
         return TStringBuilder() << " at tablet " << Self->TabletID();
     }
 public:
-    TTxRemoveSharedBlobs(TColumnShard* self, const std::shared_ptr<NOlap::IBlobsDeclareRemovingAction>& removeAction,
+    TTxRemoveSharedBlobs(TColumnShard* self,
         const NOlap::TTabletsByBlob& sharingBlobIds, const NActors::TActorId initiatorActorId,
-        const std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> manager)
+        const TString& storageId)
         : TBase(self)
-        , RemoveAction(removeAction)
         , TabletTxNo(++Self->TabletTxCounter)
         , InitiatorActorId(initiatorActorId)
         , SharingBlobIds(sharingBlobIds)
-        , Manager(manager)
+        , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId))
     {
-        const auto categories = Manager->BuildRemoveCategories(SharingBlobIds);
-        AFL_VERIFY(categories.HasSharingOnly() || categories.IsEmpty());
+        RemoveAction = Self->GetStoragesManager()->GetOperatorVerified(storageId)->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
+        auto categories = Manager->BuildRemoveCategories(SharingBlobIds);
+        for (auto it = categories.GetDirect().GetIterator(); it.IsValid(); ++it) {
+            RemoveAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
+        }
+        AFL_VERIFY(categories.GetBorrowed().IsEmpty());
+        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize());
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

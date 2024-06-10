@@ -1334,6 +1334,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
     TDeferredActions<false>& deferred
 ) {
     Ydb::Topic::StreamReadMessage::ReadResponse r;
+    // TODO(qyryq) What is the proper size here?
     r.set_bytes_size(response.ByteSizeLong());
     auto* data = r.add_partition_data();
     data->Swap(response.mutable_partition_data());
@@ -1356,23 +1357,49 @@ inline void TSingleClusterReadSessionImpl<false>::ScheduleCallback(TDuration tim
 }
 
 template <>
-inline bool TSingleClusterReadSessionImpl<false>::StopPartitionSession(TPartitionSessionId partitionSessionId) {
+inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
+    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream, bool graceful, TDeferredActions<false>& deferred
+) {
+    auto partitionSessionId = partitionStream->GetAssignId();
+
+    if (Settings.DirectRead_) {
+        Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
+        DirectReadSessionManager->StopPartitionSession(partitionSessionId);
+    }
+
+    bool pushRes = true;
+
+    if (graceful) {
+        pushRes = EventsQueue->PushEvent(
+            partitionStream,
+            // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
+            TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), partitionStream->GetMaxCommittedOffset()),
+            deferred);
+    } else {
+        PartitionStreams.erase(partitionSessionId);
+        pushRes = EventsQueue->PushEvent(
+            partitionStream,
+            TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
+            deferred);
+    }
+
+    if (!pushRes) {
+        AbortImpl();
+    }
+}
+
+template <>
+inline void TSingleClusterReadSessionImpl<false>::StopPartitionSession(TPartitionSessionId partitionSessionId, bool graceful) {
     TDeferredActions<false> deferred;
     with_lock (Lock) {
-        auto it = PartitionStreams.find(partitionSessionId);
-        if (it != PartitionStreams.end()) {
-            bool pushRes = EventsQueue->PushEvent(
-                it->second,
-                // TODO(qyryq) What should we pass as committedOffset argument?
-                TReadSessionEvent::TStopPartitionSessionEvent(std::move(it->second), it->second->GetMaxCommittedOffset()),
-                deferred);
-            if (!pushRes) {
-                AbortImpl();
-                return false;
-            }
+        auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
+        if (partitionStreamIt == PartitionStreams.end()) {
+            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Wanted to stop partition stream id=" << partitionSessionId
+                                                     << ", but no such id was found");
+            return;
         }
+        StopPartitionSessionImpl(partitionStreamIt->second, graceful, deferred);
     }
-    return true;
 }
 
 template <>
@@ -1488,38 +1515,22 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
+    auto partitionSessionId = msg.partition_session_id();
+
+    auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
     if (partitionStreamIt == PartitionStreams.end()) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Server wants us to stop partition session id=" << partitionSessionId
+                                                 << ", but it's not found");
         return;
     }
 
-    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
-    bool pushRes = true;
-    if (!msg.graceful()) {
-        if (Settings.DirectRead_) {
-            Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
-            DirectReadSessionManager->StopPartitionSession(msg.partition_session_id());
-        }
-        PartitionStreams.erase(msg.partition_session_id());
-        pushRes = EventsQueue->PushEvent(
-            partitionStream,
-            TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
-            deferred);
-    } else {
-        if (Settings.DirectRead_) {
-            Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
-            DirectReadSessionManager->StopPartitionSessionGracefully(msg.partition_session_id(), msg.committed_offset(), msg.last_direct_read_id());
-            return;
-        }
-        pushRes = EventsQueue->PushEvent(
-            partitionStream,
-            TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), msg.committed_offset()),
-            deferred);
-    }
-    if (!pushRes) {
-        AbortImpl();
+    if (msg.graceful() && Settings.DirectRead_) {
+        Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
+        DirectReadSessionManager->StopPartitionSessionGracefully(partitionSessionId, msg.last_direct_read_id());
         return;
     }
+
+    StopPartitionSessionImpl(partitionStreamIt->second, msg.graceful(), deferred);
 }
 
 template <>
@@ -1782,8 +1793,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
         if constexpr (!UseMigrationProtocol) {
             if (DirectReadSessionManager) {
                 DirectReadSessionManager->Close();
+                DirectReadSessionManager.Clear();
             }
-            DirectReadSessionManager.Clear();
         }
     }
 }

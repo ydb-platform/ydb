@@ -399,10 +399,10 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
 
         // Data helpers.
         TServerReadInfo& PartitionData(const TPartitionSessionId partitionSessionId) {
-            Response.mutable_direct_read_response()->set_partition_session_id(partitionSessionId);
-            Response.mutable_direct_read_response()->set_direct_read_id(1);
-            auto* data = Response.mutable_direct_read_response()->mutable_partition_data();
-            data->set_partition_session_id(partitionSessionId);
+            auto* response = Response.mutable_direct_read_response();
+            response->set_partition_session_id(partitionSessionId);
+            response->set_direct_read_id(1);
+            response->mutable_partition_data()->set_partition_session_id(partitionSessionId);
             return *this;
         }
 
@@ -1548,6 +1548,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
       - dieCallback
       - graceful/non-graceful StopPartitionSession (sdk should respond in either way)
       - tablet relocation to another/same node
+      - schedule callback, recreate DirectReadSessionManager, the scheduled callback should do nothing (?)
 
     */
 

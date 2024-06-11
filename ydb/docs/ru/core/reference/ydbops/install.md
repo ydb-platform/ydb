@@ -8,7 +8,7 @@
 
 1. [Установите Go](https://go.dev/doc/install). Минимально требуемая версия Go — 1.21.
 
-2. Склонируйте репозиторий `ydbops` с Github:
+2. Склонируйте репозиторий `ydbops` с GitHub:
     ```bash
     git clone https://github.com/ydb-platform/ydbops.git
     ```

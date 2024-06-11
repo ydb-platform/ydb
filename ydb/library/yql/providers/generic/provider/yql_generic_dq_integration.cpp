@@ -271,7 +271,6 @@ namespace NYql {
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
-
                 // for backward compability full path can be used (cluster_name.`db_name.table`)
                 // TODO: simplify during https://st.yandex-team.ru/YQ-2494
                 TStringBuf db, dbTable;
@@ -285,12 +284,10 @@ namespace NYql {
                     << ", table: " << table
                     << ", endpoint: " << endpoint.ShortDebugString();
 
-
                 auto [tableMeta, issue] = State_->GetTable(clusterName, table);
                 if (issue.has_value()) {
                     ythrow yexception() << "Get table metadata: " << issue.value();
                 }
-
 
                 Generic::TLookupSource source;
                 source.set_table(TString(dbTable));
@@ -312,6 +309,7 @@ namespace NYql {
                 protoSettings.PackFrom(source);
                 sourceType = GetSourceType(source.data_source_instance());
             }
+
         private:
             const TGenericState::TPtr State_;
         };

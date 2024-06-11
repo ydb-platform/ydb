@@ -114,12 +114,12 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 }
 
 bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKeys) {
-    if (stats.KeyColumns.size() == 0) {
+    if (!stats.KeyColumns) {
         return false;
     }
 
-    for(size_t i = 0; i < stats.KeyColumns.size(); i++){
-        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns[i]) == joinKeys.end()) {
+    for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
+        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns->Data[i]) == joinKeys.end()) {
             return false;
         }
     }
@@ -221,7 +221,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         + leftStats.Cost + rightStats.Cost;
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
-        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
+        leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
     result.Selectivity = selectivity;
     return result;
 }

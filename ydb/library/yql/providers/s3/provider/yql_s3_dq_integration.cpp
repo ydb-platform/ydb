@@ -216,7 +216,7 @@ public:
 
             rows = size / 1024; // magic estimate
             return primaryKey 
-                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, *primaryKey)
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
                 : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();

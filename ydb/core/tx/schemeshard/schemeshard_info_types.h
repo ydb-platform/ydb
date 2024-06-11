@@ -2743,6 +2743,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     TSet<TActorId> Subscribers;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TImportInfo(
             const ui64 id,
             const TString& uid,

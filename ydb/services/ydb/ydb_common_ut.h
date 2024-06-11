@@ -33,7 +33,7 @@ struct TKikimrTestSettings {
     static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
     static TString GetServerKey() { return NYdbSslTestData::ServerKey; }
 
-    static NKikimr::TDynamicNodeAuthorizationParams GetCertAuthParams() {return {}; }
+    static NKikimr::TCertificateAuthorizationParams GetCertAuthParams() {return {}; }
 };
 
 struct TKikimrTestWithAuth : TKikimrTestSettings {

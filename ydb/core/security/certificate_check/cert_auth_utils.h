@@ -3,7 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
-#include "dynamic_node_auth_processor.h"
+#include "cert_auth_processor.h"
 
 namespace NKikimr {
 struct TCertificateAuthValues {
@@ -12,7 +12,7 @@ struct TCertificateAuthValues {
     TString Domain;
 };
 
-TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);
+std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);
 NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes = {});
 
 struct TCertAndKey {

@@ -40,6 +40,7 @@ public:
             Status = Ydb::StatusIds::UNAUTHORIZED;
             Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Access denied"));
             SendReplyAndDie(ctx);
+            return;
         }
 
         auto dinfo = AppData(ctx)->DomainsInfo;

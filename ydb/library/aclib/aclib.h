@@ -13,7 +13,6 @@ namespace NACLib {
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
 
-#define DEFAULT_REGISTER_NODE_CERT_USER "register.node"
 class TUserToken;
 class TSystemUsers {
 public:

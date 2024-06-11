@@ -1,4 +1,4 @@
-#include "dynamic_node_auth_processor.h"
+#include "cert_auth_processor.h"
 
 #include <openssl/x509.h>
 #include <openssl/pem.h>
@@ -98,73 +98,86 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(cons
     return ReadTerms(name);
 }
 
-TDynamicNodeAuthorizationParams::TDistinguishedName& TDynamicNodeAuthorizationParams::TDistinguishedName::AddRelativeDistinguishedName(TRelativeDistinguishedName name) {
-    RelativeDistinguishedNames.push_back(std::move(name));
+TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, bool requireSameIssuer, const std::vector<TString>& groups)
+    : SubjectDn(dn)
+    , RequireSameIssuer(requireSameIssuer)
+    , Groups(groups)
+{}
+
+TCertificateAuthorizationParams::TCertificateAuthorizationParams(TDN&& dn, bool requireSameIssuer, std::vector<TString>&& groups)
+    : SubjectDn(std::move(dn))
+    , RequireSameIssuer(requireSameIssuer)
+    , Groups(std::move(groups))
+{}
+
+TCertificateAuthorizationParams::TDN& TCertificateAuthorizationParams::TDN::AddRDN(const TRDN& rdn) {
+    RDNs.push_back(rdn);
     return *this;
 }
 
-TDynamicNodeAuthorizationParams::operator bool() const {
-    return !CertSubjectsDescriptions.empty();
+TCertificateAuthorizationParams::operator bool() const {
+    return SubjectDn;
 }
 
-bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const {
-    for (const auto& description: CertSubjectsDescriptions) {
-        bool isDescriptionMatched = false;
-        for (const auto& name: description.RelativeDistinguishedNames) {
-            isDescriptionMatched = false;
-            auto fieldIt = subjectDescription.find(name.Attribute);
-            if (fieldIt == subjectDescription.cend()) {
-                break;
-            }
+bool TCertificateAuthorizationParams::CheckSubject(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const {
+    bool isDescriptionMatched = false;
+    for (const auto& rdn: SubjectDn.RDNs) {
+        isDescriptionMatched = false;
+        auto fieldIt = subjectDescription.find(rdn.Attribute);
+        if (fieldIt == subjectDescription.cend()) {
+            break;
+        }
 
-            const auto& attributeValues = fieldIt->second;
-            bool attributeMatched = false;
-            for (const auto& attributeValue : attributeValues) {
-                attributeMatched = false;
-                for (const auto& value: name.Values) {
-                    if (value == attributeValue) {
-                        attributeMatched = true;
-                        break;
-                    }
-                }
-                if (!attributeMatched) {
-                    for (const auto& suffix: name.Suffixes) {
-                        if (attributeValue.EndsWith(suffix)) {
-                            attributeMatched = true;
-                            break;
-                        }
-                    }
-                }
-                if (!attributeMatched) {
+        const auto& attributeValues = fieldIt->second;
+        bool attributeMatched = false;
+        for (const auto& attributeValue : attributeValues) {
+            attributeMatched = false;
+            for (const auto& value: rdn.Values) {
+                if (value == attributeValue) {
+                    attributeMatched = true;
                     break;
                 }
             }
             if (!attributeMatched) {
-                isDescriptionMatched = false;
+                for (const auto& suffix: rdn.Suffixes) {
+                    if (attributeValue.EndsWith(suffix)) {
+                        attributeMatched = true;
+                        break;
+                    }
+                }
+            }
+            if (!attributeMatched) {
                 break;
             }
-            isDescriptionMatched = true;
         }
-
-        if (isDescriptionMatched) {
-            return true;
+        if (!attributeMatched) {
+            isDescriptionMatched = false;
+            break;
         }
+        isDescriptionMatched = true;
     }
 
+    if (isDescriptionMatched) {
+        return true;
+    }
     return false;
 }
 
-TDynamicNodeAuthorizationParams::TRelativeDistinguishedName::TRelativeDistinguishedName(const TString& Attribute)
+TCertificateAuthorizationParams::TDN::operator bool() const {
+    return !RDNs.empty();
+}
+
+TCertificateAuthorizationParams::TRDN::TRDN(const TString& Attribute)
     :Attribute(Attribute)
 {}
 
-TDynamicNodeAuthorizationParams::TRelativeDistinguishedName& TDynamicNodeAuthorizationParams::TRelativeDistinguishedName::AddValue(const TString& val)
+TCertificateAuthorizationParams::TRDN& TCertificateAuthorizationParams::TRDN::AddValue(const TString& val)
 {
     Values.push_back(val);
     return *this;
 }
 
-TDynamicNodeAuthorizationParams::TRelativeDistinguishedName& TDynamicNodeAuthorizationParams::TRelativeDistinguishedName::AddSuffix(const TString& suffix)
+TCertificateAuthorizationParams::TRDN& TCertificateAuthorizationParams::TRDN::AddSuffix(const TString& suffix)
 {
     Suffixes.push_back(suffix);
     return *this;

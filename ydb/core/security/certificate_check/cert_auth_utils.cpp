@@ -17,31 +17,29 @@
 
 namespace NKikimr {
 
-TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
-    TDynamicNodeAuthorizationParams certAuthConf;
-    if (!clientCertificateAuth.HasDynamicNodeAuthorization()) {
-        return certAuthConf;
+std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
+    std::vector<TCertificateAuthorizationParams> certAuthParams;
+    certAuthParams.reserve(clientCertificateAuth.ClientCertificateDefinitionsSize());
+
+    for (const auto& clientCertificateDefinition : clientCertificateAuth.GetClientCertificateDefinitions()) {
+        TCertificateAuthorizationParams::TDN dn;
+        for (const auto& term: clientCertificateDefinition.GetSubjectTerms()) {
+            auto rdn = TCertificateAuthorizationParams::TRDN(term.GetShortName());
+            for (const auto& value: term.GetValues()) {
+                rdn.AddValue(value);
+            }
+            for (const auto& suffix: term.GetSuffixes()) {
+                rdn.AddSuffix(suffix);
+            }
+            dn.AddRDN(std::move(rdn));
+        }
+        if (dn) {
+            std::vector<TString> groups(clientCertificateDefinition.GetMemberGroups().cbegin(), clientCertificateDefinition.GetMemberGroups().cend());
+            certAuthParams.emplace_back(std::move(dn), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
+        }
     }
 
-    const auto& dynNodeAuth = clientCertificateAuth.GetDynamicNodeAuthorization();
-    TDynamicNodeAuthorizationParams::TDistinguishedName distinguishedName;
-    for (const auto& term: dynNodeAuth.GetSubjectTerms()) {
-        auto name = TDynamicNodeAuthorizationParams::TRelativeDistinguishedName(term.GetShortName());
-        for (const auto& value: term.GetValues()) {
-            name.AddValue(value);
-        }
-        for (const auto& suffix: term.GetSuffixes()) {
-            name.AddSuffix(suffix);
-        }
-        distinguishedName.AddRelativeDistinguishedName(std::move(name));
-    }
-    if (!distinguishedName.RelativeDistinguishedNames.empty()) {
-        certAuthConf.AddCertSubjectDescription(distinguishedName);
-    }
-    certAuthConf.CanCheckNodeByAttributeCN = dynNodeAuth.GetCanCheckNodeHostByCN();
-    certAuthConf.NeedCheckIssuer = dynNodeAuth.GetNeedCheckIssuer();
-    certAuthConf.SidName = dynNodeAuth.GetSidName();
-    return certAuthConf;
+    return certAuthParams;
 }
 
 NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes) {

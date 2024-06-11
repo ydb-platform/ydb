@@ -11,7 +11,7 @@ public:
     struct TCertificateCheckResult {
         TEvTicketParser::TError Error;
         TString UserSid;
-        TString Group;
+        std::vector<TString> Groups;
     };
 
 private:
@@ -30,9 +30,10 @@ private:
         TEvTicketParser::TError Error;
     };
 
-    const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
+    const std::vector<TCertificateAuthorizationParams> CertificateAuthorizationParams;
     const TString ServerCertificate;
     const TString Domain;
+    const TString DefaultGroup;
 
 public:
     TCertificateChecker(const TCertificateAuthValues& certificateAuthValues);
@@ -46,7 +47,7 @@ private:
     TEvTicketParser::TError CheckIssuers(const TPemCertificates& pemCertificates) const;
     TReadClientSubjectResult ReadSubjectFromClientCertificate(const TPemCertificates& pemCertificates) const;
     TString CreateUserSidFromSubjectDn(const std::vector<std::pair<TString, TString>>& subjectDn) const;
-    TEvTicketParser::TError CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn) const;
+    TEvTicketParser::TError CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn, const TCertificateAuthorizationParams& authParams) const;
     TCertificateCheckResult DefaultCheckClientCertificate(const TPemCertificates& pemCertificates) const;
     TCertificateCheckResult CheckClientCertificate(const TPemCertificates& pemCertificates) const;
     TString GetDefaultGroup() const;

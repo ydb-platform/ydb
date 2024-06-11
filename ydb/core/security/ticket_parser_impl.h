@@ -680,7 +680,9 @@ private:
             .AuthType = record.GetAuthType()
         };
         auto userToken = MakeIntrusive<NACLib::TUserToken>(std::move(userTokenInitFields));
-        userToken->AddGroupSID(certificateCheckResult.Group);
+        for (const auto& group : certificateCheckResult.Groups) {
+            userToken->AddGroupSID(group);
+        }
         SetToken(key, record, userToken);
         return true;
     }

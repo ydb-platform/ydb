@@ -611,6 +611,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         serverCertificateFile.Write(serverCert.Certificate.data(), serverCert.Certificate.size());
         settings.ServerCertFilePath = serverCertificateFile.Name();
 
+        const TString expectedGroup = settings.AppConfig->GetClientCertificateAuthorization().GetDefaultGroup();
+
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -628,7 +630,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
-        const TString expectedGroup = TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@cert";
         UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain " + expectedGroup);
     }
 
@@ -676,14 +677,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
-        dynNodeDefinition.SetSidName("test.Register.Node.Group@cert");
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        certDef.AddMemberGroups("test.Register.Node.Group@cert");
 
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
@@ -710,8 +712,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
-        const TString expectedGroup = dynNodeDefinition.GetSidName();
-        UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
+        const std::vector<TString> expectedGroups(certDef.GetMemberGroups().cbegin(), certDef.GetMemberGroups().cend());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
+        }
     }
 
     Y_UNIT_TEST(TicketFromCertificateWithValidationDifferentIssuersGood) {
@@ -721,15 +725,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
-        dynNodeDefinition.SetNeedCheckIssuer(false);
-        dynNodeDefinition.SetSidName("test.Register.Node.Group@cert");
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        certDef.SetRequireSameIssuer(false);
+        certDef.AddMemberGroups("test.Register.Node.Group@cert");
 
         const TCertAndKey caForServerCert = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(caForServerCert, TProps::AsServer());
@@ -759,8 +764,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
-        const TString expectedGroup = dynNodeDefinition.GetSidName();
-        UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
+        const std::vector<TString> expectedGroups(certDef.GetMemberGroups().cbegin(), certDef.GetMemberGroups().cend());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
+        }
     }
 
     Y_UNIT_TEST(TicketFromCertificateWithValidationDifferentIssuersBad) {
@@ -770,14 +777,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
-        dynNodeDefinition.SetSidName("test.Register.Node.Group@cert");
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        certDef.AddMemberGroups("test.Register.Node.Group@cert");
 
         const TCertAndKey caForServerCert = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(caForServerCert, TProps::AsServer());
@@ -804,7 +812,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate failed verification");
         UNIT_ASSERT(result->Token == nullptr);
     }
 
@@ -815,13 +823,14 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
 
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
@@ -830,6 +839,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTempFileHandle serverCertificateFile;
         serverCertificateFile.Write(serverCert.Certificate.data(), serverCert.Certificate.size());
         settings.ServerCertFilePath = serverCertificateFile.Name();
+
+        const TString expectedGroup = settings.AppConfig->GetClientCertificateAuthorization().GetDefaultGroup();
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -848,7 +859,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
-        const TString expectedGroup = TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@cert";
         UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
     }
 
@@ -859,13 +869,14 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"Other org"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"Other org"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
 
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
@@ -900,13 +911,14 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"Other org"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+        auto& certDef = *clientCertDefinitions.Add();
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"Other org"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
 
         const TCertAndKey caForServerCert = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(caForServerCert, TProps::AsServer());
@@ -933,7 +945,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate failed verification");
         UNIT_ASSERT(result->Token == nullptr);
     }
 

@@ -10,22 +10,23 @@
 namespace NKikimr {
 
 TCertificateChecker::TCertificateChecker(const TCertificateAuthValues& certificateAuthValues)
-    : DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
+    : CertificateAuthorizationParams(GetCertificateAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
     , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? NYdb::NConsoleClient::ReadFromFile(certificateAuthValues.ServerCertificateFilePath, "Can not open server`s certificate") : ""))
     , Domain(certificateAuthValues.Domain)
+    , DefaultGroup(certificateAuthValues.ClientCertificateAuthorization.GetDefaultGroup())
 { }
 
 TCertificateChecker::TCertificateCheckResult TCertificateChecker::Check(const TString& clientCertificate) const {
     TReadCertificateAsPemResult readCertificateAsPemResult = ReadCertificatesAsPem(clientCertificate);
     if (!readCertificateAsPemResult.Error.empty()) {
-        return {.Error = readCertificateAsPemResult.Error, .UserSid = "", .Group = ""};
+        return {.Error = readCertificateAsPemResult.Error, .UserSid = "", .Groups = {""}};
     }
 
     const auto& pemCertificates = readCertificateAsPemResult.PemCertificates;
-    if (DynamicNodeAuthorizationParams) {
-        return CheckClientCertificate(pemCertificates);
+    if (CertificateAuthorizationParams.empty()) {
+        return DefaultCheckClientCertificate(pemCertificates);
     }
-    return DefaultCheckClientCertificate(pemCertificates);
+    return CheckClientCertificate(pemCertificates);
 }
 
 TCertificateChecker::TReadCertificateAsPemResult TCertificateChecker::ReadCertificatesAsPem(const TString& clientCertificate) const {
@@ -81,14 +82,14 @@ TString TCertificateChecker::CreateUserSidFromSubjectDn(const std::vector<std::p
     return userSid;
 }
 
-TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn) const {
+TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn, const TCertificateAuthorizationParams& authParams) const {
     std::unordered_map<TString, std::vector<TString>> subjectDescription;
     for (const auto& [attribute, value] : subjectDn) {
         auto& attributeValues = subjectDescription[attribute];
         attributeValues.push_back(value);
     }
 
-    if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
+    if (!authParams.CheckSubject(subjectDescription)) {
         return { .Message = "Client certificate failed verification", .Retryable = false };
     }
     return {};
@@ -107,37 +108,41 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::DefaultCheckCl
         return result;
     }
     result.UserSid = CreateUserSidFromSubjectDn(readClientSubjectResult.SubjectDn);
-    result.Group = GetDefaultGroup();
+    result.Groups = {DefaultGroup};
     return result;
 }
 
 TCertificateChecker::TCertificateCheckResult TCertificateChecker::CheckClientCertificate(const TPemCertificates& pemCertificates) const {
     TCertificateCheckResult result;
-    if (DynamicNodeAuthorizationParams.NeedCheckIssuer) {
-        auto checkIssuersError = CheckIssuers(pemCertificates);
-        if (!checkIssuersError.empty()) {
-            result.Error = checkIssuersError;
-            return result;
-        }
-    }
+    auto checkIssuersError = CheckIssuers(pemCertificates);
     TReadClientSubjectResult readClientSubjectResult = ReadSubjectFromClientCertificate(pemCertificates);
     if (!readClientSubjectResult.Error.empty()) {
         result.Error = readClientSubjectResult.Error;
         return result;
     }
+    std::unordered_set<TString> groups;
+    for (const auto& authParams : CertificateAuthorizationParams) {
+        if (authParams.RequireSameIssuer && !checkIssuersError.empty()) {
+            continue;
+        }
 
-    auto checkClientSubjectError = CheckClientSubject(readClientSubjectResult.SubjectDn);
-    if (!checkClientSubjectError.empty()) {
-        result.Error = checkClientSubjectError;
+        auto checkClientSubjectError = CheckClientSubject(readClientSubjectResult.SubjectDn, authParams);
+        if (!checkClientSubjectError.empty()) {
+            continue;
+        }
+        if (authParams.Groups.empty()) {
+            groups.insert(DefaultGroup);
+        } else {
+            groups.insert(authParams.Groups.cbegin(), authParams.Groups.cend());
+        }
+    }
+    if (groups.empty()) {
+        result.Error = { .Message = "Client certificate failed verification", .Retryable = false };
         return result;
     }
     result.UserSid = CreateUserSidFromSubjectDn(readClientSubjectResult.SubjectDn);
-    result.Group = (DynamicNodeAuthorizationParams.SidName.empty() ? GetDefaultGroup() : DynamicNodeAuthorizationParams.SidName);
+    result.Groups.assign(groups.cbegin(), groups.cend());
     return result;
-}
-
-TString TCertificateChecker::GetDefaultGroup() const {
-    return TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Domain;
 }
 
 } // namespace NKikimr

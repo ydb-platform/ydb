@@ -10,7 +10,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
-#include <ydb/core/security/certificate_check/dynamic_node_auth_processor.h>
+#include <ydb/core/security/certificate_check/cert_auth_processor.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -57,6 +57,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
         bool EnableDynamicNodeAuth = false;
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
+        std::vector<TString> RegisterNodeAllowedSids = {"DefaultClientAuth@cert", BUILTIN_ACL_ROOT};
     };
 
     TKikimrServerForTestNodeRegistration(const TServerInitialization& serverInitialization)
@@ -73,23 +74,27 @@ private:
         }
         if (serverInitialization.EnableDynamicNodeAuth) {
             config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
-            config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+            // config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
         }
 
-        securityConfig.MutableRegisterDynamicNodeAllowedSIDs()->Add(BUILTIN_ACL_ROOT);
+        std::vector<TString> tmpRegisterNodeAllowedSids(serverInitialization.RegisterNodeAllowedSids);
+        for (auto& sid : tmpRegisterNodeAllowedSids) {
+            securityConfig.MutableRegisterDynamicNodeAllowedSIDs()->Add(std::move(sid));
+        }
 
         if (serverInitialization.SetNodeAuthValues) {
-            auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+            auto& clientCertDefinitions = *config.MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
+            auto& certDef = *clientCertDefinitions.Add();
             if (serverInitialization.EnableWrongIdentity) {
-                *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
+                *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
             } else {
-                *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+                *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
             }
-            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
+            *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+            *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+            *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+            *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+            *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
         }
 
         return config;
@@ -146,14 +151,20 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
 }
 
-Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
+void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) {
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
             .EnforceUserToken = true,
             .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {}
         });
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -172,7 +183,8 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
             .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {}
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -186,6 +198,98 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
 
         CheckGood(RegisterNode(config));
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {}
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {}
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGroup) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {"DefaultClientAuth@cert"}
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), "Cannot authorize node. Access denied");
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true,
+            .RegisterNodeAllowedSids = {"DefaultClientAuth@cert"}
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
     }
 }
@@ -854,6 +958,30 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AccessDenied) {
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .RegisterNodeAllowedSids = {BUILTIN_ACL_ROOT}
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+
+    NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);
+
+    Cerr << "Trying to register node" << Endl;
+
+    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+    UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node. Access denied");
+
+    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+}
+
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerForTestNodeRegistration server({
         .EnforceUserToken = true,
@@ -871,8 +999,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     Cerr << "Trying to register node" << Endl;
 
     auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
-    UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
-    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node. Node has not provided certificate");
+    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
 
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
@@ -936,7 +1063,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
 
     auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
     UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
-    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node by certificate");
+    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot create token from certificate. Client certificate failed verification");
 
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }

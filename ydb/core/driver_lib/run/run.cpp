@@ -227,13 +227,11 @@ public:
                 appData->AllAuthenticatedUsers = allUsersGroup;
             }
         }
-        TVector<TString> registerDynamicNodeAllowedSIDs {BUILTIN_ACL_ROOT, // Remove when switch on certificate auth only
-                                                         TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
         if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
             const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
-            registerDynamicNodeAllowedSIDs.insert(registerDynamicNodeAllowedSIDs.end(), allowedSids.cbegin(), allowedSids.cend());
+            TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
-        appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
 
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
@@ -705,9 +703,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLegacy) {
             // start legacy service
             auto grpcService = new NGRpcProxy::TGRpcService();
-            if (!opts.SslData.Empty()) {
-                grpcService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {

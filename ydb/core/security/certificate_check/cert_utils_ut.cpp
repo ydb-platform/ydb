@@ -22,15 +22,14 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
 
     Y_UNIT_TEST(ClientCertAuthorizationParamsMatch) {
         {
-            TDynamicNodeAuthorizationParams authParams;
-            TDynamicNodeAuthorizationParams::TDistinguishedName dn;
-            dn.AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("C").AddValue("RU"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("ST").AddValue("MSK"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("L").AddValue("MSK"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("O").AddValue("YA"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("OU").AddValue("UtTest").AddValue("OtherUnit"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("CN").AddValue("localhost").AddSuffix(".yandex.ru"));
-            authParams.AddCertSubjectDescription(dn);
+            TCertificateAuthorizationParams::TDN dn;
+            dn.AddRDN(TCertificateAuthorizationParams::TRDN("C").AddValue("RU"))
+            .AddRDN(TCertificateAuthorizationParams::TRDN("ST").AddValue("MSK"))
+            .AddRDN(TCertificateAuthorizationParams::TRDN("L").AddValue("MSK"))
+            .AddRDN(TCertificateAuthorizationParams::TRDN("O").AddValue("YA"))
+            .AddRDN(TCertificateAuthorizationParams::TRDN("OU").AddValue("UtTest").AddValue("OtherUnit"))
+            .AddRDN(TCertificateAuthorizationParams::TRDN("CN").AddValue("localhost").AddSuffix(".yandex.ru"));
+            TCertificateAuthorizationParams authParams(std::move(dn));
 
             {
                 std::unordered_map<TString, std::vector<TString>> subjectTerms;
@@ -41,7 +40,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -54,7 +53,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("OtherUnit");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -67,7 +66,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("WrongUnit");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -79,7 +78,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -92,7 +91,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["CN"].push_back("test.yandex.ru");
                 subjectTerms["ELSE"].push_back("WhatEver");
 
-                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -104,7 +103,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -116,7 +115,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.not-yandex.ru");
 
-                UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
             }
 
             {
@@ -128,7 +127,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
             }
         }
     }

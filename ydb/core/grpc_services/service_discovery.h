@@ -4,8 +4,6 @@
 
 namespace NKikimr {
 
-struct TDynamicNodeAuthorizationParams;
-
 namespace NGRpcService {
 
 class IRequestOpCtx;

@@ -1753,15 +1753,16 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
-    message TDynamicNodeDefinition {
+    message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
-        optional string SidName = 3;
-        optional bool NeedCheckIssuer = 4 [default = true];
+        repeated string MemberGroups = 3;
+        optional bool RequireSameIssuer = 4 [default = true];
     }
 
-    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+    repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
     optional bool RequestClientCertificate = 2 [default = false];
+    optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
 message TLocalPgWireConfig {

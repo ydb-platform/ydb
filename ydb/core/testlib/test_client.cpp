@@ -240,9 +240,7 @@ namespace Tests {
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
-            TVector<TString> registerDynamicNodeAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Settings->AuthConfig.GetCertificateAuthenticationDomain()};
-            const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
-            registerDynamicNodeAllowedSIDs.insert(registerDynamicNodeAllowedSIDs.end(), allowedSids.cbegin(), allowedSids.cend());
+            TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
             appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
             appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
@@ -346,10 +344,6 @@ namespace Tests {
             desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
 
             system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
-        }
-
-        if (!options.SslData.Empty()) {
-            grpcService->SetDynamicNodeAuthParams(NKikimr::GetDynamicNodeAuthorizationParams(Settings->AppConfig->GetClientCertificateAuthorization()));
         }
 
         auto future = grpcService->Prepare(

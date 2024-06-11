@@ -9,28 +9,31 @@
 
 namespace NKikimr {
 
-struct TDynamicNodeAuthorizationParams {
-    struct TRelativeDistinguishedName {
+struct TCertificateAuthorizationParams {
+    struct TRDN {
         TString Attribute;
         TVector<TString> Values;
         TVector<TString> Suffixes;
 
-        TRelativeDistinguishedName(const TString& Attribute);
-        TRelativeDistinguishedName& AddValue(const TString& val);
-        TRelativeDistinguishedName& AddSuffix(const TString& suffix);
+        TRDN(const TString& Attribute);
+        TRDN& AddValue(const TString& val);
+        TRDN& AddSuffix(const TString& suffix);
     };
 
-    struct TDistinguishedName {
-        TVector<TRelativeDistinguishedName> RelativeDistinguishedNames;
+    struct TDN {
+        TVector<TRDN> RDNs;
 
-        TDistinguishedName& AddRelativeDistinguishedName(TRelativeDistinguishedName name);
+        TDN& AddRDN(const TRDN& rdn);
+        operator bool () const;
     };
+
+    TCertificateAuthorizationParams(const TDN& dn = TDN(), bool requireSameIssuer = true, const std::vector<TString>& groups = {});
+    TCertificateAuthorizationParams(TDN&& dn, bool requireSameIssuer = true, std::vector<TString>&& groups = {});
 
     operator bool () const;
-    bool IsSubjectDescriptionMatched(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const;
-    TDynamicNodeAuthorizationParams& AddCertSubjectDescription(const TDistinguishedName& description) {
-        CertSubjectsDescriptions.push_back(description);
-        return *this;
+    bool CheckSubject(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const;
+    void SetSubjectDn(const TDN& subjectDn) {
+        SubjectDn = subjectDn;
     }
 
     bool IsHostMatchAttributeCN(const TString&) const {
@@ -38,9 +41,9 @@ struct TDynamicNodeAuthorizationParams {
     }
 
     bool CanCheckNodeByAttributeCN = false;
-    TVector<TDistinguishedName> CertSubjectsDescriptions;
-    bool NeedCheckIssuer = true;
-    TString SidName;
+    TDN SubjectDn;
+    bool RequireSameIssuer = true;
+    std::vector<TString> Groups;
 };
 
 

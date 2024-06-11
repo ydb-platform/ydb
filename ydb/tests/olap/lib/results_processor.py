@@ -10,7 +10,7 @@ from time import time_ns
 class ResultsProcessor:
     class Endpoint:
         def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
-            self._driver = YdbCluster._create_ydb_driver(ep, db, key, iam_file)
+            self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
             self._db = db
             self._table = table
 

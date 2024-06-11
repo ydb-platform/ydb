@@ -367,7 +367,7 @@ public:
     ~TSpillingSupportState() {
     }
 
-    bool UpdateAndCheckIfReadyToContinue() {
+    bool UpdateSpillingAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
             case EOperatingMode::ProcessSpilled:
@@ -388,29 +388,33 @@ public:
                     BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
                 }
 
-                if (InputStatus == EFetchResult::Finish) {
-                    ui64 finishedCount = 0;
-                    for (auto& bucket : SpilledBuckets) {
-                        MKQL_ENSURE(bucket.BucketState != TSpilledBucket::EBucketState::SpillingState, "Internal logic error");
-                        if (!bucket.AsyncWriteOperation.has_value()) {
-                            auto writeOperation = bucket.SpilledData->FinishWriting();
-                            if (!writeOperation) {
-                                ++finishedCount;
-                            } else {
-                                bucket.AsyncWriteOperation = writeOperation;
-                            }
-                        }
-                    }
-
-                    if (finishedCount != SpilledBuckets.size()) return false;
-
-                    YQL_LOG(INFO) << "switching to ProcessSpilled";
-                    SwitchMode(EOperatingMode::ProcessSpilled, Ctx);
-                }
-
                 return true;
             }
         }
+    }
+
+    bool FlushSpillingBuffersAndWait() {
+        if (GetMode() != EOperatingMode::Spilling || InputStatus == EFetchResult::Finish) return false;
+
+        ui64 finishedCount = 0;
+        for (auto& bucket : SpilledBuckets) {
+            MKQL_ENSURE(bucket.BucketState != TSpilledBucket::EBucketState::SpillingState, "Internal logic error");
+            if (!bucket.AsyncWriteOperation.has_value()) {
+                auto writeOperation = bucket.SpilledData->FinishWriting();
+                if (!writeOperation) {
+                    ++finishedCount;
+                } else {
+                    bucket.AsyncWriteOperation = writeOperation;
+                }
+            }
+        }
+
+        if (finishedCount != SpilledBuckets.size()) return true;
+
+        YQL_LOG(INFO) << "switching to ProcessSpilled";
+        SwitchMode(EOperatingMode::ProcessSpilled, Ctx);
+
+        return false;
     }
 
     void DoCalculate() {
@@ -1227,7 +1231,7 @@ public:
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
             while (EFetchResult::Finish != ptr->InputStatus) {
-                if (!ptr->UpdateAndCheckIfReadyToContinue()) {
+                if (ptr->UpdateSpillingAndWait()) {
                     return EFetchResult::Yield;
                 }
                 for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
@@ -1244,7 +1248,7 @@ public:
                 }
             }
 
-            if (!ptr->UpdateAndCheckIfReadyToContinue()) {
+            if (ptr->FlushSpillingBuffersAndWait()) {
                 return EFetchResult::Yield;
             }
 

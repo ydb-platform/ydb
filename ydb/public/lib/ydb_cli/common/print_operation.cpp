@@ -36,6 +36,14 @@ namespace {
                 freeText << "  - " << issue << Endl;
             }
         }
+        
+        if (operation.StartTime() != TInstant::Zero()) {
+            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
 
         row.FreeText(freeText);
     }
@@ -114,6 +122,14 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
+        if (operation.StartTime() != TInstant::Zero()) {
+            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
+
         row.FreeText(freeText);
     }
 
@@ -166,6 +182,14 @@ namespace {
 
         if (settings.NumberOfRetries_) {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+        }
+
+        if (operation.StartTime() != TInstant::Zero()) {
+            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
         }
 
         row.FreeText(freeText);

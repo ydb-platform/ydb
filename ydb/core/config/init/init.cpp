@@ -321,6 +321,7 @@ class TDefaultNodeBrokerClient
         size_t currentNumberReceivedCallUnimplemented = 0;
         while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
             for (const auto& addr : addrs) {
+                logger.Out() << "Trying to register dynamic node to " << addr << Endl;
                 result = TryToRegisterDynamicNodeViaDiscoveryService(
                     grpcSettings,
                     addr,

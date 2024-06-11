@@ -127,15 +127,6 @@ public:
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
-
-        // const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
-        // if (!clientCertificates.empty()) {
-        //     TBase::SetSecurityToken(TString(clientCertificates.front()));
-        // // While nodes send both token and certificate for registration,  check only certificates and ignore tokens
-        // } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) {
-        //     TBase::SetSecurityToken("");
-        // } else {
-        // }
         Initialize(schemeData);
     }
 

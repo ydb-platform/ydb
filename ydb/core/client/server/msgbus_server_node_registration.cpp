@@ -20,7 +20,7 @@ using namespace NNodeBroker;
 
 namespace {
 
-class TNodeRegistrationActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TNodeRegistrationActor>>//, public TMessageBusSessionIdentHolder
+class TNodeRegistrationActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TNodeRegistrationActor>>
 {
     using TActorBase = TActorBootstrapped<TNodeRegistrationActor>;
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TNodeRegistrationActor>>;

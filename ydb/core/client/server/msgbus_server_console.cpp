@@ -39,12 +39,6 @@ public:
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
-        // const auto& clientCertificates = msg.FindClientCert();
-        // if (!clientCertificates.empty()) {
-        //     TBase::SetSecurityToken(TString(clientCertificates.front()));
-        // } else {
-        //     TBase::SetSecurityToken(request.GetSecurityToken());
-        // }
         // Don`t require admin access for GetNodeConfigRequest
         if (!Request.HasGetNodeConfigRequest()) {
             TBase::SetRequireAdminAccess(true);
@@ -384,7 +378,6 @@ private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
     TActorId ConsolePipe;
-    // typename TBase::TAuthInfo AuthInfo;
 };
 
 } // namespace

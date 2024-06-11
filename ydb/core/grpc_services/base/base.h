@@ -373,9 +373,6 @@ public:
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void RaiseIssues(const NYql::TIssues& issues) = 0;
     virtual TVector<TStringBuf> FindClientCertPropertyValues() const = 0;
-    virtual bool NeedAuthByCertificate() const {
-        return false;
-    }
 
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
@@ -1094,10 +1091,6 @@ public:
 
     TVector<TStringBuf> FindClientCertPropertyValues() const override {
         return Ctx_->FindClientCert();
-    }
-
-    bool NeedAuthByCertificate() const override {
-        return std::is_same_v<TRequest, Ydb::Discovery::NodeRegistrationRequest>;
     }
 
     void SetDiskQuotaExceeded(bool disk) override {

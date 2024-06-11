@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/security/certificate_check/cert_auth_processor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>

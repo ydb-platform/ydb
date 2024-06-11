@@ -1,6 +1,4 @@
 #pragma once
-#include <ydb/core/security/certificate_check/cert_auth_processor.h>
-
 #include <ydb/core/protos/grpc.grpc.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>

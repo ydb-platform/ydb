@@ -137,6 +137,7 @@ namespace {
                 ui32 partsSent = SendParts(std::move(*batch), epoch);
                 Mngr.StartJob(TlsActivationContext->Now(), partsSent, partsLeft);
                 Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
+                TryCompleteBatch(epoch);
             }
         }
 

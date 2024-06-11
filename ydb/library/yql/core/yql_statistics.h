@@ -22,7 +22,7 @@ struct IProviderStatistics {
 };
 
 struct TColumnStatistics {
-    std::optional<double> NuniqueVals;
+    std::optional<double> NumUniqueVals;
     std::optional<double> HyperLogLog;
 
     TColumnStatistics() {}

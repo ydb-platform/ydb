@@ -75,41 +75,41 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
 
     auto tableStats = dbStats.at(tablePath).GetMapSafe();
 
-    if (tableStats.contains("key_columns")) {
+    if (auto keyCols = tableStats.find("key_columns")) {
         TVector<TString> cols;
-        for (auto c : tableStats.at("key_columns").GetArraySafe()) {
+        for (auto c : keyCols->second.GetArraySafe()) {
             cols.push_back(c.GetStringSafe());
         }
         res->KeyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
     }
 
-    if (tableStats.contains("n_rows")) {
-        res->Nrows = tableStats.at("n_rows").GetDoubleSafe();
+    if (auto nrows = tableStats.find("n_rows")) {
+        res->Nrows = nrows->second.GetDoubleSafe();
     }
-    if (tableStats.contains("byte_size")) {
-        res->ByteSize = tableStats.at("byte_size").GetDoubleSafe();
+    if (auto byteSize = tableStats.find("byte_size")) {
+        res->ByteSize = byteSize->second.GetDoubleSafe();
     }
-    if (tableStats.contains("n_attrs")) {
-        res->Ncols = tableStats.at("n_attrs").GetIntegerSafe();
+    if (auto nattrs = tableStats.find("n_attrs")) {
+        res->Ncols = nattrs->second.GetIntegerSafe();
     }
 
-    if (tableStats.contains("columns")) {
+    if (auto columns = tableStats.find("columns")) {
         if (!res->ColumnStatistics) {
             res->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(new TOptimizerStatistics::TColumnStatMap());
         }
 
-        for (auto col : tableStats.at("columns").GetArraySafe()) {
+        for (auto col : columns->second.GetArraySafe()) {
             auto colMap = col.GetMapSafe();
 
             TColumnStatistics cStat;
 
             auto column_name = colMap.at("name").GetStringSafe();
 
-            if (colMap.contains("n_unique_vals")) {
-                cStat.NuniqueVals = colMap.at("n_unique_vals").GetDoubleSafe();
+            if (auto numUniqueVals = colMap.find("n_unique_vals")) {
+                cStat.NumUniqueVals = numUniqueVals->second.GetDoubleSafe();
             }
-            if (colMap.contains("hyperloglog")) {
-                cStat.HyperLogLog = colMap.at("hyperloglog").GetDoubleSafe();
+            if (auto hll = colMap.find("hyperloglog")) {
+                cStat.HyperLogLog = hll->second.GetDoubleSafe();
             }
 
             res->ColumnStatistics->Data[column_name] = cStat;

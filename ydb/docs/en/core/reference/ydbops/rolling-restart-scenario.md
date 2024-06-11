@@ -80,9 +80,9 @@ It might be convenient to restart only the nodes that have been up for over a fe
 
 ### Restarting based on {{ ydb-short-name }} version
 
-It is possible to restart only the nodes which version is equal (`==`), not equal (`!=`), more (`>`), or less (`<`) than desired.
+It is possible to restart only the nodes whose version is equal to (`==`), not equal to (`!=`), greater than (`>`), or less than (`<`) the desired version.
 
-The option argument needs to be enclosed in quotes, otherwise shell might interpret `>` or `<` signs as stream redirections. See the examples:
+The option argument needs to be enclosed in quotes; otherwise, the shell might interpret the `>` or `<` signs as stream redirections. See the examples:
 
 ```bash
 ydbops restart --version '>24.1.2'

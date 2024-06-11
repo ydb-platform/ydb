@@ -8,7 +8,7 @@
 
 * Для установки утилиты следуйте [инструкциям](install.md).
 * Для настройки утилиты смотрите [справочник конфигурации](configuration.md).
-* Исходный код `ydbops` доступен [на Github](https://github.com/ydb-platform/ydbops).
+* Исходный код `ydbops` доступен [на GitHub](https://github.com/ydb-platform/ydbops).
 
 ## Поддерживаемые сценарии
 

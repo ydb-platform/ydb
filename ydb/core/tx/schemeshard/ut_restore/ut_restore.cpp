@@ -2952,9 +2952,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(ImportStartTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         const auto data = GenerateTestData(R"(
@@ -2995,9 +2994,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CompletedImportEndTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         const auto data = GenerateTestData(R"(
@@ -3043,9 +3041,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CancelledImportEndTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         const auto data = GenerateTestData(R"(

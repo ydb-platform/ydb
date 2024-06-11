@@ -1506,9 +1506,8 @@ partitioning_settings {
 
     Y_UNIT_TEST(ExportStartTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1545,9 +1544,8 @@ partitioning_settings {
 
     Y_UNIT_TEST(CompletedExportEndTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1589,9 +1587,8 @@ partitioning_settings {
 
     Y_UNIT_TEST(CancelledExportEndTime) {
         TTestBasicRuntime runtime;
-        runtime.UpdateCurrentTime(TInstant::Now());
-
         TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

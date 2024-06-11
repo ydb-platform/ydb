@@ -370,9 +370,9 @@ public:
     bool UpdateAndCheckIfReadyToContinue() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
+            case EOperatingMode::ProcessSpilled:
                return true;
-            case EOperatingMode::Spilling:
-            {
+            case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing()) {
@@ -408,10 +408,6 @@ public:
                     SwitchMode(EOperatingMode::ProcessSpilled, Ctx);
                 }
 
-                return true;
-            }
-            case EOperatingMode::ProcessSpilled:
-            {
                 return true;
             }
         }

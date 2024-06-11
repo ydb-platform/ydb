@@ -206,7 +206,7 @@ runs:
         fi
 
         # Also build targets which are not in tests' dependencies
-        params+=(--no-strip-idle-build-results)
+        params+=(--build-all)
 
         echo "::debug::get version"
         ./ya --version

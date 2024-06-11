@@ -20,6 +20,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/string/guid.h>
+
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,7 +291,7 @@ struct TServiceId
     TRealmId RealmId;
 };
 
-TString ToString(const TServiceId& serviceId);
+void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

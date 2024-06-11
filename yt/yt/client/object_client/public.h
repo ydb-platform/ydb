@@ -399,9 +399,6 @@ struct TVersionedObjectId
 //! Formats id into a string (for debugging and logging purposes mainly).
 void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
 
-//! Converts id into a string (for debugging and logging purposes mainly).
-TString ToString(const TVersionedObjectId& id);
-
 //! Compares TVersionedNodeId s for equality.
 bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 

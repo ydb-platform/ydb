@@ -165,11 +165,6 @@ void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics,
     }
 }
 
-TString ToString(const TDataStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto

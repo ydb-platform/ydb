@@ -246,51 +246,40 @@ size_t TLegacyReadLimit::SpaceUsed() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLegacyReadLimit& limit)
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf /*spec*/)
 {
-    using ::ToString;
-
-    TStringBuilder builder;
-    builder.AppendChar('{');
+    builder->AppendChar('{');
 
     bool firstToken = true;
-    auto append = [&] (const char* label, TStringBuf value) {
+    auto append = [&] (const char* label, const auto& value) {
         if (!firstToken) {
-            builder.AppendString(", ");
+            builder->AppendString(", ");
         }
         firstToken = false;
-        builder.AppendString(label);
-        builder.AppendString(": ");
-        builder.AppendString(value);
+        builder->AppendFormat("%v: %v", label, value);
     };
 
     if (limit.HasLegacyKey()) {
-        append("Key", ToString(limit.GetLegacyKey()));
+        append("Key", limit.GetLegacyKey());
     }
 
     if (limit.HasRowIndex()) {
-        append("RowIndex", ToString(limit.GetRowIndex()));
+        append("RowIndex", limit.GetRowIndex());
     }
 
     if (limit.HasOffset()) {
-        append("Offset", ToString(limit.GetOffset()));
+        append("Offset", limit.GetOffset());
     }
 
     if (limit.HasChunkIndex()) {
-        append("ChunkIndex", ToString(limit.GetChunkIndex()));
+        append("ChunkIndex", limit.GetChunkIndex());
     }
 
     if (limit.HasTabletIndex()) {
-        append("TabletIndex", ToString(limit.GetTabletIndex()));
+        append("TabletIndex", limit.GetTabletIndex());
     }
 
-    builder.AppendChar('}');
-    return builder.Flush();
-}
-
-void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf spec)
-{
-    FormatValue(builder, ToString(limit), spec);
+    builder->AppendChar('}');
 }
 
 bool IsTrivial(const TLegacyReadLimit& limit)
@@ -688,51 +677,40 @@ bool TReadLimit::operator == (const TReadLimit& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TReadLimit& readLimit)
+void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf /*spec*/)
 {
-    using ::ToString;
-
-    TStringBuilder builder;
-    builder.AppendChar('{');
+    builder->AppendChar('{');
 
     bool firstToken = true;
-    auto append = [&] (const char* label, TStringBuf value) {
+    auto append = [&] (const char* label, const auto& value) {
         if (!firstToken) {
-            builder.AppendString(", ");
+            builder->AppendString(", ");
         }
         firstToken = false;
-        builder.AppendString(label);
-        builder.AppendString(": ");
-        builder.AppendString(value);
+        builder->AppendFormat("%v: %v", label, value);
     };
 
     if (readLimit.KeyBound()) {
-        append("Key", ToString(readLimit.KeyBound()));
+        append("Key", readLimit.KeyBound());
     }
 
     if (readLimit.GetRowIndex()) {
-        append("RowIndex", ToString(readLimit.GetRowIndex()));
+        append("RowIndex", readLimit.GetRowIndex());
     }
 
     if (readLimit.GetOffset()) {
-        append("Offset", ToString(readLimit.GetOffset()));
+        append("Offset", readLimit.GetOffset());
     }
 
     if (readLimit.GetChunkIndex()) {
-        append("ChunkIndex", ToString(readLimit.GetChunkIndex()));
+        append("ChunkIndex", readLimit.GetChunkIndex());
     }
 
     if (readLimit.GetTabletIndex()) {
-        append("TabletIndex", ToString(readLimit.GetTabletIndex()));
+        append("TabletIndex", readLimit.GetTabletIndex());
     }
 
-    builder.AppendChar('}');
-    return builder.Flush();
-}
-
-void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf spec)
-{
-    FormatValue(builder, ToString(readLimit), spec);
+    builder->AppendChar('}');
 }
 
 void ToProto(NProto::TReadLimit* protoReadLimit, const TReadLimit& readLimit)

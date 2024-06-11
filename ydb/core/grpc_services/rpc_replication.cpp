@@ -172,6 +172,9 @@ private:
         case NKikimrReplication::TReplicationState::kStandBy:
             to.mutable_running();
             break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            to.mutable_paused();
+            break;
         case NKikimrReplication::TReplicationState::kError:
             *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());
             break;

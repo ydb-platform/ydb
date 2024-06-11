@@ -5620,8 +5620,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER ASYNC REPLICATION `/Root/replication`
                 SET (
-                    STATE = "DONE",
-                    FAILOVER_MODE = "FORCE"
+                    STATE = "PAUSED"
                 );
             )";
 
@@ -5633,14 +5632,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& desc = result.GetReplicationDescription();
-                if (desc.GetState() == TReplicationDescription::EState::Done) {
+                if (desc.GetState() == TReplicationDescription::EState::Paused) {
                     break;
                 }
 
                 Sleep(TDuration::Seconds(1));
             }
         }
-
 
         // Connection string and Endpoint/Database are mutually exclusive
         {
@@ -5858,6 +5856,49 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        // alter replication to done state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "DONE",
+                    FAILOVER_MODE = "FORCE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            while (true) {
+                const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& desc = result.GetReplicationDescription();
+                if (desc.GetState() == TReplicationDescription::EState::Done) {
+                    break;
+                }
+
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+
+        // alter state and config in done state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "DONE",
+                    FAILOVER_MODE = "FORCE",
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Replication is in Done state.");
+        }
     }
 
     Y_UNIT_TEST(DropAsyncReplication) {

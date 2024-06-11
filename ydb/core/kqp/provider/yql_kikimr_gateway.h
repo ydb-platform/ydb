@@ -707,6 +707,8 @@ struct TReplicationSettings {
         EFailoverMode FailoverMode;
     };
 
+    struct TStatePaused {};
+
     struct TOAuthToken {
         TString Token;
         TString TokenSecretName;
@@ -728,6 +730,7 @@ struct TReplicationSettings {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+    TMaybe<TStatePaused> StatePaused;
 
     TOAuthToken& EnsureOAuthToken() {
         if (!OAuthToken) {
@@ -754,6 +757,14 @@ struct TReplicationSettings {
         }
 
         return *StateDone;
+    }
+
+    TStatePaused& EnsureStatePaused() {
+        if (!StatePaused) {
+            StatePaused = TStatePaused{};
+        }
+
+        return *StatePaused;
     }
 };
 

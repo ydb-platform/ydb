@@ -224,7 +224,7 @@ class TAlterReplication: public TSubOperation {
         using TState = NKikimrReplication::TReplicationState;
         switch (desc.GetState().GetStateCase()) {
         case TState::kStandBy:
-            if (newState.GetStateCase() != TState::kDone) {
+            if (!THashSet<TState::StateCase>{TState::kPaused, TState::kDone}.contains(newState.GetStateCase())) {
                 result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
                 return false;
             }
@@ -253,7 +253,11 @@ class TAlterReplication: public TSubOperation {
                 "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
             return false;
         case TState::kPaused:
+            break;
         case TState::kDone:
+            result.SetError(NKikimrScheme::StatusInvalidParameter,
+                "Replication is in Done state.");
+            return false;
             break;
         default:
             result.SetError(NKikimrScheme::StatusInvalidParameter, "State not set");

@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "private_events.h"
 #include "target_table.h"
 #include "util.h"
 
@@ -102,6 +103,90 @@ private:
 
 }; // TTableWorkerRegistar
 
+class TTableWorkerStoper: public TActorBootstrapped<TTableWorkerStoper> {
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                return Retry();
+            }
+
+            return; // TODO: hard error
+        }
+
+        for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
+            auto ev = MakeHolder<TEvService::TEvStopWorker>();
+            auto& record = ev->Record;
+
+            auto& worker = *record.MutableWorker();
+            worker.SetReplicationId(ReplicationId);
+            worker.SetTargetId(TargetId);
+            worker.SetWorkerId(partition.GetPartitionId());
+
+            Send(Parent, std::move(ev));
+        }
+        Send(Parent, new TEvPrivate::TEvPauseTargetResult(ReplicationId, TargetId));
+
+        PassAway();
+    }
+
+    void Retry() {
+        LOG_D("Retry");
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+    }
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TABLE_WORKER_STOPER;
+    }
+
+    explicit TTableWorkerStoper(
+            const TActorId& parent,
+            const TActorId& proxy,
+            const NKikimrReplication::TConnectionParams& connectionParams,
+            ui64 rid,
+            ui64 tid,
+            const TString& srcStreamPath,
+            const TPathId& dstPathId)
+        : Parent(parent)
+        , YdbProxy(proxy)
+        , ConnectionParams(connectionParams)
+        , ReplicationId(rid)
+        , TargetId(tid)
+        , SrcStreamPath(srcStreamPath)
+        , DstPathId(dstPathId)
+        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcStreamPath, {}));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
+            sFunc(TEvents::TEvWakeup, Bootstrap);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    const TActorId Parent;
+    const TActorId YdbProxy;
+    const NKikimrReplication::TConnectionParams ConnectionParams;
+    const ui64 ReplicationId;
+    const ui64 TargetId;
+    const TString SrcStreamPath;
+    const TPathId DstPathId;
+    const TActorLogPrefix LogPrefix;
+    THashSet<TWorkerId> WorkersToStop;
+
+}; // TTableWorkerStoper
+
 TTableTarget::TTableTarget(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
     : TTargetWithStream(replication, ETargetKind::Table, id, srcPath, dstPath)
 {
@@ -110,6 +195,13 @@ TTableTarget::TTableTarget(TReplication* replication, ui64 id, const TString& sr
 IActor* TTableTarget::CreateWorkerRegistar(const TActorContext& ctx) const {
     auto replication = GetReplication();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
+        CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());
+}
+
+IActor* TTableTarget::CreateWorkerStoper(const TActorContext& ctx) const {
+    auto replication = GetReplication();
+    return new TTableWorkerStoper(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
         CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());
 }

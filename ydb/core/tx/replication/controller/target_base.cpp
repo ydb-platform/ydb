@@ -50,6 +50,10 @@ void TTargetBase::SetDstState(const EDstState value) {
         return Replication->AddPendingAlterTarget(Id);
     case EDstState::Done:
         return Replication->RemovePendingAlterTarget(Id);
+    case EDstState::Pausing:
+        return Replication->AddPendingPauseTarget(Id);
+    case EDstState::Paused:
+        return Replication->RemovePendingPauseTarget(Id);
     default:
         break;
     }
@@ -128,6 +132,12 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
+    case EDstState::Pausing:
+        if (!WorkerStoper) {
+            WorkerStoper = ctx.Register(CreateWorkerStoper(ctx));
+        }
+        break;
+    case EDstState::Paused:
     case EDstState::Done:
         break;
     case EDstState::Removing:
@@ -148,6 +158,7 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
         &DstAlterer,
         &DstRemover,
         &WorkerRegistar,
+        &WorkerStoper,
     };
 
     for (auto* x : toShutdown) {

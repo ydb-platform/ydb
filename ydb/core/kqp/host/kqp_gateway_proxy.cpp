@@ -1910,6 +1910,10 @@ public:
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
             }
 
+            if (settings.Settings.StatePaused) {
+                op.MutableState()->MutablePaused();
+            }
+
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
                     settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
                 auto& config = *op.MutableConfig();

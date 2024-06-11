@@ -54,11 +54,15 @@ public:
         auto& state = *Result->Record.MutableState();
         switch (replication->GetState()) {
         case TReplication::EState::Ready:
+        case TReplication::EState::Pausing:
         case TReplication::EState::Removing:
             state.MutableStandBy();
             break;
         case TReplication::EState::Done:
             state.MutableDone();
+            break;
+        case TReplication::EState::Paused:
+            state.MutablePaused();
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {

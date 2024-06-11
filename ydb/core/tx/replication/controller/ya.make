@@ -44,6 +44,7 @@ SRCS(
     tx_drop_dst_result.cpp
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
+    tx_pause_target_result.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_resolve_secret_result.cpp

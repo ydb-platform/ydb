@@ -60,6 +60,7 @@ private:
 
 struct TRunningState {};
 struct TDoneState {};
+struct TPausedState {};
 
 class TErrorState {
     class TImpl;
@@ -84,6 +85,7 @@ public:
 
     enum class EState {
         Running,
+        Paused,
         Error,
         Done,
     };
@@ -97,12 +99,14 @@ public:
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
     const TDoneState& GetDoneState() const;
+    const TPausedState& GetPausedState() const;
 
 private:
     TConnectionParams ConnectionParams_;
     TVector<TItem> Items_;
     std::variant<
         TRunningState,
+        TPausedState,
         TErrorState,
         TDoneState
     > State_;

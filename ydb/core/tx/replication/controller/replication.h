@@ -24,6 +24,8 @@ public:
     enum class EState: ui8 {
         Ready,
         Done,
+        Pausing,
+        Paused,
         Removing,
         Error = 255
     };
@@ -37,6 +39,8 @@ public:
         Ready,
         Alter,
         Done,
+        Pausing,
+        Paused,
         Removing,
         Error = 255
     };
@@ -83,11 +87,14 @@ public:
 
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
+        virtual IActor* CreateWorkerStoper(const TActorContext& ctx) const = 0;
     };
 
     friend class TTargetBase;
     void AddPendingAlterTarget(ui64 id);
     void RemovePendingAlterTarget(ui64 id);
+    void AddPendingPauseTarget(ui64 id);
+    void RemovePendingPauseTarget(ui64 id);
 
     struct TDropOp {
         TActorId Sender;
@@ -127,6 +134,7 @@ public:
     const TString& GetTenant() const;
 
     bool CheckAlterDone() const;
+    bool CheckPauseDone() const;
 
     void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
     const std::optional<TDropOp>& GetDropOp() const;

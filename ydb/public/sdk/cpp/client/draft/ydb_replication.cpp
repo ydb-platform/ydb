@@ -103,6 +103,10 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         State_ = TRunningState();
         break;
 
+    case Ydb::Replication::DescribeReplicationResult::kPaused:
+        State_ = TPausedState();
+        break;
+
     case Ydb::Replication::DescribeReplicationResult::kError:
         State_ = TErrorState(IssuesFromMessage(desc.error().issues()));
         break;
@@ -138,6 +142,10 @@ const TErrorState& TReplicationDescription::GetErrorState() const {
 
 const TDoneState& TReplicationDescription::GetDoneState() const {
     return std::get<TDoneState>(State_);
+}
+
+const TPausedState& TReplicationDescription::GetPausedState() const {
+    return std::get<TPausedState>(State_);
 }
 
 TDescribeReplicationResult::TDescribeReplicationResult(TStatus&& status, Ydb::Replication::DescribeReplicationResult&& desc)

@@ -143,7 +143,11 @@ public:
             } else {
                 return ProgressTargets(ctx);
             }
+        case EState::Pausing:
+            return ProgressTargets(ctx);
         case EState::Done:
+        case EState::Paused:
+            return;
         case EState::Error:
             return;
         }
@@ -185,6 +189,7 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, THolder<ITarget>> Targets;
     THashSet<ui64> PendingAlterTargets;
+    THashSet<ui64> PendingPauseTargets;
     TActorId SecretResolver;
     TActorId YdbProxy;
     TActorId TenantResolver;
@@ -327,6 +332,18 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 
 bool TReplication::CheckAlterDone() const {
     return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
+}
+
+void TReplication::AddPendingPauseTarget(ui64 id) {
+    Impl->PendingPauseTargets.insert(id);
+}
+
+void TReplication::RemovePendingPauseTarget(ui64 id) {
+    Impl->PendingPauseTargets.erase(id);
+}
+
+bool TReplication::CheckPauseDone() const {
+    return Impl->State == EState::Pausing && Impl->PendingPauseTargets.empty();
 }
 
 }

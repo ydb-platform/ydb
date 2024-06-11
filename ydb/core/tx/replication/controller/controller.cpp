@@ -51,6 +51,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
+        HFunc(TEvPrivate::TEvPauseTargetResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
@@ -64,6 +65,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvStatus, Handle);
         HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
+        HFunc(TEvService::TEvStopWorker, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -150,6 +152,12 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
 void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropStreamResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvPauseTargetResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    
+    RunTxPauseTargetResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
@@ -431,6 +439,21 @@ TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplicat
 
     target->AddWorker(id.WorkerId());
     return &it->second;
+}
+
+void TController::Handle(TEvService::TEvStopWorker::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+
+    auto it = Workers.find(id);
+    if (it == Workers.end()) {
+         return;
+    }
+
+    auto& worker = it->second;
+    StopWorker(worker.GetSession(), id);
 }
 
 void TController::ScheduleProcessQueues() {

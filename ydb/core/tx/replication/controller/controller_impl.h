@@ -74,6 +74,7 @@ private:
     void Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPauseTargetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
@@ -87,6 +88,7 @@ private:
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvStopWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
@@ -116,6 +118,7 @@ private:
     class TTxCreateDstResult;
     class TTxAlterDstResult;
     class TTxDropDstResult;
+    class TTxPauseTargetResult;
     class TTxResolveSecretResult;
     class TTxWorkerError;
 
@@ -131,6 +134,7 @@ private:
     void RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxPauseTargetResult(TEvPrivate::TEvPauseTargetResult::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);

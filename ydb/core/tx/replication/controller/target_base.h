@@ -65,6 +65,7 @@ private:
     TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
+    TActorId WorkerStoper;
     THashSet<ui64> Workers;
     bool PendingRemoveWorkers = false;
 

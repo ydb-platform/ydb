@@ -50,6 +50,9 @@ message DescribeReplicationResult {
     message RunningState {
     }
 
+    message PausedState {
+    }
+
     message ErrorState {
         repeated Ydb.Issue.IssueMessage issues = 1;
     }
@@ -65,6 +68,7 @@ message DescribeReplicationResult {
         RunningState running = 4;
         ErrorState error = 5;
         DoneState done = 6;
+        PausedState paused = 7;
     }
 }
 

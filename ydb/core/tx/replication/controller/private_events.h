@@ -21,11 +21,13 @@ struct TEvPrivate {
         EvDropReplication,
         EvResolveTenantResult,
         EvUpdateTenantNodes,
-        EvProcessQueues,
+        EvStopWorkers,
+        EvPauseTargetResult,
+        EvRunWorkers,
         EvResolveSecretResult,
         EvAlterDstResult,
+        EvProcessQueues,
         EvRemoveWorker,
-
         EvEnd,
     };
 
@@ -143,6 +145,14 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvPauseTargetResult: public TEventLocal<TEvPauseTargetResult, EvPauseTargetResult> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+
+        explicit TEvPauseTargetResult(ui64 rid, ui64 tid);
+        TString ToString() const override;
+    };
+
     struct TEvResolveTenantResult: public TEventLocal<TEvResolveTenantResult, EvResolveTenantResult> {
         const ui64 ReplicationId;
         const TString Tenant;
@@ -163,6 +173,9 @@ struct TEvPrivate {
     };
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
+    };
+
+    struct TEvStopWorkers: public TEventLocal<TEvStopWorkers, EvStopWorkers> {
     };
 
     struct TEvResolveSecretResult: public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult> {

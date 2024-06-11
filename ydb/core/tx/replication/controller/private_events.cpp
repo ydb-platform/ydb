@@ -80,6 +80,19 @@ TString TEvPrivate::TEvDropReplication::ToString() const {
     << " }";
 }
 
+TEvPrivate::TEvPauseTargetResult::TEvPauseTargetResult(ui64 rid, ui64 tid)
+    : ReplicationId(rid)
+    , TargetId(tid)
+{
+}
+
+TString TEvPrivate::TEvPauseTargetResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " TargetId: " << TargetId
+    << " }";
+}
+
 TEvPrivate::TEvResolveTenantResult::TEvResolveTenantResult(ui64 rid, const TString& tenant)
     : ReplicationId(rid)
     , Tenant(tenant)

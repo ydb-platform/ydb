@@ -7,6 +7,56 @@ class TController::TTxAlterReplication: public TTxBase {
     THolder<TEvController::TEvAlterReplicationResult> Result;
     TReplication::TPtr Replication;
 
+    bool OnDoneState(TTransactionContext& txc, const TActorContext& ctx) {
+        Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        bool alter = false;
+        for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
+            auto* target = Replication->FindTarget(tid);
+            if (!target) {
+                continue;
+            }
+
+            target->Shutdown(ctx);
+            target->SetDstState(TReplication::EDstState::Alter);
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
+            );
+
+            alter = true;
+        }
+
+        return alter;
+    }
+
+    bool OnPausedState(TTransactionContext& txc) {
+        Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        Replication->SetState(TReplication::EState::Pausing);
+        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+        );
+
+        bool alter = false;
+        for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
+            auto* target = Replication->FindTarget(tid);
+            if (!target) {
+                continue;
+            }
+
+            target->SetDstState(TReplication::EDstState::Pausing);
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
+            );
+            alter = true;
+        }
+        return alter;
+    }
+
 public:
     explicit TTxAlterReplication(TController* self, TEvController::TEvAlterReplication::TPtr& ev)
         : TTxBase("TxAlterReplication", self)
@@ -48,29 +98,16 @@ public:
             return true;
         }
 
+        bool alter;
         switch (record.GetSwitchState().GetStateCase()) {
         case NKikimrReplication::TReplicationState::kDone:
+            alter = OnDoneState(txc, ctx);
+            break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            alter = OnPausedState(txc);
             break;
         default:
             Y_ABORT("Invalid state");
-        }
-
-        Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-
-        bool alter = false;
-        for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
-            auto* target = Replication->FindTarget(tid);
-            if (!target) {
-                continue;
-            }
-
-            target->Shutdown(ctx);
-            target->SetDstState(TReplication::EDstState::Alter);
-            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
-                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
-            );
-
-            alter = true;
         }
 
         if (alter) {

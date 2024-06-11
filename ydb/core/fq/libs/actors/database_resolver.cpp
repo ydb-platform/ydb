@@ -441,6 +441,7 @@ public:
 
                 // If the host is alive, add it to the list of alive hosts
                 aliveHost = hostMap.at("name").GetString();
+                break;
             }
     
             if (aliveHost == "") {

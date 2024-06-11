@@ -63,14 +63,14 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
 }
 
 std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const TString& statHints) {
-    TOptimizerStatistics* res = new TOptimizerStatistics(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
+    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
 
     NJson::TJsonValue root;
     NJson::ReadJsonTree(statHints, &root, true);
     auto dbStats = root.GetMapSafe();
 
     if (!dbStats.contains(tablePath)){
-        return std::shared_ptr<TOptimizerStatistics>(res);
+        return res;
     }
 
     auto tableStats = dbStats.at(tablePath).GetMapSafe();
@@ -116,5 +116,5 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
         }
     }
 
-    return std::shared_ptr<TOptimizerStatistics>(res);
+    return res;
 }

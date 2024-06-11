@@ -3,7 +3,7 @@ PROGRAM()
 SRCS(
     main.cpp
     vector_index.cpp
-    clusterization.cpp
+    clusterizer.cpp
 )
 
 PEERDIR(

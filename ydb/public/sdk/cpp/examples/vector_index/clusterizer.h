@@ -29,14 +29,15 @@ public:
     virtual void Iterate(std::function<void(TId, TRawEmbedding)>) = 0;
 };
 
+using TDistance = std::function<float(TEmbedding, TEmbedding)>;
+
 class TClusterizer {
 public:
-    using TDistance = std::function<float(TEmbedding, TEmbedding)>;
-
     TClusterizer(TDatasetIterator& it, TDistance distance);
 
     struct TOptions {
         ui32 maxIterations = 10;
+        ui32 maxK = 1000;
         ui32 minClusterSize = 1;
         ui32 maxClusterSize = 1 << 13;
         bool normalize = false;
@@ -61,11 +62,23 @@ private:
     TDatasetIterator& It;
     TDistance Distance;
 
-    struct AggregatedCluster {
+    struct TAggregatedCluster {
         std::vector<float> Coords;
-        float Distance;
-        ui64 Count;
+        float Distance = 0;
+        ui64 Count = 0;
     };
-    std::vector<AggregatedCluster> NewClusters;
+    std::vector<TAggregatedCluster> NewClusters;
     float OldMean = std::numeric_limits<float>::max();
+
+    struct TProgress {
+        void Reset(ui64 rows);
+        void Report();
+
+    private:
+        double Curr = 0;
+        double Rows = 0;
+        ui64 Count = 0;
+        std::chrono::steady_clock::time_point Last{};
+    };
+    TProgress Progress;
 };

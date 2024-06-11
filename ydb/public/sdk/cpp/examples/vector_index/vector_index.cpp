@@ -1,6 +1,5 @@
+#include "clusterizer.h"
 #include "vector_index.h"
-#include "clusterization.h"
-#include "library/cpp/messagebus/www/concat_strings.h"
 #include <format>
 
 template <>
@@ -57,6 +56,10 @@ static void PrintTop(TResultSetParser&& parser) {
     Cout << Endl;
 }
 
+static TString FullName(const TOptions& options, const TString& name) {
+    return TString::Join(options.Database, "/", name);
+}
+
 static TString IndexName(const TOptions& options) {
     return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
 }
@@ -69,7 +72,7 @@ static void CreateFlatBit(TTableClient& client, const TOptions& options) {
                         .SetPrimaryKeyColumn(options.PrimaryKey)
                         .Build();
 
-        return session.CreateTable(TString::Join(options.Database, "/", IndexName(options)), std::move(desc)).ExtractValueSync();
+        return session.CreateTable(FullName(options, IndexName(options)), std::move(desc)).ExtractValueSync();
     }));
 }
 
@@ -83,7 +86,7 @@ static void CreateKMeansNone(TTableClient& client, const TOptions& options) {
                         .SetPrimaryKeyColumns({"level", "id"})
                         .Build();
 
-        return session.CreateTable(TString::Join(options.Database, "/", IndexName(options)), std::move(desc)).ExtractValueSync();
+        return session.CreateTable(FullName(options, IndexName(options)), std::move(desc)).ExtractValueSync();
     }));
 }
 
@@ -127,48 +130,129 @@ public:
     }
 
     ui64 Rows() const final {
-        return 0;
+        return 500'000;
     }
 
-    void RandomK(ui64 k, std::function<void(TRawEmbedding)>) final {
+    void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) final {
+        TString query = std::format(R"(
+            SELECT {0} FROM {1}
+                WHERE RANDOM({0}) < {2}
+                LIMIT {3}
+        )",
+                                    Options.Embedding,
+                                    Options.Table,
+                                    static_cast<double>(k * 10) / Rows(),
+                                    k);
+        Cout << query << Endl;
+        auto values = Session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
+                                                          .CommitTx())
+                          .ExtractValueSync();
+        if (!values.IsSuccess()) {
+            ythrow yexception() << values.GetIssues();
+        }
+        for (auto& part : values.GetResultSets()) {
+            TResultSetParser batch(part);
+            Y_ASSERT(batch.ColumnsCount() == 1);
+            auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+            auto& embedding = batch.ColumnParser(embeddingIdx);
+            while (batch.TryNextRow()) {
+                cb(*embedding.GetOptionalString());
+            }
+        }
     }
 
     void Iterate(std::function<void(TRawEmbedding)> cb) final {
-        Iterate([&](TId, TRawEmbedding embedding) {
-            cb(embedding);
-        });
+        IterateImpl<false>(cb);
     }
 
     void Iterate(std::function<void(TId, TRawEmbedding)> cb) final {
-        auto fit = Session.ReadTable(IndexName(Options));
-        auto it = fit.ExtractValueSync();
-        bool stop = true;
-        do {
-            auto part = it.ReadNext().ExtractValueSync().ExtractPart();
-            TResultSetParser batch(part);
-            Y_ASSERT(batch.ColumnsCount() >= 2);
-            stop = true;
-            while (batch.TryNextRow()) {
-                cb(batch.ColumnParser(0).GetUint64(), *batch.ColumnParser(0).GetOptionalString());
-                stop = false;
-            }
-        } while (!stop);
+        IterateImpl<true>(cb);
     }
 
 private:
+    template <bool WithPK>
+    void IterateImpl(auto&& cb) {
+        TReadTableSettings settings;
+        if constexpr (WithPK) {
+            settings.AppendColumns(Options.PrimaryKey);
+        }
+        settings.AppendColumns(Options.Embedding);
+        auto fit = Session.ReadTable(FullName(Options, Options.Table), settings);
+        auto it = fit.ExtractValueSync();
+        if (!it.IsSuccess()) {
+            ythrow yexception() << it.GetIssues();
+        }
+        while (true) {
+            auto part = it.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                if (part.EOS()) {
+                    return;
+                }
+                ythrow yexception() << part.GetIssues();
+            }
+            TResultSetParser batch(part.ExtractPart());
+            if (!batch.TryNextRow()) {
+                break;
+            }
+            if constexpr (WithPK) {
+                Y_ASSERT(batch.ColumnsCount() == 2);
+                auto primaryKeyIdx = batch.ColumnIndex(Options.PrimaryKey);
+                auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+                auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
+                auto& embedding = batch.ColumnParser(embeddingIdx);
+                do {
+                    cb(*primaryKey.GetOptionalUint64(), *embedding.GetOptionalString());
+                } while (batch.TryNextRow());
+            } else {
+                Y_ASSERT(batch.ColumnsCount() == 1);
+                auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+                auto& embedding = batch.ColumnParser(embeddingIdx);
+                do {
+                    cb(*embedding.GetOptionalString());
+                } while (batch.TryNextRow());
+            }
+        }
+    }
+
     const TOptions& Options;
     TSession& Session;
 };
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
+    TClusterizer::TClusters clusters;
     ThrowOnError(client.RetryOperationSync([&](TSession session) {
         TTableIterator it{options, session};
-        TClusterizer clusterizer{it, [](TEmbedding, TEmbedding) {
-                                     return 0.f;
+        TClusterizer clusterizer{it, [](TEmbedding lhs, TEmbedding rhs) {
+                                     Y_ASSERT(lhs.size() == rhs.size());
+                                     auto* l = lhs.data();
+                                     auto* r = rhs.data();
+                                     float dot = 0.f;
+                                     float lNorm = 0.f;
+                                     float rNorm = 0.f;
+                                     for (size_t i = 0; i < lhs.size(); ++i) {
+                                         lNorm += l[i] * l[i];
+                                         rNorm += r[i] * r[i];
+                                         dot += l[i] * r[i];
+                                     }
+                                     auto norm = std::sqrt(lNorm * rNorm);
+                                     return norm != 0 ? 1 - (dot / norm) : 0;
                                  }};
-        auto clusters = clusterizer.Run({});
-        // clusters.Coords;
-        // clusters.Ids;
+        clusters = clusterizer.Run({
+            .maxIterations = 20,
+            .maxK = 1000,
+        });
+        for (auto& ids : clusters.Ids) {
+            Cout << " [";
+            for (size_t i = 0; auto id : ids) {
+                Cout << id << " ";
+                if (i++ > 10) {
+                    Cout << "...";
+                    break;
+                }
+            }
+            Cout << "] " << Endl;
+        }
+        return TStatus{EStatus::SUCCESS, {}};
     }));
 }
 
@@ -219,7 +303,7 @@ static void TopKFlatBit(TTableClient& client, const TOptions& options) {
     }));
 }
 
-static void TopKKMeansNone(TTableClient& client, const TOptions& options) {
+static void TopKKMeansNone(TTableClient& /*client*/, const TOptions& /*options*/) {
 }
 
 int CreateIndex(NYdb::TDriver& driver, const TOptions& options) {

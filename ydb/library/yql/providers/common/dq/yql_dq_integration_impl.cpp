@@ -58,7 +58,7 @@ void TDqIntegrationBase::FillLookupSourceSettings(const TExprNode& node, ::googl
     Y_UNUSED(node);
     Y_UNUSED(settings);
     Y_UNUSED(sourceType);
-    Y_ABORT("Unimplemented");
+    YQL_ENSURE(false);
 }
 
 void TDqIntegrationBase::FillSinkSettings(const TExprNode&, ::google::protobuf::Any&, TString&) {

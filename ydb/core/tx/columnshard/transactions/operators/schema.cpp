@@ -173,7 +173,7 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                AFL_VERIFY(owner.TablesManager.HasTable(i.GetPathId()));
+                AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
                 if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
                     WaitPathIdsToErase.emplace(i.GetPathId());
                 }
@@ -186,6 +186,7 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
+    AfterStartFlag = true;
     if (WaitPathIdsToErase.empty()) {
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     } else {

@@ -17,6 +17,7 @@ private:
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
     THashSet<ui64> WaitPathIdsToErase;
+    bool AfterStartFlag = false;
 
     virtual void DoOnStart(TColumnShard& owner) override;
 
@@ -40,12 +41,11 @@ private:
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override;
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
-        AFL_VERIFY(WaitPathIdsToErase.size())("error", "not implemented for non-async operator by default")("method", "DoFinishProposeOnExecute");
     }
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return WaitPathIdsToErase.size() || AfterStartFlag;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {

@@ -92,13 +92,13 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
     }
 
-    void CheckBTreeIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui32 histogramKeysCount = 10) {
+    void CheckBTreeIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui32 histogramBucketsCount = 10) {
         TStats stats;
         TTouchEnv env;
 
         const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStatsBTreeIndex(subset, stats, histogramKeysCount, &env, [](){})) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){})) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    void Check(const TSubset& subset, TMode mode, ui32 histogramKeysCount = 10, bool verifyPercents = true) {
+    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true) {
         if (mode == 0) {
             Dump(subset);
         }
@@ -567,15 +567,15 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             CalcDataBefore(subset, TSerializedCellVec(emptyKey), totalBytes, totalRows);
         }
 
-        ui64 rowCountResolution = totalRows / (histogramKeysCount + 1);
-        ui64 dataSizeResolution = totalBytes / (histogramKeysCount + 1);
+        ui64 rowCountResolution = totalRows / histogramBucketsCount;
+        ui64 dataSizeResolution = totalBytes / histogramBucketsCount;
 
         TTouchEnv env;
         env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
-                return NTable::BuildStatsBTreeIndex(subset, stats, histogramKeysCount, &env, [](){});
+                return NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){});
             } else {
                 return NTable::BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             }

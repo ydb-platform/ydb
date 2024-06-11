@@ -41,7 +41,7 @@ private:
 public:
     TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
                             const TAutoPtr<TSubset> subset, ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui64 searchHeight, TInstant statsUpdateTime)
+                            ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, ui64 searchHeight, TInstant statsUpdateTime)
         : TActorCoroImpl(/* stackSize */ 64_KB, /* allowUnhandledDtor */ true)
         , ReplyTo(replyTo)
         , TabletId(tabletId)
@@ -54,6 +54,7 @@ public:
         , MemDataSize(memDataSize)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
+        , HistogramBucketsCount(histogramBucketsCount)
         , SearchHeight(searchHeight)
     {}
 
@@ -139,7 +140,7 @@ private:
 
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
 
-        BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, this, [this](){
+        BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
     
             if (now > CoroutineDeadline) {
@@ -222,6 +223,7 @@ private:
     ui64 MemDataSize;
     ui64 RowCountResolution;
     ui64 DataSizeResolution;
+    ui32 HistogramBucketsCount;
     ui64 SearchHeight;
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
     ui64 CoroutineDeadline;
@@ -273,6 +275,7 @@ public:
 
         tableInfo.Stats.DataSizeResolution = Ev->Get()->Record.GetDataSizeResolution();
         tableInfo.Stats.RowCountResolution = Ev->Get()->Record.GetRowCountResolution();
+        tableInfo.Stats.HistogramBucketsCount = Ev->Get()->Record.GetHistogramBucketsCount();
 
         // Check if first stats update has been completed
         bool ready = (tableInfo.Stats.StatsUpdateTime != TInstant());
@@ -480,11 +483,13 @@ public:
                 continue;
             }
 
+            const ui32 MaxBuckets = 500;
+
             ui64 tableId = ti.first;
             ui64 rowCountResolution = gDbStatsRowCountResolution;
             ui64 dataSizeResolution = gDbStatsDataSizeResolution;
+            ui32 histogramBucketsCount = gDbStatsHistogramBucketsCount;
 
-            const ui64 MaxBuckets = 500;
 
             if (ti.second->Stats.DataSizeResolution &&
                 ti.second->Stats.DataStats.DataSize.Size / ti.second->Stats.DataSizeResolution <= MaxBuckets)
@@ -496,6 +501,10 @@ public:
                 ti.second->Stats.DataStats.RowCount / ti.second->Stats.RowCountResolution <= MaxBuckets)
             {
                 rowCountResolution = ti.second->Stats.RowCountResolution;
+            }
+
+            if (ti.second->Stats.HistogramBucketsCount) {
+                histogramBucketsCount = Min(MaxBuckets, ti.second->Stats.HistogramBucketsCount);
             }
 
             ti.second->StatsUpdateInProgress = true;
@@ -536,6 +545,7 @@ public:
                 memDataSize,
                 rowCountResolution,
                 dataSizeResolution,
+                histogramBucketsCount,
                 searchHeight,
                 AppData(ctx)->TimeProvider->Now()), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
 

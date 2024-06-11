@@ -234,7 +234,7 @@ BENCHMARK_DEFINE_F(TPartFixture, DoCharge)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, BuildStats)(benchmark::State& state) {
     for (auto _ : state) {
         TStats stats;
-        BuildStats(*Subset, stats, NDataShard::gDbStatsRowCountResolution, NDataShard::gDbStatsDataSizeResolution, NDataShard::gDbStatsHistogramKeysCount, &Env, [](){});
+        BuildStats(*Subset, stats, NDataShard::gDbStatsRowCountResolution, NDataShard::gDbStatsDataSizeResolution, NDataShard::gDbStatsHistogramBucketsCount, &Env, [](){});
     }
 }
 

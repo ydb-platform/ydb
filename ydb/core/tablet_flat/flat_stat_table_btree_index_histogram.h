@@ -127,18 +127,22 @@ private:
     };
 
 public:
-    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, ui32 histogramKeysCount, TBuildStatsYieldHandler yieldHandler)
+    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, ui32 histogramBucketsCount, TBuildStatsYieldHandler yieldHandler)
         : Subset(subset)
         , KeyDefaults(*Subset.Scheme->Keys)
         , Env(env)
-        , HistogramKeysCount(histogramKeysCount)
+        , HistogramBucketsCount(histogramBucketsCount)
         , YieldHandler(yieldHandler)
     {
     }
 
     template <typename TGetSize>
     bool Build(THistogram& histogram, ui64 statTotalSize) {
-        Resolution = statTotalSize / (HistogramKeysCount + 1);
+        if (!HistogramBucketsCount) {
+            return true;
+        }
+
+        Resolution = statTotalSize / HistogramBucketsCount;
         StatTotalSize = statTotalSize;
         
         bool ready = true;
@@ -498,7 +502,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
-    ui32 HistogramKeysCount;
+    ui32 HistogramBucketsCount;
     TBuildStatsYieldHandler YieldHandler;
     ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
@@ -507,10 +511,10 @@ private:
 
 }
 
-inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramKeysCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     bool ready = true;
     
-    TTableHistogramBuilderBtreeIndex builder(subset, env, histogramKeysCount, yieldHandler);
+    TTableHistogramBuilderBtreeIndex builder(subset, env, histogramBucketsCount, yieldHandler);
 
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, stats.RowCount);
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, stats.DataSize.Size);

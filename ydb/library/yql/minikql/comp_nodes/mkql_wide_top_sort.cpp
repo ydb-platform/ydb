@@ -182,16 +182,15 @@ public:
         return Width_;
     }
 
-    void Pop() {
+    TStorage Pop() {
+        auto data(std::move(Data));
         HasValue = false;
         Read();
+        return data;
     }
 
-    NKikimr::NUdf::TUnboxedValue* GetValue() {
-        return &*Data.begin();
-    }
-    const NKikimr::NUdf::TUnboxedValue* GetValue() const {
-        return &*Data.begin();
+    const NUdf::TUnboxedValue* GetValue() const {
+        return &Data.front();
     }
 };
 
@@ -719,12 +718,13 @@ public:
         }
     }
 
-    void Seal() {
-        if (!SpilledStates.empty()) {
+    bool Seal() {
+        if (SpilledStates.empty()) {
+            SealInMemory();
+        } else {
             SwitchMode(EOperatingMode::Spilling);
-            return;
         }
-        SealInMemory();
+        return IsReadyToContinue();
     }
 
     NUdf::TUnboxedValue* Extract() {
@@ -742,21 +742,12 @@ public:
 
         std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
         auto &currentIt = SpilledUnboxedValuesIterators.back();
-        return currentIt.GetValue();
-    }
-
-    void Clean() {
-        if (SpilledUnboxedValuesIterators.empty()) {
-            // No spilled data
-            return;
-        }
-        auto &currentIt = SpilledUnboxedValuesIterators.back();
-        currentIt.Pop();
+        Storage = currentIt.Pop();
         if (currentIt.IsFinished()) {
             SpilledUnboxedValuesIterators.pop_back();
         }
+        return Storage.data();
     }
-
 private:
     EOperatingMode GetMode() const { return Mode; }
 
@@ -902,16 +893,13 @@ public:
                     case EFetchResult::One:
                         ptr->Put();
                         continue;
+                    case EFetchResult::Finish:
+                        if (ptr->Seal())
+                            break;
+                        [[fallthrough]];
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
-                    case EFetchResult::Finish:
-                        ptr->Seal();
-                        break;
                 }
-            }
-
-            if (!ptr->IsReadyToContinue()) {
-                return EFetchResult::Yield;
             }
 
             if (auto extract = ptr->Extract()) {
@@ -921,7 +909,6 @@ public:
                     else
                         ++extract;
                 }
-                ptr->Clean();
                 return EFetchResult::One;
             }
 

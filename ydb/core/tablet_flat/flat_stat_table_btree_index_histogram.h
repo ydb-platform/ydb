@@ -127,17 +127,18 @@ private:
     };
 
 public:
-    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, TBuildStatsYieldHandler yieldHandler)
+    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, ui32 histogramKeysCount, TBuildStatsYieldHandler yieldHandler)
         : Subset(subset)
         , KeyDefaults(*Subset.Scheme->Keys)
         , Env(env)
+        , HistogramKeysCount(histogramKeysCount)
         , YieldHandler(yieldHandler)
     {
     }
 
     template <typename TGetSize>
-    bool Build(THistogram& histogram, ui64 resolution, ui64 statTotalSize) {
-        Resolution = resolution;
+    bool Build(THistogram& histogram, ui64 statTotalSize) {
+        Resolution = statTotalSize / (HistogramKeysCount + 1);
         StatTotalSize = statTotalSize;
         
         bool ready = true;
@@ -497,6 +498,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
+    ui32 HistogramKeysCount;
     TBuildStatsYieldHandler YieldHandler;
     ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
@@ -505,13 +507,13 @@ private:
 
 }
 
-inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramKeysCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     bool ready = true;
     
-    TTableHistogramBuilderBtreeIndex builder(subset, env, yieldHandler);
+    TTableHistogramBuilderBtreeIndex builder(subset, env, histogramKeysCount, yieldHandler);
 
-    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, rowCountResolution, stats.RowCount);
-    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
+    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, stats.RowCount);
+    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, stats.DataSize.Size);
 
     return ready;
 }

@@ -21,6 +21,17 @@ public:
     virtual TExprNode::TPtr RewriteRead(const TExprNode::TPtr& reader, TExprContext& ctx) = 0;
 
     /**
+        Rewrite provider reader under DqReadWrap
+        Args:
+            * reader - provider specific callable of reader
+            * typeAnn - DqReadWrap's type
+            * ctx - expr context
+        Returns:
+            * TDqLookupSourceWrap
+    */
+    virtual TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr read, const TTypeAnnotationNode * typeAnn, TExprContext& ctx) = 0;
+
+    /**
         Apply new members subset for DqReadWrap's underlying provider reader
         Args:
             * reader - provider specific callable of reader

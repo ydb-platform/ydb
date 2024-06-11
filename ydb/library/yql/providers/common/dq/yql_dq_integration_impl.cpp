@@ -54,6 +54,13 @@ bool TDqIntegrationBase::CanFallback() {
 void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t) {
 }
 
+void TDqIntegrationBase::FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) {
+    Y_UNUSED(node);
+    Y_UNUSED(settings);
+    Y_UNUSED(sourceType);
+    Y_ABORT("Unimplemented");
+}
+
 void TDqIntegrationBase::FillSinkSettings(const TExprNode&, ::google::protobuf::Any&, TString&) {
 }
 

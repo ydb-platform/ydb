@@ -51,7 +51,7 @@ my-profile:
 
 Currently, `ydbops` does not support the creation, modification, and activation of profiles via the CLI commands [the way that {{ ydb-short-name }} CLI does](../ydb-cli/profile/index.md#commands).
 
-The configuration file needs to be created manually.
+The configuration file needs to be created and edited manually.
 
 ### Configuration file reference
 

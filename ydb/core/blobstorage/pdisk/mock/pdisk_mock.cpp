@@ -46,8 +46,9 @@ struct TPDiskMockState::TImpl {
     NPDisk::TStatusFlags StatusFlags;
     THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
+    NPDisk::EDeviceType DeviceType;
 
-    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
+    TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, NPDisk::EDeviceType deviceType)
         : NodeId(nodeId)
         , PDiskId(pdiskId)
         , PDiskGuid(pdiskGuid)
@@ -57,6 +58,7 @@ struct TPDiskMockState::TImpl {
         , AppendBlockSize(4096)
         , NextFreeChunk(1)
         , StatusFlags(NPDisk::TStatusFlags{})
+        , DeviceType(deviceType)
     {}
 
     TImpl(const TImpl&) = default;
@@ -280,8 +282,9 @@ struct TPDiskMockState::TImpl {
     }
 };
 
-TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
-    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize))
+TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize,
+        NPDisk::EDeviceType deviceType)
+    : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, deviceType))
 {}
 
 TPDiskMockState::TPDiskMockState(std::unique_ptr<TImpl>&& impl)
@@ -415,15 +418,16 @@ public:
 
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
-            const ui64 seekTimeUs = 100;
-            const ui64 readSpeedBps = 100 * 1000 * 1000;
-            const ui64 writeSpeedBps = 100 * 1000 * 1000;
+            const auto& performanceParams = NPDisk::DevicePerformance.at(Impl.DeviceType);
+            const ui64 seekTimeUs = (performanceParams.SeekTimeNs + 1000) / 1000 - 1;
+            const ui64 readSpeedBps = performanceParams.FirstSectorReadBytesPerSec;
+            const ui64 writeSpeedBps = performanceParams.FirstSectorWriteBytesPerSec;
             const ui64 readBlockSize = 65536;
             const ui64 writeBlockSize = 65536;
             const ui64 bulkWriteBlockSize = 65536;
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::OK, seekTimeUs, readSpeedBps, writeSpeedBps,
                 readBlockSize, writeBlockSize, bulkWriteBlockSize, Impl.ChunkSize, Impl.AppendBlockSize, ownerId,
-                owner->OwnerRound, GetStatusFlags(), std::move(ownedChunks), TString());
+                owner->OwnerRound, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
             res->StartingPoints = owner->StartingPoints;
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");

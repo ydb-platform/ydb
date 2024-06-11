@@ -125,6 +125,8 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
+        TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
     public:
         struct TGroupRecord;
 
@@ -137,6 +139,11 @@ namespace NKikimr::NStorage {
             : Cfg(cfg)
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+            , CostMetricsParametersByMedia({
+                TCostMetricsParameters{200},
+                TCostMetricsParameters{50},
+                TCostMetricsParameters{32},
+            })
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

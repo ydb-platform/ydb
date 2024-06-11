@@ -542,20 +542,39 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit):
-    # Originally this peerdir was in .conf file
-    # but it kept taking default value of NPM_CONTRIBS_PATH
-    # before it was updated by CUSTOM_CONTRIB_TYPESCRIPT()
-    # so I moved it here.
-    unit.onpeerdir(unit.get("NPM_CONTRIBS_PATH"))
+    contrib_path = unit.get("NPM_CONTRIBS_PATH")
+    if contrib_path == '-':
+        unit.on_prepare_deps_configure_no_contrib()
+        return
+    unit.onpeerdir(contrib_path)
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     ins, outs = pm.calc_prepare_deps_inouts(unit.get("_TARBALLS_STORE"), has_deps)
 
-    if pj.has_dependencies():
+    if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+
+    else:
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
+def on_prepare_deps_configure_no_contrib(unit):
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps)
+
+    if has_deps:
+        unit.onpeerdir(pm.get_local_peers_from_package_json())
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
+        unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
     else:
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))

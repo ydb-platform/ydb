@@ -52,9 +52,9 @@ ydbops restart --tenant
 ydbops restart --tenant-list=</domain/database_name_1>,</domain/database_name_2>,...
 ```
 
-### Перезапуск только определенных узлов
+### Перезапуск только определённых узлов
 
-Можно перезапустить узлы только на определенных хостах, указав FQDN с помощью опции `--hosts`:
+Можно перезапустить узлы только на определённых хостах, указав FQDN с помощью опции `--hosts`:
 
 ```bash
 ydbops restart --hosts=<node1.some.zone>,<node2.some.zone>

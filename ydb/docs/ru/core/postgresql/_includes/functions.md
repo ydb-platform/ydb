@@ -4350,29 +4350,29 @@ SELECT dense_rank() OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
 ]
 ```||
 ||percent_rank () → double precision|
-Returns the relative rank of the current row, that is (rank - 1) / (total partition rows - 1). The value thus ranges from 0 to 1 inclusive. (NOT SUPPORTED)|
+Returns the relative rank of the current row, that is (rank - 1) / (total partition rows - 1). The value thus ranges from 0 to 1 inclusive.|
 ```sql
-#SELECT percent_rank() OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
-0.0
+SELECT percent_rank() OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
+0
 0.3333333333333333
 0.3333333333333333
-1.0
+1
 ]
 ```||
 ||cume_dist () → double precision|
-Returns the cumulative distribution, that is (number of partition rows preceding or peers with current row) / (total partition rows). The value thus ranges from 1/N to 1.(NOT SUPPORTED)|
+Returns the cumulative distribution, that is (number of partition rows preceding or peers with current row) / (total partition rows). The value thus ranges from 1/N to 1.|
 ```sql
-#SELECT cume_dist() OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
+SELECT cume_dist() OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
 0.25
 0.75
 0.75
-1.0
+1
 ]
 ```||
 ||ntile ( num_buckets integer ) → integer|
-Returns an integer ranging from 1 to the argument value, dividing the partition as equally as possible. (NOT SUPPORTED)|
+Returns an integer ranging from 1 to the argument value, dividing the partition as equally as possible.|
 ```sql
-#SELECT ntile(2) OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
+SELECT ntile(2) OVER (ORDER BY x) FROM (VALUES (4),(5),(5),(6)) a(x) → [
 1
 1
 2

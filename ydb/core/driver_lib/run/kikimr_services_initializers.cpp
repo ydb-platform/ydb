@@ -185,8 +185,6 @@
 
 #include <ydb/core/backup/controller/tablet.h>
 
-#include <ydb/services/bg_tasks/ds_table/executor.h>
-#include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/service/executor.h>
 
@@ -2286,24 +2284,6 @@ void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup
         auto service = NMetadata::NProvider::CreateService(serviceConfig);
         setup->LocalServices.push_back(std::make_pair(
             NMetadata::NProvider::MakeServiceId(NodeId),
-            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
-    }
-}
-
-TBackgroundTasksInitializer::TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TBackgroundTasksInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NBackgroundTasks::TConfig serviceConfig;
-    if (Config.HasBackgroundTasksConfig()) {
-        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
-    }
-
-    if (serviceConfig.IsEnabled()) {
-        auto service = NBackgroundTasks::CreateService(serviceConfig);
-        setup->LocalServices.push_back(std::make_pair(
-            NBackgroundTasks::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

@@ -154,8 +154,6 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata/ds_table
     ydb/services/metadata
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ext_index/service
     ydb/services/ext_index/metadata
     ydb/services/monitoring

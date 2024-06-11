@@ -3,7 +3,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -251,86 +250,6 @@ public:
     }
 };
 
-class TProposedDeleteParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TProposedDeleteParts"
-                << " operationId#" << OperationId;
-    }
-
-    bool Finish(TOperationContext& context) {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
-
-        bool isStandalone = false;
-        {
-            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
-            auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
-            isStandalone = tableInfo->IsStandalone();
-        }
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
-
-        if (isStandalone) {
-            for (auto& shard : txState->Shards) {
-                context.OnComplete.DeleteShard(shard.Idx);
-            }
-        }
-
-        context.OnComplete.DoneOperation(OperationId);
-        return true;
-    }
-public:
-    TProposedDeleteParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
-        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
-        return Finish(context);
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
-
-        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
-            return Finish(context);
-        }
-        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
-        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetUseTiering();
-        if (!tieringId) {
-            return Finish(context);
-        }
-
-        {
-            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
-                tieringId, txState->TargetPathId.LocalPathId), nullptr);
-            task.SetId(OperationId.SerializeToString());
-            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
-            return false;
-        }
-    }
-};
-
 class TDropColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
@@ -530,7 +449,7 @@ private:
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
-            return TTxState::ProposedDeleteParts;
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -544,8 +463,8 @@ private:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
             return MakeHolder<TProposedWaitParts>(OperationId);
-        case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeleteParts>(OperationId);
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

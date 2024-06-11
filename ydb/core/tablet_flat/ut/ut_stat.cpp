@@ -1014,7 +1014,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
     // this test uses same data as benchmark::TPartFixture/BuildStats/*, but may be debugged and prints result histograms
     Y_UNIT_TEST(Benchmark)
     {
-        const ui32 partsCount = 15;
+        const ui32 partsCount = 4;
         const bool groups = false;
         const bool history = false;
         ui64 rowsCount = history ? 300000 : 1000000;

@@ -103,7 +103,7 @@ private:
 
 }; // TTableWorkerRegistar
 
-class TTableWorkerStoper: public TActorBootstrapped<TTableWorkerStoper> {
+class TTableWorkerStopper: public TActorBootstrapped<TTableWorkerStopper> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
@@ -139,10 +139,10 @@ class TTableWorkerStoper: public TActorBootstrapped<TTableWorkerStoper> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TABLE_WORKER_STOPER;
+        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TABLE_WORKER_STOPPER;
     }
 
-    explicit TTableWorkerStoper(
+    explicit TTableWorkerStopper(
             const TActorId& parent,
             const TActorId& proxy,
             const NKikimrReplication::TConnectionParams& connectionParams,
@@ -157,7 +157,7 @@ public:
         , TargetId(tid)
         , SrcStreamPath(srcStreamPath)
         , DstPathId(dstPathId)
-        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , LogPrefix("TableWorkerStopper", ReplicationId, TargetId)
     {
     }
 
@@ -185,7 +185,7 @@ private:
     const TActorLogPrefix LogPrefix;
     THashSet<TWorkerId> WorkersToStop;
 
-}; // TTableWorkerStoper
+}; // TTableWorkerStopper
 
 TTableTarget::TTableTarget(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
     : TTargetWithStream(replication, ETargetKind::Table, id, srcPath, dstPath)
@@ -199,9 +199,9 @@ IActor* TTableTarget::CreateWorkerRegistar(const TActorContext& ctx) const {
         CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());
 }
 
-IActor* TTableTarget::CreateWorkerStoper(const TActorContext& ctx) const {
+IActor* TTableTarget::CreateWorkerStopper(const TActorContext& ctx) const {
     auto replication = GetReplication();
-    return new TTableWorkerStoper(ctx.SelfID, replication->GetYdbProxy(),
+    return new TTableWorkerStopper(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
         CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());
 }

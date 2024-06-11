@@ -5870,6 +5870,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+            {
+                Sleep(TDuration::Seconds(10));
+
+                const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& desc = result.GetReplicationDescription();
+                UNIT_ASSERT_VALUES_EQUAL(desc.GetState(), TReplicationDescription::EState::Done);
+            }
+
             while (true) {
                 const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

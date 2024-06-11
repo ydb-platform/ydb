@@ -11,7 +11,7 @@ public:
 
 protected:
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
-    IActor* CreateWorkerStoper(const TActorContext& ctx) const override;
+    IActor* CreateWorkerStopper(const TActorContext& ctx) const override;
 
 }; // TTableTarget
 

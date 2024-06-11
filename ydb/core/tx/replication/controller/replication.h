@@ -87,7 +87,7 @@ public:
 
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
-        virtual IActor* CreateWorkerStoper(const TActorContext& ctx) const = 0;
+        virtual IActor* CreateWorkerStopper(const TActorContext& ctx) const = 0;
     };
 
     friend class TTargetBase;

@@ -133,8 +133,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Pausing:
-        if (!WorkerStoper) {
-            WorkerStoper = ctx.Register(CreateWorkerStoper(ctx));
+        if (!WorkerStopper) {
+            WorkerStopper = ctx.Register(CreateWorkerStopper(ctx));
         }
         break;
     case EDstState::Paused:
@@ -158,7 +158,7 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
         &DstAlterer,
         &DstRemover,
         &WorkerRegistar,
-        &WorkerStoper,
+        &WorkerStopper,
     };
 
     for (auto* x : toShutdown) {

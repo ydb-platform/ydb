@@ -117,6 +117,14 @@ def validate_cfg(result):
             "canonize_peephole",
             "canonize_lineage",
             "peephole_use_blocks",
+            "xfail",
+            "pragma",
+            "canonize_yt",
+            "file",
+            "http_file",
+            "yt_file",
+            "os",
+            "param",
             ), "Unknown command in .cfg: %s" % (r[0])
 
 

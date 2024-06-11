@@ -23,10 +23,6 @@ public:
     {
     }
 
-    static constexpr bool NeedExistingQueue() {
-        return false;
-    }
-
 private:
     bool DoValidate() override {
         if (!GetQueueName()) {

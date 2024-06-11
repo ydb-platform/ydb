@@ -119,7 +119,7 @@ class Platform(object):
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
 
-        self.is_xtensa = self.arch in ('xtensa_hifi5',)
+        self.is_xtensa = self.arch in ('xtensa_hifi4', 'xtensa_hifi5',)
 
         self.armv7_float_abi = None
         if self.is_armv7:

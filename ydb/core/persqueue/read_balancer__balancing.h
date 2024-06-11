@@ -215,7 +215,7 @@ struct TConsumer {
     TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx);
     bool BreakUpFamily(ui32 partitionId, bool destroy, const TActorContext& ctx);
     bool BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx);
-    bool MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
+    std::pair<TPartitionFamily*, bool> MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
     void DestroyFamily(TPartitionFamily* family, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
 

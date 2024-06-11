@@ -139,7 +139,7 @@ def get_config(suite, case, cfg, data_path=None):
             result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip() and line.strip().split()[0]]
         validate_cfg(result)
         result = [r for r in result if r[0] in inherit]
-    except OSError:
+    except IOError:
         pass
     cfg_file = get_cfg_file(cfg, case)
     with open(os.path.join(data_path, suite, cfg_file)) as cfg_file_content:

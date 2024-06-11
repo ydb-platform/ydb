@@ -293,17 +293,19 @@ void TPrintable<TCommitOffsetAcknowledgementEvent>::DebugString(TStringBuilder& 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TStartPartitionSessionEvent
 
-TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset,
-                                                         ui64 endOffset)
+TStartPartitionSessionEvent::TStartPartitionSessionEvent(
+    TPartitionSession::TPtr partitionSession, ui64 committedOffset, ui64 endOffset, TMaybe<TPartitionLocation> location
+)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset)
-    , EndOffset(endOffset) {
-}
+    , EndOffset(endOffset)
+    , Location(location)
+    {}
 
 void TStartPartitionSessionEvent::Confirm(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (PartitionSession) {
         static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-            ->ConfirmCreate(readOffset, commitOffset);
+            ->ConfirmCreate(readOffset, commitOffset, Location);
     }
 }
 

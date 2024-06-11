@@ -330,11 +330,10 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
-        TTypeEnvironment env(alloc);
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
         TVector<TOwnedCellVec> emptyBatch(1000);
-        auto bytes = scanData.AddData(emptyBatch, {}, factory, env);
+        auto bytes = scanData.AddData(emptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);
 
         std::vector<NUdf::TUnboxedValue*> containerPtr;

@@ -73,9 +73,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation> location) {
     if (auto sessionShared = CbContext->LockShared()) {
-        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
+        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset, location);
     }
 }
 
@@ -624,7 +624,8 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(
     const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
     TMaybe<ui64> readOffset,
-    TMaybe<ui64> commitOffset
+    TMaybe<ui64> commitOffset,
+    TMaybe<TPartitionLocation> location
 ) {
     TStringBuilder commitOffsetLogStr;
     if (commitOffset) {
@@ -662,18 +663,36 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             if (commitOffset) {
                 startRead.set_commit_offset(*commitOffset);
             }
+
+            WriteToProcessorImpl(std::move(req));
         } else {
+            auto partitionSessionId = partitionStream->GetAssignId();
+
             auto& startRead = *req.mutable_start_partition_session_response();
-            startRead.set_partition_session_id(partitionStream->GetAssignId());
+            startRead.set_partition_session_id(partitionSessionId);
             if (readOffset) {
                 startRead.set_read_offset(*readOffset);
             }
             if (commitOffset) {
                 startRead.set_commit_offset(*commitOffset);
             }
-        }
 
-        WriteToProcessorImpl(std::move(req));
+            WriteToProcessorImpl(std::move(req));
+
+            if (Settings.DirectRead_) {
+                // First send Start response to the control session,
+                // then send Start request to the direct read session.
+                // As the messages are sent to different nodes, there no order between them,
+                // we just give the control session a bit more time to process the Start response.
+
+                Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
+                Y_ABORT_UNLESS(location.Defined());
+                DirectReadSessionManager->StartPartitionSession({
+                    .PartitionSessionId = static_cast<TPartitionSessionId>(partitionSessionId),
+                    .Location = *location,
+                });
+            }
+        }
     }
 }
 
@@ -1458,14 +1477,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         }
     }
 
-    if (Settings.DirectRead_) {
-        Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
-        DirectReadSessionManager->StartPartitionSession({
-            .PartitionSessionId = static_cast<TPartitionSessionId>(partitionSessionId),
-            .Location = TPartitionLocation(msg.partition_location()),
-        });
-    }
-
     partitionSession = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId,
         msg.partition_session().path(),
@@ -1476,10 +1487,18 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     NextPartitionStreamId += PartitionStreamIdStep;
 
+    // For DirectRead the message MUST have partition location.
+    Y_ABORT_UNLESS(!Settings.DirectRead_ || msg.has_partition_location());
+
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
         partitionSession,
-        TReadSessionEvent::TStartPartitionSessionEvent(partitionSession, msg.committed_offset(), msg.partition_offsets().end()),
+        TReadSessionEvent::TStartPartitionSessionEvent(
+            partitionSession,
+            msg.committed_offset(),
+            msg.partition_offsets().end(),
+            msg.has_partition_location() ? TMaybe<TPartitionLocation>(msg.partition_location()) : Nothing()
+        ),
         deferred);
 
     if (!pushRes) {

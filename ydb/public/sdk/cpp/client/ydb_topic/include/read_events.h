@@ -2,6 +2,7 @@
 
 #include "codecs.h"
 #include "events_common.h"
+#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
@@ -246,7 +247,7 @@ struct TReadSessionEvent {
     //! Server command for creating and starting partition session.
     struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
                                         public TPrintable<TStartPartitionSessionEvent> {
-        TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
+        TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset, TMaybe<TPartitionLocation>);
 
         //! Current committed offset in partition session.
         ui64 GetCommittedOffset() const {
@@ -266,6 +267,7 @@ struct TReadSessionEvent {
     private:
         ui64 CommittedOffset;
         ui64 EndOffset;
+        TMaybe<TPartitionLocation> Location;
     };
 
     //! Server command for stopping and destroying partition session.

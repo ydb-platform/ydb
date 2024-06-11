@@ -424,7 +424,7 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 if (const TString& port = option->CurVal()) {
                     RunnerOptions.YdbSettings.MonitoringEnabled = true;
-                    RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port.c_str());
+                    RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port);
                 }
             });
 

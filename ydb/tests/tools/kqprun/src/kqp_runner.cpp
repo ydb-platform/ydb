@@ -199,15 +199,16 @@ public:
         if (Options_.InFlightLimit && AsyncState_.InFlight >= Options_.InFlightLimit) {
             AwaitInFlight_.WaitI(Mutex_);
         }
-
         ui64 requestId = AsyncState_.OnStartRequest();
+        Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " started. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << "\n";
+
         RunningQueries_[requestId] = YdbSetup_.QueryRequestAsync(query, action, traceId, nullptr).Subscribe([this, requestId](const NThreading::TFuture<NKqpRun::TQueryResult>& f) {
             TGuard<TMutex> lock(Mutex_);
 
             auto response = f.GetValue().Response;
             AsyncState_.OnRequestFinished(response.IsSuccess());
             if (response.IsSuccess()) {
-                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << "\n";
+                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << Endl;
             } else {
                 Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.Status << ". " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.Issues.ToString() << CoutColors_.Default();
             }
@@ -220,7 +221,6 @@ public:
             }
             RunningQueries_.erase(requestId);
         }).IgnoreResult();
-        Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " started. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << "\n";
     }
 
     void WaitAsyncQueries() {
@@ -263,12 +263,14 @@ public:
     }
 
     void PrintScriptResults() const {
-        Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
-        for (size_t i = 0; i < ResultSets_.size(); ++i) {
-            if (ResultSets_.size() > 1) {
-                *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+        if (Options_.ResultOutput) {
+            Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
+            for (size_t i = 0; i < ResultSets_.size(); ++i) {
+                if (ResultSets_.size() > 1) {
+                    *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+                }
+                PrintScriptResult(ResultSets_[i]);
             }
-            PrintScriptResult(ResultSets_[i]);
         }
     }
 

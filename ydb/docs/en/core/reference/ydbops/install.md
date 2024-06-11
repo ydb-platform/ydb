@@ -8,7 +8,7 @@ Currently, only building from source is available as an installation option. The
 
 1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
 
-2. Clone the `ydbops` repository from Github:
+2. Clone the `ydbops` repository from GitHub:
     ```bash
     git clone https://github.com/ydb-platform/ydbops.git
     ```

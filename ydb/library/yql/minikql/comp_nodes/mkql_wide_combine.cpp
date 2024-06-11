@@ -345,7 +345,7 @@ public:
         TMemoryUsageInfo* memInfo,
         const TCombinerNodes& nodes, size_t wideFieldsIndex,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth,
-        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling
+        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
@@ -359,6 +359,7 @@ public:
         , MemInfo(memInfo)
         , Equal(equal)
         , AllowSpilling(allowSpilling)
+        , Ctx(ctx)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         BufferForKeyAnsState.reserve(keyAndStateType->GetElementsCount());
@@ -366,7 +367,7 @@ public:
     ~TSpillingSupportState() {
     }
 
-    bool UpdateAndCheckIfReadyToContinue(TComputationContext& ctx) {
+    bool UpdateAndCheckIfReadyToContinue() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
                return true;
@@ -404,7 +405,7 @@ public:
                     if (finishedCount != SpilledBuckets.size()) return false;
 
                     YQL_LOG(INFO) << "switching to ProcessSpilled";
-                    SwitchMode(EOperatingMode::ProcessSpilled, ctx);
+                    SwitchMode(EOperatingMode::ProcessSpilled, Ctx);
                 }
 
                 return true;
@@ -416,14 +417,14 @@ public:
         }
     }
 
-    void DoCalculate(TComputationContext& ctx) {
+    void DoCalculate() {
         switch(GetMode()) {
             case EOperatingMode::InMemory: {
-                DoCalculateInMemory(ctx);
+                DoCalculateInMemory(Ctx);
                 break;
             }
             case EOperatingMode::Spilling: {
-                DoCalculateWithSpilling(ctx);
+                DoCalculateWithSpilling(Ctx);
                 break;
             }
             default:
@@ -432,17 +433,17 @@ public:
         }
     }
 
-    EFetchResult Finish(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+    EFetchResult Finish(NUdf::TUnboxedValue*const* output) {
         switch(GetMode()) {
             case EOperatingMode::InMemory: {
                 if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
-                    Nodes.FinishItem(ctx, values, output);
+                    Nodes.FinishItem(Ctx, values, output);
                     return EFetchResult::One;
                 }
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                return ProcessSpilledData(ctx, output);
+                return ProcessSpilledData(Ctx, output);
             }
             default:
                 MKQL_ENSURE(false, "Internal logic error");  
@@ -668,7 +669,7 @@ private:
         return Mode;
     }
 
-    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+    void SwitchMode(EOperatingMode mode, const TComputationContext& ctx) {
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -707,7 +708,6 @@ private:
     }
 
 private:
-
     ui64 NextBucketToSpill = 0;
     TState InMemoryProcessingState;
     const TCombinerNodes& Nodes;
@@ -730,6 +730,8 @@ private:
     TMemoryUsageInfo* MemInfo = nullptr;
     TEqualsFunc const Equal;
     const bool AllowSpilling;
+
+    TComputationContext& Ctx;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -792,7 +794,6 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        std::cerr << "[MISHA] here\n";
         if (!state.HasValue()) {
             MakeState(ctx, state);
         }
@@ -1230,16 +1231,15 @@ public:
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
             while (EFetchResult::Finish != ptr->InputStatus) {
-                if (!ptr->UpdateAndCheckIfReadyToContinue(ctx)) {
+                if (!ptr->UpdateAndCheckIfReadyToContinue()) {
                     return EFetchResult::Yield;
                 }
                 for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                    if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
-                        fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                    fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
 
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                     case EFetchResult::One:
-                        ptr->DoCalculate(ctx);
+                        ptr->DoCalculate();
                         continue;
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -1248,11 +1248,11 @@ public:
                 }
             }
 
-            if (!ptr->UpdateAndCheckIfReadyToContinue(ctx)) {
+            if (!ptr->UpdateAndCheckIfReadyToContinue()) {
                 return EFetchResult::Yield;
             }
 
-            return ptr->Finish(ctx, output);
+            return ptr->Finish(output);
         }
         Y_UNREACHABLE();
     }
@@ -1501,7 +1501,8 @@ private:
             Nodes.KeyNodes.size(),
             TMyValueHasher(KeyTypes),
             TMyValueEqual(KeyTypes),
-            allowSpilling
+            allowSpilling,
+            ctx
         );
     }
 

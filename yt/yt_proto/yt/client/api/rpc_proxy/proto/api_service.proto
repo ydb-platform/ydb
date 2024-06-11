@@ -3168,6 +3168,11 @@ message TReqStartQuery
         required EContentType type = 3;
     }
 
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required EQueryEngine engine = 2;
     required string query = 3;
@@ -3175,7 +3180,8 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8;
+    optional string access_control_object = 8; // deprecated
+    optional TAccessControlObjects access_control_objects = 9;
 }
 
 message TRspStartQuery
@@ -3249,13 +3255,14 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9;
+    optional string access_control_object = 9; // deprecated
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
     optional NYT.NProto.TError error = 13;
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
+    optional bytes access_control_objects = 16; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3301,10 +3308,16 @@ message TRspListQueries
 
 message TReqAlterQuery
 {
+    message TAccessControlObjects
+    {
+        repeated string items = 1;
+    }
+
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4;
+    optional string access_control_object = 4; // deprecated
+    optional TAccessControlObjects access_control_objects = 5;
 }
 
 message TRspAlterQuery

@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package yandex.cloud.vpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1;vpc";
+option java_package = "yandex.cloud.api.vpc.v1";
+
+// An Address resource. For more information, see [Address](/docs/vpc/concepts/address).
+message Address {
+  reserved 8 to 14;
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Internal IP address.
+    INTERNAL = 1;
+
+    // Public IP address.
+    EXTERNAL = 2;
+  }
+
+  enum IpVersion {
+    IP_VERSION_UNSPECIFIED = 0;
+
+    // IPv4 address.
+    IPV4 = 1;
+
+    // IPv6 address.
+    IPV6 = 2;
+  }
+
+  // ID of the address. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the address belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the address.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the address.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // External ipv4 address specification.
+  oneof address {
+    option (exactly_one) = true;
+
+    ExternalIpv4Address external_ipv4_address = 7;
+  }
+
+  // Specifies if address is reserved or not.
+  bool reserved = 15;
+
+  // Specifies if address is used or not.
+  bool used = 16;
+
+  // Type of the IP address.
+  Type type = 17;
+
+  // Version of the IP address.
+  IpVersion ip_version = 18;
+
+  // Specifies if address protected from deletion.
+  bool deletion_protection = 19;
+
+  // Optional DNS record specifications
+  repeated DnsRecord dns_records = 20;
+}
+
+message ExternalIpv4Address {
+  // Value of address.
+  string address = 1;
+
+  // Availability zone from which the address will be allocated.
+  string zone_id = 2;
+
+  // Parameters of the allocated address, for example DDoS Protection.
+  AddressRequirements requirements = 3;
+}
+
+message AddressRequirements {
+  // DDoS protection provider ID.
+  string ddos_protection_provider = 1;
+
+  // Capability to send SMTP traffic.
+  string outgoing_smtp_capability = 2;
+}
+
+message DnsRecord {
+  // DNS record name (absolute or relative to the DNS zone in use).
+  string fqdn = 1;
+
+  // ID of the public DNS zone.
+  string dns_zone_id = 2;
+
+  // TTL of record.
+  int64 ttl = 3;
+
+  // If the PTR record is required, this parameter must be set to "true".
+  bool ptr = 4;
+}

@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.redis.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/redis/v1/config;redis";
+option java_package = "yandex.cloud.api.mdb.redis.v1.config";
+
+// Fields and structure of `RedisConfig` reflects Redis configuration file
+// parameters.
+message RedisConfig6_0 {
+  enum MaxmemoryPolicy {
+    MAXMEMORY_POLICY_UNSPECIFIED = 0;
+
+    // Try to remove less recently used (LRU) keys with `expire set`.
+    VOLATILE_LRU = 1;
+
+    // Remove less recently used (LRU) keys.
+    ALLKEYS_LRU = 2;
+
+    // Try to remove least frequently used (LFU) keys with `expire set`.
+    VOLATILE_LFU = 3;
+
+    // Remove least frequently used (LFU) keys.
+    ALLKEYS_LFU = 4;
+
+    // Try to remove keys with `expire set` randomly.
+    VOLATILE_RANDOM = 5;
+
+    // Remove keys randomly.
+    ALLKEYS_RANDOM = 6;
+
+    // Try to remove less recently used (LRU) keys with `expire set`
+    // and shorter TTL first.
+    VOLATILE_TTL = 7;
+
+    // Return errors when memory limit was reached and commands could require
+    // more memory to be used.
+    NOEVICTION = 8;
+  }
+
+  message ClientOutputBufferLimit {
+    reserved 4;
+    reserved 2;
+    // Total limit in bytes.
+    google.protobuf.Int64Value hard_limit = 1 [(value) = ">=0"];
+    // Limit in bytes during certain time period.
+    google.protobuf.Int64Value soft_limit = 3 [(value) = ">=0"];
+    // Seconds for soft limit.
+    google.protobuf.Int64Value soft_seconds = 5 [(value) = ">=0"];
+  }
+
+  // Redis key eviction policy for a dataset that reaches maximum memory,
+  // available to the host. Redis maxmemory setting depends on Managed
+  // Service for Redis [host class](/docs/managed-redis/concepts/instance-types).
+  //
+  // All policies are described in detail in [Redis documentation](https://redis.io/topics/lru-cache).
+  MaxmemoryPolicy maxmemory_policy = 1;
+
+  // Time that Redis keeps the connection open while the client is idle.
+  // If no new command is sent during that time, the connection is closed.
+  google.protobuf.Int64Value timeout = 2;
+
+  // Authentication password.
+  string password = 3 [(pattern) = "[a-zA-Z0-9@=+?*.,!&#$^<>_-]{8,128}"];
+
+  // Number of database buckets on a single redis-server process.
+  google.protobuf.Int64Value databases = 4 [(value) = ">0"];
+
+  // Threshold for logging slow requests to server in microseconds (log only slower than it).
+  google.protobuf.Int64Value slowlog_log_slower_than = 5 [(value) = ">=0"];
+
+  // Max slow requests number to log.
+  google.protobuf.Int64Value slowlog_max_len = 6 [(value) = ">=0"];
+
+  // String setting for pub\sub functionality.
+  string notify_keyspace_events = 7 [(pattern) = "[KEg$lshzxeAtm]{0,13}"];
+
+  // Redis connection output buffers limits for pubsub operations.
+  ClientOutputBufferLimit client_output_buffer_limit_pubsub = 8;
+
+  // Redis connection output buffers limits for clients.
+  ClientOutputBufferLimit client_output_buffer_limit_normal = 9;
+}
+
+message RedisConfigSet6_0 {
+  // Effective settings for a Redis 6.0 cluster (a combination of settings
+  // defined in [user_config] and [default_config]).
+  RedisConfig6_0 effective_config = 1;
+
+  // User-defined settings for a Redis 6.0 cluster.
+  RedisConfig6_0 user_config = 2;
+
+  // Default configuration for a Redis 6.0 cluster.
+  RedisConfig6_0 default_config = 3;
+}

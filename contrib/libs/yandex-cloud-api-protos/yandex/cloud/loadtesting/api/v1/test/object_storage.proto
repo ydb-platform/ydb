@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+// Reference to a file stored in Object Storage.
+message ObjectStorage {
+  // Bucket name.
+  string bucket = 1;
+
+  // File name.
+  string name = 2;
+}

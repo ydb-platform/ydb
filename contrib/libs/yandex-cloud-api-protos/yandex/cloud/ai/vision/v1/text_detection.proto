@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v1;
+
+import "yandex/cloud/ai/vision/v1/primitives.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v1;vision";
+option java_package = "yandex.cloud.api.ai.vision.v1";
+
+message TextAnnotation {
+  // Pages of the recognized file.
+  //
+  // For JPEG and PNG files contains only 1 page.
+  repeated Page pages = 1;
+}
+
+message Page {
+  // Page width in pixels.
+  int64 width = 1;
+
+  // Page height in pixels.
+  int64 height = 2;
+
+  // Recognized text blocks in this page.
+  repeated Block blocks = 3;
+
+  // Recognized entities
+  repeated Entity entities = 4;
+}
+
+message Entity {
+  // Entity name
+  string name = 1;
+
+  // Recognized entity text
+  string text = 2;
+}
+
+message Block {
+  // Area on the page where the text block is located.
+  Polygon bounding_box = 1;
+
+  // Recognized lines in this block.
+  repeated Line lines = 2;
+}
+
+message Line {
+  // Area on the page where the line is located.
+  Polygon bounding_box = 1;
+
+  // Recognized words in this line.
+  repeated Word words = 2;
+
+  // Confidence of the OCR results for the line. Range [0, 1].
+  double confidence = 3;
+}
+
+message Word {
+  // Area on the page where the word is located.
+  Polygon bounding_box = 1;
+
+  // Recognized word value.
+  string text = 2;
+
+  // Confidence of the OCR results for the word. Range [0, 1].
+  double confidence = 3;
+
+  message DetectedLanguage {
+    // Detected language code.
+    string language_code = 1;
+
+    // Confidence of detected language. Range [0, 1].
+    double confidence = 2;
+  }
+
+  // A list of detected languages together with confidence.
+  repeated DetectedLanguage languages = 4;
+
+  // Id of recognized word in entities array
+  int64 entity_index = 5;
+}

@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.apigateway.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/apigateway/v1;apigateway";
+option java_package = "yandex.cloud.api.serverless.apigateway.v1";
+
+message ApiGateway {
+  reserved 6;
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // API gateway is being created.
+    CREATING = 1;
+
+    // API gateway is ready for use.
+    ACTIVE = 2;
+
+    // API gateway is being deleted.
+    DELETING = 3;
+
+    // API gateway failed. The only allowed action is delete.
+    ERROR = 4;
+
+    // API gateway is being updated.
+    UPDATING = 5;
+  }
+
+  // ID of the API gateway. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the API gateway belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp for the API-gateway.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the API gateway. The name is unique within the folder.
+  string name = 4;
+
+  // Description of the API gateway.
+  string description = 5;
+
+  // API gateway labels as `key:value` pairs.
+  map<string, string> labels = 7;
+
+  // Status of the API gateway.
+  Status status = 8;
+
+  // Default domain for the API gateway. Generated at creation time.
+  string domain = 9;
+
+  // ID of the log group for the API gateway.
+  string log_group_id = 10;
+
+  // List of domains attached to API gateway.
+  repeated AttachedDomain attached_domains = 11;
+
+  // Network access. If specified the gateway will be attached to specified network/subnet(s).
+  Connectivity connectivity = 12;
+
+  // Options for logging from the API gateway.
+  LogOptions log_options = 13;
+
+  // Values of variables defined in the specification.
+  map<string, VariableInput> variables = 14;
+
+  // Canary release of the gateway.
+  Canary canary = 15;
+
+  // Timeout for gateway call execution
+  google.protobuf.Duration execution_timeout = 16 [(value) = "<=600s"];
+}
+
+message AttachedDomain {
+  reserved 4;
+  // ID of the domain.
+  string domain_id = 1;
+  // ID of the domain certificate.
+  string certificate_id = 2;
+  // Enabling flag.
+  bool enabled = 3;
+  // Name of the domain.
+  string domain = 5;
+}
+
+// Gateway connectivity specification.
+message Connectivity {
+  // Network the gateway will have access to.
+  // It's essential to specify network with subnets in all availability zones.
+  string network_id = 1;
+
+  // Complete list of subnets (from the same network) the gateway can be attached to.
+  // It's essential to specify at least one subnet for each availability zones.
+  repeated string subnet_id = 2;
+}
+
+message LogOptions {
+  // Is logging from API gateway disabled.
+  bool disabled = 1;
+
+  // Log entries destination.
+  oneof destination {
+    // Entry should be written to log group resolved by ID.
+    string log_group_id = 2;
+
+    // Entry should be written to default log group for specified folder.
+    string folder_id = 3;
+  }
+
+  // Minimum log entry level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message Canary {
+  // It describes percentage of requests, which will be processed by canary.
+  int64 weight = 1 [(value) = "0-99"];
+
+  // Values specification variables, associated with canary.
+  map<string, VariableInput> variables = 2 [(size) = ">0"];
+}
+
+message VariableInput {
+  // Variable value that can has only primitive type
+  oneof variable_value {
+    string string_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+  }
+}

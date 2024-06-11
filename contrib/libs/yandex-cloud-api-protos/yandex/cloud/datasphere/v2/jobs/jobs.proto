@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2.jobs;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2/jobs;datasphere";
+option java_outer_classname = "Jobs";
+option java_package = "yandex.cloud.api.datasphere.v2.jobs";
+
+// Job parameters.
+message JobParameters {
+  // List of input files.
+  repeated File input_files = 1;
+  // List of output files descriptions.
+  repeated FileDesc output_files = 2;
+  // List of DataSphere S3 mount ids.
+  repeated string s3_mount_ids = 3;
+  // List of DataSphere dataset ids.
+  repeated string dataset_ids = 4;
+  // Job run command.
+  string cmd = 5;
+  // Job environment description.
+  Environment env = 6;
+  // Should project disk be attached to VM.
+  bool attach_project_disk = 7;
+  // VM specification.
+  repeated CloudInstanceType cloud_instance_types = 8 [(size) = ">=1"];
+  // Extended working storage configuration.
+  ExtendedWorkingStorage extended_working_storage = 9;
+  // List of literal arguments.
+  repeated Argument arguments = 10;
+}
+
+message CloudInstanceType {
+  // Name of DataSphere VM configuration.
+  string name = 1;
+}
+
+// Extended working storage configuration.
+message ExtendedWorkingStorage {
+  enum StorageType {
+    STORAGE_TYPE_UNSPECIFIED = 0;
+    SSD = 1;
+  }
+
+  StorageType type = 1;
+  int64 size_gb = 2;
+}
+
+message Argument {
+  string name = 1;
+  string value = 2;
+}
+
+enum FileCompressionType {
+  FILE_COMPRESSION_TYPE_UNSPECIFIED = 0;
+  NONE = 1;
+  ZIP = 2;
+}
+
+message File {
+  FileDesc desc = 1;
+  // SHA256 of the file.
+  string sha256 = 2;
+  // File size in bytes.
+  int64 size_bytes = 3;
+  // File compression info
+  FileCompressionType compression_type = 4;
+}
+
+message StorageFile {
+  File file = 1;
+  // File URL.
+  string url = 2;
+}
+
+message FileDesc {
+  // Path of the file on filesystem.
+  string path = 1;
+  // Variable to use in cmd substitution.
+  string var = 2;
+}
+
+message Environment {
+  // Environment variables.
+  map<string, string> vars = 1;
+
+  oneof docker_image {
+    // DS docker image id.
+    string docker_image_resource_id = 2;
+    DockerImageSpec docker_image_spec = 3;
+  }
+
+  PythonEnv python_env = 4;
+}
+
+message DockerImageSpec {
+  // Docker image URL.
+  string image_url = 1;
+  // Username for container registry.
+  string username = 2;
+  // Password for container registry.
+  oneof password {
+    // Plaintext password.
+    string password_plain_text = 3;
+    // ID of DataSphere secret containing password.
+    string password_ds_secret_name = 4;
+  }
+}
+
+message PythonEnv {
+  // Conda YAML.
+  string conda_yaml = 1;
+  // List of local modules descriptions.
+  repeated File local_modules = 2;
+}
+
+// Instance of the job.
+message Job {
+  // ID of the job.
+  string id = 1;
+  // Name of the job.
+  string name = 2;
+  // Description of the job.
+  string desc = 3;
+  // Create job timestamp.
+  google.protobuf.Timestamp created_at = 4;
+  // Start job timestamp.
+  google.protobuf.Timestamp started_at = 17;
+  // Finish job timestamp.
+  google.protobuf.Timestamp finished_at = 5;
+  // Status of the job.
+  JobStatus status = 6;
+  // Config of the job, copied from configuration file.
+  string config = 7;
+  // ID of the user who created the job.
+  string created_by_id = 8;
+  // ID of the project.
+  string project_id = 9;
+  JobParameters job_parameters = 10;
+  // Job data expiration timestamp.
+  google.protobuf.Timestamp data_expires_at = 11;
+  // Marks if the job data has been cleared.
+  bool data_cleared = 12;
+  // Output files of the job.
+  repeated File output_files = 13;
+  // Job log files.
+  repeated File log_files = 14;
+  // Job diagnostics files.
+  repeated File diagnostic_files = 15;
+  // Job total data size.
+  int64 data_size_bytes = 16;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  CREATING = 1;
+  EXECUTING = 2;
+  UPLOADING_OUTPUT = 3;
+  SUCCESS = 4;
+  ERROR = 5;
+  CANCELLED = 6;
+}
+
+message JobResult {
+  // Execution return code.
+  int64 return_code = 1;
+}

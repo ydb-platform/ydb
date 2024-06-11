@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+message SerializerAuto {
+}
+message SerializerJSON {
+}
+message DebeziumSerializerParameter {
+    // Name of the serializer parameter
+    string key = 1;
+    // Value of the serializer parameter
+    string value = 2;
+}
+message SerializerDebezium {
+    // Settings of sterilization parameters as key-value pairs
+    repeated DebeziumSerializerParameter serializer_parameters = 1;
+}
+// Data serialization format
+message Serializer {
+    oneof serializer {
+        // Select the serialization format automatically
+        SerializerAuto serializer_auto = 1;
+        // Serialize data in json format
+        SerializerJSON serializer_json = 2;
+        // Serialize data in debezium format
+        SerializerDebezium serializer_debezium = 3;
+    }
+}

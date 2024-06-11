@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "yandex/cloud/datatransfer/v1/endpoint/common.proto";
+
+message PostgresObjectTransferSettings {
+    // Sequences
+    // 
+    // CREATE SEQUENCE ...
+    ObjectTransferStage sequence = 1;
+    // Owned sequences
+    // 
+    // CREATE SEQUENCE ... OWNED BY ...
+    ObjectTransferStage sequence_owned_by = 2;
+    // Tables
+    // 
+    // CREATE TABLE ...
+    ObjectTransferStage table = 3;
+    // Primary keys
+    // 
+    // ALTER TABLE ... ADD PRIMARY KEY ...
+    ObjectTransferStage primary_key = 4;
+    // Foreign keys
+    // 
+    // ALTER TABLE ... ADD FOREIGN KEY ...
+    ObjectTransferStage fk_constraint = 5;
+    // Default values
+    // 
+    // ALTER TABLE ... ALTER COLUMN ... SET DEFAULT ...
+    ObjectTransferStage default_values = 6;
+    // Constraints
+    // 
+    // ALTER TABLE ... ADD CONSTRAINT ...
+    ObjectTransferStage constraint = 7;
+    // Indexes
+    // 
+    // CREATE INDEX ...
+    ObjectTransferStage index = 8;
+    // Views
+    // 
+    // CREATE VIEW ...
+    ObjectTransferStage view = 9;
+    // Functions
+    // 
+    // CREATE FUNCTION ...
+    ObjectTransferStage function = 10;
+    // Triggers
+    // 
+    // CREATE TRIGGER ...
+    ObjectTransferStage trigger = 11;
+    // Types
+    // 
+    // CREATE TYPE ...
+    ObjectTransferStage type = 12;
+    // Rules
+    // 
+    // CREATE RULE ...
+    ObjectTransferStage rule = 13;
+    // Collations
+    // 
+    // CREATE COLLATION ...
+    ObjectTransferStage collation = 14;
+    // Policies
+    // 
+    // CREATE POLICY ...
+    ObjectTransferStage policy = 15;
+    // Casts
+    // 
+    // CREATE CAST ...
+    ObjectTransferStage cast = 16;
+    // Materialized views
+    // 
+    // CREATE MATERIALIZED VIEW ...
+    ObjectTransferStage materialized_view = 17;
+    // 
+    ObjectTransferStage sequence_set = 18;
+}
+message OnPremisePostgres {
+    reserved 1, 3;
+    // Will be used if the cluster ID is not specified.
+    int64 port = 2;
+    // Network interface for endpoint. If none will assume public ipv4
+    string subnet_id = 4;
+    repeated string hosts = 5;
+    // TLS settings for server connection. Disabled by default.
+    TLSMode tls_mode = 6;
+}
+message PostgresConnection {
+    oneof connection {
+        // Managed Service for PostgreSQL cluster ID
+        string mdb_cluster_id = 1;
+        // Connection options for on-premise PostgreSQL
+        OnPremisePostgres on_premise = 2;
+    }
+}
+message PostgresSource {
+    reserved 7, 10 to 12;
+    // Database connection settings
+    PostgresConnection connection = 1;
+    // Database name
+    string database = 2;
+    // User for database access.
+    string user = 3;
+    // Password for database access.
+    Secret password = 4;
+    // Included tables
+    // 
+    // If none or empty list is presented, all tables are replicated. Full table name
+    // with schema. Can contain schema_name.* patterns.
+    repeated string include_tables = 5;
+    // Excluded tables
+    // 
+    // If none or empty list is presented, all tables are replicated. Full table name
+    // with schema. Can contain schema_name.* patterns.
+    repeated string exclude_tables = 6;
+    // Maximum lag of replication slot (in bytes); after exceeding this limit
+    // replication will be aborted.
+    int64 slot_byte_lag_limit = 8;
+    // Database schema for service tables (__consumer_keeper,
+    // __data_transfer_mole_finder). Default is public
+    string service_schema = 9;
+    // Select database objects to be transferred during activation or deactivation.
+    PostgresObjectTransferSettings object_transfer_settings = 13;
+    // Security groups
+    repeated string security_groups = 14;
+}
+message PostgresTarget {
+    reserved 6;
+    // Database connection settings
+    PostgresConnection connection = 1;
+    // Database name
+    string database = 2;
+    // User for database access.
+    string user = 3;
+    // Password for database access.
+    Secret password = 4;
+    // Cleanup policy for activate, reactivate and reupload processes. Default is
+    // truncate.
+    CleanupPolicy cleanup_policy = 5;
+    // Security groups
+    repeated string security_groups = 7;
+}

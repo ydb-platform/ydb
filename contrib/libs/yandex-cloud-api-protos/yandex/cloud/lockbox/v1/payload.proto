@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.lockbox.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/lockbox/v1;lockbox";
+option java_package = "yandex.cloud.api.lockbox.v1";
+
+// A payload.
+message Payload {
+  // ID of the version that the payload belongs to.
+  string version_id = 1;
+
+  // Payload entries.
+  repeated Entry entries = 2;
+
+  message Entry {
+    // Non-confidential key of the entry.
+    string key = 1;
+
+    // Confidential value of the entry.
+    oneof value {
+      // Text value.
+      string text_value = 2;
+
+      // Binary value.
+      bytes binary_value = 3;
+    }
+  }
+}

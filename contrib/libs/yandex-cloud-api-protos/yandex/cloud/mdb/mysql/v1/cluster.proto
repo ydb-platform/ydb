@@ -1,0 +1,327 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "google/type/timeofday.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/mysql/v1/config/mysql5_7.proto";
+import "yandex/cloud/mdb/mysql/v1/config/mysql8_0.proto";
+import "yandex/cloud/mdb/mysql/v1/maintenance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1";
+
+// An object that represents MySQL cluster.
+//
+// See [the documentation](/docs/managed-mysql/concepts) for details.
+message Cluster {
+  enum Environment {
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Environment for stable versions of your apps.
+    // A conservative update policy is in effect: only bug fixes are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment for testing, including the Managed Service for MySQL itself.
+    // This environment gets new features, improvements, and bug fixes in the first place, compared to the production environment.
+    // However, not every update ensures backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // Health of the cluster is unknown ([Host.health] for every host in the cluster is `UNKNOWN`).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and well ([Host.health] for every host in the cluster is `ALIVE`).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] for every host in the cluster is `DEAD`).
+    DEAD = 2;
+
+    // Cluster is degraded ([Host.health] for at least one host in the cluster is not `ALIVE`).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster is stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the cluster.
+  //
+  // This ID is assigned by the platform at the time of creation.
+  string id = 1;
+
+  // ID of the folder that the cluster belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp of the cluster.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the cluster.
+  string name = 4;
+
+  // Description of the cluster.
+  string description = 5;
+
+  // Custom labels for the cluster as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the MySQL cluster.
+  Environment environment = 7;
+
+  // Monitoring systems data that is relevant to the cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the cluster.
+  ClusterConfig config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated health of the cluster.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+
+  // Maintenance window settings for the cluster.
+  MaintenanceWindow maintenance_window = 13;
+
+  // Planned maintenance operation to be started for the cluster within the nearest [maintenance_window].
+  MaintenanceOperation planned_operation = 14;
+
+  // Effective list of security group IDs applied to the cluster.
+  repeated string security_group_ids = 15;
+
+  // This option prevents unintended deletion of the cluster.
+  bool deletion_protection = 16;
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 17;
+}
+
+// Cluster-related monitoring system data.
+message Monitoring {
+
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the cluster.
+  string link = 3;
+}
+
+message ClusterConfig {
+
+  // Version of MySQL used in the cluster.
+  string version = 1;
+
+  // Cluster-wide MySQL configuration.
+  oneof mysql_config {
+
+    // Configuration of a MySQL 5.7 server.
+    config.MysqlConfigSet5_7 mysql_config_5_7 = 2 [json_name="mysqlConfig_5_7"];
+
+    // Configuration of a MySQL 8.0 server.
+    config.MysqlConfigSet8_0 mysql_config_8_0 = 6 [json_name="mysqlConfig_8_0"];
+  }
+
+  // Resource preset for the cluster hosts.
+  Resources resources = 3;
+
+  // Time to start the daily backup, in the UTC timezone.
+  google.type.TimeOfDay backup_window_start = 4;
+
+  // Access policy for external services.
+  Access access = 5;
+
+  // Configuration of the performance diagnostics service.
+  PerformanceDiagnostics performance_diagnostics = 7;
+
+  // Retention policy of automated backups.
+  google.protobuf.Int64Value backup_retain_period_days = 8 [(value) = "7-60"];
+}
+
+message Host {
+
+  enum Role {
+
+    // Role of the host is unknown. Default value.
+    ROLE_UNKNOWN = 0;
+
+    // Host is the master.
+    MASTER = 1;
+
+    // Host is a replica.
+    REPLICA = 2;
+  }
+
+  enum Health {
+
+    // Health of the host is unknown. Default value.
+    HEALTH_UNKNOWN = 0;
+
+    // Host is performing all its functions normally.
+    ALIVE = 1;
+
+    // Host is inoperable, and cannot perform any of its essential functions.
+    DEAD = 2;
+
+    // Host is degraded, and can perform only some of its essential functions.
+    DEGRADED = 3;
+
+    // Host is alive, but in read-only mode.
+    READONLY = 4;
+  }
+
+  // Name of the host.
+  //
+  // This name is assigned by the platform at the time of creation.
+  // The name is unique across all MDB hosts that exist on the platform, as it defines the FQDN of the host.
+  string name = 1;
+
+  // ID of the cluster the host belongs to.
+  string cluster_id = 2;
+
+  // ID of the availability zone where the host resides.
+  string zone_id = 3;
+
+  // Resources allocated to the host.
+  Resources resources = 4;
+
+  // Role of the host in the cluster. If the field has default value, it is not returned in the response.
+  Role role = 5;
+
+  // Aggregated health of the host. If the field has default value, it is not returned in the response.
+  Health health = 6;
+
+  // List of services provided by the host.
+  repeated Service services = 7;
+
+  // ID of the subnet that the host belongs to.
+  string subnet_id = 8;
+
+  // Flag that shows if public IP address is assigned to the host so that the host can be accessed from the internet.
+  bool assign_public_ip = 9;
+
+  // Name of the host to be used as the replication source for cascading replication.
+  string replication_source = 10;
+
+  // Host backup priority.
+  int64 backup_priority = 11 [(value) = "0-100"];
+
+  // Host master promotion priority.
+  int64 priority = 12 [(value) = "0-100"];
+}
+
+
+message Service {
+
+  enum Type {
+    // Service type of the host is unspecified. Default value.
+    TYPE_UNSPECIFIED = 0;
+
+    // The host is a MySQL server.
+    MYSQL = 1;
+  }
+
+  enum Health {
+
+    // Health of the service is unknown. Default value.
+    HEALTH_UNKNOWN = 0;
+
+    // The service is working normally.
+    ALIVE = 1;
+
+    // The service is dead or unresponsive.
+    DEAD = 2;
+
+    // The service is in read-only mode.
+    READONLY = 3;
+  }
+
+  // Type of the service provided by the host. If the field has default value, it is not returned in the response.
+  Type type = 1;
+
+  // Aggregated health of the service. If the field has default value, it is not returned in the response.
+  Health health = 2;
+}
+
+// Cluster resource preset.
+message Resources {
+
+  // ID of the resource preset that defines available computational resources (vCPU, RAM, etc.) for a cluster host.
+  //
+  // All available presets are listed in [the documentation](/docs/managed-mysql/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Volume of the storage (for each cluster host, in bytes).
+  int64 disk_size = 2;
+
+  // Type of the storage.
+  //
+  // Possible values:
+  // * `network-hdd` - standard network storage
+  // * `network-ssd` - fast network storage
+  // * `network-ssd-nonreplicated` - fast network nonreplicated storage
+  // * `local-ssd` - fast local storage.
+  //
+  // See [the documentation](/docs/managed-mysql/concepts/storage) for details.
+  string disk_type_id = 3;
+}
+
+message Access {
+
+  // Allows access from DataLens.
+  //
+  // See [the documentation](/docs/managed-mysql/operations/datalens-connect) for details.
+  bool data_lens = 1;
+
+  // Allows SQL queries to the cluster databases from management console.
+  //
+  // See [the documentation](/docs/managed-mysql/operations/web-sql-query) for details.
+  bool web_sql = 2;
+
+  // Allow access for DataTransfer.
+  bool data_transfer = 3;
+}
+
+message PerformanceDiagnostics {
+
+  // Flag that shows if performance statistics gathering is enabled for the cluster.
+  bool enabled = 1;
+
+  // Interval (in seconds) for `my_session` sampling.
+  int64 sessions_sampling_interval = 2 [(value) = "1-86400"];
+
+  // Interval (in seconds) for `my_statements` sampling.
+  int64 statements_sampling_interval = 3 [(value) = "1-86400"];
+}

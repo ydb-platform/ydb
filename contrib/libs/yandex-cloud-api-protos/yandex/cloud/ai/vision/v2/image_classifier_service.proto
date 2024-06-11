@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v2;
+
+
+import "yandex/cloud/ai/vision/v2/image_classifier.proto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v2;vision";
+option java_package = "yandex.cloud.api.ai.vision.v2";
+
+
+service ImageClassifierService {
+
+    rpc Annotate (AnnotationRequest) returns (AnnotationResponse) {
+    }
+}

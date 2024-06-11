@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/cdn/v1/raw_logs.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+service RawLogsService {
+    rpc Activate(ActivateRawLogsRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/rawLogs:activate" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "ActivateRawLogsMetadata"
+          response: "ActivateRawLogsResponse"
+        };
+    }
+
+    rpc Deactivate(DeactivateRawLogsRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/rawLogs/{resource_id}" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeactivateRawLogsMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    rpc Get(GetRawLogsRequest) returns (GetRawLogsResponse) {
+        option (google.api.http) = { get: "/cdn/v1/rawLogs/{resource_id}" };
+    }
+
+    rpc Update(UpdateRawLogsRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/cdn/v1/rawLogs/{resource_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateRawLogsMetadata"
+            response: "UpdateRawLogsResponse"
+        };
+    }
+}
+
+message ActivateRawLogsRequest {
+    // ID of CDN resource to switch logs storage for..
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+    // Raw logs settings.
+    RawLogsSettings settings = 2;
+}
+
+message ActivateRawLogsMetadata {
+    // ID of resource with activated raw logs.
+    string resource_id = 1;
+}
+
+message ActivateRawLogsResponse {
+    // Raw logs status.
+    RawLogsStatus status = 1;
+    // Raw logs settings.
+    RawLogsSettings settings = 2;
+}
+
+message DeactivateRawLogsRequest {
+    // ID of CDN resource to deactivate Raw Logs for.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeactivateRawLogsMetadata {
+    // ID of CDN resource.
+    string resource_id = 1;
+}
+
+message GetRawLogsRequest {
+    // ID of CDN resource to request status and settings.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetRawLogsResponse {
+    // Raw logs status.
+    RawLogsStatus status = 1;
+    // Raw logs settings.
+    RawLogsSettings settings = 2;
+}
+
+message UpdateRawLogsRequest {
+    // ID of CDN resource.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+    // Raw logs settings.
+    RawLogsSettings settings = 2;
+}
+
+message UpdateRawLogsResponse {
+    // Raw logs status.
+    RawLogsStatus status = 1;
+    // Raw logs settings.
+    RawLogsSettings settings = 2;
+}
+
+message UpdateRawLogsMetadata {
+    // ID of CDN resource.
+    string resource_id = 1;
+}

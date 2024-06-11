@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package yandex.cloud.certificatemanager.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/certificatemanager/v1;certificatemanager";
+option java_package = "yandex.cloud.api.certificatemanager.v1";
+
+// A set of methods for managing certificate content.
+service CertificateContentService {
+  // Returns chain and private key of the specified certificate.
+  rpc Get(GetCertificateContentRequest) returns (GetCertificateContentResponse) {
+    option (google.api.http) = {get: "/certificate-manager/v1/certificates/{certificate_id}:getContent"};
+  }
+}
+
+enum PrivateKeyFormat {
+  PRIVATE_KEY_FORMAT_UNSPECIFIED = 0;
+  PKCS1 = 1;
+  PKCS8 = 2;
+}
+
+message GetCertificateContentResponse {
+  reserved 2;
+  // ID of the certificate.
+  string certificate_id = 1;
+
+  // PEM-encoded certificate chain content of the certificate.
+  repeated string certificate_chain = 3;
+
+  // PEM-encoded private key content of the certificate.
+  string private_key = 4;
+}
+
+message GetCertificateContentRequest {
+  // ID of the certificate to download content.
+  string certificate_id = 1;
+
+  // Optional ID of the version.
+  string version_id = 2;
+
+  // Desired format of private key
+  PrivateKeyFormat private_key_format = 3;
+}

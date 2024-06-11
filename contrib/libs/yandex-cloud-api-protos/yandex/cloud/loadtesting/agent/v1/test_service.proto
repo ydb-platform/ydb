@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/loadtesting/agent/v1/test.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+
+service TestService {
+  // Returns test by test id.
+  rpc Get (GetTestRequest) returns (Test) {
+    option (google.api.http) = { get: "/loadtesting/agent/v1/tests/{test_id}" };
+  };
+
+  // Updates the specified test.
+  rpc Update (UpdateTestRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/loadtesting/agent/v1/tests/{test_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTestMetadata"
+      response: "Test"
+    };
+  };
+}
+
+message GetTestRequest {
+  string test_id = 1 [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=50"];
+}
+
+message UpdateTestRequest {
+  string test_id = 1 [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string name = 3 [deprecated = true];
+  string description = 4 [deprecated = true];
+  map<string, string> labels = 5 [deprecated = true];
+  bool favorite = 6 [deprecated = true];
+  string target_version = 7 [deprecated = true];
+  int64 imbalance_point = 8;
+  int64 imbalance_ts = 9;
+  string imbalance_comment = 10;
+}
+
+message UpdateTestMetadata {
+  string test_id = 1;
+}

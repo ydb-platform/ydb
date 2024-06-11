@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/dataproc/v1/common.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";
+option java_package = "yandex.cloud.api.dataproc.v1";
+
+// A Data Proc cluster. For details about the concept, see [documentation](/docs/data-proc/concepts/).
+message Cluster {
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is stopping.
+    STOPPING = 4;
+
+    // Cluster stopped.
+    STOPPED = 5;
+
+    // Cluster is starting.
+    STARTING = 6;
+  }
+
+  // ID of the cluster. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the cluster belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the cluster. The name is unique within the folder.
+  string name = 4 [(length) = "1-63"];
+
+  // Description of the cluster.
+  string description = 5 [(length) = "0-256"];
+
+  // Cluster labels as `key:value` pairs.
+  map<string, string> labels = 6 [(size) = "<=64"];
+
+  // Monitoring systems relevant to the cluster.
+  repeated Monitoring monitoring = 7;
+
+  // Configuration of the cluster.
+  ClusterConfig config = 8;
+
+  // Aggregated cluster health.
+  Health health = 9;
+
+  // Cluster status.
+  Status status = 10;
+
+  // ID of the availability zone where the cluster resides.
+  string zone_id = 11;
+
+  // ID of service account for the Data Proc manager agent.
+  string service_account_id = 12;
+
+  // Object Storage bucket to be used for Data Proc jobs that are run in the cluster.
+  string bucket = 13;
+
+  // Whether UI Proxy feature is enabled.
+  bool ui_proxy = 14;
+
+  // User security groups.
+  repeated string security_group_ids = 15;
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 16;
+
+  // Deletion Protection inhibits deletion of the cluster
+  bool deletion_protection = 17;
+
+  // ID of the cloud logging log group to write logs. If not set, default log group for the folder will be used.
+  // To prevent logs from being sent to the cloud set cluster property dataproc:disable_cloud_logging = true
+  string log_group_id = 18;
+}
+
+// Metadata of a monitoring system for a Data Proc cluster.
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system.
+  string link = 3;
+}
+
+// Hadoop configuration that describes services installed in a cluster,
+// their properties and settings.
+message HadoopConfig {
+  enum Service {
+    SERVICE_UNSPECIFIED = 0;
+    HDFS = 1;
+    YARN = 2;
+    MAPREDUCE = 3;
+    HIVE = 4;
+    TEZ = 5;
+    ZOOKEEPER = 6;
+    HBASE = 7;
+    SQOOP = 8;
+    FLUME = 9;
+    SPARK = 10;
+    ZEPPELIN = 11;
+    OOZIE = 12;
+    LIVY = 13;
+  }
+
+  // Set of services used in the cluster (if empty, the default set is used).
+  repeated Service services = 1;
+
+  // Properties set for all hosts in `*-site.xml` configurations. The key should indicate
+  // the service and the property.
+  //
+  // For example, use the key 'hdfs:dfs.replication' to set the `dfs.replication` property
+  // in the file `/etc/hadoop/conf/hdfs-site.xml`.
+  map<string, string> properties = 2;
+
+  // List of public SSH keys to access to cluster hosts.
+  repeated string ssh_public_keys = 3;
+
+  // Set of init-actions
+  repeated InitializationAction initialization_actions = 4;
+}
+
+message ClusterConfig {
+  // Image version for cluster provisioning.
+  // All available versions are listed in the [documentation](/docs/data-proc/concepts/environment).
+  string version_id = 1;
+
+  // Data Proc specific configuration options.
+  HadoopConfig hadoop = 2;
+}
+
+message InitializationAction {
+  // URI of the executable file
+  string uri = 1;
+
+  // Arguments to the initialization action
+  repeated string args = 2;
+
+  // Execution timeout
+  int64 timeout = 3;
+}

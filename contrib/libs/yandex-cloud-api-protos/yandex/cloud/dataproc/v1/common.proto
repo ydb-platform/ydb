@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.v1;
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";
+option java_package = "yandex.cloud.api.dataproc.v1";
+
+enum Health {
+
+  // Object is in unknown state (we have no data).
+  HEALTH_UNKNOWN = 0;
+
+  // Object is alive and well (for example, all hosts of the cluster are alive).
+  ALIVE = 1;
+
+  // Object is inoperable (it cannot perform any of its essential functions).
+  DEAD = 2;
+
+  // Object is partially alive (it can perform some of its essential functions).
+  DEGRADED = 3;
+}
+
+message Resources {
+  // ID of the resource preset for computational resources available to a host (CPU, memory etc.).
+  // All available presets are listed in the [documentation](/docs/data-proc/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Type of the storage environment for the host.
+  // Possible values:
+  // * network-hdd - network HDD drive,
+  // * network-ssd - network SSD drive.
+  string disk_type_id = 2;
+
+  // Volume of the storage available to a host, in bytes.
+  int64 disk_size = 3;
+}

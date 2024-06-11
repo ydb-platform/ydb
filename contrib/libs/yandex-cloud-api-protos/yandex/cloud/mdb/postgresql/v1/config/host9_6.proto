@@ -1,0 +1,242 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.postgresql.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1/config;postgresql";
+option java_package = "yandex.cloud.api.mdb.postgresql.v1.config";
+
+// Options and structure of `PostgresqlHostConfig` reflects parameters of a PostgreSQL
+// configuration file. Detailed description is available in
+// [PostgreSQL documentation](https://www.postgresql.org/docs/9.6/runtime-config.html).
+message PostgresqlHostConfig9_6 {
+
+  enum ConstraintExclusion {
+    CONSTRAINT_EXCLUSION_UNSPECIFIED = 0;
+
+    CONSTRAINT_EXCLUSION_ON = 1;
+
+    CONSTRAINT_EXCLUSION_OFF = 2;
+
+    CONSTRAINT_EXCLUSION_PARTITION = 3;
+  }
+
+  enum ForceParallelMode {
+    FORCE_PARALLEL_MODE_UNSPECIFIED = 0;
+
+    FORCE_PARALLEL_MODE_ON = 1;
+
+    FORCE_PARALLEL_MODE_OFF = 2;
+
+    FORCE_PARALLEL_MODE_REGRESS = 3;
+  }
+
+  enum LogLevel {
+    LOG_LEVEL_UNSPECIFIED = 0;
+
+    LOG_LEVEL_DEBUG5 = 1;
+
+    LOG_LEVEL_DEBUG4 = 2;
+
+    LOG_LEVEL_DEBUG3 = 3;
+
+    LOG_LEVEL_DEBUG2 = 4;
+
+    LOG_LEVEL_DEBUG1 = 5;
+
+    LOG_LEVEL_LOG = 6;
+
+    LOG_LEVEL_NOTICE = 7;
+
+    LOG_LEVEL_WARNING = 8;
+
+    LOG_LEVEL_ERROR = 9;
+
+    LOG_LEVEL_FATAL = 10;
+
+    LOG_LEVEL_PANIC = 11;
+  }
+
+  enum LogErrorVerbosity {
+    LOG_ERROR_VERBOSITY_UNSPECIFIED = 0;
+
+    LOG_ERROR_VERBOSITY_TERSE = 1;
+
+    LOG_ERROR_VERBOSITY_DEFAULT = 2;
+
+    LOG_ERROR_VERBOSITY_VERBOSE = 3;
+  }
+
+  enum LogStatement {
+    LOG_STATEMENT_UNSPECIFIED = 0;
+
+    LOG_STATEMENT_NONE = 1;
+
+    LOG_STATEMENT_DDL = 2;
+
+    LOG_STATEMENT_MOD = 3;
+
+    LOG_STATEMENT_ALL = 4;
+  }
+
+  enum TransactionIsolation {
+    TRANSACTION_ISOLATION_UNSPECIFIED = 0;
+
+    TRANSACTION_ISOLATION_READ_UNCOMMITTED = 1;
+
+    TRANSACTION_ISOLATION_READ_COMMITTED = 2;
+
+    TRANSACTION_ISOLATION_REPEATABLE_READ = 3;
+
+    TRANSACTION_ISOLATION_SERIALIZABLE = 4;
+  }
+
+  enum ByteaOutput {
+    BYTEA_OUTPUT_UNSPECIFIED = 0;
+
+    BYTEA_OUTPUT_HEX = 1;
+
+    BYTEA_OUTPUT_ESCAPED = 2;
+  }
+
+  enum XmlBinary {
+    XML_BINARY_UNSPECIFIED = 0;
+
+    XML_BINARY_BASE64 = 1;
+
+    XML_BINARY_HEX = 2;
+  }
+
+  enum XmlOption {
+    XML_OPTION_UNSPECIFIED = 0;
+
+    XML_OPTION_DOCUMENT = 1;
+
+    XML_OPTION_CONTENT = 2;
+  }
+
+  enum BackslashQuote {
+    BACKSLASH_QUOTE_UNSPECIFIED = 0;
+
+    BACKSLASH_QUOTE = 1;
+
+    BACKSLASH_QUOTE_ON = 2;
+
+    BACKSLASH_QUOTE_OFF = 3;
+
+    BACKSLASH_QUOTE_SAFE_ENCODING = 4;
+  }
+
+  google.protobuf.Int64Value recovery_min_apply_delay = 1; // in milliseconds.
+
+  google.protobuf.Int64Value shared_buffers = 2; // in bytes.
+
+  google.protobuf.Int64Value temp_buffers = 3; // in bytes.
+
+  google.protobuf.Int64Value work_mem = 4; // in bytes.
+
+  google.protobuf.Int64Value replacement_sort_tuples = 5; // in bytes.
+
+  google.protobuf.Int64Value temp_file_limit = 6; // in bytes.
+
+  google.protobuf.Int64Value backend_flush_after = 7 [(value) = "0-2048"];
+
+  google.protobuf.Int64Value old_snapshot_threshold = 8 [(value) = "-1-86400"];
+
+  google.protobuf.Int64Value max_standby_streaming_delay = 9; // in milliseconds.
+
+  ConstraintExclusion constraint_exclusion = 10;
+
+  google.protobuf.DoubleValue cursor_tuple_fraction = 11;
+
+  google.protobuf.Int64Value from_collapse_limit = 12 [(value) = "1-2147483647"];
+
+  google.protobuf.Int64Value  join_collapse_limit = 13 [(value) = "1-2147483647"];
+
+  ForceParallelMode force_parallel_mode = 14;
+
+  LogLevel client_min_messages = 15;
+
+  LogLevel log_min_messages = 16;
+
+  LogLevel log_min_error_statement = 17;
+
+  google.protobuf.Int64Value log_min_duration_statement = 18; // in milliseconds.
+
+  google.protobuf.BoolValue log_checkpoints = 19;
+
+  google.protobuf.BoolValue log_connections = 20;
+
+  google.protobuf.BoolValue log_disconnections = 21;
+
+  google.protobuf.BoolValue log_duration = 22;
+
+  LogErrorVerbosity log_error_verbosity = 23;
+
+  google.protobuf.BoolValue log_lock_waits = 24;
+
+  LogStatement log_statement = 25;
+
+  google.protobuf.Int64Value log_temp_files = 26;
+
+  string search_path = 27;
+
+  google.protobuf.BoolValue row_security = 28;
+
+  TransactionIsolation default_transaction_isolation = 29;
+
+  google.protobuf.Int64Value statement_timeout = 30; // in milliseconds.
+
+  google.protobuf.Int64Value lock_timeout = 31; // in milliseconds.
+
+  google.protobuf.Int64Value idle_in_transaction_session_timeout = 32 [(value) = "0-2147483647"]; // in milliseconds.
+
+  ByteaOutput bytea_output = 33;
+
+  XmlBinary xmlbinary = 34;
+
+  XmlOption xmloption = 35;
+
+  google.protobuf.Int64Value gin_pending_list_limit = 36; // in bytes.
+
+  google.protobuf.Int64Value deadlock_timeout = 37; // in milliseconds.
+
+  google.protobuf.Int64Value max_locks_per_transaction = 38;
+
+  google.protobuf.Int64Value max_pred_locks_per_transaction = 39;
+
+  google.protobuf.BoolValue array_nulls = 40;
+
+  BackslashQuote backslash_quote = 41;
+
+  google.protobuf.BoolValue default_with_oids = 42;
+
+  google.protobuf.BoolValue escape_string_warning = 43;
+
+  google.protobuf.BoolValue lo_compat_privileges = 44;
+
+  google.protobuf.BoolValue operator_precedence_warning = 45;
+
+  google.protobuf.BoolValue quote_all_identifiers = 46;
+
+  google.protobuf.BoolValue standard_conforming_strings = 47;
+
+  google.protobuf.BoolValue synchronize_seqscans = 48;
+
+  google.protobuf.BoolValue transform_null_equals = 49;
+
+  google.protobuf.BoolValue exit_on_error = 50;
+
+  google.protobuf.DoubleValue seq_page_cost = 51;
+
+  google.protobuf.DoubleValue random_page_cost = 52;
+
+  // This option has been removed in PostgreSQL 10.
+  google.protobuf.BoolValue sql_inheritance = 53;
+
+  google.protobuf.Int64Value effective_io_concurrency = 54 [(value) = "0-1000"];
+
+  google.protobuf.Int64Value effective_cache_size = 55 [(value) = "0-549755813888"];
+}

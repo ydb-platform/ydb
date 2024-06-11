@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+message AgentInstance {
+    string id = 1;
+}

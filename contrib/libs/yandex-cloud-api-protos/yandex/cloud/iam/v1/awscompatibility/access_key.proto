@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1.awscompatibility;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1/awscompatibility;awscompatibility";
+option java_package = "yandex.cloud.api.iam.v1.awscompatibility";
+
+// An access key.
+// For more information, see [AWS-compatible access keys](/docs/iam/concepts/authorization/access-key).
+message AccessKey {
+  // ID of the AccessKey resource.
+  // It is used to manage secret credentials: an access key ID and a secret access key.
+  string id = 1;
+
+  // ID of the service account that the access key belongs to.
+  string service_account_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Description of the access key. 0-256 characters long.
+  string description = 4;
+
+  // ID of the access key.
+  // The key is AWS compatible.
+  string key_id = 5;
+
+  reserved 6;
+
+  // Timestamp for the last authentication using this Access key.
+  google.protobuf.Timestamp last_used_at = 7;
+}

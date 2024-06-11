@@ -1,0 +1,213 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";
+option java_package = "yandex.cloud.api.dataproc.v1";
+option java_outer_classname = "PHJ";
+
+// A Data Proc job. For details about the concept, see [documentation](/docs/data-proc/concepts/jobs).
+message Job {
+  // ID of the job. Generated at creation time.
+  string id = 1;
+
+  // ID of the Data Proc cluster that the job belongs to.
+  string cluster_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // The time when the job was started.
+  google.protobuf.Timestamp started_at = 4;
+
+  // The time when the job was finished.
+  google.protobuf.Timestamp finished_at = 5;
+
+  // Name of the job, specified in the [JobService.Create] request.
+  string name = 6;
+
+  // The id of the user who created the job
+  string created_by = 12;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Job is logged in the database and is waiting for the agent to run it.
+    PROVISIONING = 1;
+
+    // Job is acquired by the agent and is in the queue for execution.
+    PENDING = 2;
+
+    // Job is being run in the cluster.
+    RUNNING = 3;
+
+    // Job failed to finish the run properly.
+    ERROR = 4;
+
+    // Job is finished.
+    DONE = 5;
+
+    // Job is cancelled.
+    CANCELLED = 6;
+
+    // Job is waiting for cancellation.
+    CANCELLING = 7;
+  }
+  // Job status.
+  Status status = 7;
+
+  // Specification for the job.
+  oneof job_spec {
+    // Specification for a MapReduce job.
+    MapreduceJob mapreduce_job = 8;
+
+    // Specification for a Spark job.
+    SparkJob spark_job = 9;
+
+    // Specification for a PySpark job.
+    PysparkJob pyspark_job = 10;
+
+    // Specification for a Hive job.
+    HiveJob hive_job = 11;
+  }
+
+  // Attributes of YARN application.
+  ApplicationInfo application_info = 13;
+}
+
+message ApplicationAttempt {
+  // ID of YARN application attempt
+  string id = 1;
+
+  // ID of YARN Application Master container
+  string am_container_id = 2;
+}
+
+message ApplicationInfo {
+  // ID of YARN application
+  string id = 1;
+
+  // YARN application attempts
+  repeated ApplicationAttempt application_attempts = 2;
+}
+
+message MapreduceJob {
+  // Optional arguments to pass to the driver.
+  repeated string args = 1;
+
+  // JAR file URIs to add to CLASSPATH of the Data Proc driver and each task.
+  repeated string jar_file_uris = 2;
+
+  // URIs of resource files to be copied to the working directory of Data Proc drivers
+  // and distributed Hadoop tasks.
+  repeated string file_uris = 3;
+
+  // URIs of archives to be extracted to the working directory of Data Proc drivers and tasks.
+  repeated string archive_uris = 4;
+
+  // Property names and values, used to configure Data Proc and MapReduce.
+  map<string, string> properties = 5;
+
+  oneof driver {
+    // HCFS URI of the .jar file containing the driver class.
+    string main_jar_file_uri = 6;
+
+    // The name of the driver class.
+    string main_class = 7;
+  }
+}
+
+message SparkJob {
+  // Optional arguments to pass to the driver.
+  repeated string args = 1;
+
+  // JAR file URIs to add to CLASSPATH of the Data Proc driver and each task.
+  repeated string jar_file_uris = 2;
+
+  // URIs of resource files to be copied to the working directory of Data Proc drivers
+  // and distributed Hadoop tasks.
+  repeated string file_uris = 3;
+
+  // URIs of archives to be extracted to the working directory of Data Proc drivers and tasks.
+  repeated string archive_uris = 4;
+
+  // Property names and values, used to configure Data Proc and Spark.
+  map<string, string> properties = 5;
+
+  // The HCFS URI of the JAR file containing the `main` class for the job.
+  string main_jar_file_uri = 6;
+
+  // The name of the driver class.
+  string main_class = 7;
+
+  // List of maven coordinates of jars to include on the driver and executor classpaths.
+  repeated string packages = 8;
+
+  // List of additional remote repositories to search for the maven coordinates given with --packages.
+  repeated string repositories = 9;
+
+  // List of groupId:artifactId, to exclude while resolving the dependencies provided in --packages to avoid dependency conflicts.
+  repeated string exclude_packages = 10;
+}
+
+message PysparkJob {
+  // Optional arguments to pass to the driver.
+  repeated string args = 1;
+
+  // JAR file URIs to add to CLASSPATH of the Data Proc driver and each task.
+  repeated string jar_file_uris = 2;
+
+  // URIs of resource files to be copied to the working directory of Data Proc drivers
+  // and distributed Hadoop tasks.
+  repeated string file_uris = 3;
+
+  // URIs of archives to be extracted to the working directory of Data Proc drivers and tasks.
+  repeated string archive_uris = 4;
+
+  // Property names and values, used to configure Data Proc and PySpark.
+  map<string, string> properties = 5;
+
+  // URI of the file with the driver code. Must be a .py file.
+  string main_python_file_uri = 6;
+
+  // URIs of Python files to pass to the PySpark framework.
+  repeated string python_file_uris = 7;
+
+  // List of maven coordinates of jars to include on the driver and executor classpaths.
+  repeated string packages = 8;
+
+  // List of additional remote repositories to search for the maven coordinates given with --packages.
+  repeated string repositories = 9;
+
+  // List of groupId:artifactId, to exclude while resolving the dependencies provided in --packages to avoid dependency conflicts.
+  repeated string exclude_packages = 10;
+}
+
+message QueryList {
+  // List of Hive queries.
+  repeated string queries = 1;
+}
+
+message HiveJob {
+  // Property names and values, used to configure Data Proc and Hive.
+  map<string, string> properties = 1;
+
+  // Flag indicating whether a job should continue to run if a query fails.
+  bool continue_on_failure = 2;
+
+  // Query variables and their values.
+  map<string, string> script_variables = 3;
+
+  // JAR file URIs to add to CLASSPATH of the Hive driver and each task.
+  repeated string jar_file_uris = 4;
+
+  oneof query_type {
+    // URI of the script with all the necessary Hive queries.
+    string query_file_uri = 5;
+
+    // List of Hive queries to be used in the job.
+    QueryList query_list = 6;
+  }
+}

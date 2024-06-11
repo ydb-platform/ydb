@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.opensearch.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/opensearch/v1/backup.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/opensearch/v1;opensearch";
+option java_package = "yandex.cloud.api.mdb.opensearch.v1";
+
+// A set of methods for managing backups.
+service BackupService {
+  // Returns the specified backup of an OpenSearch cluster.
+  rpc Get (GetBackupRequest) returns (Backup) {
+    option (google.api.http) = { get: "/managed-opensearch/v1/backups/{backup_id}" };
+  }
+
+  // Returns the list of available backups for the specified OpenSearch cluster.
+  rpc List (ListBackupsRequest) returns (ListBackupsResponse) {
+    option (google.api.http) = { get: "/managed-opensearch/v1/backups" };
+  }
+}
+
+message GetBackupRequest {
+  // ID of the backup to return.
+  string backup_id = 1 [(required) = true];
+}
+
+message ListBackupsRequest {
+  // ID of the folder to list backups in.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned.
+  //
+  // If the number of available results is larger than [page_size], the service returns
+  // a [ListBackupsResponse.next_page_token] that can be used to get the next page of results
+  // in subsequent list requests.
+  //
+  // Default value is 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // The page token. To get the next page of results, set [page_token] to the [ListBackupsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListBackupsResponse {
+  // Requested list of backups.
+  repeated Backup backups = 1;
+
+  // This token allows you to get the next page of results for a list request.
+  //
+  // If the number of results is larger than [ListBackupsRequest.page_size] specified in the request,
+  // use the [next_page_token] as the value for the [ListBackupsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent ListBackups request has its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

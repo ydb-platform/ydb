@@ -1,0 +1,286 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/instance.proto";
+import "yandex/cloud/compute/v1/gpu_cluster.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing GPU clusters.
+service GpuClusterService {
+  // Returns the specified GPU cluster.
+  //
+  // To get the list of available GPU clusters, make a [List] request.
+  rpc Get(GetGpuClusterRequest) returns (GpuCluster) {
+    option (google.api.http) = { get: "/compute/v1/gpuClusters/{gpu_cluster_id}" };
+  }
+
+  // Retrieves the list of GPU clusters in the specified folder.
+  rpc List(ListGpuClustersRequest) returns (ListGpuClustersResponse) {
+    option (google.api.http) = { get: "/compute/v1/gpuClusters" };
+  }
+
+  // Creates a GPU cluster in the specified folder.
+  rpc Create(CreateGpuClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/gpuClusters" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata : "CreateGpuClusterMetadata"
+      response : "GpuCluster"
+    };
+  }
+
+  // Updates the specified GPU cluster.
+  //
+  // Currently only name, description and labels can be updated.
+  rpc Update(UpdateGpuClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/gpuClusters/{gpu_cluster_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata : "UpdateGpuClusterMetadata"
+      response : "GpuCluster"
+    };
+  }
+
+  // Deletes the specified GPU cluster.
+  //
+  // GPU cluster can be deleted only if it doesn't have any instances associated with it.
+  rpc Delete(DeleteGpuClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/gpuClusters/{gpu_cluster_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata : "DeleteGpuClusterMetadata"
+      response : "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified GPU cluster.
+  rpc ListOperations(ListGpuClusterOperationsRequest) returns (ListGpuClusterOperationsResponse) {
+    option (google.api.http) = { get: "/compute/v1/gpuClusters/{gpu_cluster_id}/operations" };
+  }
+
+  // List instances created in this GPU cluster.
+  rpc ListInstances(ListGpuClusterInstancesRequest) returns (ListGpuClusterInstancesResponse) {
+    option (google.api.http) = { get: "/compute/v1/gpuClusters/{gpu_cluster_id}/instances" };
+  }
+
+  // access
+
+  // Lists access bindings for the GPU cluster.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/compute/v1/gpuClusters/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the GPU cluster.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/gpuClusters/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the GPU cluster.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/gpuClusters/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetGpuClusterRequest {
+  // ID of the GPU cluster to return.
+  //
+  // To get a GPU cluster ID, make a [GpuClusterService.List] request.
+  string gpu_cluster_id = 1;
+}
+
+message ListGpuClustersRequest {
+  // ID of the folder to list GPU clusters in.
+  //
+  // To get the folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListGpuClustersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+  
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListGpuClustersResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+  
+  // A filter expression that filters GPU clusters listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [GpuCluster.name] field.
+  // 2. An operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+  // 3. The value. Must be 3-63 characters long and match the regular expression `^[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-schedule`.
+  string filter = 4 [(length) = "<=1000"];
+  
+  // A sorting expression that sorts GPU clusters listed in the response.
+  //
+  // The expression must specify the field name from [GpuCluster] and `asc`ending or `desc`ending order,
+  // e.g. `createdAt desc`.
+  //
+  // Default value: `id asc`.
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListGpuClustersResponse {
+  // List of GPU clusters in the specified folder.
+  repeated GpuCluster gpu_clusters = 1;
+  
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListGpuClustersRequest.page_size], use `next_page_token` as the value
+  // for the [ListGpuClustersRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateGpuClusterRequest {
+  // ID of the folder to create a GPU cluster in.
+  //
+  // To get a folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1;
+  
+  // Name of the GPU cluster.
+  //
+  // The name must be unique within the folder.
+  string name = 2;
+  
+  // Description of the GPU cluster.
+  string description = 3;
+  
+  // GPU cluster labels as `key:value` pairs.
+  map<string, string> labels = 4;
+
+  // ID of the availability zone where the GPU cluster resides.
+  // To get a list of available zones use the [yandex.cloud.compute.v1.ZoneService.List] request.
+  string zone_id = 5;
+  
+  // Type of interconnect to use for this GPU cluster. 
+  GpuInterconnectType interconnect_type = 6;
+}
+
+message CreateGpuClusterMetadata {
+  // ID of the GPU cluster that is being created.
+  string gpu_cluster_id = 1;
+}
+
+message UpdateGpuClusterRequest {
+  // ID of the GPU cluster to update.
+  //
+  // To get the GPU cluster ID, make a [GpuClusterService.List] request.
+  string gpu_cluster_id = 1;
+
+  // Field mask that specifies which attributes of the GPU cluster should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the GPU cluster.
+  //
+  // The name must be unique within the folder.
+  string name = 3;
+  
+  // New description of the GPU cluster.
+  string description = 4;
+  
+  // New GPU cluster labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label:
+  // 1. Get the current set of labels with a [GpuClusterService.Get] request.
+  // 2. Add or remove a label in this set.
+  // 3. Send the new set in this field.
+  map<string, string> labels = 5;
+}
+
+message UpdateGpuClusterMetadata {
+  // ID of the GPU cluster that is being updated.
+  string gpu_cluster_id = 1;
+}
+
+message DeleteGpuClusterRequest {
+  // ID of the GPU cluster to delete.
+  //
+  // To get a GPU cluster ID, make a [GpuClusterService.List] request.
+  string gpu_cluster_id = 1;
+}
+
+message DeleteGpuClusterMetadata {
+  // ID of the GPU cluster that is being deleted.
+  string gpu_cluster_id = 1;
+}
+
+message ListGpuClusterOperationsRequest {
+  // ID of the GPU cluster to list operations for.
+  //
+  // To get a GPU cluster ID, make a [GpuClusterService.List] request.
+  string gpu_cluster_id = 1;
+  
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListGpuClusterOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListGpuClusterOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+}
+
+message ListGpuClusterOperationsResponse {
+  // List of operations for the specified GPU cluster.
+  repeated operation.Operation operations = 1;
+  
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListGpuClusterOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListGpuClusterOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListGpuClusterInstancesRequest {
+  // ID of the GPU cluster to list instances in.
+  //
+  // To get a GPU cluster ID, make a [GpuClusterService.List] request.
+  string gpu_cluster_id = 1;
+  
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListGpuClusterInstancesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+  
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListGpuClusterInstancesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [Instance.name] field.
+  string filter = 4;
+}
+
+message ListGpuClusterInstancesResponse {
+  // List of instances in the specified GPU cluster.
+  repeated Instance instances = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListGpuClusterInstancesRequest.page_size], use `next_page_token` as the value
+  // for the [ListGpuClusterInstancesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

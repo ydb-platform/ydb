@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+// Group mapping represents which external (federated) groups should match which internal (cloud) groups
+message GroupMappingItem {
+  // External group id (received from identity provider)
+  string external_group_id = 1 [(required) = true, (length) = "<=1000"];
+  // Internal cloud group id
+  string internal_group_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+// Group synchronization status for a specific federation
+// Absence of this object for a federation means that there is no group synchronization set of for the federation.
+message GroupMapping {
+  // Federation id
+  string federation_id = 1;
+  // Flag to show whether group synchronization should be enabled for this federation.
+  bool enabled = 2;
+}

@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.licensemanager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/marketplace/licensemanager/v1/lock.proto";
+import "yandex/cloud/marketplace/licensemanager/v1/template.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/licensemanager/v1;licensemanager";
+option java_package = "yandex.cloud.api.marketplace.licensemanager.v1";
+
+message Instance {
+    // ID of the subscription instance.
+    string id = 1;
+    // ID of the cloud that the subscription instance belongs to.
+    string cloud_id = 2;
+    // ID of the folder that the subscription instance belongs to.
+    string folder_id = 3;
+    // ID of the subscription template that was used to create subscription instance.
+    string template_id = 4;
+    // ID of the version of subscription template.
+    string template_version_id = 5;
+
+    reserved 6;
+    // Description of the subscription instance.
+    string description = 14;
+
+    // Timestamp of the start of the subscription.
+    google.protobuf.Timestamp start_time = 7;
+    // Timestamp of the end of the subscription.
+    google.protobuf.Timestamp end_time = 8;
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 9;
+    // Update timestamp.
+    google.protobuf.Timestamp updated_at = 10;
+    // Subscription state.
+    State state = 11;
+    // List of subscription locks.
+    repeated Lock locks = 12;
+    // Subscription template.
+    Template license_template = 13;
+
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        // Subscription created but not active yet.
+        PENDING = 1;
+        // Subscription is active.
+        ACTIVE = 2;
+        // Subscription canceled. It is still active, but won't be automatically renewed after the end of the current period.
+        CANCELLED = 3;
+        // Subscription expired.
+        EXPIRED = 4;
+        // Subscription deprecated.
+        DEPRECATED = 5;
+        // Subscription deleted.
+        DELETED = 6;
+    }
+}

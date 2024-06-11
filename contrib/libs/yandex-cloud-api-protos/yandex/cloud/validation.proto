@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud;cloud";
+option java_package = "yandex.cloud.api";
+
+extend google.protobuf.OneofOptions {
+  bool exactly_one = 101400;
+}
+
+extend google.protobuf.FieldOptions {
+  bool required = 101501;
+  string pattern = 101502;
+  string value = 101503;
+  string size = 101504;
+  string length = 101505;
+  bool unique = 101506;
+  MapKeySpec map_key = 101510;
+  string bytes = 101511;
+}
+
+message MapKeySpec {
+  string value = 1;
+  string pattern = 2;
+  string length = 3;
+}

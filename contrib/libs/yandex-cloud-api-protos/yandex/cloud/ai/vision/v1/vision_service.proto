@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v1;
+
+import "yandex/cloud/ai/vision/v1/text_detection.proto";
+import "yandex/cloud/ai/vision/v1/classification.proto";
+import "yandex/cloud/ai/vision/v1/face_detection.proto";
+import "yandex/cloud/ai/vision/v1/image_copy_search.proto";
+import "yandex/cloud/validation.proto";
+
+import "google/api/annotations.proto";
+import "google/rpc/status.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v1;vision";
+option java_package = "yandex.cloud.api.ai.vision.v1";
+
+// A set of methods for the Vision service.
+service VisionService {
+  // Analyzes a batch of images and returns results with annotations.
+  rpc BatchAnalyze(BatchAnalyzeRequest) returns (BatchAnalyzeResponse) {
+    option (google.api.http) = { post: "/vision/v1/batchAnalyze" body: "*" };
+  }
+}
+
+
+message BatchAnalyzeRequest {
+  // A list of specifications. Each specification contains the file to analyze and features to use for analysis.
+  //
+  // Restrictions:
+  // * Supported file formats: `JPEG`, `PNG`.
+  // * Maximum file size: 1 MB.
+  // * Image size should not exceed 20M pixels (length x width).
+  repeated AnalyzeSpec analyze_specs = 1 [(size) = "1-8"];
+
+  // ID of the folder to which you have access.
+  // Required for authorization with a user account (see [yandex.cloud.iam.v1.UserAccount] resource).
+  // Don't specify this field if you make the request on behalf of a service account.
+  string folder_id = 2 [(length) = "<=50"];
+}
+
+message AnalyzeSpec {
+  reserved 2;
+
+  oneof source {
+    option (exactly_one) = true;
+
+    // Image content, represented as a stream of bytes.
+    // Note: As with all bytes fields, protobuffers use a pure binary representation, whereas JSON representations use base64.
+    bytes content = 1 [(length) = "<=10485760"];
+    string signature = 5 [(length) = "<=16384"];
+  }
+
+  // Requested features to use for analysis.
+  //
+  // Max count of requested features for one file is 8.
+  repeated Feature features = 3 [(size) = "1-8"];
+
+  // [MIME type](https://en.wikipedia.org/wiki/Media_type) of content (for example, `` application/pdf ``).
+  string mime_type = 4 [(length) = "<=255"];
+}
+
+message Feature {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Text detection (OCR) feature.
+    TEXT_DETECTION = 1;
+
+    // Classification feature.
+    CLASSIFICATION = 2;
+
+    // Face detection feature.
+    FACE_DETECTION = 3;
+
+    // Image copy search.
+    IMAGE_COPY_SEARCH = 4;
+  }
+
+  // Type of requested feature.
+  Type type = 1;
+
+  oneof config {
+    // Required for the `CLASSIFICATION` type. Specifies configuration for the classification feature.
+    FeatureClassificationConfig classification_config = 2;
+    // Required for the `TEXT_DETECTION` type. Specifies configuration for the text detection (OCR) feature.
+    FeatureTextDetectionConfig text_detection_config = 3;
+  }
+}
+
+message FeatureClassificationConfig {
+  // Model to use for image classification.
+  string model = 1 [(length) = "<=256"];
+}
+
+message FeatureTextDetectionConfig {
+  // List of the languages to recognize text.
+  // Specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `ru`).
+  repeated string language_codes = 1 [(size) = "1-8", (length) = "<=3"];
+
+  // Model to use for text detection.
+  // Possible values:
+  // * `page` (default): this model is suitable for detecting multiple text entries in an image.
+  // * `line`: this model is suitable for cropped images with one line of text.
+  string model = 2 [(length) = "<=50"];
+}
+
+message BatchAnalyzeResponse {
+  // Request results.
+  // Results have the same order as specifications in the request.
+  repeated AnalyzeResult results = 1;
+}
+
+message AnalyzeResult {
+  // Results for each requested feature.
+  // Feature results have the same order as in the request.
+  repeated FeatureResult results = 2;
+
+  // Return error in case of error with file processing.
+  google.rpc.Status error = 1;
+}
+
+message FeatureResult {
+  oneof feature {
+    // Text detection (OCR) result.
+    TextAnnotation text_detection = 2;
+
+    // Classification result.
+    ClassAnnotation classification = 3;
+
+    // Face detection result.
+    FaceAnnotation face_detection = 4;
+
+    // Image Copy Search result.
+    ImageCopySearchAnnotation image_copy_search = 5;
+  }
+
+  // Return error in case of error during the specified feature processing.
+  google.rpc.Status error = 1;
+}

@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/cdn/v1/origin.proto";
+import "yandex/cloud/cdn/v1/origin_group.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+
+//
+// Origin Groups management service.
+//
+service OriginGroupService {
+    // Gets origin group with specified origin group id.
+    rpc Get(GetOriginGroupRequest) returns (OriginGroup) {
+        option (google.api.http) = { get: "/cdn/v1/originGroups/{origin_group_id}" };
+    }
+
+    // Lists origins of origin group.
+    rpc List(ListOriginGroupsRequest) returns (ListOriginGroupsResponse) {
+        option (google.api.http) = { get: "/cdn/v1/originGroups" };
+    }
+
+    // Creates origin group.
+    rpc Create(CreateOriginGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/originGroups" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "CreateOriginGroupMetadata"
+          response: "OriginGroup"
+        };
+    }
+
+    // Updates the specified origin group.
+    //
+    // Changes may take up to 15 minutes to apply. Afterwards, it is recommended to purge cache of the resources that
+    // use the origin group via a [CacheService.Purge] request.
+    rpc Update(UpdateOriginGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/cdn/v1/originGroups" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdateOriginGroupMetadata"
+          response: "OriginGroup"
+        };
+    }
+
+    // Deletes origin group with specified origin group id.
+    rpc Delete(DeleteOriginGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/cdn/v1/originGroups/{origin_group_id}" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "DeleteOriginGroupMetadata"
+          response: "google.protobuf.Empty"
+        };
+    }
+}
+
+message GetOriginGroupRequest {
+    // ID of the folder that the origin group belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the origin group to return.
+    //
+    // To get a origin group ID, make a [OriginGroupService.List] request.
+    int64 origin_group_id = 2 [(value) = ">0"];
+}
+
+message ListOriginGroupsRequest {
+    // ID of the folder that the origin group belongs to..
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than [page_size],
+    // the service returns a [ListOriginGroupsResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests.
+    int64 page_size = 2 [(value) = "<=1000"];
+
+    // Page token. To get the next page of results,
+    // set [page_token] to the [ListOriginGroupsResponse.next_page_token]
+    // returned by a previous list request.
+    string page_token = 3 [(length) = "<=100"];
+}
+
+message ListOriginGroupsResponse {
+    // List of all Origin Groups associated with folder.
+    repeated OriginGroup origin_groups = 1;
+
+    // [next_page_token] token allows you to get the next page of results for list requests.
+    // If the number of results is larger than [ListOriginGroupsRequest.page_size], use
+    // the [next_page_token] as the value for the [ListOriginGroupsRequest.page_token] query parameter
+    // in the next list request. Each subsequent list request will have its own
+    // [next_page_token] to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message CreateOriginGroupRequest {
+    // ID of the folder that the origin group belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Name of the origin group.
+    string name = 2;
+
+    // This option have two possible conditions:
+    //  true - The option is active. In case the origin responds with 4XX or 5XX codes,
+    //         use the next origin from the list.
+    //  false - The option is disabled.
+    //
+    //  default value is true
+    google.protobuf.BoolValue use_next = 3;
+
+    // List of origins: IP addresses or Domain names of your origins and the port
+    // (if custom).
+    repeated OriginParams origins = 4;
+}
+
+message CreateOriginGroupMetadata {
+    // ID of created origin group.
+    int64 origin_group_id = 1 [(value) = ">0"];
+}
+
+message UpdateOriginGroupRequest {
+    // ID of the folder that the origin group belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the origin group.
+    int64 origin_group_id = 2 [(value) = ">0"];
+
+    // Name of the origin group.
+    google.protobuf.StringValue group_name = 3;
+
+    // This option have two possible values:
+    //
+    //   True - The option is active. In case the origin responds with 4XX or 5XX
+    //          codes, use the next origin from the list.
+    //   False - The option is disabled.
+    google.protobuf.BoolValue use_next = 4;
+
+    // List of origins: IP addresses or Domain names of your origins and the port
+    // (if custom).
+    repeated OriginParams origins = 5;
+}
+
+message UpdateOriginGroupMetadata {
+    // ID of the origin group.
+    int64 origin_group_id = 1 [(value) = ">0"];
+}
+
+message DeleteOriginGroupRequest {
+    // ID of the folder that the origin group belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the origin group.
+    int64 origin_group_id = 2 [(value) = ">0"];
+}
+
+message DeleteOriginGroupMetadata {
+    // ID of the origin group.
+    int64 origin_group_id = 1 [(value) = ">0"];
+}

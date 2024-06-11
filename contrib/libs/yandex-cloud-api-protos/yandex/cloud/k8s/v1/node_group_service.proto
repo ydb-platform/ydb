@@ -1,0 +1,315 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/k8s/v1/node.proto";
+import "yandex/cloud/k8s/v1/node_group.proto";
+import "yandex/cloud/k8s/v1/version.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1;k8s";
+option java_package = "yandex.cloud.api.k8s.v1";
+
+// A set of methods for managing node groups.
+service NodeGroupService {
+  // Returns the specified node group.
+  //
+  // To get the list of available node group, make a [List] request.
+  rpc Get(GetNodeGroupRequest) returns (NodeGroup) {
+    option (google.api.http) = {get: "/managed-kubernetes/v1/nodeGroups/{node_group_id}"};
+  }
+
+  // Retrieves the list of node group in the specified Kubernetes cluster.
+  rpc List(ListNodeGroupsRequest) returns (ListNodeGroupsResponse) {
+    option (google.api.http) = {get: "/managed-kubernetes/v1/nodeGroups"};
+  }
+
+  // Creates a node group in the specified Kubernetes cluster.
+  rpc Create(CreateNodeGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/managed-kubernetes/v1/nodeGroups"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateNodeGroupMetadata"
+      response: "NodeGroup"
+    };
+  }
+
+  // Updates the specified node group.
+  rpc Update(UpdateNodeGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/managed-kubernetes/v1/nodeGroups/{node_group_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateNodeGroupMetadata"
+      response: "NodeGroup"
+    };
+  }
+
+  // Deletes the specified node group.
+  rpc Delete(DeleteNodeGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/managed-kubernetes/v1/nodeGroups/{node_group_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteNodeGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified node group.
+  rpc ListOperations(ListNodeGroupOperationsRequest) returns (ListNodeGroupOperationsResponse) {
+    option (google.api.http) = {get: "/managed-kubernetes/v1/nodeGroups/{node_group_id}/operations"};
+  }
+
+  // Retrieves the list of nodes in the specified Kubernetes cluster.
+  rpc ListNodes(ListNodeGroupNodesRequest) returns (ListNodeGroupNodesResponse) {
+    option (google.api.http) = {get: "/managed-kubernetes/v1/nodes"};
+  }
+}
+
+message GetNodeGroupRequest {
+  // ID of the node group to return.
+  // To get the node group ID use a [NodeGroupService.List] request.
+  string node_group_id = 1 [(required) = true];
+}
+
+message ListNodeGroupsRequest {
+  // ID of the folder to list node groups in.
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNodeGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListNodeGroupsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [NodeGroup.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListNodeGroupsResponse {
+  // List of node groups.
+  repeated NodeGroup node_groups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNodeGroupsRequest.page_size], use
+  // the `next_page_token` as the value
+  // for the [ListNodeGroupsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListNodeGroupNodesRequest {
+  // ID of the node group to list.
+  // To get the node group ID use a [NodeGroupService.List] request.
+  string node_group_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNodeGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListNodeGroupNodesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNodeGroupNodesResponse {
+  // List of nodes.
+  repeated Node nodes = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNodeGroupNodesRequest.page_size], use
+  // the `next_page_token` as the value
+  // for the [ListNodeGroupNodesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message DeleteNodeGroupRequest {
+  // ID of the node group to delete.
+  // To get node group ID use a [NodeGroupService.List] request.
+  string node_group_id = 1 [(required) = true];
+}
+
+message DeleteNodeGroupMetadata {
+  // ID of the node group that is being deleted.
+  string node_group_id = 1;
+}
+
+message UpdateNodeGroupRequest {
+  reserved 7;
+  // ID of the node group to update.
+  // To get the node group ID use a [NodeGroupService.List] request.
+  string node_group_id = 1 [(required) = true];
+
+  // Field mask that specifies which fields of the node group are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the node group.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the node group.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Node template for the node group.
+  // Change may trigger nodes rolling reboot or recreate.
+  NodeTemplate node_template = 8;
+
+  // Scale policy of the node group.
+  ScalePolicy scale_policy = 6;
+
+  // Allocation policy of the node group by the zones and regions.
+  NodeGroupAllocationPolicy allocation_policy = 9;
+
+  // Deploy policy according to which the updates are rolled out. If not specified,
+  // the default is used.
+  DeployPolicy deploy_policy = 15;
+
+  // Version of Kubernetes components that runs on the nodes.
+  UpdateVersionSpec version = 10;
+
+  // Maintenance policy of the node group.
+  NodeGroupMaintenancePolicy maintenance_policy = 11;
+
+  // Support for unsafe sysctl parameters. For more details see [documentation](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/).
+  repeated string allowed_unsafe_sysctls = 12 [
+    (length) = "<=253",
+    (pattern) = "([a-z0-9]([-_a-z0-9]*[a-z0-9])?\\.)*([a-z0-9][-_a-z0-9]*)?[a-z0-9*]"
+  ];
+
+  // Taints that are applied to the nodes of the node group at creation time.
+  repeated Taint node_taints = 13;
+
+  // Labels that are assigned to the nodes of the node group at creation time.
+  map<string, string> node_labels = 14;
+}
+
+message UpdateNodeGroupMetadata {
+  // ID of the Node group that is being updated.
+  string node_group_id = 1 [(required) = true];
+}
+
+message CreateNodeGroupRequest {
+  // ID of the Kubernetes cluster to create a node group in.
+  // To get the Kubernetes cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true];
+
+  // Name of the node group.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the node group.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Node template for creating the node group.
+  NodeTemplate node_template = 5 [(required) = true];
+
+  // Scale policy of the node group.
+  ScalePolicy scale_policy = 6 [(required) = true];
+
+  // Allocation policy of the node group by the zones and regions.
+  NodeGroupAllocationPolicy allocation_policy = 7;
+
+  // Deploy policy according to which the updates are rolled out. If not specified,
+  // the default is used.
+  DeployPolicy deploy_policy = 13;
+
+  // Version of Kubernetes components that runs on the nodes.
+  string version = 8;
+
+  // Maintenance policy of the node group.
+  NodeGroupMaintenancePolicy maintenance_policy = 9;
+
+  // Support for unsafe sysctl parameters. For more details see [documentation](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/).
+  repeated string allowed_unsafe_sysctls = 10 [
+    (length) = "<=253",
+    (pattern) = "([a-z0-9]([-_a-z0-9]*[a-z0-9])?\\.)*([a-z0-9][-_a-z0-9]*)?[a-z0-9*]"
+  ];
+
+  // Taints that are applied to the nodes of the node group at creation time.
+  repeated Taint node_taints = 11;
+
+  // Labels that are assigned to the nodes of the node group at creation time.
+  map<string, string> node_labels = 12;
+}
+
+message CreateNodeGroupMetadata {
+  // ID of the node group that is being created.
+  string node_group_id = 1;
+}
+
+message AutoUpgradeNodeGroupMetadata {
+  // ID of the node group that is being auto upgraded.
+  string node_group_id = 1;
+}
+
+message ListNodeGroupOperationsRequest {
+  // ID of the node group to list operations for.
+  string node_group_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size], the service returns a [ListNodeGroupOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListNodeGroupOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on [NodeGroup.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListNodeGroupOperationsResponse {
+  // List of operations for the specified node group.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNodeGroupOperationsRequest.page_size], use the `next_page_token` as the value
+  // for the [ListNodeGroupOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

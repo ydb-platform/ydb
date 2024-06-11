@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.manager.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/manager/v1;dataproc_manager";
+option java_package = "yandex.cloud.api.dataproc.manager.v1";
+
+// Data Proc manager service definition.
+service DataprocManagerService {
+    // Sends a status report from a host.
+    rpc Report (ReportRequest) returns (ReportReply) {}
+}
+
+message HbaseNodeInfo {
+    string name = 1;
+    int64 requests = 2;
+    int64 heap_size_mb = 3;
+    int64 max_heap_size_mb = 4;
+}
+
+message HbaseInfo {
+    bool available = 1;
+    int64 regions = 2;
+    int64 requests = 3;
+    double average_load = 4;
+    repeated HbaseNodeInfo live_nodes = 5;
+    repeated HbaseNodeInfo dead_nodes = 6;
+}
+
+message HDFSNodeInfo {
+    string name = 1;
+    int64 used = 2;
+    int64 remaining = 3;
+    int64 capacity = 4;
+    int64 num_blocks = 5;
+    string state = 6;
+}
+
+message HDFSInfo {
+    bool available = 1;
+    double percent_remaining = 2;
+    int64 used = 3;
+    int64 free = 4;
+    int64 total_blocks = 5;
+    int64 missing_blocks = 6;
+    int64 missing_blocks_replica_one = 7;
+    repeated HDFSNodeInfo live_nodes = 8;
+    repeated HDFSNodeInfo dead_nodes = 9;
+    reserved 10;
+    string safemode = 11;
+    repeated HDFSNodeInfo decommissioning_nodes = 12;
+    repeated HDFSNodeInfo decommissioned_nodes = 13;
+    repeated string requested_decommission_hosts = 14; // Actual list of decommission hosts in HDFS namenode memory
+}
+
+message HiveInfo {
+    bool available = 1;
+    int64 queries_succeeded = 2;
+    int64 queries_failed = 3;
+    int64 queries_executing = 4;
+    int64 sessions_open = 5;
+    int64 sessions_active = 6;
+}
+
+message YarnNodeInfo {
+    string name = 1;
+    string state = 2;
+    int64 num_containers = 3;
+    int64 used_memory_mb = 4;
+    int64 available_memory_mb = 5;
+    int64 update_time = 6;
+}
+
+message YarnInfo {
+    bool available = 1;
+    repeated YarnNodeInfo live_nodes = 2;
+    repeated string requested_decommission_hosts = 3; // Actual list of decommission hosts in Yarn resource manager memory
+}
+
+message ZookeeperInfo {
+    bool alive = 1;
+}
+
+message OozieInfo {
+    bool alive = 1;
+}
+
+message LivyInfo {
+    bool alive = 1;
+}
+
+enum InitActsState {
+    INIT_ACTS_STATE_UNSPECIFIED = 0; // No init acts on cluster
+    FAILED = 1; // At least one failed init act
+    SUCCESSFUL = 2; // All init acts succeeded
+    IN_PROGRESS = 3; // Some init acts not finished
+}
+
+message InitActs {
+    InitActsState state = 1;
+    // fqdns of nodes for error message
+    repeated string fqdns = 2;
+}
+
+message Info {
+    HDFSInfo hdfs = 1;
+    YarnInfo yarn = 2;
+    HiveInfo hive = 3;
+    ZookeeperInfo zookeeper = 4;
+    HbaseInfo hbase = 5;
+    OozieInfo oozie = 6;
+    // Report count is incremented every time report is sent by Dataproc Agent.
+    // So Worker can use this property to make sure that Dataproc Agent got data sent by Worker through Dataproc Manager
+    // for synchronization purposes
+    int64 report_count = 7;
+    LivyInfo livy = 8;
+    InitActs init_acts = 9;
+}
+
+// The request message containing the host status report.
+message ReportRequest {
+    string cid = 1;
+    int64 topology_revision = 2;
+    Info info = 3;
+    google.protobuf.Timestamp collected_at = 4;
+}
+
+// The response message containing the agent commands to apply on host.
+message ReportReply {
+    int64 decommission_timeout = 1;
+    repeated string yarn_hosts_to_decommission = 2;
+    repeated string hdfs_hosts_to_decommission = 3;
+}

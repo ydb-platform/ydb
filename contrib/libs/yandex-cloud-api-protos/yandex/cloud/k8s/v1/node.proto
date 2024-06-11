@@ -1,0 +1,332 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1;k8s";
+option java_package = "yandex.cloud.api.k8s.v1";
+
+message Node {
+  // Kubernetes node info
+  message KubernetesStatus {
+    // Node id (and instance name)
+    string id = 1;
+
+    // Conditions is an array of current observed node conditions.
+    // More info: https://kubernetes.io/docs/concepts/nodes/node/#condition
+    repeated Condition conditions = 2;
+
+    // If specified, the node's taints.
+    repeated Taint taints = 3;
+
+    // List of volumes that are attached to the node.
+    repeated AttachedVolume attached_volumes = 4;
+  }
+
+  // Cloud instance info
+  message CloudStatus {
+    // Compute instance id
+    string id = 1;
+
+    // IG instance status
+    string status = 2;
+
+    // IG instance status message
+    string status_message = 3;
+  }
+
+  // Computed node status.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // Node instance is not yet created (e.g. in progress).
+    PROVISIONING = 1;
+    // Node instance is created but not registered
+    // (e.g. is still initializing).
+    NOT_CONNECTED = 2;
+    // Node has connected but is not ready for
+    // workload (see conditions for details).
+    NOT_READY = 3;
+    // Node has connected and ready for workload.
+    READY = 4;
+    // Node is still registered but its instance
+    // is deleted (this is our bug).
+    MISSING = 5;
+    // Node is stopped
+    STOPPED = 6;
+    // Backend request to kubernetes api was unsuccessful.
+    UNKNOWN = 7;
+  }
+
+  // Node specification.
+  message Spec {
+    // Node group specified resources.
+    ResourcesSpec resources = 1;
+    // Node group specified disk.
+    DiskSpec disk = 2;
+  }
+
+  // Computed node status.
+  Status status = 1;
+
+  // Node specificaion.
+  Spec spec = 2;
+
+  // Cloud instance status.
+  // Not available in `MISSING` status.
+  CloudStatus cloud_status = 3;
+
+  // Kubernetes node status.
+  // Not available in `PROVISIONING` and `NOT_CONNECTED` states.
+  KubernetesStatus kubernetes_status = 4;
+}
+
+message Condition {
+  // Type of node condition.
+  string type = 1;
+
+  // Status is the status of the condition.
+  string status = 2;
+
+  // Human-readable message indicating details about last transition.
+  string message = 3;
+
+  // Last time we got an update on a given condition.
+  google.protobuf.Timestamp last_heartbeat_time = 4;
+
+  // Last time the condition transit from one status to another.
+  google.protobuf.Timestamp last_transition_time = 5;
+}
+
+message Taint {
+  enum Effect {
+    EFFECT_UNSPECIFIED = 0;
+
+    // Do not allow new pods to schedule onto the node unless they tolerate the taint,
+    // but allow all pods submitted to Kubelet without going through the scheduler
+    // to start, and allow all already-running pods to continue running.
+    NO_SCHEDULE = 1;
+
+    // Like NO_SCHEDULE, but the scheduler tries not to schedule
+    // new pods onto the node, rather than prohibiting new pods from scheduling
+    // onto the node entirely. Enforced by the scheduler.
+    PREFER_NO_SCHEDULE = 2;
+
+    // Evict any already-running pods that do not tolerate the taint.
+    NO_EXECUTE = 3;
+  }
+
+  // The taint key to be applied to a node.
+  string key = 1;
+
+  // The taint value corresponding to the taint key.
+  string value = 2;
+
+  // The effect of the taint on pods that do not tolerate the taint.
+  Effect effect = 3;
+}
+
+// AttachedVolume describes a volume attached to a node
+message AttachedVolume {
+  // Name of the driver which has attached the volume
+  string driver_name = 1;
+
+  // Volume handle (cloud disk id)
+  string volume_handle = 2;
+}
+
+message NodeTemplate {
+  reserved 14;
+  reserved 17;
+  reserved 8 to 9;
+  // Name of the instance.
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}
+  // If not set, default is used: {instance_group.id}-{instance.short_id}
+  // It may also contain another placeholders, see metadata doc for full list.
+  string name = 13 [(length) = "<=128"];
+
+  // these labels will be assigned to compute nodes (instances), created by the nodegroup
+  map<string, string> labels = 15 [
+    (size) = "<=32",
+    (length) = "<=128",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // ID of the hardware platform configuration for the node.
+  string platform_id = 1;
+
+  // Computing resources of the node such as the amount of memory and number of cores.
+  ResourcesSpec resources_spec = 2;
+
+  // Specification for the boot disk that will be attached to the node.
+  DiskSpec boot_disk_spec = 3;
+
+  // The metadata as `key:value` pairs assigned to this instance template. Only SSH keys are supported as metadata.
+  //
+  // For more information, see [Connecting to a node over SSH](/docs/managed-kubernetes/operations/node-connect-ssh).
+  map<string, string> metadata = 4 [
+    (size) = "<=64",
+    (length) = "<=131072",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Specification for the create network interfaces for the node group compute instances.
+  // Deprecated, please use network_interface_specs.
+  NodeAddressSpec v4_address_spec = 5 [deprecated = true];
+
+  // Scheduling policy configuration.
+  SchedulingPolicy scheduling_policy = 6;
+
+  // New api, to specify network interfaces for the node group compute instances.
+  // Can not be used together with 'v4_address_spec'
+  repeated NetworkInterfaceSpec network_interface_specs = 7;
+
+  PlacementPolicy placement_policy = 10;
+
+  message NetworkSettings {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      STANDARD = 1;
+      SOFTWARE_ACCELERATED = 2;
+      // unsupported yet, commented for possible future utilization.
+      //HARDWARE_ACCELERATED = 3;
+    }
+
+    Type type = 1 [(required) = true];
+  }
+
+  // this parameter allows to specify type of network acceleration used on nodes (instances)
+  NetworkSettings network_settings = 11;
+
+  message ContainerRuntimeSettings {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      DOCKER = 1;
+      CONTAINERD = 2;
+    }
+
+    Type type = 1 [(required) = true];
+  }
+
+  ContainerRuntimeSettings container_runtime_settings = 12;
+
+  message ContainerNetworkSettings {
+    int64 pod_mtu = 1;
+  }
+
+  ContainerNetworkSettings container_network_settings = 16;
+
+  // GPU settings
+  GpuSettings gpu_settings = 18;
+}
+
+message GpuSettings {
+  enum GpuEnvironment {
+    // Use one of the values below, depending on the default for the specific Cloud installation.
+    GPU_ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Use a node image with the pre-installed GPU toolkit, drivers and CUDA.
+    RUNC_DRIVERS_CUDA = 1;
+
+    // Use a node image with the pre-installed GPU toolkit but without drivers.
+    // You should install drivers on a node yourself in that case.
+    // There are tools to help you to do that, for example gpu-operator.
+    RUNC = 2;
+  }
+
+  // GPU cluster id, that mk8s node will join.
+  string gpu_cluster_id = 1;
+
+  // GPU environment configured on node.
+  GpuEnvironment gpu_environment = 2;
+}
+
+message NetworkInterfaceSpec {
+  // IDs of the subnets.
+  repeated string subnet_ids = 2;
+
+  // Primary IPv4 address that is assigned to the instance for this network interface.
+  NodeAddressSpec primary_v4_address_spec = 3;
+
+  // Primary IPv6 address that is assigned to the instance for this network interface.
+  NodeAddressSpec primary_v6_address_spec = 4;
+
+  // IDs of security groups.
+  repeated string security_group_ids = 5;
+}
+
+message NodeAddressSpec {
+  // One-to-one NAT configuration. Setting up one-to-one NAT ensures that public IP addresses are assigned to nodes, and therefore internet is accessible for all nodes of the node group. If the field is not set, NAT will not be set up.
+  OneToOneNatSpec one_to_one_nat_spec = 1;
+
+  // Internal DNS configuration.
+  repeated DnsRecordSpec dns_record_specs = 2;
+}
+
+message DnsRecordSpec {
+  // FQDN (required).
+  string fqdn = 1 [(required) = true];
+  // DNS zone id (optional, if not set, private zone is used).
+  string dns_zone_id = 2;
+  // DNS record ttl, values in 0-86400 (optional).
+  int64 ttl = 3 [(value) = "0-86400"];
+  // When set to true, also create PTR DNS record (optional).
+  bool ptr = 4;
+}
+
+message OneToOneNatSpec {
+  // IP version for the public IP address.
+  IpVersion ip_version = 1;
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+
+  // IPv4 address, for example 192.168.0.0.
+  IPV4 = 1;
+
+  // IPv6 address, not available yet.
+  IPV6 = 2;
+}
+
+message ResourcesSpec {
+  // Amount of memory available to the node, specified in bytes.
+  int64 memory = 1 [(value) = ">=0"];
+
+  // Number of cores available to the node.
+  int64 cores = 2 [(value) = ">=0"];
+
+  // Baseline level of CPU performance with the possibility to burst performance above that baseline level.
+  // This field sets baseline performance for each core.
+  int64 core_fraction = 3 [(value) = "0-100"];
+
+  // Number of GPUs available to the node.
+  int64 gpus = 4 [(value) = ">=0"];
+}
+
+message DiskSpec {
+  // ID of the disk type.
+  string disk_type_id = 1 [(pattern) = "|network-ssd|network-hdd|network-ssd-nonreplicated|network-ssd-io-m3"];
+
+  // Size of the disk, specified in bytes.
+  int64 disk_size = 2 [(value) = "0-4398046511104"];
+}
+
+message SchedulingPolicy {
+  // True for preemptible compute instances. Default value is false. Preemptible compute instances are stopped at least once every 24 hours, and can be stopped at any time
+  // if their resources are needed by Compute.
+  // For more information, see [Preemptible Virtual Machines](/docs/compute/concepts/preemptible-vm).
+  bool preemptible = 1;
+}
+
+message PlacementPolicy {
+  // Identifier of placement group
+  string placement_group_id = 1;
+}

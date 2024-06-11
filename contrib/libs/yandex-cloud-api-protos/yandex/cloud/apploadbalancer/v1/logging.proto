@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.apploadbalancer.v1;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+import "google/rpc/code.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/apploadbalancer/v1;apploadbalancer";
+option java_package = "yandex.cloud.api.apploadbalancer.v1";
+
+enum HttpCodeInterval {
+  HTTP_CODE_INTERVAL_UNSPECIFIED = 0;
+  HTTP_1XX = 1;
+  HTTP_2XX = 2;
+  HTTP_3XX = 3;
+  HTTP_4XX = 4;
+  HTTP_5XX = 5;
+  HTTP_ALL = 6;
+}
+
+// LogDiscardRule discards a fraction of logs with certain codes.
+// If neither codes or intervals are provided, rule applies to all logs.
+message LogDiscardRule {
+  // HTTP codes that should be discarded.
+  repeated int64 http_codes = 1 [(value)="100-599"];
+
+  // Groups of HTTP codes like 4xx that should be discarded.
+  repeated HttpCodeInterval http_code_intervals = 2;
+
+  // GRPC codes that should be discarded
+  repeated google.rpc.Code grpc_codes = 3;
+
+  // Percent of logs to be discarded: 0 - keep all, 100 or unset - discard all
+  google.protobuf.Int64Value discard_percent = 4 [(value)="0-100"];
+}
+
+message LogOptions {
+  // Cloud Logging log group ID to store access logs.
+  // If not set then logs will be stored in default log group for the folder
+  // where load balancer located.
+  string log_group_id = 1;
+
+  // ordered list of rules, first matching rule applies
+  repeated LogDiscardRule discard_rules = 2;
+
+  // Do not send logs to Cloud Logging log group.
+  bool disable = 3;
+}

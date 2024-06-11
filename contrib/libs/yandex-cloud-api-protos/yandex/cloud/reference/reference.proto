@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package yandex.cloud.reference;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/reference;reference";
+option java_package = "yandex.cloud.api.reference";
+
+message Reference {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    MANAGED_BY = 1;
+    USED_BY = 2;
+  }
+  Referrer referrer = 1;
+  Type type = 2;
+}
+
+message Referrer {
+  // * `type = compute.instance, id = <instance id>`
+  // * `type = compute.instanceGroup, id = <instanceGroup id>`
+  // * `type = loadbalancer.networkLoadBalancer, id = <networkLoadBalancer id>`
+  // * `type = managed-kubernetes.cluster, id = <cluster id>`
+  // * `type = managed-mysql.cluster, id = <cluster id>`
+  string type = 1;
+  string id = 2;
+}

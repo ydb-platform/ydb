@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package yandex.cloud.ydb.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ydb/v1;ydb";
+option java_package = "yandex.cloud.api.ydb.v1";
+
+message ResourcePreset {
+  string id = 1;
+  int64 cores = 2;
+  int64 memory = 3;
+}

@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/clickhouse/v1/database.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+// A set of methods for managing ClickHouse Database resources.
+// NOTE: these methods are available only if database management through SQL is disabled.
+service DatabaseService {
+  // Returns the specified ClickHouse Database resource.
+  //
+  // To get the list of available ClickHouse Database resources, make a [List] request.
+  rpc Get (GetDatabaseRequest) returns (Database) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/databases/{database_name}" };
+  }
+
+  // Retrieves the list of ClickHouse Database resources in the specified cluster.
+  rpc List (ListDatabasesRequest) returns (ListDatabasesResponse) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/databases" };
+  }
+
+  // Creates a new ClickHouse database in the specified cluster.
+  rpc Create (CreateDatabaseRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-clickhouse/v1/clusters/{cluster_id}/databases" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDatabaseMetadata"
+      response: "Database"
+    };
+  }
+
+  // Deletes the specified ClickHouse database.
+  rpc Delete (DeleteDatabaseRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-clickhouse/v1/clusters/{cluster_id}/databases/{database_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDatabaseMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetDatabaseRequest {
+  // ID of the ClickHouse cluster that the database belongs to.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the ClickHouse Database resource to return.
+  // To get the name of the database, use a [DatabaseService.List] request.
+  string database_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message ListDatabasesRequest {
+  // ID of the ClickHouse cluster to list databases in.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListDatabasesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token.  to get the next page of results, set [page_token] to the [ListDatabasesResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListDatabasesResponse {
+  // List of ClickHouse databases.
+  repeated Database databases = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListDatabasesRequest.page_size], use the [next_page_token] as the value
+  // for the [ListDatabasesRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateDatabaseRequest {
+  // ID of the ClickHouse cluster to create a database in.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Configuration of the database to create.
+  DatabaseSpec database_spec = 2 [(required) = true];
+}
+
+message CreateDatabaseMetadata {
+  // ID of the ClickHouse cluster where a database is being created.
+  string cluster_id = 1;
+
+  // Name of the ClickHouse database that is being created.
+  string database_name = 2;
+}
+
+message DeleteDatabaseRequest {
+  // ID of the ClickHouse cluster to delete a database in.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the database to delete.
+  // To get the name of the database, use a [DatabaseService.List] request.
+  string database_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message DeleteDatabaseMetadata {
+  // ID of the ClickHouse cluster where a database is being deleted.
+  string cluster_id = 1;
+
+  // Name of the ClickHouse database that is being deleted.
+  string database_name = 2;
+}

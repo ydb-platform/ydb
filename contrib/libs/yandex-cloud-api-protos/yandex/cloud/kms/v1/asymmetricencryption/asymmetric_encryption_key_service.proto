@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+package yandex.cloud.kms.v1.asymmetricencryption;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/kms/v1/asymmetricencryption/asymmetric_encryption_key.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/kms/v1/asymmetricencryption;kms";
+option java_package = "yandex.cloud.api.kms.v1";
+
+// Set of methods for managing asymmetric KMS keys.
+service AsymmetricEncryptionKeyService {
+  // control plane
+  // Creates an asymmetric KMS key in the specified folder.
+  rpc Create (CreateAsymmetricEncryptionKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/kms/v1/asymmetricEncryptionKeys" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateAsymmetricEncryptionKeyMetadata"
+      response: "AsymmetricEncryptionKey"
+    };
+  }
+
+  // Returns the specified asymmetric KMS key.
+  //
+  //  To get the list of available asymmetric KMS keys, make a [SymmetricKeyService.List] request.
+  rpc Get (GetAsymmetricEncryptionKeyRequest) returns (AsymmetricEncryptionKey) {
+    option (google.api.http) = { get: "/kms/v1/asymmetricEncryptionKeys/{key_id}" };
+  }
+
+  // Returns the list of asymmetric KMS keys in the specified folder.
+  rpc List (ListAsymmetricEncryptionKeysRequest) returns (ListAsymmetricEncryptionKeysResponse) {
+    option (google.api.http) = { get: "/kms/v1/asymmetricEncryptionKeys" };
+  }
+
+  // Updates the specified asymmetric KMS key.
+  rpc Update (UpdateAsymmetricEncryptionKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/kms/v1/asymmetricEncryptionKeys/{key_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAsymmetricEncryptionKeyMetadata"
+      response: "AsymmetricEncryptionKey"
+    };
+  }
+
+  // Deletes the specified asymmetric KMS key. This action also automatically schedules
+  // the destruction of all of the key's versions in 72 hours.
+  //
+  // The key and its versions appear absent in [AsymmetricEncryptionKeyService.Get] and [AsymmetricEncryptionKeyService.List]
+  // requests, but can be restored within 72 hours with a request to tech support.
+  rpc Delete (DeleteAsymmetricEncryptionKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/kms/v1/asymmetricEncryptionKeys/{key_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteAsymmetricEncryptionKeyMetadata"
+      response: "AsymmetricEncryptionKey"
+    };
+  }
+
+  // Lists operations for the specified asymmetric KMS key.
+  rpc ListOperations (ListAsymmetricEncryptionKeyOperationsRequest) returns (ListAsymmetricEncryptionKeyOperationsResponse) {
+    option (google.api.http) = { get: "/kms/v1/asymmetricEncryptionKeys/{key_id}/operations" };
+  }
+
+  // Lists existing access bindings for the specified key.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/kms/v1/asymmetricEncryptionKeys/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the key.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/kms/v1/asymmetricEncryptionKeys/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified key.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/kms/v1/asymmetricEncryptionKeys/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message CreateAsymmetricEncryptionKeyRequest {
+  // ID of the folder to create a asymmetric KMS key in.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the key.
+  string name = 2 [(length) = "<=100"];
+
+  // Description of the key.
+  string description = 3 [(length) = "<=1024"];
+
+  // Custom labels for the asymmetric KMS key as `key:value` pairs. Maximum 64 per key.
+  // For example, `"project": "mvp"` or `"source": "dictionary"`.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Asymmetric encryption algorithm.
+  AsymmetricEncryptionAlgorithm encryption_algorithm = 5;
+
+  // Flag that inhibits deletion of the symmetric KMS key
+  bool deletion_protection = 6;
+}
+
+message CreateAsymmetricEncryptionKeyMetadata {
+  // ID of the key being created.
+  string key_id = 1;
+}
+
+message GetAsymmetricEncryptionKeyRequest {
+  // ID of the asymmetric KMS key to return.
+  // To get the ID of an asymmetric KMS key use a [AsymmetricEncryptionKeyService.List] request.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListAsymmetricEncryptionKeysRequest {
+  // ID of the folder to list asymmetric KMS keys in.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListAsymmetricEncryptionKeysResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListAsymmetricEncryptionKeysResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAsymmetricEncryptionKeysResponse {
+  // List of asymmetric KMS keys in the specified folder.
+  repeated AsymmetricEncryptionKey keys = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number
+  // of results is greater than the specified [ListAsymmetricEncryptionKeysRequest.page_size], use
+  // the [next_page_token] as the value for the [ListAsymmetricEncryptionKeysRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message UpdateAsymmetricEncryptionKeyRequest {
+  // ID of the asymmetric KMS key to update.
+  // To get the ID of a asymmetric KMS key use a [AsymmetricEncryptionKeyService.List] request.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which attributes of the asymmetric KMS key are going to be updated.
+  google.protobuf.FieldMask update_mask = 2 [(required) = true];
+
+  // New name for the asymmetric KMS key.
+  string name = 3 [(length) = "<=100"];
+
+  // New description for the asymmetric KMS key.
+  string description = 4 [(length) = "<=1024"];
+
+  // New status for the asymmetric KMS key.
+  // Using the [AsymmetricEncryptionKeyService.Update] method you can only set ACTIVE or INACTIVE status.
+  AsymmetricEncryptionKey.Status status = 5;
+
+  // Custom labels for the asymmetric KMS key as `key:value` pairs. Maximum 64 per key.
+  map<string, string> labels = 6 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Flag that inhibits deletion of the asymmetric KMS key
+  bool deletion_protection = 7;
+}
+
+message UpdateAsymmetricEncryptionKeyMetadata {
+  // ID of the key being updated.
+  string key_id = 1;
+}
+
+message DeleteAsymmetricEncryptionKeyRequest {
+  // ID of the key to be deleted.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteAsymmetricEncryptionKeyMetadata {
+  // ID of the key being deleted.
+  string key_id = 1;
+}
+
+message ListAsymmetricEncryptionKeyOperationsRequest {
+  // ID of the symmetric KMS key to get operations for.
+  //
+  // To get the key ID, use a [AsymmetricKeyEncryptionService.List] request.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size], the service returns a [ListAsymmetricEncryptionKeyOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListAsymmetricKeyOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAsymmetricEncryptionKeyOperationsResponse {
+  // List of operations for the specified key.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListAsymmetricEncryptionKeyOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListAsymmetricEncryptionKeyOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

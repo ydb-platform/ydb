@@ -1,0 +1,257 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/monitoring/v3/dashboard.proto";
+import "yandex/cloud/monitoring/v3/parametrization.proto";
+import "yandex/cloud/monitoring/v3/widget.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// A set of methods for managing dashboards.
+service DashboardService {
+  // Returns the specified dashboard.
+  rpc Get(GetDashboardRequest) returns (Dashboard) {
+    option (google.api.http) = {get: "/monitoring/v3/dashboards/{dashboard_id}"};
+  }
+
+  // Retrieves the list of dashboards in the specified folder.
+  rpc List(ListDashboardsRequest) returns (ListDashboardsResponse) {
+    option (google.api.http) = {get: "/monitoring/v3/dashboards"};
+  }
+
+  // Creates a new dashboard in the specified folder.
+  rpc Create(CreateDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/monitoring/v3/dashboards"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDashboardMetadata"
+      response: "Dashboard"
+    };
+  }
+
+  // Updates the specified dashboard.
+  rpc Update(UpdateDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/monitoring/v3/dashboards/{dashboard_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateDashboardMetadata"
+      response: "Dashboard"
+    };
+  }
+
+  // Deletes the specified dashboard.
+  rpc Delete(DeleteDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/monitoring/v3/dashboards/{dashboard_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDashboardMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified dashboard.
+  rpc ListOperations(ListDashboardOperationsRequest) returns (ListDashboardOperationsResponse) {
+    option (google.api.http) = {get: "/monitoring/v3/dashboards/{dashboard_id}/operations"};
+  }
+}
+
+message GetDashboardRequest {
+  // Required. Dashboard ID.
+  string dashboard_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDashboardsRequest {
+  reserved 3 to 18;
+  // Container id
+  oneof container {
+    // Required. Folder ID.
+    string folder_id = 2 [
+      (required) = true,
+      (length) = "<=50"
+    ];
+  }
+
+  // The maximum number of dashboards to return.
+  // If unspecified, at most 100 dashboards will be returned.
+  // The maximum value is 1000; values above 1000 will be coerced to 1000.
+  int64 page_size = 19 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListDashboardResponse.next_page_token] returned by a previous list request.
+  string page_token = 20 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on the [Dashboard.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example: name="abc"
+  string filter = 21 [(length) = "<=1000"];
+}
+
+message ListDashboardsResponse {
+  // List of dashboards.
+  repeated Dashboard dashboards = 1;
+
+  // Token to retrieve the next page of results, or empty if there are no more results in the list.
+  string next_page_token = 2;
+}
+
+message CreateDashboardRequest {
+  reserved 3 to 18;
+  // Container id
+  oneof container {
+    // Required. Folder ID.
+    string folder_id = 2 [
+      (required) = true,
+      (length) = "<=50"
+    ];
+  }
+
+  // Required. Dashboard name.
+  string name = 19 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Dashboard description.
+  string description = 20 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 21 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Dashboard title.
+  string title = 22;
+
+  // List of dashboard widgets.
+  repeated Widget widgets = 23;
+
+  // Dashboard parametrization.
+  Parametrization parametrization = 24;
+
+  reserved 25;
+
+  // Entity that controls dashboard
+  // Must match the regular expression "[\w \-]{1,100}"
+  string managed_by = 26;
+
+  // Information about entity that controls dashboard
+  // Must be valid URI
+  string managed_link = 27;
+}
+
+message CreateDashboardMetadata {
+  // Dashboard ID.
+  string dashboard_id = 1;
+}
+
+message UpdateDashboardRequest {
+  // Required. Dashboard ID.
+  string dashboard_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Required. Dashboard name.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Dashboard description.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Dashboard title.
+  string title = 5;
+
+  // List of dashboard widgets.
+  repeated Widget widgets = 6;
+
+  // Dashboard parametrization.
+  Parametrization parametrization = 7;
+
+  // The current etag of the dashboard.
+  string etag = 8;
+
+  reserved 9 to 25;
+
+  // Entity that controls dashboard
+  // Must match the regular expression "[\w \-]{1,100}"
+  string managed_by = 26;
+
+  // Information about entity that controls dashboard
+  // Must be valid URI
+  string managed_link = 27;
+}
+
+message UpdateDashboardMetadata {
+  // Dashboard ID.
+  string dashboard_id = 1;
+}
+
+message DeleteDashboardRequest {
+  // Required. Dashboard ID.
+  string dashboard_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The current etag of the dashboard.
+  string etag = 2;
+}
+
+message DeleteDashboardMetadata {
+  // Dashboard ID.
+  string dashboard_id = 1;
+}
+
+message ListDashboardOperationsRequest {
+  // ID of the dashboard to list operations for.
+  string dashboard_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListDashboardOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListDashboardOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListDashboardOperationsResponse {
+  // List of operations for the specified dashboard.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListDashboardOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListDashboardOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

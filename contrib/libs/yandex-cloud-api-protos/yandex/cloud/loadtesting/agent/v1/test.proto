@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+
+message Test {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATED = 1;
+    INITIATED = 2;
+    PREPARING = 3;
+    RUNNING = 4;
+    FINISHING = 5;
+    DONE = 6;
+    POST_PROCESSING = 7;
+    FAILED = 8;
+    STOPPING = 9;
+    STOPPED = 10;
+    AUTOSTOPPED = 11;
+    WAITING = 12;
+    DELETING = 13;
+    LOST = 14;
+  }
+
+  enum Generator {
+    GENERATOR_UNSPECIFIED = 0;
+    PANDORA = 1;
+    PHANTOM = 2;
+    JMETER = 3;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+
+  Generator generator = 10;
+
+  // AgentInstance ID where Test is running.
+  string agent_instance_id = 11;
+
+  // Target VM.
+  string target_address = 12;
+  int64 target_port = 13;
+
+  // Version of object under test.
+  string target_version = 14;
+
+  // Test details
+  string config = 15;
+  oneof ammo {
+    string ammo_urls = 16;
+    string ammo_id = 17;
+  }
+  repeated string cases = 18;
+
+  Status status = 19;
+  repeated string errors = 20;
+  bool favorite = 21;
+}

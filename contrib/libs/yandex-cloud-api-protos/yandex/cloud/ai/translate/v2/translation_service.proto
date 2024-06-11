@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.translate.v2;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/ai/translate/v2/translation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/translate/v2;translate";
+option java_package = "yandex.cloud.api.ai.translate.v2";
+
+// A set of methods for the Translate service.
+service TranslationService {
+  // Translates the text to the specified language.
+  rpc Translate (TranslateRequest) returns (TranslateResponse) {
+    option (google.api.http) = { post: "/translate/v2/translate" body: "*" };
+  }
+
+  // Detects the language of the text.
+  rpc DetectLanguage (DetectLanguageRequest) returns (DetectLanguageResponse) {
+    option (google.api.http) = { post: "/translate/v2/detect" body: "*" };
+  }
+
+  // Retrieves the list of supported languages.
+  rpc ListLanguages (ListLanguagesRequest) returns (ListLanguagesResponse) {
+    option (google.api.http) = { post: "/translate/v2/languages" body: "*" };
+  }
+}
+
+message TranslateRequest {
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+
+    // Text without markup. Default value.
+    PLAIN_TEXT = 1;
+
+    // Text in the HTML format.
+    HTML = 2;
+  }
+
+  // The text language to translate from.
+  // Specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` ru ``).
+  //
+  // Required for translating with glossary.
+  string source_language_code = 1 [(length) = "<=3"];
+
+  // The target language to translate the text.
+  // Specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` en ``).
+  string target_language_code = 2 [(required) = true, (length) = "<=3"];
+
+  // Format of the text.
+  Format format = 3;
+
+  // Array of the strings to translate.
+  // The maximum total length of all strings is 10000 characters.
+  repeated string texts = 4 [(size) = ">0"];
+
+  // ID of the folder to which you have access.
+  // Required for authorization with a user account (see [yandex.cloud.iam.v1.UserAccount] resource).
+  // Don't specify this field if you make the request on behalf of a service account.
+  string folder_id = 5 [(length) = "<=50"];
+
+  // Do not specify this field, custom models are not supported yet.
+  string model = 6 [(length) = "<=50"];
+
+  // Glossary to be applied for the translation. For more information, see [Glossaries](/docs/translate/concepts/glossary).
+  TranslateGlossaryConfig glossary_config = 7;
+  // use speller
+  bool speller = 8;
+}
+
+message TranslateGlossaryConfig {
+  oneof glossary_source {
+    option (exactly_one) = true;
+    // Pass glossary data in the request. Currently, only this way to pass glossary is supported.
+    GlossaryData glossary_data = 1;
+  }
+}
+
+message GlossaryData {
+  // Array of text pairs.
+  //
+  // The maximum total length of all source texts is 10000 characters.
+  // The maximum total length of all translated texts is 10000 characters.
+  repeated GlossaryPair glossary_pairs = 1 [(size) = "1-50"];
+}
+
+message GlossaryPair {
+  // Text in the source language.
+  string source_text = 1 [(required) = true];
+
+  // Text in the target language.
+  string translated_text = 2 [(required) = true];
+
+  bool exact = 3;
+}
+
+message TranslateResponse {
+  // Array of the translations.
+  repeated TranslatedText translations = 1;
+}
+
+message DetectLanguageRequest {
+  // The text to detect the language for.
+  string text = 1 [(required) = true, (length) = "<=1000"];
+
+  // List of the most likely languages. These languages will be given preference when detecting the text language.
+  // Specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` ru ``).
+  //
+  // To get the list of supported languages, use a [TranslationService.ListLanguages] request.
+  repeated string language_code_hints = 2 [(size) = "<=10", (length) = "<=3"];
+
+  // ID of the folder to which you have access.
+  // Required for authorization with a user account (see [yandex.cloud.iam.v1.UserAccount] resource).
+  // Don't specify this field if you make the request on behalf of a service account.
+  string folder_id = 3 [(length) = "<=50"];
+}
+
+message DetectLanguageResponse {
+  // The text language in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` ru ``).
+  //
+  // To get the language name, use a [TranslationService.ListLanguages] request.
+  string language_code = 1;
+}
+
+message ListLanguagesRequest {
+  // ID of the folder to which you have access.
+  // Required for authorization with a user account (see [yandex.cloud.iam.v1.UserAccount] resource).
+  // Don't specify this field if you make the request on behalf of a service account.
+  string folder_id = 1 [(length) = "<=50"];
+}
+
+message ListLanguagesResponse {
+  // List of supported languages.
+  repeated Language languages = 1;
+}

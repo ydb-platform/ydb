@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package speechkit.tts.v3;
+import "yandex/cloud/ai/tts/v3/tts.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tts/v3;tts";
+option java_package = "yandex.cloud.api.ai.tts.v3";
+
+// A set of methods for voice synthesis.
+service Synthesizer {
+    // Synthesizing text into speech.
+    rpc UtteranceSynthesis (UtteranceSynthesisRequest) returns (stream UtteranceSynthesisResponse) {
+        option (google.api.http) = {post: "/tts/v3/utteranceSynthesis" body: "*"};
+    }
+}

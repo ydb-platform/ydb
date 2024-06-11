@@ -1,0 +1,704 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1.instancegroup;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/instancegroup/instance_group.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1/instancegroup;instancegroup";
+option java_package = "yandex.cloud.api.compute.v1.instancegroup";
+
+// A set of methods for managing InstanceGroup resources.
+service InstanceGroupService {
+  // Returns the specified InstanceGroup resource.
+  //
+  // To get the list of available InstanceGroup resources, make a [List] request.
+  rpc Get(GetInstanceGroupRequest) returns (InstanceGroup) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups/{instance_group_id}"};
+  }
+
+  // Retrieves the list of InstanceGroup resources in the specified folder.
+  rpc List(ListInstanceGroupsRequest) returns (ListInstanceGroupsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups"};
+  }
+
+  // Creates an instance group in the specified folder.
+  // This method starts an operation that can be cancelled by another operation.
+  rpc Create(CreateInstanceGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Creates an instance group in the specified folder from a YAML file.
+  // This method starts an operation that can be cancelled by another operation.
+  rpc CreateFromYaml(CreateInstanceGroupFromYamlRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups:yaml"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Updates the specified instance group.
+  // This method starts an operation that can be cancelled by another operation.
+  rpc Update(UpdateInstanceGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/instanceGroups/{instance_group_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Updates the specified instance group from a YAML file.
+  // This method starts an operation that can be cancelled by another operation.
+  rpc UpdateFromYaml(UpdateInstanceGroupFromYamlRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/instanceGroups/{instance_group_id}:yaml"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Stops the specified instance group.
+  rpc Stop(StopInstanceGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/instanceGroups/{instance_group_id}:stop"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Performs rolling restart of specified instances for the specified instance group.
+  // Rolling restart does restart of instances respecting all group policies.
+  rpc RollingRestart(RollingRestartRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{instance_group_id}:rollingRestart"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RollingRestartMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Performs rolling recreate of specified instances for the specified instance group.
+  // Rolling recreate does recreate of instance VMs respecting all group policies.
+  rpc RollingRecreate(RollingRecreateRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{instance_group_id}:rollingRecreate"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RollingRecreateMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Starts the specified instance group.
+  rpc Start(StartInstanceGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/instanceGroups/{instance_group_id}:start"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Deletes the specified instance group.
+  rpc Delete(DeleteInstanceGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/compute/v1/instanceGroups/{instance_group_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteInstanceGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists instances for the specified instance group.
+  rpc ListInstances(ListInstanceGroupInstancesRequest) returns (ListInstanceGroupInstancesResponse) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups/{instance_group_id}/instances"};
+  }
+
+  // Delete instances from the instance group.
+  rpc DeleteInstances(DeleteInstancesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteInstancesMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Stop instances from the instance group.
+  rpc StopInstances(StopInstancesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopInstancesMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Lists operations for the specified instance group.
+  rpc ListOperations(ListInstanceGroupOperationsRequest) returns (ListInstanceGroupOperationsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups/{instance_group_id}/operations"};
+  }
+
+  // Lists logs for the specified instance group.
+  rpc ListLogRecords(ListInstanceGroupLogRecordsRequest) returns (ListInstanceGroupLogRecordsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups/{instance_group_id}:logs"};
+  }
+
+  // Lists existing access bindings for the specified instance group.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instanceGroups/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the specified instance group.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified instance group.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Resumes all processes regarding management of the specified instance group,
+  // i.e. scaling, checking instances' health, auto-healing and updating them.
+  rpc ResumeProcesses(ResumeInstanceGroupProcessesRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{instance_group_id}:resumeProcesses"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResumeInstanceGroupProcessMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  // Pauses all processes regarding management of the specified instance group,
+  // i.e. scaling, checking instances' health, auto-healing and updating them. Running instances are not stopped.
+  rpc PauseProcesses(PauseInstanceGroupProcessesRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instanceGroups/{instance_group_id}:pauseProcesses"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "PauseInstanceGroupProcessMetadata"
+      response: "InstanceGroup"
+    };
+  }
+}
+
+enum InstanceGroupView {
+
+  // Doesn't include the metadata of the instance template in the server response.
+  BASIC = 0;
+
+  // Returns the metadata of the instance template in the server response.
+  FULL = 1;
+}
+
+message ResumeInstanceGroupProcessesRequest {
+  // ID of the instance group to resume processes in.
+  //
+  // The instance group must have a `PAUSED` status ([InstanceGroup.status]).
+  //
+  // To get the instance group ID, make a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [(length) = "<=50"];
+}
+
+message ResumeInstanceGroupProcessMetadata {
+  // ID of the instance group that processes are being resumed in.
+  string instance_group_id = 1;
+}
+
+message PauseInstanceGroupProcessesRequest {
+  // ID of the instance group to pause processes in.
+  //
+  // The instance group must have an `ACTIVE` status ([InstanceGroup.status]).
+  //
+  // To get the instance group ID, make a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [(length) = "<=50"];
+}
+
+message PauseInstanceGroupProcessMetadata {
+  // ID of the instance group that processes are being paused in.
+  string instance_group_id = 1;
+}
+
+message GetInstanceGroupRequest {
+  // ID of the InstanceGroup resource to return.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Defines which information about the Instance template should be returned in the server response.
+  InstanceGroupView view = 2;
+}
+
+message CreateInstanceGroupRequest {
+  reserved 2;
+  // ID of the folder to create an instance group in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // Name of the instance group.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the instance group.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Instance template that the instance group belongs to.
+  InstanceTemplate instance_template = 6 [(required) = true];
+
+  // [Scaling policy](/docs/compute/concepts/instance-groups/scale) of the instance group.
+  ScalePolicy scale_policy = 7 [(required) = true];
+
+  // Deployment policy of the instance group.
+  DeployPolicy deploy_policy = 8 [(required) = true];
+
+  // Allocation policy of the instance group by zones and regions.
+  AllocationPolicy allocation_policy = 9 [(required) = true];
+
+  // Settings for balancing load between instances via [Network Load Balancer](/docs/network-load-balancer/concepts)
+  // (OSI model layer 3).
+  //
+  // If specified, a Network Load Balancer target group containing all instances from the instance group will be created
+  // and attributed to the instance group.
+  LoadBalancerSpec load_balancer_spec = 10;
+
+  // Health checking specification. For more information, see [Health check](/docs/network-load-balancer/concepts/health-check).
+  HealthChecksSpec health_checks_spec = 11;
+
+  // ID of the service account. The service account will be used for all API calls
+  // made by the Instance Groups component on behalf of the user (for example, creating instances, adding them to load balancer target group, etc.). For more information, see [Service accounts](/docs/iam/concepts/users/service-accounts).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 12;
+
+  repeated Variable variables = 13;
+
+  // Flag prohibiting deletion of the instance group.
+  //
+  // Allowed values:</br>- `false`: The instance group can be deleted.</br>- `true`: The instance group cannot be deleted.
+  //
+  // The default is `false`.
+  bool deletion_protection = 14;
+
+  // Settings for balancing load between instances via [Application Load Balancer](/docs/application-load-balancer/concepts)
+  // (OSI model layer 7).
+  //
+  // If specified, an Application Load Balancer target group containing all instances from the instance group will be created
+  // and attributed to the instance group.
+  ApplicationLoadBalancerSpec application_load_balancer_spec = 15;
+}
+
+message CreateInstanceGroupFromYamlRequest {
+  // ID of the folder to create an instance group in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // [InstanceGroupService.Create] request in YAML format.
+  string instance_group_yaml = 2 [
+    (required) = true,
+    (length) = "<=1048576"
+  ];
+}
+
+message CreateInstanceGroupMetadata {
+  // ID of the instance group that is being created.
+  string instance_group_id = 1 [(length) = "<=50"];
+}
+
+message UpdateInstanceGroupRequest {
+  reserved 13;
+  reserved 10;
+  // ID of the instance group to update.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the InstanceGroup resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the instance group.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the instance group.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // The existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Instance template that the instance group belongs to.
+  InstanceTemplate instance_template = 6 [(required) = true];
+
+  // [Scaling policy](/docs/compute/concepts/instance-groups/scale) of the instance group.
+  ScalePolicy scale_policy = 7 [(required) = true];
+
+  // Deployment policy of the instance group.
+  DeployPolicy deploy_policy = 8 [(required) = true];
+
+  // Allocation policy of the instance group by zones and regions.
+  AllocationPolicy allocation_policy = 9 [(required) = true];
+
+  // Health checking specification. For more information, see [Health check](/docs/network-load-balancer/concepts/health-check).
+  HealthChecksSpec health_checks_spec = 11;
+
+  // ID of the service account. The service account will be used for all API calls
+  // made by the Instance Groups component on behalf of the user (for example, creating instances, adding them to load balancer target group, etc.). For more information, see [Service accounts](/docs/iam/concepts/users/service-accounts).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 12;
+
+  // Settings for balancing load between instances via [Network Load Balancer](/docs/network-load-balancer/concepts)
+  // (OSI model layer 3).
+  LoadBalancerSpec load_balancer_spec = 14;
+
+  repeated Variable variables = 15;
+
+  // Flag that inhibits deletion of the instance group
+  bool deletion_protection = 16;
+
+  // Settings for balancing load between instances via [Application Load Balancer](/docs/application-load-balancer/concepts)
+  // (OSI model layer 7).
+  ApplicationLoadBalancerSpec application_load_balancer_spec = 17;
+}
+
+message UpdateInstanceGroupFromYamlRequest {
+  // ID of the instance group to update.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // [InstanceGroupService.Update] request in YAML format.
+  string instance_group_yaml = 2 [
+    (required) = true,
+    (length) = "<=1048576"
+  ];
+}
+
+message UpdateInstanceGroupMetadata {
+  // ID of the InstanceGroup resource that is being updated.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1;
+}
+
+message StartInstanceGroupRequest {
+  // ID of the instance group to start.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StartInstanceGroupMetadata {
+  // ID of the InstanceGroup resource that is being started.
+  string instance_group_id = 1;
+}
+
+message StopInstanceGroupRequest {
+  // ID of the instance group to stop.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StopInstanceGroupMetadata {
+  // ID of the InstanceGroup resource that is being stopped.
+  string instance_group_id = 1;
+}
+
+message RollingRestartRequest {
+  // ID of the instance group to restart instances in.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // IDs of managed instances in the group to restart
+  // To get instance IDs, use a [InstanceGroupService.ListInstances] request.
+  repeated string managed_instance_ids = 2;
+}
+
+message RollingRestartMetadata {
+  // ID of the InstanceGroup resource that is being rolling restarted.
+  string instance_group_id = 1;
+}
+
+message RollingRecreateRequest {
+  // ID of the instance group to recreate instances in.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // IDs of managed instances in the group to recreate
+  // To get instance IDs, use a [InstanceGroupService.ListInstances] request.
+  repeated string managed_instance_ids = 2;
+}
+
+message RollingRecreateMetadata {
+  // ID of the InstanceGroup resource that is being rolling recreated.
+  string instance_group_id = 1;
+}
+
+message DeleteInstanceGroupRequest {
+  // ID of the instance group to delete.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteInstanceGroupMetadata {
+  // ID of the instance group that is being deleted.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1;
+}
+
+message DeleteInstancesMetadata {
+  // ID of the instance group that the instances are being deleted from.
+  string instance_group_id = 1;
+}
+
+message StopInstancesMetadata {
+  // ID of the instance group that the instances are being stopped from.
+  string instance_group_id = 1;
+}
+
+message ListInstanceGroupsRequest {
+  // ID of the folder to list instance groups in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListInstanceGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListInstanceGroupsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [InstanceGroup.name] field.
+  string filter = 4 [(length) = "<=1000"];
+
+  // Defines which information about the Instance template should be returned in the server response.
+  InstanceGroupView view = 5;
+}
+
+message ListInstanceGroupsResponse {
+  // Lists instance groups for the specified folder.
+  repeated InstanceGroup instance_groups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListInstanceGroupsRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListInstanceGroupsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListInstanceGroupInstancesRequest {
+  // ID of the InstanceGroup resource to list instances for.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListInstanceGroupInstancesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListInstanceGroupInstancesResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [ManagedInstance.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupInstancesResponse {
+  // Lists instances for the specified instance group.
+  repeated ManagedInstance instances = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is more than [ListInstanceGroupInstancesRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListInstanceGroupInstancesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message DeleteInstancesRequest {
+  // ID of the instance group that the instances are being deleted from.
+  // To get the ID of the instance group, use the [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // IDs of the instances to delete. Instances will be deleted along with all dependent resources.
+  // Only IDs from the ManagedInstance.id field are allowed, not ManagedInstance.instance_id.
+  repeated string managed_instance_ids = 2 [
+    (size) = ">=1",
+    (length) = "<=50"
+  ];
+
+  // If set to true, the target size of instance group will not be reduced and
+  // a new instance will be created instead of the deleted one. By default, the target size of instance group
+  // will be reduced by the specified number of instance IDs.
+  bool create_another = 3;
+}
+
+message StopInstancesRequest {
+  // ID of the instance group that the instances are being stopped from.
+  // To get the ID of the instance group, use the [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // IDs of the instances to stop. After stopping, the instance can be updated, started, or deleted
+  // according to scale and deploy policies.
+  // Only IDs from the ManagedInstance.id field are allowed, not ManagedInstance.instance_id.
+  repeated string managed_instance_ids = 2 [
+    (size) = ">=1",
+    (length) = "<=50"
+  ];
+}
+
+message ListInstanceGroupOperationsRequest {
+  // ID of the InstanceGroup resource to list operations for.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is more than [page_size], the service returns a [ListInstanceGroupOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListInstanceGroupOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [InstanceGroup.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupOperationsResponse {
+  // Lists operations for the specified instance group.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is more than [ListInstanceGroupOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListInstanceGroupOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListInstanceGroupLogRecordsRequest {
+  // ID of the InstanceGroup resource to list logs for.
+  // To get the instance group ID, use a [InstanceGroupService.List] request.
+  string instance_group_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListInstanceGroupLogRecordsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListInstanceGroupLogRecordsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [InstanceGroup.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupLogRecordsResponse {
+  // Lists logs for the specified instance group.
+  repeated LogRecord log_records = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListInstanceGroupLogRecordsRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListInstanceGroupLogRecordsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

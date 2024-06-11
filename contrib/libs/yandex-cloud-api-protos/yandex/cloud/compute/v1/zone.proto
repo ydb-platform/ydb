@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// Availability zone. For more information, see [Availability zones](/docs/overview/concepts/geo-scope).
+message Zone {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Zone is available. You can access the resources allocated in this zone.
+    UP = 1;
+
+    // Zone is not available.
+    DOWN = 2;
+  }
+
+  // ID of the zone.
+  string id = 1;
+
+  // ID of the region.
+  string region_id = 2;
+
+  // Status of the zone.
+  Status status = 3;
+}

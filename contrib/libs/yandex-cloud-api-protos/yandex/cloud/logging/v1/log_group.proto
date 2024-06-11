@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+message LogGroup {
+  // Possible log group statuses.
+  enum Status {
+    // Unknown status.
+    //
+    // Should never occur.
+    STATUS_UNSPECIFIED = 0;
+
+    // Log group is creating.
+    CREATING = 1;
+
+    // Log group is ready to accept messages,
+    ACTIVE = 2;
+
+    // Log group is being deleted.
+    //
+    // No messages will be accepted.
+    DELETING = 3;
+
+    // Log group is in failed state.
+    ERROR = 4;
+  }
+
+  // Log group ID.
+  string id = 1;
+
+  // Log group folder ID.
+  string folder_id = 2;
+
+  // Log group cloud ID.
+  string cloud_id = 3;
+
+  // Log group creation time.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Log group name.
+  string name = 5;
+
+  // Log group description.
+  string description = 6;
+
+  // Log group labels.
+  map<string, string> labels = 7;
+
+
+  // Status of the log group.
+  Status status = 8;
+
+  // Log group entry retention period.
+  //
+  // Entries will be present in group during this period.
+  google.protobuf.Duration retention_period = 9;
+
+  // Data stream name
+  string data_stream = 10;
+
+}

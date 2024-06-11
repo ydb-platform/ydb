@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.manager.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/manager/v1;dataproc_manager";
+option java_package = "yandex.cloud.api.dataproc.manager.v1";
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/dataproc/manager/v1/job.proto";
+
+service JobService {
+    // Retrieves a list of jobs for Data Proc cluster.
+    rpc ListActive (ListJobsRequest) returns (ListJobsResponse) {}
+
+    // Currently used to update Job status.
+    rpc UpdateStatus (UpdateJobStatusRequest) returns (UpdateJobStatusResponse) {}
+
+    // Retrieves a list of support jobs for Data Proc cluster.
+    rpc ListSupportActive (ListJobsRequest) returns (ListSupportJobsResponse) {}
+
+    // Currently used to update support job status.
+    rpc UpdateSupportStatus (UpdateSupportJobStatusRequest) returns (UpdateJobStatusResponse) {}
+
+    // Save support job output.
+    rpc SaveSupportLog (SaveSupportJobLogRequest) returns (SaveSupportJobLogResponse) {}
+}
+
+message ListJobsRequest {
+    // Required. ID of the cluster to list Data Proc jobs of.
+    string cluster_id = 1 [(length) = "<=50"];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListJobs requests.
+    // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+    int64 page_size = 2 [(value) = "<=1000"];
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListJobs
+    // request to get the next page of results.
+    string page_token = 3 [(length) = "<=100"];
+
+    // String that describes a display filter.
+    string filter = 4 [(length) = "<=1000"];
+}
+
+message ListJobsResponse {
+    // Requested list of Data Proc jobs.
+    repeated Job jobs = 1;
+
+    // This token allows you to get the next page of results for ListJobs requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListClusters request. Subsequent ListClusters
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message UpdateJobStatusRequest {
+    // Required. ID of the Data Proc cluster.
+    string cluster_id = 1 [(length) = "<=50"];
+
+    // Required. ID of the Data Proc job to update.
+    string job_id = 2 [(length) = "<=50"];
+
+    // Required. New status of the job.
+    Job.Status status = 3;
+
+    // Attributes of YARN application.
+    ApplicationInfo application_info = 4;
+}
+
+message UpdateJobStatusResponse {
+}
+
+message ListSupportJobsResponse {
+    // Requested list of Data Proc jobs.
+    repeated SupportJob jobs = 1;
+
+    // This token allows you to get the next page of results for ListJobs requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListClusters request. Subsequent ListClusters
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message UpdateSupportJobStatusRequest {
+    // Required. ID of the Data Proc cluster.
+    string cluster_id = 1 [(length) = "<=50"];
+
+    // Required. ID of the Data Proc job to update.
+    string job_id = 2 [(length) = "<=50"];
+
+    // Required. New status of the job.
+    SupportJob.Status status = 3;
+}
+
+message SaveSupportJobLogRequest {
+    // ID of the cluster.
+    string cluster_id = 1 [(length) = "<=50"];
+
+    // ID of the support job.
+    string job_id = 2 [(length) = "<=50"];
+
+    // Job output.
+    string output = 3;
+}
+
+message SaveSupportJobLogResponse {
+}

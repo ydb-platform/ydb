@@ -1,0 +1,165 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/dataproc/v1/job.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";
+option java_package = "yandex.cloud.api.dataproc.v1";
+option java_outer_classname = "PHJS";
+
+// A set of methods for managing Data Proc jobs.
+service JobService {
+  // Retrieves a list of jobs for a cluster.
+  rpc List (ListJobsRequest) returns (ListJobsResponse) {
+    option (google.api.http) = { get: "/dataproc/v1/clusters/{cluster_id}/jobs" };
+  }
+
+  // Creates a job for a cluster.
+  rpc Create (CreateJobRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dataproc/v1/clusters/{cluster_id}/jobs" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateJobMetadata"
+      response: "Job"
+    };
+  }
+
+  // Returns the specified job.
+  rpc Get (GetJobRequest) returns (Job) {
+    option (google.api.http) = { get: "/dataproc/v1/clusters/{cluster_id}/jobs/{job_id}" };
+  }
+
+  // Returns a log for specified job.
+  rpc ListLog (ListJobLogRequest) returns (ListJobLogResponse) {
+    option (google.api.http) = { get: "/dataproc/v1/clusters/{cluster_id}/jobs/{job_id}:logs" };
+  }
+
+  // Cancels the specified Dataproc job.
+  rpc Cancel (CancelJobRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dataproc/v1/clusters/{cluster_id}/jobs/{job_id}:cancel" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateJobMetadata"
+      response: "Job"
+    };
+  }
+}
+
+message GetJobRequest {
+  // ID of the cluster to request a job from.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the job to return.
+  //
+  // To get a job ID make a [JobService.List] request.
+  string job_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message ListJobsRequest {
+  // ID of the cluster to list jobs for.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListJobsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListJobsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters jobs listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [Job.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-job`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListJobsResponse {
+  // List of jobs for the specified cluster.
+  repeated Job jobs = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListJobsRequest.page_size], use `next_page_token` as the value
+  // for the [ListJobsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateJobRequest {
+  // ID of the cluster to create a job for.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the job.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Specification for the job.
+  oneof job_spec {
+    // Specification for a MapReduce job.
+    MapreduceJob mapreduce_job = 3;
+
+    // Specification for a Spark job.
+    SparkJob spark_job = 4;
+
+    // Specification for a PySpark job.
+    PysparkJob pyspark_job = 5;
+
+    // Specification for a Hive job.
+    HiveJob hive_job = 6;
+  }
+}
+
+message CreateJobMetadata {
+  // ID of the cluster that the job is being created for.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the job being created.
+  string job_id = 2 [(length) = "<=50"];
+}
+
+message CancelJobRequest {
+  // Required. ID of the Dataproc cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Required. ID of the Dataproc job to cancel.
+  string job_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message ListJobLogRequest {
+  // ID of the cluster that the job is being created for.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the job being created.
+  string job_id = 2 [(length) = "<=50"];
+
+  // The maximum bytes of job log per response to return. If the number of available
+  // bytes is larger than [page_size], the service returns a [ListJobLogResponse.next_page_token]
+  // that can be used to get the next page of output in subsequent list requests.
+  // Default value: 1048576.
+  int64 page_size = 3 [(value) = "<=1048576"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListJobLogResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+}
+
+message ListJobLogResponse {
+  // Requested part of Data Proc Job log.
+  string content = 1;
+
+  // This token allows you to get the next page of results for ListLog requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListLog request. Subsequent ListLog
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

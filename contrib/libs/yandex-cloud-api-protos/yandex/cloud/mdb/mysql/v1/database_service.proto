@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/mysql/v1/database.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1";
+
+// A set of methods for managing MySQL databases in a cluster.
+//
+// See [the documentation](/docs/managed-mysql/operations/databases) for details.
+service DatabaseService {
+
+  // Retrieves information about the specified database.
+  rpc Get (GetDatabaseRequest) returns (Database) {
+    option (google.api.http) = { get: "/managed-mysql/v1/clusters/{cluster_id}/databases/{database_name}" };
+  }
+
+  // Retrieves the list of databases in a cluster.
+  rpc List (ListDatabasesRequest) returns (ListDatabasesResponse) {
+    option (google.api.http) = { get: "/managed-mysql/v1/clusters/{cluster_id}/databases" };
+  }
+
+  // Creates a new database in a cluster.
+  rpc Create (CreateDatabaseRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-mysql/v1/clusters/{cluster_id}/databases" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDatabaseMetadata"
+      response: "Database"
+    };
+  }
+
+  // Deletes a database from a cluster.
+  rpc Delete (DeleteDatabaseRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-mysql/v1/clusters/{cluster_id}/databases/{database_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDatabaseMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetDatabaseRequest {
+
+  // ID of the cluster that the database belongs to.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the database to return information about.
+  //
+  // To get this name, make a [DatabaseService.List] request.
+  string database_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message ListDatabasesRequest {
+
+  // ID of the cluster to list databases in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the API returns a [ListDatabasesResponse.next_page_token] that can be used to get the next page of results in the subsequent [DatabaseService.List] requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token that can be used to iterate through multiple pages of results.
+  //
+  // To get the next page of results, set [page_token] to the [ListDatabasesResponse.next_page_token] returned by the previous [DatabaseService.List] request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListDatabasesResponse {
+
+  // List of databases.
+  repeated Database databases = 1;
+
+  // The token that can be used to get the next page of results.
+  //
+  // If the number of results is larger than [ListDatabasesRequest.page_size], use the [next_page_token] as the value for the [ListDatabasesRequest.page_token] in the subsequent [DatabaseService.List] request to iterate through multiple pages of results.
+  //
+  // Each of the subsequent [DatabaseService.List] requests should use the [next_page_token] value returned by the previous request to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateDatabaseRequest {
+
+  // ID of the cluster to create the database in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Configuration of the database.
+  DatabaseSpec database_spec = 2 [(required) = true];
+}
+
+message CreateDatabaseMetadata {
+
+  // ID of the cluster the database is being created in.
+  string cluster_id = 1;
+
+  // Name of the database that is being created.
+  string database_name = 2;
+}
+
+message DeleteDatabaseRequest {
+
+  // ID of the cluster to delete the database from.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the database to delete.
+  //
+  // To get this name, make a [DatabaseService.List] request.
+  string database_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message DeleteDatabaseMetadata {
+
+  // ID of the cluster the database is being deleted from.
+  string cluster_id = 1;
+
+  // Name of the database that is being deleted.
+  string database_name = 2;
+}

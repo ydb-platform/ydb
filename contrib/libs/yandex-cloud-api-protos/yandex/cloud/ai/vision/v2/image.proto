@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v2;
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v2;vision";
+option java_package = "yandex.cloud.api.ai.vision.v2";
+
+
+message Image {
+//    type of image
+    enum ImageType {
+        IMAGE_TYPE_UNSPECIFIED = 0;
+        JPEG = 1;
+        PNG = 2;
+    }
+    oneof ImageSource {
+//        bytes with data
+        bytes content = 1;
+    }
+//    type of data
+    ImageType image_type = 2;
+}

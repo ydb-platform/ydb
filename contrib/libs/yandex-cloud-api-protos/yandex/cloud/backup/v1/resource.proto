@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package yandex.cloud.backup.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/backup/v1;backup";
+option java_package = "yandex.cloud.api.backup.v1";
+
+message Resource {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        // Compute Cloud instance is doing nothing right now.
+        IDLE = 1;
+        // Compute Cloud instance is currently backing up itself.
+        BACKUPING = 2;
+        // Compute Cloud instance is currently recovering itself.
+        RECOVERING = 3;
+        // Compute Cloud instance is in failure state, check content of 
+        // `status_details` field for more information.
+        FAILED = 4;
+        // Unspecified state, check `status_details` field
+        // for more information.
+        OTHER = 5;
+    }
+
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1;
+
+    google.protobuf.Timestamp created_at = 2;
+    google.protobuf.Timestamp updated_at = 3;
+
+    // If this field is true, it means that instance is online.
+    bool online = 4;
+    // If this field is true, it means that backup is enabled to instance.
+    bool enabled = 5;
+
+    Status status = 6;
+    // If status value is one of `OTHER` or `FAILED`,
+    // detailed info might be stored here.
+    string status_details = 7;
+    // In case status is one of `BACKUPING` or `RECOVERING`,
+    // progress value might be found here.
+    int64 status_progress = 8;
+
+    google.protobuf.Timestamp last_backup_time = 9;
+    google.protobuf.Timestamp next_backup_time = 10;
+
+    // Resource ID is used to identify Compute Cloud instance in backup service.
+    string resource_id = 11;
+    // Status `is_active` shows whether current Compute Cloud instance controls Cloud Backup resource.
+    // If status `is_active` is false it means Compute Cloud instance is not able to manipulate
+    // Cloud Backup resource.
+    bool is_active = 12;
+}
+
+message Progress {
+    int64 current = 1;
+    int64 total = 2;
+}
+
+message Task {
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        BACKUP = 1;
+        RETENTION = 2;
+        RECOVERY = 3;
+    }
+
+    // Status of task.
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        ENQUEUED = 1;
+        ASSIGNED = 2;
+        STARTED = 3;
+        PAUSED = 4;
+        COMPLETED = 5;
+    }
+
+    // Result code of task
+    enum Code {
+        CODE_UNSPECIFIED = 0;
+        OK = 1;
+        ERROR = 2;
+        WARNING = 3;
+        CANCELLED = 4;
+        ABANDONED = 5;
+        TIMEDOUT = 6;
+    }
+
+    // Task ID.
+    int64 id = 1;
+    // Shows whether the task is cancellable.
+    // Note: task cancellation is not supported yet.
+    bool cancellable = 2;
+    // Policy ID.
+    string policy_id = 3;
+    // Type of the task.
+    Type type = 4;
+    // Task progress.
+    Progress progress = 5;
+    // Task status.
+    Status status = 6;
+
+    google.protobuf.Timestamp enqueued_at = 7;
+    google.protobuf.Timestamp started_at = 8;
+    google.protobuf.Timestamp updated_at = 9;
+    google.protobuf.Timestamp completed_at = 10;
+
+    // Compute Cloud instance ID.
+    string compute_instance_id = 11;
+
+    // Task result code.
+    Code result_code = 12;
+}

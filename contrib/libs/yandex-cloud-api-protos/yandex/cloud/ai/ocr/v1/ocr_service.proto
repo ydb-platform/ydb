@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.ocr.v1;
+
+import "yandex/cloud/ai/ocr/v1/ocr.proto";
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/ocr/v1;ocr";
+option java_package = "yandex.cloud.api.ai.ocr.v1";
+
+
+message RecognizeTextRequest {
+    oneof source {
+        // Bytes with data
+        bytes content = 1;
+    }
+
+    // Specifications of the ([MIME type](https://en.wikipedia.org/wiki/Media_type)). Each specification contains the file to analyze and features to use for analysis. Restrictions:
+    //* Supported file formats: `JPEG`, `PNG`, `PDF`.
+    //* Maximum file size: 20 MB.
+    //* Image size should not exceed 20M pixels (length x width).
+    //* The number of pages in a PDF file should not exceed 200 (each page counts as 1 request).
+    string mime_type = 2;
+
+    // List of the languages to recognize text.
+    // Specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `ru`).
+    repeated string language_codes = 3;
+
+    // Model to use for text detection.
+    string model = 4 [(length) = "<=50"];
+}
+
+message RecognizeTextResponse {
+    // Recognized text blocks in this page or text from entities.
+    TextAnnotation text_annotation = 1;
+    // Page number in PDF file.
+    int64 page = 2;
+}
+
+// A set of methods for the Vision OCR service.
+service TextRecognitionService {
+
+    // To send the image for text recognition.
+    rpc Recognize (RecognizeTextRequest) returns (stream RecognizeTextResponse) {
+        option (google.api.http) = { post: "/ocr/v1/recognizeText" body: "*" };
+    }
+}
+
+message GetRecognitionRequest {
+    // Operation ID of async recognition request.
+    string operation_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// A set of methods for managing operations for asynchronous API requests.
+service TextRecognitionAsyncService {
+
+    // To send the image for asynchronous text recognition.
+    rpc Recognize (RecognizeTextRequest) returns  (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            response: "google.protobuf.Empty"
+        };
+        option (google.api.http) = { post: "/ocr/v1/recognizeTextAsync" body: "*" };
+    }
+
+    // To get recognition results.
+    rpc GetRecognition(GetRecognitionRequest) returns (stream RecognizeTextResponse) {
+        option (google.api.http) = { get: "/ocr/v1/getRecognition"};
+    }
+}

@@ -1,0 +1,378 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/compute/v1/maintenance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// An Instance resource. For more information, see [Instances](/docs/compute/concepts/vm).
+message Instance {
+
+  reserved 15, 25;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Instance is waiting for resources to be allocated.
+    PROVISIONING = 1;
+
+    // Instance is running normally.
+    RUNNING = 2;
+
+    // Instance is being stopped.
+    STOPPING = 3;
+
+    // Instance stopped.
+    STOPPED = 4;
+
+    // Instance is being started.
+    STARTING = 5;
+
+    // Instance is being restarted.
+    RESTARTING = 6;
+
+    // Instance is being updated.
+    UPDATING = 7;
+
+    // Instance encountered a problem and cannot operate.
+    ERROR = 8;
+
+    // Instance crashed and will be restarted automatically.
+    CRASHED = 9;
+
+    // Instance is being deleted.
+    DELETING = 10;
+  }
+
+  // ID of the instance.
+  string id = 1;
+
+  // ID of the folder that the instance belongs to.
+  string folder_id = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the instance. 1-63 characters long.
+  string name = 4;
+
+  // Description of the instance. 0-256 characters long.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+
+  // ID of the availability zone where the instance resides.
+  string zone_id = 7;
+
+  // ID of the hardware platform configuration for the instance.
+  string platform_id = 8;
+
+  // Computing resources of the instance such as the amount of memory and number of cores.
+  Resources resources = 9;
+
+  // Status of the instance.
+  Status status = 10;
+
+  // The metadata `key:value` pairs assigned to this instance. This includes custom metadata and predefined keys.
+  //
+  // For example, you may use the metadata in order to provide your public SSH key to the instance.
+  // For more information, see [Metadata](/docs/compute/concepts/vm-metadata).
+  map<string, string> metadata = 11;
+
+  // Options allow user to configure access to instance's metadata
+  MetadataOptions metadata_options = 23;
+
+  // Boot disk that is attached to the instance.
+  AttachedDisk boot_disk = 12;
+
+  // Array of secondary disks that are attached to the instance.
+  repeated AttachedDisk secondary_disks = 13;
+
+  // Array of local disks that are attached to the instance.
+  repeated AttachedLocalDisk local_disks = 22;
+
+  // Array of filesystems that are attached to the instance.
+  repeated AttachedFilesystem filesystems = 21;
+
+  // Array of network interfaces that are attached to the instance.
+  repeated NetworkInterface network_interfaces = 14;
+
+  // Serial port settings
+  SerialPortSettings serial_port_settings = 24;
+
+  // GPU settings
+  GpuSettings gpu_settings = 26;
+
+  // A domain name of the instance. FQDN is defined by the server
+  // in the format `<hostname>.<region_id>.internal` when the instance is created.
+  // If the hostname were not specified when the instance was created, FQDN would be `<id>.auto.internal`.
+  string fqdn = 16; // output only
+
+  // Scheduling policy configuration.
+  SchedulingPolicy scheduling_policy = 17;
+
+  // ID of the service account to use for [authentication inside the instance](/docs/compute/operations/vm-connect/auth-inside-vm).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 18;
+
+  // Network Settings
+  NetworkSettings network_settings = 19;
+
+  // Placement policy configuration.
+  PlacementPolicy placement_policy = 20;
+
+  // ID of the dedicated host group that the instance belongs to.
+  string host_group_id = 27;
+
+  // ID of the dedicated host that the instance belongs to.
+  string host_id = 28;
+
+  // Behaviour on maintenance events
+  MaintenancePolicy maintenance_policy = 29;
+
+  // Time between notification via metadata service and maintenance
+  google.protobuf.Duration maintenance_grace_period = 30;
+}
+
+message Resources {
+  // The amount of memory available to the instance, specified in bytes.
+  int64 memory = 1;
+
+  // The number of cores available to the instance.
+  int64 cores = 2;
+
+  // Baseline level of CPU performance with the ability to burst performance above that baseline level.
+  // This field sets baseline performance for each core.
+  int64 core_fraction = 3;
+
+  // The number of GPUs available to the instance.
+  int64 gpus = 4;
+}
+
+message AttachedDisk {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+
+    // Read-only access.
+    READ_ONLY = 1;
+
+    // Read/Write access.
+    READ_WRITE = 2;
+  }
+
+  // Access mode to the Disk resource.
+  Mode mode = 1;
+
+  // Serial number that is reflected into the /dev/disk/by-id/ tree
+  // of a Linux operating system running within the instance.
+  //
+  // This value can be used to reference the device for mounting, resizing, and so on, from within the instance.
+  string device_name = 2;
+
+  // Specifies whether the disk will be auto-deleted when the instance is deleted.
+  bool auto_delete = 3;
+
+  // ID of the disk that is attached to the instance.
+  string disk_id = 4;
+}
+
+message AttachedLocalDisk {
+  // Size of the disk, specified in bytes.
+  int64 size = 1;
+
+  // Serial number that is reflected into the /dev/disk/by-id/ tree
+  // of a Linux operating system running within the instance.
+  //
+  // This value can be used to reference the device for mounting, resizing, and so on, from within the instance.
+  string device_name = 2;
+}
+
+message AttachedFilesystem {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+
+    // Read-only access.
+    READ_ONLY = 1;
+
+    // Read/Write access.
+    READ_WRITE = 2;
+  }
+
+  // Access mode to the filesystem.
+  Mode mode = 1;
+
+  // Name of the device representing the filesystem on the instance.
+  //
+  // The name should be used for referencing the filesystem from within the instance
+  // when it's being mounted, resized etc.
+  string device_name = 2;
+
+  // ID of the filesystem that is attached to the instance.
+  string filesystem_id = 3;
+}
+
+message NetworkInterface {
+  // The index of the network interface, generated by the server, 0,1,2... etc.
+  // Currently only one network interface is supported per instance.
+  string index = 1;
+
+  // MAC address that is assigned to the network interface.
+  string mac_address = 2;
+
+  // ID of the subnet.
+  string subnet_id = 3;
+
+  // Primary IPv4 address that is assigned to the instance for this network interface.
+  PrimaryAddress primary_v4_address = 4;
+
+  // Primary IPv6 address that is assigned to the instance for this network interface. IPv6 not available yet.
+  PrimaryAddress primary_v6_address = 5;
+
+  // ID's of security groups attached to the interface
+  repeated string security_group_ids = 6;
+}
+
+message PrimaryAddress {
+  // An IPv4 internal network address that is assigned to the instance for this network interface.
+  string address = 1;
+
+  // One-to-one NAT configuration. If missing, NAT has not been set up.
+  OneToOneNat one_to_one_nat = 2;
+
+  // Internal DNS configuration
+  repeated DnsRecord dns_records = 3;
+}
+
+message OneToOneNat {
+  // An external IP address associated with this instance.
+  string address = 1;
+
+  // IP version for the external IP address.
+  IpVersion ip_version = 2;
+
+  // External DNS configuration
+  repeated DnsRecord dns_records = 3;
+}
+
+message DnsRecord {
+  // Name of the A/AAAA record as specified when creating the instance.
+  // Note that if `fqdn' has no trailing '.', it is specified relative to the zone (@see dns_zone_id).
+  string fqdn = 1;
+
+  // DNS zone id for the record (optional, if not set, some private zone is used).
+  string dns_zone_id = 2;
+
+  // DNS record ttl (optional, if not set, a reasonable default is used.)
+  int64 ttl = 3;
+
+  // When true, indicates there is a corresponding auto-created PTR DNS record.
+  bool ptr = 4;
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+
+  // IPv4 address, for example 192.0.2.235.
+  IPV4 = 1;
+
+  // IPv6 address. Not available yet.
+  IPV6 = 2;
+}
+
+message SchedulingPolicy {
+  // True for short-lived compute instances. For more information, see [Preemptible VMs](/docs/compute/concepts/preemptible-vm).
+  bool preemptible = 1;
+}
+
+message NetworkSettings {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Standard network.
+    STANDARD = 1;
+
+    // Software accelerated network.
+    SOFTWARE_ACCELERATED = 2;
+
+    // Hardware accelerated network (not available yet, reserved for future use).
+    HARDWARE_ACCELERATED = 3;
+  }
+
+  // Network Type
+  Type type = 1;
+}
+
+message GpuSettings {
+  // Attach instance to specified GPU cluster.
+  string gpu_cluster_id = 1;
+}
+
+message PlacementPolicy {
+  // Affinity definition
+  message HostAffinityRule {
+    enum Operator {
+      OPERATOR_UNSPECIFIED = 0;
+      IN = 1;
+      NOT_IN = 2;
+    }
+
+    // Affinity label or one of reserved values - 'yc.hostId', 'yc.hostGroupId'
+    string key = 1;
+    // Include or exclude action
+    Operator op = 2;
+    // Affinity value or host ID or host group ID
+    repeated string values = 3;
+  }
+
+  // Placement group ID.
+  string placement_group_id = 1;
+
+  // List of affinity rules. Scheduler will attempt to allocate instances according to order of rules.
+  repeated HostAffinityRule host_affinity_rules = 2;
+
+  // Placement group partition
+  int64 placement_group_partition = 3;
+}
+
+message MetadataOptions {
+  // Enabled access to GCE flavored metadata
+  MetadataOption gce_http_endpoint = 1;
+
+  // Enabled access to AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_endpoint = 2;
+
+  // Enabled access to IAM credentials with GCE flavored metadata
+  MetadataOption gce_http_token = 3;
+
+  // Enabled access to IAM credentials with AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_token = 4;
+}
+
+enum MetadataOption {
+  METADATA_OPTION_UNSPECIFIED = 0;
+
+  // Option is enabled
+  ENABLED = 1;
+
+  // Option is disabled
+  DISABLED = 2;
+}
+
+message SerialPortSettings {
+  enum SSHAuthorization {
+    SSH_AUTHORIZATION_UNSPECIFIED = 0;
+
+    // Authentication and authorization using SSH keys in instance metadata
+    INSTANCE_METADATA = 1;
+
+    // Authentication and authorization using Oslogin service
+    OS_LOGIN = 2;
+  }
+
+  // Authentication and authorization in serial console when using SSH protocol
+  SSHAuthorization ssh_authorization = 1;
+}

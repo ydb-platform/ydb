@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+message Sink {
+  // Sink ID.
+  string id = 1;
+
+  // Sink folder ID.
+  string folder_id = 2;
+
+  // Sink cloud ID.
+  string cloud_id = 3;
+
+  // Sink creation time.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Sink name.
+  string name = 5;
+
+  // Sink description.
+  string description = 6;
+
+  // Sink labels.
+  map<string, string> labels = 7;
+
+  // Logs will be written to the sink on behalf of this service account
+  string service_account_id = 8;
+
+  // Logs destination
+  oneof sink {
+    option (exactly_one) = true;
+    // Yandex data stream
+    Yds yds = 9;
+    // Object storage
+    S3  s3  = 10;
+  }
+  message Yds {
+    // Fully qualified name of data stream
+    string stream_name = 1  [(length) = "<=512"];
+  }
+  message S3 {
+    // Object storage bucket
+    string bucket = 1 [(pattern) = "[a-zA-Z0-9][-a-zA-Z0-9.]{2,62}"];
+    // Prefix to use for saved log object names
+    string prefix = 2 [(length) = "<=1024"];
+  }
+}

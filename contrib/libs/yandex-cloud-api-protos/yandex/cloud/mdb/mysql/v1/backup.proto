@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1;
+
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1";
+
+// An object that represents MySQL backup.
+//
+// See [the documentation](/docs/managed-mysql/concepts/backup) for details.
+message Backup {
+  enum BackupCreationType {
+    BACKUP_CREATION_TYPE_UNSPECIFIED = 0;
+
+    // Backup created by automated daily schedule
+    AUTOMATED = 1;
+
+    // Backup created by user request
+    MANUAL = 2;
+  }
+  enum BackupStatus {
+    BACKUP_STATUS_UNSPECIFIED = 0;
+
+    // Backup is done
+    DONE = 1;
+
+    // Backup is creating    
+    CREATING = 2;
+  }
+  // ID of the backup.
+  string id = 1 [(required) = true];
+
+  // ID of the folder that the backup belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp (the time when the backup operation was completed).
+  google.protobuf.Timestamp created_at = 3;
+
+  // ID of the cluster that the backup was created for.
+  string source_cluster_id = 4;
+
+  // Start timestamp (the time when the backup operation was started).
+  google.protobuf.Timestamp started_at = 5;
+
+  // Size of backup, in bytes
+  int64 size = 6;
+
+  // How this backup was created (manual/automatic/etc...)
+  BackupCreationType type = 7;
+
+  // Status of backup
+  BackupStatus status = 8;
+}

@@ -1,0 +1,310 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+enum UnitFormat {
+    UNIT_FORMAT_UNSPECIFIED = 0;
+
+    // Misc.
+
+    // None (show tick values as-is).
+    UNIT_NONE = 1;
+
+    // Count.
+    UNIT_COUNT = 2;
+
+    // Percent (0-100).
+    UNIT_PERCENT = 3;
+
+    // Percent (0-1).
+    UNIT_PERCENT_UNIT = 4;
+
+    // Time.
+
+    // Nanoseconds (ns).
+    UNIT_NANOSECONDS = 5;
+
+    // Microseconds (µs).
+    UNIT_MICROSECONDS = 6;
+
+    // Milliseconds (ms).
+    UNIT_MILLISECONDS = 7;
+
+    // Seconds (s).
+    UNIT_SECONDS = 8;
+
+    // Minutes (m).
+    UNIT_MINUTES = 9;
+
+    // Hours (h).
+    UNIT_HOURS = 10;
+
+    // Days (d).
+    UNIT_DAYS = 11;
+
+    // Data (SI).
+
+    // Bits (SI).
+    UNIT_BITS_SI = 12;
+
+    // Bytes (SI).
+    UNIT_BYTES_SI = 13;
+
+    // Kilobytes (KB).
+    UNIT_KILOBYTES = 14;
+
+    // Megabytes (MB).
+    UNIT_MEGABYTES = 15;
+
+    // Gigabytes (GB).
+    UNIT_GIGABYTES = 16;
+
+    // Terabytes (TB)
+    UNIT_TERABYTES = 17;
+
+    // Petabytes (PB).
+    UNIT_PETABYTES = 18;
+
+    // Exabytes (EB).
+    UNIT_EXABYTES = 19;
+
+    // Data (IEC).
+
+    // Bits (IEC).
+    UNIT_BITS_IEC = 20;
+
+    // Bytes (IEC).
+    UNIT_BYTES_IEC = 21;
+
+    // Kibibytes (KiB).
+    UNIT_KIBIBYTES = 22;
+
+    // Mebibytes (MiB).
+    UNIT_MEBIBYTES = 23;
+
+    // Gigibytes (GiB).
+    UNIT_GIBIBYTES = 24;
+
+    // Tebibytes (TiB).
+    UNIT_TEBIBYTES = 25;
+
+    // Pebibytes (PiB).
+    UNIT_PEBIBYTES = 26;
+
+    // Exbibytes (EiB).
+    UNIT_EXBIBYTES = 27;
+
+    // Throughput.
+
+    // Requests per second (reqps).
+    UNIT_REQUESTS_PER_SECOND = 28;
+
+    // Operations per second (ops).
+    UNIT_OPERATIONS_PER_SECOND = 29;
+
+    // Writes per second (wps).
+    UNIT_WRITES_PER_SECOND = 30;
+
+    // Reads per second (rps).
+    UNIT_READS_PER_SECOND = 31;
+
+    // Packets per second (pps).
+    UNIT_PACKETS_PER_SECOND = 32;
+
+    // IO operations per second (iops).
+    UNIT_IO_OPERATIONS_PER_SECOND = 33;
+
+    // Counts per second (counts/sec).
+    UNIT_COUNTS_PER_SECOND = 34;
+
+    // Data Rate (SI).
+
+    // Bits (SI) per second (bits/sec).
+    UNIT_BITS_SI_PER_SECOND = 35;
+
+    // Bytes (SI) per second (bytes/sec).
+    UNIT_BYTES_SI_PER_SECOND = 36;
+
+    // Kilobits per second (KBits/sec).
+    UNIT_KILOBITS_PER_SECOND = 37;
+
+    // Kilobytes per second (KB/sec).
+    UNIT_KILOBYTES_PER_SECOND = 38;
+
+    // Megabits per second (MBits/sec).
+    UNIT_MEGABITS_PER_SECOND = 39;
+
+    // Megabytes per second (MB/sec).
+    UNIT_MEGABYTES_PER_SECOND = 40;
+
+    // Gigabits per second (GBits/sec).
+    UNIT_GIGABITS_PER_SECOND = 41;
+
+    // Gigabytes per second (GB/sec).
+    UNIT_GIGABYTES_PER_SECOND = 42;
+
+    // Terabits per second (TBits/sec).
+    UNIT_TERABITS_PER_SECOND = 43;
+
+    // Terabytes per second (TB/sec).
+    UNIT_TERABYTES_PER_SECOND = 44;
+
+    // Petabits per second (Pbits/sec).
+    UNIT_PETABITS_PER_SECOND = 45;
+
+    // Petabytes per second (PB/sec).
+    UNIT_PETABYTES_PER_SECOND = 46;
+
+    // Data Rate (IEC).
+
+    // Bits (IEC) per second (bits/sec).
+    UNIT_BITS_IEC_PER_SECOND = 47;
+
+    // Bytes (IEC) per second (bytes/sec).
+    UNIT_BYTES_IEC_PER_SECOND = 48;
+
+    // Kibibits per second (KiBits/sec).
+    UNIT_KIBIBITS_PER_SECOND = 49;
+
+    // Kibibytes per second (KiB/sec).
+    UNIT_KIBIBYTES_PER_SECOND = 50;
+
+    // Mebibits per second (MiBits/sec).
+    UNIT_MEBIBITS_PER_SECOND = 51;
+
+    // Mebibytes per second (MiB/sec).
+    UNIT_MEBIBYTES_PER_SECOND = 52;
+
+    // Gibibits per second (GiBits/sec).
+    UNIT_GIBIBITS_PER_SECOND = 53;
+
+    // Gibibytes per second (GiB/sec).
+    UNIT_GIBIBYTES_PER_SECOND = 54;
+
+    // Tebibits per second (TiBits/sec).
+    UNIT_TEBIBITS_PER_SECOND = 55;
+
+    // Tebibytes per second (TiB/sec).
+    UNIT_TEBIBYTES_PER_SECOND = 56;
+
+    // Pebibits per second (PiBits/sec).
+    UNIT_PEBIBITS_PER_SECOND = 57;
+
+    // Pebibytes per second (PiB/sec).
+    UNIT_PEBIBYTES_PER_SECOND = 58;
+
+    // Date & time.
+
+    // Datetime (UTC).
+    UNIT_DATETIME_UTC = 59;
+
+    // Datetime (local).
+    UNIT_DATETIME_LOCAL = 60;
+
+    // Frequency.
+
+    // Hertz (Hz).
+    UNIT_HERTZ = 61;
+
+    // Kilohertz (KHz).
+    UNIT_KILOHERTZ = 62;
+
+    // Megahertz (MHz).
+    UNIT_MEGAHERTZ = 63;
+
+    // Gigahertz (GHz).
+    UNIT_GIGAHERTZ = 64;
+
+    // Currency.
+
+    // Dollar.
+    UNIT_DOLLAR = 65;
+
+    // Euro.
+    UNIT_EURO = 66;
+
+    // Rouble.
+    UNIT_ROUBLE = 67;
+
+    // Temperature.
+
+    // Celsius (°C).
+    UNIT_CELSIUS = 68;
+
+    // Fahrenheit (°F).
+    UNIT_FAHRENHEIT = 69;
+
+    // Kelvin (K).
+    UNIT_KELVIN = 70;
+
+    // Computation.
+
+    // Flop per second (FLOP/sec).
+    UNIT_FLOP_PER_SECOND = 71;
+
+    // Kiloflop per second (KFLOP/sec).
+    UNIT_KILOFLOP_PER_SECOND = 72;
+
+    // Megaflop per second (MFLOP/sec).
+    UNIT_MEGAFLOP_PER_SECOND = 73;
+
+    // Gigaflop per second (GFLOP/sec).
+    UNIT_GIGAFLOP_PER_SECOND = 74;
+
+    // Petaflop per second (PFLOP/sec).
+    UNIT_PETAFLOP_PER_SECOND = 75;
+
+    // Exaflop per second (EFLOP/sec).
+    UNIT_EXAFLOP_PER_SECOND = 76;
+
+    // Velocity.
+
+    // Meters per second (m/sec).
+    UNIT_METERS_PER_SECOND = 77;
+
+    // Kilometers per hour (km/h).
+    UNIT_KILOMETERS_PER_HOUR = 78;
+
+    // Miles per hour (mi/h).
+    UNIT_MILES_PER_HOUR = 79;
+
+    // Length.
+
+    // Millimeter.
+    UNIT_MILLIMETER = 80;
+
+    // Centimeter.
+    UNIT_CENTIMETER = 81;
+
+    // Meter.
+    UNIT_METER = 82;
+
+    // Kilometer.
+    UNIT_KILOMETER = 83;
+
+    // Mile.
+    UNIT_MILE = 84;
+
+    // Concentration.
+
+    // Parts per million (ppm).
+    UNIT_PPM = 85;
+
+    // Events per second
+    UNIT_EVENTS_PER_SECOND = 86;
+
+    // Packets
+    UNIT_PACKETS = 87;
+
+    // dBm (dbm)
+    UNIT_DBM = 88;
+
+    // Virtual CPU cores based on CPU time (vcpu)
+    UNIT_VIRTUAL_CPU = 89;
+
+    // Messages per second (mps)
+    UNIT_MESSAGES_PER_SECOND = 90;
+}

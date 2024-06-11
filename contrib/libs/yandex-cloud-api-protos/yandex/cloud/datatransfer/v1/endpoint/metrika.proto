@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "yandex/cloud/datatransfer/v1/endpoint/common.proto";
+
+enum MetrikaStreamType {
+    METRIKA_STREAM_TYPE_UNSPECIFIED = 0;
+    METRIKA_STREAM_TYPE_HITS = 1;
+    METRIKA_STREAM_TYPE_VISITS = 2;
+    METRIKA_STREAM_TYPE_HITS_V2 = 3;
+}
+message MetrikaStream {
+    MetrikaStreamType type = 1;
+    repeated string columns = 2;
+}
+message MetrikaSource {
+    repeated int64 counter_ids = 1;
+    Secret token = 2;
+    repeated MetrikaStream streams = 3;
+}

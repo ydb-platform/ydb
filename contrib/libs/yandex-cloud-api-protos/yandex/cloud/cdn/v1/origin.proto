@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+
+// An origin. For details about the concept, see [documentation](/docs/cdn/concepts/origins).
+message Origin {
+    // ID of the origin. 
+    int64 id = 1;
+
+    // ID of the parent origin group.
+    int64 origin_group_id = 2;
+
+    // IP address or Domain name of your origin and the port (if custom).
+    // Used if [meta] variant is `common`.
+    string source = 3;
+    // The setting allows to enable or disable an Origin source in the Origins group.
+    //
+    // It has two possible values:
+    //
+    // True - The origin is enabled and used as a source for the CDN. An origins
+    // group must contain at least one enabled origin. 
+    // False - The origin is disabled and the CDN is not using it to pull content.
+    bool enabled = 4;
+    	
+    // Specifies whether the origin is used in its origin group as backup. 
+    // A backup origin is used when one of active origins becomes unavailable.
+    bool backup = 5;
+
+    // Set up origin of the content.
+    OriginMeta meta = 6;
+}
+
+// Origin parameters. For details about the concept, see [documentation](/docs/cdn/concepts/origins).
+message OriginParams {
+    // Source: IP address or Domain name of your origin and the port (if custom).
+    string source = 1;
+    // The setting allows to enable or disable an Origin source in the Origins group.
+    //
+    // It has two possible values:
+    //
+    // True - The origin is enabled and used as a source for the CDN. An origins
+    // group must contain at least one enabled origins. False - The origin is disabled
+    // and the CDN is not using it to pull content.
+    bool enabled = 2;
+    	
+    // backup option has two possible values:
+    //
+    //   True - The option is active. The origin will not be used until one of
+    //          active origins become unavailable.
+    //   False - The option is disabled.
+    bool backup = 3;
+
+    // Set up origin of the content.
+    OriginMeta meta = 4;
+}
+
+// Origin type. For details about the concept, see [documentation](/docs/cdn/concepts/origins).
+message OriginMeta {
+    // Type of the origin.
+    oneof origin_meta_variant {
+        // A server with a domain name linked to it
+        OriginNamedMeta common = 1;
+
+        // An Object Storage bucket not configured as a static site hosting.
+        OriginNamedMeta bucket = 2;
+
+        // An Object Storage bucket configured as a static site hosting.
+        OriginNamedMeta website = 3;
+
+        // An L7 load balancer from Application Load Balancer.
+        // CDN servers will access the load balancer at one of its IP addresses that must be selected in the origin settings.
+        OriginBalancerMeta balancer = 4;
+    }
+}
+
+// Origin info. For details about the concept, see [documentation](/docs/cdn/concepts/origins).
+message OriginNamedMeta {
+    // Name of the origin.
+    string name = 1;
+}
+
+// Application Load Balancer origin info. For details about the concept, see [documentation](/docs/cdn/concepts/origins).
+message OriginBalancerMeta {
+    // ID of the origin.
+    string id = 1;
+}

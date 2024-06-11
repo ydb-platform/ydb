@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package yandex.cloud.kms.v1.asymmetricsignature;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/kms/v1/asymmetricsignature;kms";
+option java_package = "yandex.cloud.api.kms.v1";
+
+// Supported asymmetric signature algorithms.
+enum AsymmetricSignatureAlgorithm {
+  ASYMMETRIC_SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+
+  //RSA-2048 signature with PSS padding and SHA-256
+  RSA_2048_SIGN_PSS_SHA_256 = 1;
+
+  //RSA-2048 signature with PSS padding and SHA-384
+  RSA_2048_SIGN_PSS_SHA_384 = 2;
+
+  //RSA-2048 signature with PSS padding and SHA-512
+  RSA_2048_SIGN_PSS_SHA_512 = 3;
+
+  //RSA-3072 signature with PSS padding and SHA-256
+  RSA_3072_SIGN_PSS_SHA_256 = 4;
+
+  //RSA-3072 signature with PSS padding and SHA-384
+  RSA_3072_SIGN_PSS_SHA_384 = 5;
+
+  //RSA-3072 signature with PSS padding and SHA-512
+  RSA_3072_SIGN_PSS_SHA_512 = 6;
+
+  //RSA-4096 signature with PSS padding and SHA-256
+  RSA_4096_SIGN_PSS_SHA_256 = 7;
+
+  //RSA-4096 signature with PSS padding and SHA-384
+  RSA_4096_SIGN_PSS_SHA_384 = 8;
+
+  //RSA-4096 signature with PSS padding and SHA-512
+  RSA_4096_SIGN_PSS_SHA_512 = 9;
+
+  //ECDSA signature with NIST P-256 curve and SHA-256
+  ECDSA_NIST_P256_SHA_256 = 10;
+
+  //ECDSA signature with NIST P-384 curve and SHA-384
+  ECDSA_NIST_P384_SHA_384 = 11;
+
+  //ECDSA signature with NIST P-521 curve and SHA-512
+  ECDSA_NIST_P521_SHA_512 = 12;
+
+  //ECDSA signature with SECP256_K1 curve and SHA-256
+  ECDSA_SECP256_K1_SHA_256 = 13;
+}
+
+// An asymmetric KMS key that may contain several versions of the cryptographic material.
+message AsymmetricSignatureKey {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // The key is being created.
+    CREATING = 1;
+
+    // The key is active and can be used for encryption and decryption or signature and verification.
+    // Can be set to INACTIVE using the [AsymmetricKeyService.Update] method.
+    ACTIVE = 2;
+
+    // The key is inactive and unusable.
+    // Can be set to ACTIVE using the [AsymmetricKeyService.Update] method.
+    INACTIVE = 3;
+  }
+
+  // ID of the key.
+  string id = 1;
+
+  // ID of the folder that the key belongs to.
+  string folder_id = 2;
+
+  // Time when the key was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the key.
+  string name = 4;
+
+  // Description of the key.
+  string description = 5;
+
+  // Custom labels for the key as `key:value` pairs. Maximum 64 per key.
+  map<string, string> labels = 6;
+
+  // Current status of the key.
+  Status status = 7;
+
+  // Signature Algorithm ID.
+  AsymmetricSignatureAlgorithm signature_algorithm = 8;
+
+  // Flag that inhibits deletion of the key
+  bool deletion_protection = 9;
+}

@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v1;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v1";
+
+// A set of methods for managing Node resources.
+service NodeService {
+  // Executes deployed Node.
+  rpc Execute(NodeExecutionRequest) returns (NodeExecutionResponse) {
+    option (google.api.http) = { post: "/datasphere/v1/nodes/{node_id}:execute" body: "*" };
+  }
+
+  // Executes NodeAlias requests.
+  rpc ExecuteAlias(AliasExecutionRequest) returns (AliasExecutionResponse) {
+    option (google.api.http) = { post: "/datasphere/v1/aliases/{alias_name}:execute" body: "*" };
+  };
+}
+
+message NodeExecutionRequest {
+  // ID of the folder that will be matched with Node ACL.
+  string folder_id = 1;
+  // ID of the Node to perform request on.
+  string node_id = 2;
+  // Input data for the execution.
+  google.protobuf.Struct input = 3;
+}
+
+message NodeExecutionResponse {
+  // Result of the execution.
+  google.protobuf.Struct output = 1;
+}
+
+message AliasExecutionRequest {
+  // ID of the folder that will be matched with Alias ACL
+  string folder_id = 1;
+  // Name of the Alias to perform request on
+  string alias_name = 2;
+  // Input data for the execution
+  google.protobuf.Struct input = 3;
+}
+
+message AliasExecutionResponse {
+  // Result of the execution
+  google.protobuf.Struct output = 1;
+}

@@ -1,0 +1,298 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/organizationmanager/v1/group.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+// A set of methods for managing groups.
+service GroupService {
+  // Returns the specified Group resource.
+  //
+  // To get the list of available Group resources, make a [List] request.
+  rpc Get (GetGroupRequest) returns (Group) {
+    option (google.api.http) = { get: "/organization-manager/v1/groups/{group_id}" };
+  }
+
+  // Retrieves the list of group resources.
+  rpc List (ListGroupsRequest) returns (ListGroupsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/groups" };
+  }
+
+  // Creates a group in the specified organization.
+  rpc Create (CreateGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/groups" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateGroupMetadata"
+      response: "Group"
+    };
+  }
+
+  // Updates the specified group.
+  rpc Update (UpdateGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/groups/{group_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateGroupMetadata"
+      response: "Group"
+    };
+  }
+
+  // Deletes the specified group.
+  rpc Delete (DeleteGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/groups/{group_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified group.
+  rpc ListOperations (ListGroupOperationsRequest) returns (ListGroupOperationsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/groups/{group_id}/operations" };
+  }
+
+  // members
+
+  // List group active members.
+  rpc ListMembers (ListGroupMembersRequest) returns (ListGroupMembersResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/groups/{group_id}:listMembers" };
+  }
+
+  // Update group members.
+  rpc UpdateMembers (UpdateGroupMembersRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/groups/{group_id}:updateMembers" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateGroupMembersMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // access
+
+  // Lists access bindings for the specified group.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/groups/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the specified group.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/groups/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the specified group.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/groups/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetGroupRequest {
+  // ID of the Group resource to return.
+  // To get the group ID, use a [GroupService.List] request.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListGroupsRequest {
+  // ID of the organization to list groups in.
+  // To get the organization ID, use a [yandex.cloud.organizationmanager.v1.OrganizationService.List] request.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListGroupsResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=2000"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on the [Group.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListGroupsResponse {
+  // List of Group resources.
+  repeated Group groups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListGroupsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListGroupsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateGroupRequest {
+  // ID of the organization to create a group in.
+  // To get the organization ID, use a [yandex.cloud.organizationmanager.v1.OrganizationService.List] request.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the group.
+  // The name must be unique within the organization.
+  string name = 2 [(required) = true, (pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the group.
+  string description = 3 [(length) = "<=256"];
+}
+
+message CreateGroupMetadata {
+  // ID of the group that is being created.
+  string group_id = 1;
+}
+
+message UpdateGroupRequest {
+  // ID of the Group resource to update.
+  // To get the group ID, use a [GroupService.List] request.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the Group resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the group.
+  // The name must be unique within the organization.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the group.
+  string description = 4 [(length) = "<=256"];
+}
+
+message UpdateGroupMetadata {
+  // ID of the Group resource that is being updated.
+  string group_id = 1;
+}
+
+message DeleteGroupRequest {
+  // ID of the group to delete.
+  // To get the group ID, use a [GroupService.List] request.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteGroupMetadata {
+  // ID of the group that is being deleted.
+  string group_id = 1;
+}
+
+message ListGroupOperationsRequest {
+  // ID of the Group resource to list operations for.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListGroupOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListGroupOperationsResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListGroupOperationsResponse {
+  // List of operations for the specified group.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListGroupOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListGroupOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListGroupMembersRequest {
+  // ID of the Group resource to list members for.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListGroupMembersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListGroupMembersResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListGroupMembersResponse {
+  // List of members for the specified group.
+  repeated GroupMember members = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListGroupMembersRequest.page_size], use the [next_page_token] as the value
+  // for the [ListGroupMembersRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message GroupMember {
+  // ID of the subject.
+  string subject_id = 1;
+
+  // Type of the subject.
+  //
+  // It can contain one of the following values:
+  // * `userAccount`: An account on Yandex, added to Yandex Cloud.
+  // * `federatedUser`: A federated account. This type represents a user from an identity federation, like Active Directory.
+  string subject_type = 2;
+}
+
+message UpdateGroupMembersRequest {
+  // ID of the group to update.
+  // To get the group ID, use a [GroupService.List] request.
+  string group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Updates to group members.
+  repeated MemberDelta member_deltas = 2 [(size) = "1-1000"];
+}
+
+message UpdateGroupMembersMetadata {
+  // ID of the group that is being updated.
+  string group_id = 1;
+}
+
+message MemberDelta {
+  // The action that is being performed on a group member.
+  MemberAction action = 1 [(required) = true];
+
+  // ID of the subject that is being added or removed from a group.
+  //
+  // Subject type can be one of following values:
+  // * `userAccount`: An account on Yandex, added to Yandex Cloud.
+  // * `federatedUser`: A federated account. This type represents a user from an identity federation, like Active Directory.
+  string subject_id = 2 [(required) = true, (length) = "<=50"];
+
+  enum MemberAction {
+    MEMBER_ACTION_UNSPECIFIED = 0;
+
+    // Addition of a group member.
+    ADD = 1;
+
+    // Removal of a group member.
+    REMOVE = 2;
+  }
+}

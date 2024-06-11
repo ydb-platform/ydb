@@ -1,0 +1,53 @@
+syntax = "proto3";
+package yandex.cloud.ai.vision.v2;
+
+
+import "yandex/cloud/ai/vision/v2/image.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v2;vision";
+option java_package = "yandex.cloud.api.ai.vision.v2";
+
+//Description of single label
+message Label {
+//    Label name
+    string name = 1;
+//    human readable description of label
+    string description = 2;
+}
+
+//Image annotation for specific label
+message ClassAnnotation {
+//    list of annotated labels
+    Label label = 1;
+//    confidence for each label
+    double confidence = 2;
+}
+
+//Specification of model used for annotation
+message ClassifierSpecification {
+    enum ClassificationType {
+        CLASSIFICATION_TYPE_UNSPECIFIED = 0;
+        MULTI_LABEL = 1;
+        MULTI_CLASS = 2;
+    }
+//  List of labels, annotated by service
+    repeated Label labels = 1;
+//    type of annotation: exclusive (multi-class) or non-exclusive (multi-label)
+    ClassificationType classification_type = 2;
+}
+//
+message AnnotationResponse {
+//  internal service requestId
+    string request_id = 1;
+//  class specification
+    ClassifierSpecification classifier_specification = 2;
+//    annotations for each class
+    repeated ClassAnnotation annotations = 3;
+}
+
+//request for annotation
+message AnnotationRequest {
+//    image to annotate
+    Image image = 1;
+}

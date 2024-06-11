@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.elasticsearch.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/elasticsearch/v1/auth.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/elasticsearch/v1;elasticsearch";
+option java_package = "yandex.cloud.api.mdb.elasticsearch.v1";
+
+// A set of methods for managing Elasticsearch Authentication resources.
+service AuthService {
+
+    // Retrieves the list of registered auth providers for Elasticsearch cluster.
+    rpc ListProviders (ListAuthProvidersRequest) returns (ListAuthProvidersResponse) {
+        option (google.api.http) = { get: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers" };
+    }
+
+    // Returns registered auth provider by name.
+    rpc GetProvider (GetAuthProviderRequest) returns (AuthProvider) {
+        option (google.api.http) = { get: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers/{name}" };
+    }
+
+    // Adds new auth providers to Elasticsearch cluster.
+    rpc AddProviders (AddAuthProvidersRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers" body: "*"};
+        option (yandex.cloud.api.operation) = {
+          metadata: "AddAuthProvidersMetadata"
+          response: "AuthProviders"
+        };
+    }
+
+    // Replase the list of auth providers.
+    rpc UpdateProviders (UpdateAuthProvidersRequest) returns (operation.Operation) {
+        option (google.api.http) = { put: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers" body: "*"};
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdateAuthProvidersMetadata"
+          response: "AuthProviders"
+        };
+    }
+
+    // Removes auth providers from Elasticsearch cluster by name.
+    rpc DeleteProviders (DeleteAuthProvidersRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers"};
+        option (yandex.cloud.api.operation) = {
+          metadata: "DeleteAuthProvidersMetadata"
+          response: "google.protobuf.Empty"
+        };
+    }
+
+    // Updates registered auth provider.
+    rpc UpdateProvider (UpdateAuthProviderRequest) returns (operation.Operation) {
+        option (google.api.http) = { put: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers/{name}" body: "*"};
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdateAuthProvidersMetadata"
+          response: "AuthProviders"
+        };
+    }
+
+    // Removes auth provider from Elasticsearch cluster by name.
+    rpc DeleteProvider (DeleteAuthProviderRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/managed-elasticsearch/v1/clusters/{cluster_id}/auth/providers/{name}"};
+        option (yandex.cloud.api.operation) = {
+          metadata: "DeleteAuthProvidersMetadata"
+          response: "google.protobuf.Empty"
+        };      
+    }
+
+}
+
+
+message ListAuthProvidersRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListAuthProvidersResponse {
+    // List of auth providers of the Elasticsearch cluster.
+    repeated AuthProvider providers = 1;
+}
+
+message GetAuthProviderRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. Name of the provider to delete.
+    string name = 2 [(required) = true, (length) = "<=50", (pattern) = "[a-z][a-z0-9_-]*"];
+}
+
+message AddAuthProvidersRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. List of providers to add.
+    repeated AuthProvider providers = 2 [(size) ="<=10"];
+}
+
+message UpdateAuthProvidersRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. List of providers to set.
+    repeated AuthProvider providers = 2 [(size) ="<=10"];
+}
+
+message DeleteAuthProvidersRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. List of providers to delete.
+    repeated string provider_names = 2 [(size) ="<=10", (length) = "<=50", (pattern) = "[a-z][a-z0-9_-]*"];
+}
+
+message UpdateAuthProviderRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. Name of the provider to update.
+    string name = 2 [(required) = true, (length) = "<=50", (pattern) = "[a-z][a-z0-9_-]*"];
+
+    // Required. New provider defenition.
+    AuthProvider provider = 3 [(required) = true];
+}
+
+message DeleteAuthProviderRequest {
+    // Required. ID of the ElasticSearch cluster.
+    string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Required. Name of the provider to delete.
+    string name = 2 [(required) = true, (length) = "<=50", (pattern) = "[a-z][a-z0-9_-]*"];  
+}
+
+message AddAuthProvidersMetadata {
+    // ID of the ElasticSearch cluster.
+    string cluster_id = 1;
+
+    // Names of the providers being added.
+    repeated string names = 2;  
+}
+
+message UpdateAuthProvidersMetadata {
+    // ID of the ElasticSearch cluster.
+    string cluster_id = 1;  
+
+    // Names of the providers being added.
+    repeated string names = 2;  
+}
+
+message DeleteAuthProvidersMetadata {
+    // ID of the ElasticSearch cluster.
+    string cluster_id = 1;  
+
+    // Names of the providers being removed.
+    repeated string names = 2;  
+}

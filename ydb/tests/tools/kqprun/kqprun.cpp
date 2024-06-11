@@ -24,7 +24,8 @@ struct TExecutionOptions {
     enum class EExecutionCase {
         GenericScript,
         GenericQuery,
-        YqlScript
+        YqlScript,
+        AsyncQuery
     };
 
     std::vector<TString> ScriptQueries;
@@ -40,7 +41,16 @@ struct TExecutionOptions {
     const TString TraceId = "kqprun_" + CreateGuidAsString();
 
     bool HasResults() const {
-        return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
+        if (ScriptQueries.empty() || ScriptQueryAction != NKikimrKqp::QUERY_ACTION_EXECUTE) {
+            return false;
+        }
+
+        for (EExecutionCase executionCase : ExecutionCases) {
+            if (executionCase != EExecutionCase::AsyncQuery) {
+                return true;
+            }
+        }
+        return false;
     }
 
     EExecutionCase GetExecutionCase(size_t index) const {
@@ -71,14 +81,16 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             Sleep(executionOptions.LoopDelay);
         }
 
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script";
-        if (numberQueries > 1) {
-            Cout << " " << id;
+        if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
+            Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script";
+            if (numberQueries > 1) {
+                Cout << " " << id;
+            }
+            if (numberLoops != 1) {
+                Cout << ", loop " << queryId / numberQueries;
+            }
+            Cout << "..." << colors.Default() << Endl;
         }
-        if (numberLoops != 1) {
-            Cout << ", loop " << queryId / numberQueries;
-        }
-        Cout << "..." << colors.Default() << Endl;
 
         switch (executionOptions.GetExecutionCase(id)) {
         case TExecutionOptions::EExecutionCase::GenericScript:
@@ -108,8 +120,13 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
+
+        case TExecutionOptions::EExecutionCase::AsyncQuery:
+            runner.ExecuteQueryAsync(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId);
+            break;
         }
     }
+    runner.WaitAsyncQueries();
 
     if (executionOptions.HasResults()) {
         try {
@@ -351,7 +368,8 @@ protected:
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
             {"script", TExecutionOptions::EExecutionCase::GenericScript},
             {"query", TExecutionOptions::EExecutionCase::GenericQuery},
-            {"yql-script", TExecutionOptions::EExecutionCase::YqlScript}
+            {"yql-script", TExecutionOptions::EExecutionCase::YqlScript},
+            {"async", TExecutionOptions::EExecutionCase::AsyncQuery}
         });
         options.AddLongOption('C', "execution-case", "Type of query for -p argument")
             .RequiredArgument("query-type")
@@ -361,6 +379,10 @@ protected:
                 TString choice(option->CurValOrDef());
                 ExecutionOptions.ExecutionCases.emplace_back(executionCase(choice));
             });
+        options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
+            .RequiredArgument("uint")
+            .DefaultValue(RunnerOptions.InFlightLimit)
+            .StoreResult(&RunnerOptions.InFlightLimit);
 
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},

@@ -47,6 +47,13 @@ struct TRequestResult {
 };
 
 
+struct TQueryResult {
+    TRequestResult Response;
+    TQueryMeta Meta;
+    std::vector<Ydb::ResultSet> ResultSets;
+};
+
+
 class TYdbSetup {
 public:
     explicit TYdbSetup(const TYdbSetupSettings& settings);
@@ -56,6 +63,8 @@ public:
     TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
     TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
+
+    NThreading::TFuture<TQueryResult> QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TProgressCallback progressCallback) const;
 
     TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 

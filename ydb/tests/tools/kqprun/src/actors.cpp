@@ -11,14 +11,12 @@ namespace {
 class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMock> {
 public:
     TRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
-        NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
+        NThreading::TPromise<TQueryResponse> promise, ui64 resultRowsLimit, ui64 resultSizeLimit,
         TProgressCallback progressCallback)
         : Request_(std::move(request))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
         , ResultSizeLimit_(std::numeric_limits<i64>::max())
-        , ResultSets_(resultSets)
         , ProgressCallback_(progressCallback)
     {
         if (resultRowsLimit) {
@@ -79,7 +77,7 @@ public:
     }
     
     void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Promise_.SetValue(std::move(ev));
+        Promise_.SetValue(TQueryResponse{.Response = std::move(ev), .ResultSets = std::move(ResultSets_)});
         PassAway();
     }
 
@@ -91,12 +89,12 @@ public:
 
 private:
     THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
-    NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> Promise_;
+    NThreading::TPromise<TQueryResponse> Promise_;
     ui64 ResultRowsLimit_;
     ui64 ResultSizeLimit_;
-    std::vector<Ydb::ResultSet>& ResultSets_;
-    std::vector<ui64> ResultSetSizes_;
     TProgressCallback ProgressCallback_;
+    std::vector<Ydb::ResultSet> ResultSets_;
+    std::vector<ui64> ResultSetSizes_;
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
@@ -186,10 +184,9 @@ private:
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
-    NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
+    NThreading::TPromise<TQueryResponse> promise, ui64 resultRowsLimit, ui64 resultSizeLimit,
     TProgressCallback progressCallback) {
-    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, progressCallback);
+    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, progressCallback);
 }
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {

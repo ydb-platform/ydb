@@ -35,12 +35,12 @@ void TCommandSql::Config(TConfig& config) {
         .StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with script (query) text").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
-    config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query plan. "
+    config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
-    config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query plan only. "
+    config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query execution plan. "
             "Query results are ignored.\n"
-            "Important note: The query is actually executed, so any changes will be applied in the database.")
+            "Important note: The query is actually executed, so any changes will be applied to the database.")
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);

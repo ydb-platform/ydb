@@ -657,7 +657,7 @@ public:
     void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
     void RequestStatus() override;
 
-    void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
+    void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation>);
     void ConfirmDestroy();
     void ConfirmEnd(const std::vector<ui32>& childIds);
 
@@ -1108,7 +1108,7 @@ public:
     ~TSingleClusterReadSessionImpl();
 
     void Start();
-    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
+    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>*, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation>);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);

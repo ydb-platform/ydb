@@ -572,11 +572,34 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , ParentId(parentId)
         {}
     };
+
+    struct TBulkAllocationCtx: public TSimpleRefCount<TBulkAllocationCtx> {
+        std::map<size_t, int> RemainingSlots;
+        std::vector<NHuge::THugeSlot> Allocated;
+        std::unique_ptr<TEvHullHugeSlotsAllocate::THandle> Ev;
+
+        TBulkAllocationCtx(std::unique_ptr<TEvHullHugeSlotsAllocate::THandle> ev) 
+            : RemainingSlots(std::move(ev->Get()->SlotSizes))
+            , Ev(std::move(ev)) 
+            {};
+    };
+
+    struct TBulkAllocationItem {
+        TIntrusivePtr<TBulkAllocationCtx> Ctx;
+        size_t SlotSize; 
+
+        TBulkAllocationItem(const TIntrusivePtr<TBulkAllocationCtx> &ctx, size_t slotSize) 
+            : Ctx(ctx)
+            , SlotSize(slotSize) 
+            {};
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // THullHugeKeeperState
     ////////////////////////////////////////////////////////////////////////////
     struct THullHugeKeeperState {
-        THashMap<ui32, std::deque<NWilson::TWithSpan<std::unique_ptr<TEvHullWriteHugeBlob::THandle>>>> WaitQueue;
+        using TWriteItem = NWilson::TWithSpan<std::unique_ptr<TEvHullWriteHugeBlob::THandle>>;
+        THashMap<ui32, std::deque<std::variant<TBulkAllocationItem, TWriteItem>>> WaitQueue;
 
         bool Committing = false;
         ui64 FreeUpToLsn = 0;           // last value we got from PDisk
@@ -682,19 +705,21 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 << " LsnFifo# " << State.LsnFifo.ToString());
         }
 
-        void PutToWaitQueue(ui32 slotSize, std::unique_ptr<TEvHullWriteHugeBlob::THandle> item) {
-            State.WaitQueue[slotSize].emplace_back(std::move(item), NWilson::TSpan(TWilson::VDiskTopLevel,
-                std::move(item->TraceId), "VDisk.HullHugeKeeper.InWaitQueue"));
+         void PutToWaitQueue(ui32 slotSize, std::unique_ptr<TEvHullWriteHugeBlob::THandle> item) {
+            State.WaitQueue[slotSize].push_back(THullHugeKeeperState::TWriteItem(std::move(item), NWilson::TSpan(TWilson::VDiskTopLevel, std::move(item->TraceId), "VDisk.HullHugeKeeper.InWaitQueue")));
+        }
+
+        void PutToWaitQueue(ui32 slotSize, ui32 alignedSize, TIntrusivePtr<TBulkAllocationCtx> item) {
+            State.WaitQueue[alignedSize].push_back(TBulkAllocationItem(std::move(item), slotSize));
         }
 
         bool ProcessWrite(std::unique_ptr<TEvHullWriteHugeBlob::THandle>& ev, const TActorContext& ctx,
                 NWilson::TTraceId traceId, bool putToQueue) {
             auto& msg = *ev->Get();
             NHuge::THugeSlot hugeSlot;
-            ui32 slotSize;
-            if (State.Pers->Heap->Allocate(msg.Data.GetSize(), &hugeSlot, &slotSize)) {
-                const bool inserted = State.Pers->AllocatedSlots.insert(hugeSlot).second;
-                Y_ABORT_UNLESS(inserted);
+            ui32 alignedSize;
+
+            if (AllocateSlot(msg.Data.GetSize(), hugeSlot, ctx, msg.Orbit, traceId.Clone(), alignedSize)) {
                 const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
                 CheckLsn(lsnInfimum, "WriteHugeBlob");
                 const ui64 wId = State.LsnFifo.Push(lsnInfimum);
@@ -702,14 +727,48 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId)));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
-            } else if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
-                LWTRACK(HugeBlobChunkAllocatorStart, ev->Get()->Orbit);
-                auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx, ctx.SelfID,
-                    State.Pers, std::move(traceId), slotSize));
-                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             if (putToQueue) {
-                PutToWaitQueue(slotSize, std::move(ev));
+                PutToWaitQueue(alignedSize, std::move(ev));
+            }
+            return false;
+        }
+
+        bool ProcessAllocation(size_t slotSize, const TIntrusivePtr<TBulkAllocationCtx> &allocation, const TActorContext &ctx, bool putToQueue) {
+            auto orbit = NLWTrace::TOrbit {};
+            while (allocation->RemainingSlots[slotSize]) {
+                NHuge::THugeSlot hugeSlot;
+                ui32 alignedSize;
+                if (AllocateSlot(slotSize, hugeSlot, ctx, orbit, NWilson::TTraceId {}, alignedSize)) {
+                    allocation->RemainingSlots[slotSize]--;
+                    allocation->Allocated.emplace_back(std::move(hugeSlot));
+                } else {
+                    if (putToQueue) {
+                        PutToWaitQueue(slotSize, alignedSize, allocation);
+                    }
+                    return false;
+                }
+            }
+            allocation->RemainingSlots.erase(slotSize);
+            if (allocation->RemainingSlots.empty()) {
+                ctx.Send(allocation->Ev->Sender, new TEvHullHugeSlotsAllocated(std::move(allocation->Allocated)));
+            }
+            return true;
+        }
+
+
+        bool AllocateSlot(size_t size, THugeSlot &hugeSlot, 
+                          const TActorContext &ctx, NLWTrace::TOrbit &orbit, NWilson::TTraceId traceId,
+                          ui32 &alignedSize) {
+            if (State.Pers->Heap->Allocate(size, &hugeSlot, &alignedSize)) {
+                const bool inserted = State.Pers->AllocatedSlots.insert(hugeSlot).second;
+                Y_ABORT_UNLESS(inserted);
+                return true;
+            } else if (AllocatingChunkPerSlotSize.insert(alignedSize).second) {
+                LWTRACK(HugeBlobChunkAllocatorStart, orbit);
+                auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx, ctx.SelfID,
+                    State.Pers, std::move(traceId), alignedSize));
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             return false;
         }
@@ -717,8 +776,22 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         void ProcessQueue(ui32 slotSize, const TActorContext &ctx) {
             auto& queue = State.WaitQueue[slotSize];
             auto it = queue.begin();
-            while (it != queue.end() && ProcessWrite(it->Item, ctx, it->Span.GetTraceId(), false)) {
-                it->Span.EndOk();
+            while (it != queue.end()) {
+                bool ok = std::visit(TOverloaded{
+                    [&](THullHugeKeeperState::TWriteItem& write) {
+                        if (ProcessWrite(write.Item, ctx, write.Span.GetTraceId(), false)) {
+                            write.Span.EndOk();
+                            return true;
+                        }
+                        return false;
+                    },
+                    [&](TBulkAllocationItem &alloc) {
+                        return ProcessAllocation(alloc.SlotSize, alloc.Ctx, ctx, false);
+                    }
+                }, *it);
+                if (!ok) {
+                    break;
+                }
                 ++it;
             }
             queue.erase(queue.begin(), it);
@@ -863,6 +936,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ProcessWrite(item, ctx, item->TraceId.Clone(), true);
         }
 
+        void Handle(TEvHullHugeSlotsAllocate::TPtr &ev, const TActorContext &ctx) {
+            std::unique_ptr<TEvHullHugeSlotsAllocate::THandle> item(ev.Release());
+            auto allocation = MakeIntrusive<TBulkAllocationCtx>(std::move(item));
+            for (auto slot : allocation->Ev->Get()->SlotSizes) {
+                auto slotSize = slot.first;
+                ProcessAllocation(slotSize, allocation, ctx, true);
+            }
+        }
+
         void Handle(TEvHullHugeChunkAllocated::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper:"
@@ -985,6 +1067,21 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(ev->Sender, new TEvHugePreCompactResult(wId), 0, ev->Cookie);
         }
 
+        void Handle(TEvHullHugeSlotsUsed::TPtr &ev, const TActorContext& /*ctx*/) {
+            const TEvHullHugeSlotsUsed *msg = ev->Get();
+            for (const auto& slot : msg->UsedSlots) {
+                auto nErased = State.Pers->AllocatedSlots.erase(slot);
+                Y_ABORT_UNLESS(nErased == 1);
+            }
+            for (const auto& slot : msg->UnusedSlots) {
+                State.Pers->Heap->Free(slot.GetDiskPart());
+            }
+            if (!msg->UsedSlots.empty()) {
+                State.Pers->LogPos.HugeSlotsAllocationLsn = msg->RecLsn;
+            }
+            State.LsnFifo.Pop(msg->WriteId, msg->RecLsn, true);
+        }
+
         void Handle(TEvHugeLockChunks::TPtr &ev, const TActorContext &ctx) {
             const TEvHugeLockChunks *msg = ev->Get();
             LOG_DEBUG(ctx, BS_HULLHUGE,
@@ -1060,6 +1157,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             const bool poison = ev->GetTypeRewrite() == TEvents::TSystem::Poison;
             STRICT_STFUNC_BODY(
                 HFunc(TEvHullWriteHugeBlob, Handle)
+                HFunc(TEvHullHugeSlotsAllocate, Handle)
+                HFunc(TEvHullHugeSlotsUsed, Handle)
                 HFunc(TEvHullHugeChunkAllocated, Handle)
                 HFunc(TEvHullFreeHugeSlots, Handle)
                 HFunc(TEvHullHugeChunkFreed, Handle)

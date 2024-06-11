@@ -21,12 +21,15 @@ namespace NKikimr {
             ui64 BlocksDbSlotDelLsn = 0;
             ui64 BarriersDbSlotDelLsn = 0;
             ui64 EntryPointLsn = 0;
+            ui64 HugeSlotsAllocationLsn = 0;
 
-            static const ui32 SerializedSize = sizeof(ui64) * 7;
+            static const ui32 SerializedSize = sizeof(ui64) * 8;
+            static const ui32 OldSerializedSize = sizeof(ui64) * 7;
+
 
             THullHugeRecoveryLogPos(ui64 allocLsn, ui64 freeLsn, ui64 blobLoggedLsn,
                                     ui64 logoBlobsDelLsn, ui64 blocksDelLsn,
-                                    ui64 barriersDelLsn, ui64 entryLsn)
+                                    ui64 barriersDelLsn, ui64 entryLsn, ui64 hugeSlotsAllocationLsn)
                 : ChunkAllocationLsn(allocLsn)
                 , ChunkFreeingLsn(freeLsn)
                 , HugeBlobLoggedLsn(blobLoggedLsn)
@@ -34,13 +37,14 @@ namespace NKikimr {
                 , BlocksDbSlotDelLsn(blocksDelLsn)
                 , BarriersDbSlotDelLsn(barriersDelLsn)
                 , EntryPointLsn(entryLsn)
+                , HugeSlotsAllocationLsn(hugeSlotsAllocationLsn)
             {}
 
             THullHugeRecoveryLogPos(const THullHugeRecoveryLogPos &) = default;
             THullHugeRecoveryLogPos &operator=(const THullHugeRecoveryLogPos &) = default;
 
             static THullHugeRecoveryLogPos Default() {
-                return THullHugeRecoveryLogPos(0, 0, 0, 0, 0, 0, 0);
+                return THullHugeRecoveryLogPos(0, 0, 0, 0, 0, 0, 0, 0);
             }
 
             TString ToString() const;
@@ -73,6 +77,7 @@ namespace NKikimr {
         struct THullHugeKeeperPersState {
             typedef THashSet<NHuge::THugeSlot> TAllocatedSlots;
             static const ui32 Signature;
+            static const ui32 OldSignature;
 
             TIntrusivePtr<TVDiskContext> VCtx;
             // current pos
@@ -169,6 +174,10 @@ namespace NKikimr {
                         ui64 lsn,
                         const TDiskPartVec &rec,
                         ESlotDelDbType type);
+            TRlas ApplySlotsUsed(
+                        const TActorContext &ctx,
+                        ui64 lsn,
+                        const TDiskPartVec &parts);
             TRlas Apply(const TActorContext &ctx,
                         ui64 lsn,
                         const NHuge::TPutRecoveryLogRec &rec);

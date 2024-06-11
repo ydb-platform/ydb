@@ -75,6 +75,8 @@ message THullDbEntryPoint {
 
     // obsolete field
     repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3;
+
+    optional TDiskPartVec AddedHugeBlobs = 4;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

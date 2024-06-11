@@ -20,6 +20,8 @@ public:
     // returns true if finished
     virtual bool GenerateTask(const TActorContext &ctx) = 0;
     virtual void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) = 0;
+    virtual void Handle(TEvHullHugeSlotsAllocated::TPtr &ev, const TActorContext &ctx) = 0;
+    virtual void Handle(TEvHugePreCompactResult::TPtr &ev, const TActorContext &ctx) = 0;
     virtual void SetHugeKeeperId(const TActorId &hugeKeeperId) {
         HugeKeeperId = hugeKeeperId;
     }
@@ -83,6 +85,87 @@ public:
         const ui64 recLsn = 100500; // FIXME: write to log actually
         ctx.Send(HugeKeeperId, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, recLsn, slotIsUsed));
         State = 2;
+    }
+
+    void Handle(TEvHullHugeSlotsAllocated::TPtr&, const TActorContext&) override {
+        Y_ABORT();
+    }
+
+    void Handle(TEvHugePreCompactResult::TPtr&, const TActorContext&) override {
+        Y_ABORT();
+    }
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// THugeAllocScenary
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+class THugeAllocScenary : public IScenary {
+    int State;
+    int WId;
+
+public:
+    THugeAllocScenary(const TAllVDisks::TVDiskInstance &vDiskInstance)
+        : IScenary(vDiskInstance)
+        , State(0)
+        , WId(-1)
+    {}
+
+    // returns true if finished
+    bool GenerateTask(const TActorContext &ctx) override {
+        switch (State) {
+            case 0: {
+                ctx.Send(HugeKeeperId, new TEvHugePreCompact());
+                State = 1;
+                return false;  
+            }
+            case 2: {
+                std::map<size_t, int> sizes {
+                    {65 << 10, 10},
+                    {50 << 10, 3000},
+                    {80 << 10, 1},
+                    {100 << 10, 5}
+                };
+                ctx.Send(HugeKeeperId, new TEvHullHugeSlotsAllocate(sizes));
+                State = 3;
+                return false;
+            }   
+            case 3:
+                Y_ABORT();
+            case 4:
+                return true;
+            default:
+                Y_ABORT();
+        }
+    }
+
+    void Handle(TEvHullLogHugeBlob::TPtr&, const TActorContext&) override {
+        Y_ABORT();
+    }
+
+    void Handle(TEvHugePreCompactResult::TPtr &ev, const TActorContext&) override {
+        Y_ABORT_UNLESS(State == 1);
+        WId = ev->Get()->WId;
+        State = 2;
+    }
+
+    void Handle(TEvHullHugeSlotsAllocated::TPtr &ev, const TActorContext &ctx) override {
+        Y_ABORT_UNLESS(State == 3);
+
+        const auto *msg = ev->Get();
+        std::vector<NHuge::THugeSlot> used;
+        std::vector<NHuge::THugeSlot> unused;
+
+        for (auto& slot : msg->Slots) {
+            if (slot.GetSize() < (66 << 10)) {
+                unused.push_back(slot);
+            } else {
+                used.push_back(slot);
+            }
+        }
+
+        const ui64 recLsn = 100500; 
+        ctx.Send(HugeKeeperId, new TEvHullHugeSlotsUsed(used, unused, recLsn, WId));
+        State = 4;
     }
 };
 
@@ -289,12 +372,24 @@ class THugeModuleTestActor : public TActorBootstrapped<THugeModuleTestActor> {
         Work(ctx);
     }
 
+    void Handle(TEvHullHugeSlotsAllocated::TPtr &ev, const TActorContext &ctx) {
+        Scenary->Handle(ev, ctx);
+        Work(ctx);
+    }
+
+    void Handle(TEvHugePreCompactResult::TPtr &ev, const TActorContext &ctx) {
+        Scenary->Handle(ev, ctx);
+        Work(ctx);
+    }
+
     STRICT_STFUNC(StateWaitForRecovery,
         HFunc(TEvents::TEvCompleted, HandleRecoveryCompletion);
     )
 
     STRICT_STFUNC(StateWorking,
         HFunc(TEvHullLogHugeBlob, Handle);
+        HFunc(TEvHullHugeSlotsAllocated, Handle);
+        HFunc(TEvHugePreCompactResult, Handle);
     )
 
 public:
@@ -308,6 +403,10 @@ public:
 
 void THugeModuleTest::operator()(TConfiguration *conf) {
     conf->ActorSystem1->Register(new THugeModuleTestActor(conf, new TSimpleScenary(conf->VDisks->Get(0))));
+}
+
+void THugeAllocTest::operator()(TConfiguration *conf) {
+    conf->ActorSystem1->Register(new THugeModuleTestActor(conf, new THugeAllocScenary(conf->VDisks->Get(0))));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

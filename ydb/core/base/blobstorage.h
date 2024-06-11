@@ -711,6 +711,9 @@ struct TEvBlobStorage {
         EvMinHugeBlobSizeUpdate,
         EvHugePreCompact,
         EvHugePreCompactResult,
+        EvHullHugeSlotsAllocate, 
+        EvHullHugeSlotsAllocated, 
+        EvHullHugeSlotsUsed,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

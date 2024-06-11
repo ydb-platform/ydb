@@ -19,7 +19,9 @@ namespace NKikimr {
                 << " LogoBlobsDbSlotDelLsn# " << LogoBlobsDbSlotDelLsn
                 << " BlocksDbSlotDelLsn# " << BlocksDbSlotDelLsn
                 << " BarriersDbSlotDelLsn# " << BarriersDbSlotDelLsn
-                << " EntryPointLsn# " << EntryPointLsn << "}";
+                << " EntryPointLsn# " << EntryPointLsn
+                << " HugeSlotsAllocationLsn# " << HugeSlotsAllocationLsn
+                << "}";
             return str.Str();
         }
 
@@ -32,6 +34,9 @@ namespace NKikimr {
             str.Write(&BlocksDbSlotDelLsn, sizeof(ui64));
             str.Write(&BarriersDbSlotDelLsn, sizeof(ui64));
             str.Write(&EntryPointLsn, sizeof(ui64));
+            if (HugeSlotsAllocationLsn) { // persist only if used to allow safe rollbacks 
+                str.Write(&HugeSlotsAllocationLsn, sizeof(ui64));
+            }
             return str.Str();
         }
 
@@ -48,17 +53,26 @@ namespace NKikimr {
                 memcpy(var, cur, sizeof(*var));
                 cur += sizeof(*var);
             }
+
+            if (size == SerializedSize) {
+                Y_ABORT_UNLESS(static_cast<size_t>(end - cur) >= sizeof(HugeSlotsAllocationLsn));
+                memcpy(&HugeSlotsAllocationLsn, cur, sizeof(HugeSlotsAllocationLsn));
+                cur += sizeof(HugeSlotsAllocationLsn);
+            }
+
             Y_ABORT_UNLESS(cur == end);
         }
 
         bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {
-            return serialized.size() == SerializedSize;
+            return serialized.size() == SerializedSize || serialized.size() == OldSerializedSize;
         }
 
         ////////////////////////////////////////////////////////////////////////////
         // THullHugeKeeperPersState
         ////////////////////////////////////////////////////////////////////////////
-        const ui32 THullHugeKeeperPersState::Signature = 0x18A0CE62;
+        const ui32 THullHugeKeeperPersState::Signature = 0x18A0CE63;
+        const ui32 THullHugeKeeperPersState::OldSignature = 0x18A0CE62;
+
 
         THullHugeKeeperPersState::THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                                            const ui32 chunkSize,
@@ -144,13 +158,18 @@ namespace NKikimr {
 
         TString THullHugeKeeperPersState::Serialize() const {
             TStringStream str;
-            // signature
-            str.Write(&Signature, sizeof(ui32));
-
             // log pos
             TString serializedLogPos = LogPos.Serialize();
-            Y_DEBUG_ABORT_UNLESS(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
-            str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
+            Y_DEBUG_ABORT_UNLESS(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize || serializedLogPos.size() == THullHugeRecoveryLogPos::OldSerializedSize);
+            
+            // signature
+            if (serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize) {
+                str.Write(&Signature, sizeof(ui32));
+            } else {
+                str.Write(&OldSignature, sizeof(ui32));
+            }
+
+            str.Write(serializedLogPos.data(), serializedLogPos.size());
 
             // heap
             TString serializedHeap = Heap->Serialize();
@@ -184,11 +203,13 @@ namespace NKikimr {
             AllocatedSlots.clear();
 
             const char *cur = data;
+            ui32 signature = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // signature
 
             // log pos
-            LogPos.ParseFromString(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize));
-            cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
+            ui32 logPosSize = signature == OldSignature ? THullHugeRecoveryLogPos::OldSerializedSize : THullHugeRecoveryLogPos::SerializedSize;
+            LogPos.ParseFromString(TString(cur, cur + logPosSize));
+            cur += logPosSize; // log pos
 
             // heap
             ui32 heapSize = ReadUnaligned<ui32>(cur);
@@ -216,14 +237,18 @@ namespace NKikimr {
 
         TString THullHugeKeeperPersState::ExtractLogPosition(const TString &data) {
             const char *cur = data.data();
+            ui32 signature = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // signature
-            return TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize);
+            ui32 logPosSize = signature == OldSignature ? THullHugeRecoveryLogPos::OldSerializedSize : THullHugeRecoveryLogPos::SerializedSize;
+            return TString(cur, cur + logPosSize);
         }
 
         TContiguousSpan THullHugeKeeperPersState::ExtractLogPosition(TContiguousSpan data) {
             const char *cur = data.data();
+            ui32 signature = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // signature
-            return TContiguousSpan(cur, THullHugeRecoveryLogPos::SerializedSize);
+            ui32 logPosSize = signature == OldSignature ? THullHugeRecoveryLogPos::OldSerializedSize : THullHugeRecoveryLogPos::SerializedSize;
+            return TContiguousSpan(cur, logPosSize);
         }
 
         bool THullHugeKeeperPersState::CheckEntryPoint(const TString &data) {
@@ -234,19 +259,20 @@ namespace NKikimr {
             const char *cur = data.data();
             const char *end = cur + data.size();
 
-            if (size_t(end - cur) < sizeof(ui32) + THullHugeRecoveryLogPos::SerializedSize + sizeof(ui32))
+            if (size_t(end - cur) < sizeof(ui32) + THullHugeRecoveryLogPos::OldSerializedSize + sizeof(ui32))
                 return false;
 
             // signature
             ui32 signature = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // signature
-            if (signature != Signature)
+            if (signature != Signature && signature != OldSignature)
                 return false;
 
             // log pos
-            if (!THullHugeRecoveryLogPos::CheckEntryPoint(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize))) //FIXME(innokentii) unnecessary copy
+            ui32 logPosSize = signature == OldSignature ? THullHugeRecoveryLogPos::OldSerializedSize : THullHugeRecoveryLogPos::SerializedSize;
+            if (!THullHugeRecoveryLogPos::CheckEntryPoint(TString(cur, cur + logPosSize))) //FIXME(innokentii) unnecessary copy
                 return false;
-            cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
+            cur += logPosSize; // log pos
 
             // heap
             ui32 heapSize = ReadUnaligned<ui32>(cur);
@@ -442,11 +468,46 @@ namespace NKikimr {
             }
         }
 
+         // apply bulk slots confirmation
+        TRlas THullHugeKeeperPersState::ApplySlotsUsed(
+                const TActorContext &ctx,
+                ui64 lsn,
+                const TDiskPartVec &parts)
+        {
+            if (lsn > LogPos.ChunkAllocationLsn) {
+                // apply
+                LOG_DEBUG(ctx, BS_HULLHUGE,
+                          VDISKP(VCtx->VDiskLogPrefix,
+                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
+                                "UsedHugeBlobs apply: %s",
+                                Guid, lsn, LogPos.EntryPointLsn, parts.ToString().data()));
+                for (const auto &part : parts) {
+                    NHuge::THugeSlot hugeSlot(Heap->ConvertDiskPartToHugeSlot(part));
+                    TAllocatedSlots::iterator it = AllocatedSlots.find(hugeSlot);
+                    if (it != AllocatedSlots.end()) {
+                        AllocatedSlots.erase(it);
+                    } else {
+                        Heap->RecoveryModeAllocate(part);
+                    }
+                }
+                LogPos.ChunkAllocationLsn = lsn;
+                return TRlas(true, false);
+            } else {
+                // skip
+                LOG_DEBUG(ctx, BS_HULLHUGE,
+                          VDISKP(VCtx->VDiskLogPrefix,
+                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
+                                "UsedHugeBlobs skip: %s",
+                                Guid, lsn, LogPos.EntryPointLsn, parts.ToString().data()));
+                return TRlas(true, true);
+            }
+        }
+
         // apply huge blob written
         TRlas THullHugeKeeperPersState::Apply(
                 const TActorContext &ctx,
                 ui64 lsn,
-                const NHuge::TPutRecoveryLogRec &rec)
+                const NHuge::TPutRecoveryLogRec &rec)   
         {
             if (rec.DiskAddr == TDiskPart()) {
                 // this is metadata part, no actual slot exists here

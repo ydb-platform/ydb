@@ -46,7 +46,7 @@ ydbops restart --storage
 ydbops restart --tenant
 ```
 
-Можно перезапустить только узлы определенных тенантов, указав `--tenant-list`:
+Можно перезапустить только узлы определенных tenant-ов, указав `--tenant-list`:
 
 ```bash
 ydbops restart --tenant-list=</domain/database_name_1>,</domain/database_name_2>,...

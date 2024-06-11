@@ -1,6 +1,7 @@
 {
     "bottles": {},
     "resources": {
+        "6277415836": "https://devtools-registry.s3.yandex.net/6277415836",
         "2214720943": "https://devtools-registry.s3.yandex.net/2214720943",
         "2214542408": "https://devtools-registry.s3.yandex.net/2214542408",
         "1886578148": "https://devtools-registry.s3.yandex.net/1886578148",
@@ -538,6 +539,7 @@
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408"
     },
     "resources_descriptions": {
+        "6277415836": "Allure 2.29.0",
         "2214720943": "Clang 11.0.0 for darwin-arm64",
         "2214542408": "Clang 11.0.0 for darwin-x86_64 from task/828474520 with LTO and PGO",
         "1886578148": "Clang 11.0.0 for linux-x86_64 from task/846665983 with LTO and PGO at r7671799",

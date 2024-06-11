@@ -1,5 +1,20 @@
 {
     "bottles": {
+        "allure_commandline": {
+            "executable": {
+                "allure": [
+                    "bin",
+                    "allure"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "any": {
+                        "uri": "sbr:6277415836"
+                    }
+                }
+            }
+        },
         "atop": {
             "executable": {
                 "atop": [
@@ -273,6 +288,28 @@
         }
     },
     "toolchain": {
+        "allure_commandline": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "allure": {
+                    "bottle": "allure_commandline",
+                    "executable": "allure"
+                }
+            }
+        },
         "atop": {
             "platforms": [
                 {
@@ -1980,6 +2017,9 @@
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },
     "tools": {
+        "allure": {
+            "description": "Run Allure commandline"
+        },
         "atop": {
             "description": "Advanced System & Process Monitor"
         },

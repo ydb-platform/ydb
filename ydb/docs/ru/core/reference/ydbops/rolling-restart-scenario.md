@@ -40,7 +40,7 @@ ydbops restart
 ydbops restart --storage
 ```
 
-Или только тенант-узлы:
+Или только tenant-узлы:
 
 ```bash
 ydbops restart --tenant

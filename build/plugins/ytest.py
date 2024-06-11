@@ -80,6 +80,10 @@ def validate_test(unit, kw):
     errors = []
     warnings = []
 
+    mandatory_fields = {"SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME"}
+    for field in mandatory_fields - valid_kw.keys():
+        errors.append(f"Mandatory field {field!r} is not set in DART")
+
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
         if not project_path.startswith(
@@ -333,12 +337,8 @@ def validate_test(unit, kw):
     return valid_kw, warnings, errors
 
 
-def dump_test(unit, kw, trim_falsy_fields=True):
-    if trim_falsy_fields:
-        # "SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME" are required to distinguish dart files
-        # TODO remove "TEST-FILES", "FILES" once defaults are moved to tests suites
-        dont_trim = ("SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME", "TEST-FILES", "FILES")
-        kw = {k: v for k, v in kw.items() if k in dont_trim or v and (not isinstance(v, (str, bytes)) or v.strip())}
+def dump_test(unit, kw):
+    kw = {k: v for k, v in kw.items() if v and (not isinstance(v, str | bytes) or v.strip())}
     valid_kw, warnings, errors = validate_test(unit, kw)
     for w in warnings:
         unit.message(['warn', w])
@@ -403,14 +403,14 @@ def implies(a, b):
 
 
 def match_coverage_extractor_requirements(unit):
-    # we shouldn't add test if
+    # we add test if
     return all(
         (
-            # tests are not requested
+            # tests are requested
             unit.get("TESTS_REQUESTED") == "yes",
-            # build doesn't imply clang coverage, which supports segment extraction from the binaries
+            # build implies clang coverage, which supports segment extraction from the binaries
             unit.get("CLANG_COVERAGE") == "yes",
-            # contrib wasn't requested
+            # contrib was requested
             implies(
                 _common.get_norm_unit_path(unit).startswith("contrib/"), unit.get("ENABLE_CONTRIB_COVERAGE") == "yes"
             ),

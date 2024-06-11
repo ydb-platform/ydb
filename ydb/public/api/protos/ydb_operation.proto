@@ -122,11 +122,9 @@ message Operation {
     // For operations in progress, it might indicate the current cost of the operation (if supported).
     CostInfo cost_info = 7;
 
-    // The time at which this operation was started and the time at which
-    // this operation was completed (doesn't matter successful or not).
-    // Currently filled for:
-    // - Export;
-    // - Import.
+    // The time at which this operation was started (if supported).
     google.protobuf.Timestamp start_time = 8;
+
+    // The time at which this operation was completed, doesn't matter successful or not (if supported).
     google.protobuf.Timestamp end_time = 9;
 }

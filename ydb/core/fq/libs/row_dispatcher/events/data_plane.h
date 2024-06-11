@@ -13,11 +13,11 @@ NActors::TActorId RowDispatcherServiceActorId();
 struct TEvRowDispatcher {
     // Event ids.
     enum EEv : ui32 {
-        EvCreateResource = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
-        EvCreateResourceResponse,
-        EvDeleteResource,
-        EvStartSession,
+        EvStartSession = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorInfo,
+        EvGetAddressRequest,
+        EvGetAddressResponse,
+        EvCreateResource,
         EvEnd,
     };
 
@@ -28,8 +28,6 @@ struct TEvRowDispatcher {
         NActors::TActorId LeaderActorId;
     };
 
-
-
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
         TEvStartSession() = default;
@@ -38,6 +36,16 @@ struct TEvRowDispatcher {
     struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
         NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
         TEvCoordinatorInfo() = default;
+    };
+
+    struct TEvGetAddressRequest : public NActors::TEventPB<TEvGetAddressRequest,
+        NFq::NRowDispatcherProto::TEvGetAddressRequest, EEv::EvGetAddressRequest> {
+        TEvGetAddressRequest() = default;
+    };
+
+    struct TEvGetAddressResponse : public NActors::TEventPB<TEvGetAddressResponse,
+        NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvGetAddressResponse> {
+        TEvGetAddressResponse() = default;
     };
 
 };

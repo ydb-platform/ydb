@@ -743,7 +743,9 @@ private:
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
                 for (NYql::NDqProto::TTaskInput& taskInput : *task.MutableInputs()) {
-                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == "PqSource") {
+                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource 
+                        && (taskInput.GetSource().GetType() == "PqSource"
+                            || taskInput.GetSource().GetType() == "PqRdSource")) {
                         google::protobuf::Any& settingsAny = *taskInput.MutableSource()->MutableSettings();
                         YQL_ENSURE(settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>());
                         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
@@ -1949,7 +1951,7 @@ private:
                 Params.FunctionRegistry
             );
             const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, false, dbResolver));
         }
 
         {

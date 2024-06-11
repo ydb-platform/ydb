@@ -10,6 +10,7 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -53,18 +54,21 @@ public:
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
 
-    void Handle(TEvents::TEvUndelivered::TPtr &ev) ;
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) ;
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &ev) ;
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &ev);
+    void Handle(NFq::TEvents::TEvRowDispatcherRequest::TPtr &ev);
+
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-        hFunc(TEvents::TEvUndelivered, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorInfo, Handle);
+        hFunc(NFq::TEvents::TEvRowDispatcherRequest, Handle);
     })
 
 private:
@@ -88,7 +92,7 @@ void TRowDispatcher::Bootstrap() {
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources).release());
+        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver).release());
         Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources).release());
     }
 }
@@ -108,7 +112,7 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvNodeDisconnected " << ev->Get()->NodeId);
 }
 
-void TRowDispatcher::Handle(TEvents::TEvUndelivered::TPtr &ev) {
+void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, ev: " << ev->Get()->ToString());
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, Reason: " << ev->Get()->Reason);
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, Data: " << ev->Get()->Data);
@@ -123,6 +127,11 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvCoordinatorInfo ");
 }
+
+ void TRowDispatcher::Handle(NFq::TEvents::TEvRowDispatcherRequest::TPtr &ev) {
+    LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvRowDispatcherRequest ");
+    Send(ev->Sender, new NFq::TEvents::TEvRowDispatcherResult(LeaderActorId));
+ }
 
 } // namespace
 

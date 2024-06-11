@@ -143,7 +143,7 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
-    Register(NewLeaderDetector(SelfId(), Config, CredentialsProviderFactory, YqSharedResources).release());
+    Register(NewLeaderDetector(SelfId(), Config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver).release());
 
     Register(MakeCreateCoordinationNodeActor(
         SelfId(),

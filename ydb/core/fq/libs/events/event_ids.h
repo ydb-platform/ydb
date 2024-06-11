@@ -53,6 +53,8 @@ struct TEventIds {
 
         // Row dispatcher
         EvCreateSemaphoreResult,
+        EvRowDispatcherRequest,
+        EvRowDispatcherResult,
 
         // Special events
         EvEnd

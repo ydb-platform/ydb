@@ -195,6 +195,7 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
+                bool useRowDispatcher = false;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);
@@ -203,6 +204,8 @@ public:
                         srcDesc.SetConsumerName(TString(Value(setting)));
                     } else if (name == EndpointSetting) {
                         srcDesc.SetEndpoint(TString(Value(setting)));
+                    } else if (name == UseRowDispatcher) {
+                        useRowDispatcher = FromString<bool>(Value(setting));
                     } else if (name == UseSslSetting) {
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
@@ -231,7 +234,7 @@ public:
                 }
 
                 protoSettings.PackFrom(srcDesc);
-                sourceType = "PqSource";
+                sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
             }
         }
     }
@@ -295,6 +298,7 @@ public:
         }
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
+        Add(props, UseRowDispatcher, ToString(clusterConfiguration->UseRowDispatcher), pos, ctx);
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }

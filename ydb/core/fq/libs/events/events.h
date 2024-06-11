@@ -248,6 +248,17 @@ struct TEvents {
         NYql::TIssues Issues;
         const bool FatalError;
     };
+
+
+    struct TEvRowDispatcherRequest : public NActors::TEventLocal<TEvRowDispatcherRequest, TEventIds::EvRowDispatcherRequest> {};
+
+    struct TEvRowDispatcherResult : public NActors::TEventLocal<TEvRowDispatcherResult, TEventIds::EvRowDispatcherResult> {
+        TEvRowDispatcherResult(TMaybe<NActors::TActorId> coordinatorActorId)
+            : CoordinatorActorId(coordinatorActorId) {}
+
+        TMaybe<NActors::TActorId> CoordinatorActorId;
+    };
+
 };
 
 NActors::TActorId MakeYqPrivateProxyId();

@@ -1,15 +1,26 @@
+syntax = "proto3";
+
 package NFq.NRowDispatcherProto;
 option cc_enable_arenas = true;
 
-import "google/protobuf/any.proto";
-
-
-
+import "ydb/library/actors/protos/actors.proto";
 
 message TEvStartSession {
-    optional uint32 TransportMeta = 1;
+    uint32 TransportMeta = 1;
 }
 
 message TEvCoordinatorInfo {
-    optional uint32 TransportMeta = 1;
+    uint32 TransportMeta = 1;
 }
+
+message TEvGetAddressRequest {
+    string Topic = 1;
+    uint32 PartitionId = 2;
+}
+
+message TEvGetAddressResponse {
+    string topic = 1;
+    repeated uint32 partition_id = 2;
+    NActorsProto.TActorId ActorId = 3;
+}
+

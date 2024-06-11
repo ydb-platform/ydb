@@ -63,7 +63,7 @@ public:
         NActors::TActorId rowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        NYdb::TDriver driver);
 
     void Bootstrap();
 
@@ -94,9 +94,9 @@ TLeaderDetector::TLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    NYdb::TDriver driver)
     : Config(config)
-    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
+    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, driver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
     , ParentId(parentId) {
 }
@@ -214,9 +214,9 @@ std::unique_ptr<NActors::IActor> NewLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    NYdb::TDriver driver)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, yqSharedResources));
+    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, driver));
 }
 
 } // namespace NFq

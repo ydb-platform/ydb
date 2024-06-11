@@ -7,6 +7,7 @@ namespace NYql {
 constexpr TStringBuf PartitionsCountProp = "PartitionsCount";
 constexpr TStringBuf ConsumerSetting = "Consumer";
 constexpr TStringBuf EndpointSetting = "Endpoint";
+constexpr TStringBuf UseRowDispatcher = "UseRowDispatcher";
 constexpr TStringBuf UseSslSetting = "UseSsl";
 constexpr TStringBuf AddBearerToTokenSetting = "AddBearerToToken";
 constexpr TStringBuf WatermarksEnableSetting = "WatermarksEnable";

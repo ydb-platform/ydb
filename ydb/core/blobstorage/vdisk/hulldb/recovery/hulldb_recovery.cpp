@@ -393,10 +393,12 @@ namespace NKikimr {
                 << "Db# Barriers action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
 
         Y_ABORT_UNLESS(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()));
-        if (HullDs->HullCtx->BarrierValidation) {
+        const bool validation = HullDs->HullCtx->BarrierValidation;
+        HullDs->Barriers->PutToFresh(validation ? std::shared_ptr<TFreshAppendixBarriers>(barriers) : std::move(barriers),
+            seg.First, seg.Last);
+        if (validation) {
             UpdateBarrierCache(barriers);
         }
-        HullDs->Barriers->PutToFresh(std::move(barriers), seg.First, seg.Last);
     }
 
     void THullDbRecovery::GetOwnedChunks(TSet<TChunkIdx>& chunks) const

@@ -4,5 +4,3 @@
 
 // define to turn on latency optimization
 //#define UNPACK_LOCALSYNCDATA
-
-

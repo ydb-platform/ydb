@@ -529,15 +529,11 @@ namespace NKikimr {
         auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
             BlocksCache.UpdateInFlight(rec->TabletId, {rec->Generation, rec->IssuerGuid}, curLsn++);
         };
-        auto otherHandler = [&] (const void *) {
-            curLsn++;
-        };
+        auto otherHandler = [&] (const void *) {};
         // do job - update blocks cache
         for (const NSyncLog::TRecordHdr* rec : records) {
             NSyncLog::HandleRecordHdr(rec, otherHandler, blockHandler, otherHandler, blockHandlerV2);
         }
-        // check that all records are applied
-        Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         return seg;
     }
@@ -573,6 +569,9 @@ namespace NKikimr {
     {
         ui64 curLsn = seg.First;
 
+        TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>::TVec blobs;
+        TFreshAppendix<TKeyBarrier, TMemRecBarrier>::TVec barriers;
+
         // record handlers
         auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
             Y_DEBUG_ABORT_UNLESS(TIngress::MustKnowAboutLogoBlob(HullDs->HullCtx->VCtx->Top.get(),
@@ -583,36 +582,51 @@ namespace NKikimr {
                            HullDs->HullCtx->VCtx->ShortSelfVDisk.ToString().data(),
                            HullDs->HullCtx->VCtx->Top->ToString().data());
             TLogoBlobID genId(rec->LogoBlobID(), 0); // TODO: add verify for logoBlob.PartId() == 0 after migration
-            ReplayAddLogoBlobCmd(ctx, genId, rec->Ingress, curLsn++, THullDbRecovery::NORMAL);
+            blobs.push_back({genId, rec->Ingress});
         };
         auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
             // replay uncondititionally
-            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, 0, curLsn, THullDbRecovery::NORMAL);
-            Fields->DelayedResponses.ConfirmLsn(curLsn, replySender);
-            ++curLsn;
+            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, 0, curLsn++, THullDbRecovery::NORMAL);
         };
         auto barrierHandler = [&] (const NSyncLog::TBarrierRec *rec) {
-            ReplayAddBarrierCmd(ctx, rec->TabletId, rec->Channel, rec->Gen, rec->GenCounter, rec->CollectGeneration,
-                rec->CollectStep, rec->Hard, rec->Ingress, curLsn++, THullDbRecovery::NORMAL);
+            barriers.push_back({{rec->TabletId, rec->Channel, rec->Gen, rec->GenCounter, static_cast<bool>(rec->Hard)},
+                {rec->CollectGeneration, rec->CollectStep, rec->Ingress}});
         };
         auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
-            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, rec->IssuerGuid, curLsn, THullDbRecovery::NORMAL);
-            Fields->DelayedResponses.ConfirmLsn(curLsn, replySender);
-            ++curLsn;
+            ReplayAddBlockCmd(ctx, rec->TabletId, rec->Generation, rec->IssuerGuid, curLsn++, THullDbRecovery::NORMAL);
         };
 
         // process synclog data
         NSyncLog::TFragmentReader fragment(data);
         fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+
+        if (blobs) {
+            TLsnSeg seg(curLsn, curLsn + blobs.size() - 1);
+            auto appendix = std::make_shared<TFreshAppendix<TKeyLogoBlob, TMemRecLogoBlob>>(std::move(blobs),
+                TMemoryConsumer(HullDs->HullCtx->VCtx->FreshIndex));
+            ReplaySyncDataCmd_LogoBlobsBatch(ctx, std::move(appendix), seg, THullDbRecovery::NORMAL);
+            curLsn = seg.Last + 1;
+            CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+                Fields->AllowGarbageCollection);
+        }
+
+        if (barriers) {
+            TLsnSeg seg(curLsn, curLsn + barriers.size() - 1);
+            auto appendix = std::make_shared<TFreshAppendix<TKeyBarrier, TMemRecBarrier>>(std::move(barriers),
+                TMemoryConsumer(HullDs->HullCtx->VCtx->FreshIndex));
+            ReplaySyncDataCmd_BarriersBatch(ctx, std::move(appendix), seg, THullDbRecovery::NORMAL);
+            curLsn = seg.Last + 1;
+            CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
+                Fields->AllowGarbageCollection);
+        }
+
         // check that all records are applied
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
+        Fields->DelayedResponses.ConfirmLsn(seg.Last, replySender);
+
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
-            Fields->AllowGarbageCollection);
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx, false,
-            Fields->AllowGarbageCollection);
-        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
 

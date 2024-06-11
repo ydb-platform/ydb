@@ -433,7 +433,7 @@ public:
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
                 const auto& hostMap = host.GetMap();
 
-                if (hostMap.at("health").GetString() != "ALIVE") {
+                if (hostMap.at("health").GetString() != "ALIVE" && hostMap.at("type").GetString() != "MASTER"){
                     // Host is not alive, skip it
                     continue;
 

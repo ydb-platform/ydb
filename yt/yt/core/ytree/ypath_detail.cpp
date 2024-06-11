@@ -482,7 +482,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
         writer.OnBeginMap();
 
         if (attributeFilter) {
-            WriteAttributesFragment(&writer, attributeFilter, /*stable*/false);
+            WriteAttributesFragment(&writer, attributeFilter, /*stable*/ false);
         } else {
             if (builtinAttributeProvider) {
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;

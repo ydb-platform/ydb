@@ -151,7 +151,7 @@ private:
                 auto guard = Guard(Lock_);
                 while(GuardedProcessQueues());
             }),
-            /*priority*/std::numeric_limits<int>::min());
+            /*priority*/ std::numeric_limits<int>::min());
     }
 
 #endif

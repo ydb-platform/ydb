@@ -403,7 +403,7 @@ private:
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "IdleFiberPool",
         BIND_NO_PROPAGATE(&TIdleFiberPool::Shutdown, this),
-        /*priority*/std::numeric_limits<int>::min() + 1);
+        /*priority*/ std::numeric_limits<int>::min() + 1);
 
     void Shutdown()
     {

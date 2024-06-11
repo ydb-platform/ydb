@@ -1640,7 +1640,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
         writer->WriteEntity();
     };
 
-    auto structMatch = MatchStructTypes(descriptor, skiffSchema, /*allowUnknownSkiffFields*/false);
+    auto structMatch = MatchStructTypes(descriptor, skiffSchema, /*allowUnknownSkiffFields*/ false);
     std::vector<TSkiffToYsonConverter> converterList;
     for (const auto& match : structMatch) {
         const auto& [fieldDescriptor, fieldSkiffSchema] = *match;

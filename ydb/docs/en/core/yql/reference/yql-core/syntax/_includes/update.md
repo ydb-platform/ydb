@@ -14,7 +14,9 @@ WHERE Key1 > 1;
 
 ## UPDATE ON {#update-on}
 
-Updates the data based on the results of a subquery. The set of columns returned by the subquery must be a subset of the table's columns being updated, and all columns of the table's primary key must be present in the returned columns. The data types of the columns returned by the subquery must match the data types of the corresponding columns in the table.
+Updates the data in the table based on the results of a subquery. The set of columns returned by the subquery must be a subset of the table's columns being updated, and all columns of the table's primary key must be present in the returned columns. The data types of the columns returned by the subquery must match the data types of the corresponding columns in the table.
+
+The primary key value is used to search for the rows being updated. For each row found, the values of the non-key columns is replaced with the values returned in the corresponding row of the result of the subquery. The values of the table columns that are missing in the returned columns of the subquery remain unchanged.
 
 **Example**
 
@@ -24,9 +26,6 @@ $to_update = (
     WHERE Key = 1
 );
 
-SELECT * FROM my_table;
-
 UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
-

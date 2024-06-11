@@ -69,7 +69,7 @@ class TYdbSetup::TImpl {
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
         if (Settings_.LogOutputFile) {
-            return NActors::CreateFileBackend(*Settings_.LogOutputFile);
+            return NActors::CreateFileBackend(Settings_.LogOutputFile);
         } else {
             return NActors::CreateStderrBackend();
         }
@@ -138,6 +138,7 @@ private:
 
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
+            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset);
         }
 
         return serverSettings;

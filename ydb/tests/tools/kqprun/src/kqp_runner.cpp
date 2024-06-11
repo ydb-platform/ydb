@@ -295,7 +295,7 @@ private:
 
     void PrintScriptProgress(const TString& plan) const {
         if (Options_.InProgressStatisticsOutputFile) {
-            TFileOutput outputStream(*Options_.InProgressStatisticsOutputFile);
+            TFileOutput outputStream(Options_.InProgressStatisticsOutputFile);
             outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;

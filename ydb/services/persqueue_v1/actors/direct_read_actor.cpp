@@ -66,7 +66,6 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvNotifiedWhenDone::TPt
     Die(ctx);
 }
 
-
 bool TDirectReadSessionActor::ReadFromStreamOrDie(const TActorContext& ctx) {
     if (!Request->GetStreamCtx()->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc read failed at start");
@@ -90,7 +89,7 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvReadFinished::TPtr& e
     }
 
     switch (request.client_message_case()) {
-        case TClientMessage::kInitDirectRead: {
+        case TClientMessage::kInitDirectReadRequest: {
             ctx.Send(ctx.SelfID, new TEvPQProxy::TEvInitDirectRead(request, Request->GetStreamCtx()->GetPeerName()));
             return;
         }
@@ -199,7 +198,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     }
     Initing = true;
 
-    const auto& init = ev->Get()->Request.init_direct_read();
+    const auto& init = ev->Get()->Request.init_direct_read_request();
 
     if (!init.topics_read_settings_size()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
@@ -318,6 +317,14 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
 }
 
 void TDirectReadSessionActor::InitSession(const TActorContext& ctx) {
+    // Successfully authenticated, send InitDirectReadResponse, wait for StartDirectReadPartitionSession requests.
+    TServerMessage result;
+    result.set_status(Ydb::StatusIds::SUCCESS);
+    result.mutable_init_direct_read_response();
+    if (!WriteToStreamOrDie(ctx, std::move(result))) {
+        return;
+    }
+
     InitDone = true;
     ReadFromStreamOrDie(ctx);
     ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));

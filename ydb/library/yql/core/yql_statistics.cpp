@@ -75,7 +75,7 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
 
     auto tableStats = dbStats.at(tablePath).GetMapSafe();
 
-    if (auto keyCols = tableStats.find("key_columns")) {
+    if (auto keyCols = tableStats.find("key_columns"); keyCols != tableStats.end()) {
         TVector<TString> cols;
         for (auto c : keyCols->second.GetArraySafe()) {
             cols.push_back(c.GetStringSafe());
@@ -83,17 +83,17 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
         res->KeyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
     }
 
-    if (auto nrows = tableStats.find("n_rows")) {
+    if (auto nrows = tableStats.find("n_rows"); nrows != tableStats.end()) {
         res->Nrows = nrows->second.GetDoubleSafe();
     }
-    if (auto byteSize = tableStats.find("byte_size")) {
+    if (auto byteSize = tableStats.find("byte_size"); byteSize != tableStats.end()) {
         res->ByteSize = byteSize->second.GetDoubleSafe();
     }
-    if (auto nattrs = tableStats.find("n_attrs")) {
+    if (auto nattrs = tableStats.find("n_attrs"); nattrs != tableStats.end()) {
         res->Ncols = nattrs->second.GetIntegerSafe();
     }
 
-    if (auto columns = tableStats.find("columns")) {
+    if (auto columns = tableStats.find("columns"); columns != tableStats.end()) {
         if (!res->ColumnStatistics) {
             res->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(new TOptimizerStatistics::TColumnStatMap());
         }
@@ -105,10 +105,10 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
 
             auto column_name = colMap.at("name").GetStringSafe();
 
-            if (auto numUniqueVals = colMap.find("n_unique_vals")) {
+            if (auto numUniqueVals = colMap.find("n_unique_vals"); numUniqueVals != colMap.end()) {
                 cStat.NumUniqueVals = numUniqueVals->second.GetDoubleSafe();
             }
-            if (auto hll = colMap.find("hyperloglog")) {
+            if (auto hll = colMap.find("hyperloglog"); hll != colMap.end()) {
                 cStat.HyperLogLog = hll->second.GetDoubleSafe();
             }
 

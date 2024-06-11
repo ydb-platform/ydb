@@ -4,7 +4,7 @@
 
 Утилита `ydbops` облегчает выполнение объемные сценариев на кластерах {{ ydb-short-name }}. Утилита поддерживает кластеры, развернутые с помощью [Ansible](../../devops/ansible/index.md), [Kubernetes](../../devops/kubernetes/index.md) или [вручную](../../devops/manual/index.md).
 
-## See also
+## Смотрите также
 
 * Для установки утилиты следуйте [инструкциям](install.md).
 * Для настройки утилиты смотрите [справочник конфигурации](configuration.md).

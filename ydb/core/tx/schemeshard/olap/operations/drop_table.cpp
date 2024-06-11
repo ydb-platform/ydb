@@ -250,6 +250,65 @@ public:
     }
 };
 
+class TProposedDeleteParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+private:
+    TString DebugHint() const override {
+        return TStringBuilder()
+                << "TDropColumnTable TProposedDeleteParts"
+                << " operationId#" << OperationId;
+    }
+
+    bool Finish(TOperationContext& context) {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
+
+        bool isStandalone = false;
+        {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
+            auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
+            isStandalone = tableInfo->IsStandalone();
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
+
+        if (isStandalone) {
+            for (auto& shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        }
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+public:
+    TProposedDeleteParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(),
+            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+             TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " ProgressState"
+            << ", at schemeshard: " << ssId);
+
+        return Finish(context);
+    }
+};
+
 class TDropColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
@@ -449,7 +508,7 @@ private:
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
-            return TTxState::Done;
+            return TTxState::ProposedDeleteParts;
         default:
             return TTxState::Invalid;
         }
@@ -463,8 +522,8 @@ private:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
             return MakeHolder<TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+        case TTxState::ProposedDeleteParts:
+            return MakeHolder<TProposedDeleteParts>(OperationId);
         default:
             return nullptr;
         }

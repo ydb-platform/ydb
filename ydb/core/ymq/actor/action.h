@@ -77,12 +77,14 @@ public:
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
         }
+        bool enableThrottling = (Action_ != EAction::CreateQueue);
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<TSqsEvents::TEvGetConfiguration>(
                 RequestId_,
                 UserName_,
                 GetQueueName(),
                 FolderId_,
+                enableThrottling,
                 configurationFlags)
         );
     }

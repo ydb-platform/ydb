@@ -163,6 +163,7 @@ struct TSqsEvents {
         TString  UserName;
         TString  QueueName;
         TString  FolderId;
+        bool EnableThrottling = true;
         ui64 Flags = 0;
 
         enum EFlags {
@@ -183,11 +184,13 @@ struct TSqsEvents {
                 const TString& user,
                 const TString& name,
                 const TString& folderId,
+                bool enableThrottling,
                 ui64 flags = 0
         )   : RequestId(std::move(requestId))
             , UserName(user)
             , QueueName(name)
             , FolderId(folderId)
+            , EnableThrottling(enableThrottling)
             , Flags(flags)
         { }
     };

@@ -596,8 +596,10 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
         LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
         RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
         user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
-    } else {
+    } else if (ev->Get()->EnableThrottling) {
         AnswerThrottled(ev);
+    } else {
+        AnswerNotExists(ev, user);
     }
 }
 

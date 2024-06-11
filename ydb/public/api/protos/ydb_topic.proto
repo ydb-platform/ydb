@@ -670,7 +670,7 @@ message StreamDirectReadMessage {
         int64 partition_session_id = 3;
 
         // Partition generation.
-        int64 generation = 2;
+        int64 generation = 4;
     }
 
     // Messages that have been read directly from the partition node.

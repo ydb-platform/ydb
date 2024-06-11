@@ -107,8 +107,6 @@
 #include <ydb/core/fq/libs/mock/yql_mock.h>
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/services/bg_tasks/ds_table/executor.h>
-#include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/common/service.h>
 #include <ydb/services/ext_index/service/executor.h>
@@ -759,11 +757,6 @@ namespace Tests {
             auto* actor = NMetadata::NProvider::CreateService(cfg);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-        }
-        if (Settings->IsEnableBackgroundTasks()) {
-            auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableExternalIndex()) {
             auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());

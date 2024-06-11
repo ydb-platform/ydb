@@ -246,10 +246,11 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
+        TTypeEnvironment env(alloc);
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, rows.front().Columns());
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, env);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(20);
@@ -297,6 +298,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
+        TTypeEnvironment env(alloc);
 
         TSmallVec<TKqpComputeContextBase::TColumn> resultCols;
         auto resCol = TKqpComputeContextBase::TColumn {
@@ -305,7 +307,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         resultCols.push_back(resCol);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, resultCols);
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, env);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(1);
@@ -328,10 +330,11 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
+        TTypeEnvironment env(alloc);
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
         TVector<TOwnedCellVec> emptyBatch(1000);
-        auto bytes = scanData.AddData(emptyBatch, {}, factory);
+        auto bytes = scanData.AddData(emptyBatch, {}, factory, env);
         UNIT_ASSERT(bytes > 0);
 
         std::vector<NUdf::TUnboxedValue*> containerPtr;
@@ -348,12 +351,13 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
+        TTypeEnvironment env(alloc);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
 
         TVector<TDataRow> rows = TestRows();
         std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows, rows.front().MakeArrowSchema());
 
-        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory);
+        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory, env);
         UNIT_ASSERT(bytes > 0);
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (const auto& row: rows) {

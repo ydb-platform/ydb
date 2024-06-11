@@ -198,7 +198,9 @@ public:
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled) {
-            Cout << CoutColors_.Cyan() << "Monitoring port: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort() << Endl;
+            for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
+                Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
+            }
         }
     }
 

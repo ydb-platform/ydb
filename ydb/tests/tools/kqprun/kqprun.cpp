@@ -30,14 +30,22 @@ struct TExecutionOptions {
     std::vector<TString> ScriptQueries;
     TString SchemeQuery;
 
+    ui32 LoopCount = 1;
+    TDuration LoopDelay;
+
     bool ForgetExecution = false;
-    EExecutionCase ExecutionCase = EExecutionCase::GenericScript;
+    std::vector<EExecutionCase> ExecutionCases;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
     const TString TraceId = "kqprun_" + CreateGuidAsString();
 
     bool HasResults() const {
         return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
+    }
+
+    EExecutionCase GetExecutionCase(size_t index) const {
+        Y_ABORT_UNLESS(!ExecutionCases.empty());
+        return ExecutionCases[std::min(index, ExecutionCases.size() - 1)];
     }
 };
 
@@ -55,9 +63,24 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         }
     }
 
-    for (size_t id = 0; id < executionOptions.ScriptQueries.size(); ++id) {
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script" << (executionOptions.ScriptQueries.size() > 1 ? TStringBuilder() << " " << id : TString()) << "..." << colors.Default() << Endl;
-        switch (executionOptions.ExecutionCase) {
+    const size_t numberQueries = executionOptions.ScriptQueries.size();
+    const size_t numberLoops = executionOptions.LoopCount;
+    for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
+        size_t id = queryId % numberQueries;
+        if (id == 0 && queryId > 0) {
+            Sleep(executionOptions.LoopDelay);
+        }
+
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script";
+        if (numberQueries > 1) {
+            Cout << " " << id;
+        }
+        if (numberLoops != 1) {
+            Cout << ", loop " << queryId / numberQueries;
+        }
+        Cout << "..." << colors.Default() << Endl;
+
+        switch (executionOptions.GetExecutionCase(id)) {
         case TExecutionOptions::EExecutionCase::GenericScript:
             if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
@@ -334,7 +357,10 @@ protected:
             .RequiredArgument("query-type")
             .DefaultValue("script")
             .Choices(executionCase.GetChoices())
-            .StoreMappedResultT<TString>(&ExecutionOptions.ExecutionCase, executionCase);
+            .Handler1([this, executionCase](const NLastGetopt::TOptsParser* option) {
+                TString choice(option->CurValOrDef());
+                ExecutionOptions.ExecutionCases.emplace_back(executionCase(choice));
+            });
 
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
@@ -349,6 +375,15 @@ protected:
         options.AddLongOption('F', "forget", "Forget script execution operation after fetching results")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ForgetExecution);
+
+        options.AddLongOption("loop-count", "Number of runs of the script query (use 0 to start infinite loop)")
+            .RequiredArgument("uint")
+            .DefaultValue(ExecutionOptions.LoopCount)
+            .StoreResult(&ExecutionOptions.LoopCount);
+        options.AddLongOption("loop-delay", "Delay in milliseconds between loop steps")
+            .RequiredArgument("uint")
+            .DefaultValue(1000)
+            .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
         // Cluster settings
 

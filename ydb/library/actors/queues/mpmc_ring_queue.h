@@ -115,10 +115,8 @@ struct TMPMCRingQueueStats {
 
     template <typename  ...TArgs>
     static void IncrementMetrics(TArgs& ...args) {
-        if constexpr (CollectStatistics) {
-            auto dummy = [](...) {};
-            dummy(++args...);
-        }
+        auto dummy = [](...) {};
+        dummy(++args...);
     }
 
 #define DEFINE_INCREMENT_STATS_1(M1)                \

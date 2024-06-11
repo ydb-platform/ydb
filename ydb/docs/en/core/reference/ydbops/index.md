@@ -8,7 +8,7 @@
 
 * To install the utility, follow the [instructions](install.md).
 * see [configuration reference](configuration.md) for available configuration options.
-* The source code of `ydbops` can be found [on Github](https://github.com/ydb-platform/ydbops).
+* The source code of `ydbops` can be found [on GitHub](https://github.com/ydb-platform/ydbops).
 
 ## Currently supported scenarios
 

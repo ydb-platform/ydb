@@ -150,6 +150,7 @@ namespace {
                 }
                 Mngr.StartJob(TlsActivationContext->Now(), deletedParts, partsLeft);
                 Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
+                TryCompleteBatch(epoch);
             }
         }
 
@@ -158,6 +159,8 @@ namespace {
         }
 
         void TryCompleteBatch(ui64 epoch) {
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TEvDelLogoBlobDataSyncLogResult received"), (ExpectedEpoch, epoch), (ActualEpoch, Mngr.GetEpoch()), (ToSendPartsCount, Mngr.ToSendPartsCount), (SentPartsCount, Mngr.SentPartsCount));
+
             if (auto ev = Mngr.IsJobDone(epoch, TlsActivationContext->Now()); ev != nullptr) {
                 Send(NotifyId, ev);
                 if (Mngr.IsPassAway()) {

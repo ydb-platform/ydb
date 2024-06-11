@@ -189,8 +189,10 @@ namespace NBalancing {
         void Handle(TEvProxyQueueState::TPtr ev) {
             const TVDiskID& vdiskId = ev->Get()->VDiskId;
             if (ev->Get()->IsConnected) {
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, VDISKP(Ctx->VCtx, "VDisk connected"), (VDiskId, vdiskId.ToString()));
                 ConnectedVDisks.insert(vdiskId);
             } else {
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, VDISKP(Ctx->VCtx, "VDisk disconnected"), (VDiskId, vdiskId.ToString()));
                 ConnectedVDisks.erase(vdiskId);
             }
         }

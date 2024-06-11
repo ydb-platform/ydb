@@ -46,8 +46,6 @@ PEERDIR(
     library/cpp/threading/hot_swap
 )
 
-ADDINCL(ydb/library/yql/parser/pg_wrapper/postgresql/src/include)
-
 YQL_LAST_ABI_VERSION()
 
 END()

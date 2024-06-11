@@ -106,7 +106,7 @@ private: //events
             Y_ABORT_UNLESS(!r.second || r.second.IsBoxed());
             Map.emplace(std::move(r));
         }
-        while(!AwaitingQueue.empty()) {
+        while (!AwaitingQueue.empty()) {
             const auto wideInputRow = AwaitingQueue.Head();
             NUdf::TUnboxedValue* keyItems;
             NUdf::TUnboxedValue lookupKey = HolderFactory.CreateDirectArrayHolder(InputJoinColumns.size(), keyItems);

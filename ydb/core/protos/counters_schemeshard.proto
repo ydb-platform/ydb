@@ -195,6 +195,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropView = 157                  [(CounterOpts) = {Name: "InFlightOps/DropView"}];
 
     COUNTER_GRAPHSHARD_COUNT = 158 [(CounterOpts) = {Name: "GraphShards"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCopySequence = 159            [(CounterOpts) = {Name: "InFlightOps/CopySequence"}];
 }
 
 enum ECumulativeCounters {
@@ -315,6 +317,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateView = 95              [(CounterOpts) = {Name: "FinishedOps/CreateView"}];
     COUNTER_FINISHED_OPS_TxDropView = 96                [(CounterOpts) = {Name: "FinishedOps/DropView"}];
     COUNTER_FINISHED_OPS_TxAlterView = 97               [(CounterOpts) = {Name: "FinishedOps/AlterView"}];
+    COUNTER_FINISHED_OPS_TxCopySequence = 98              [(CounterOpts) = {Name: "FinishedOps/TxCopySequence"}];
 }
 
 enum EPercentileCounters {
@@ -536,4 +539,6 @@ enum ETxTypes {
     TXTYPE_PERSQUEUE_PROPOSE_RESULT = 83                  [(TxTypeOpts) = {Name: "TxPersQueueProposeResult"}];
     TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT = 84           [(TxTypeOpts) = {Name: "TxProposeTransactionAttachResult"}];
     TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
+
+    TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
 }

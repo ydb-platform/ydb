@@ -101,6 +101,10 @@ namespace NSequenceShard {
             ui64 cookie, const TActorId& edge);
         THolder<TEvSequenceShard::TEvRedirectSequenceResult> RedirectSequence(
             const TPathId& pathId, ui64 redirectTo);
+
+        void SendGetSequence(ui64 cookie, const TActorId& edge, const TPathId& pathId);
+        THolder<TEvSequenceShard::TEvGetSequenceResult> NextGetSequenceResult(ui64 cookie, const TActorId& edge);
+        THolder<TEvSequenceShard::TEvGetSequenceResult> GetSequence(const TPathId& pathId);
     };
 
 } // namespace NSequenceShard

@@ -185,7 +185,12 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
 
-            Self->LoadLongTxWrite(writeId, writePartId, longTxId);
+            std::optional<ui32> granuleShardingVersion;
+            if (rowset.HaveValue<Schema::LongTxWrites::GranuleShardingVersion>() && rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>()) {
+                granuleShardingVersion = rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>();
+            }
+
+            Self->LoadLongTxWrite(writeId, writePartId, longTxId, granuleShardingVersion);
 
             if (!rowset.Next()) {
                 return false;
@@ -217,6 +222,8 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
         Self->SharingSessionsManager = local;
     }
+
+    Self->ProgressTxController->StartOperators();
 
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
@@ -276,7 +283,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
                 break;
             }
             NIceDb::TNiceDb db(txc.DB);
-            Self->NormalizerController.UpdateControllerState(db);
+            Self->NormalizerController.OnNormalizerFinished(db);
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
@@ -315,7 +322,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
+    TTxType GetTxType() const override { return TXTYPE_APPLY_NORMALIZER; }
 
 private:
     NOlap::INormalizerChanges::TPtr Changes;
@@ -330,7 +337,7 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 
     if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
         NIceDb::TNiceDb db(txc.DB);
-        Self->NormalizerController.UpdateControllerState(db);
+        Self->NormalizerController.OnNormalizerFinished(db);
     }
     return true;
 }
@@ -371,6 +378,17 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
+    if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
+        NIceDb::TNiceDb db(txc.DB);
+        if (!Self->NormalizerController.InitControllerState(db)) {
+            return false;
+        }
+    }
+    {
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        Self->NormalizerController.InitNormalizers(initCtx);
+    }
+
     if (isFirstRun) {
         txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
         txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
@@ -381,9 +399,6 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
             localBaseModifier->Apply(txc);
         }
     }
-
-    // NIceDb::TNiceDb db(txc.DB);
-    // Self->NormalizerController.InitControllerState(db);
 
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);

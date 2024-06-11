@@ -75,6 +75,9 @@ bool IsCypressTransactionType(EObjectType type);
 //! Checks if the given type is a system transaction.
 bool IsSystemTransactionType(EObjectType type);
 
+//! Checks if the given type if an upload transaction.
+bool IsUploadTransactionType(EObjectType type);
+
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);
 

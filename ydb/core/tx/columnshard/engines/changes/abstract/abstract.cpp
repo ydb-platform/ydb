@@ -53,7 +53,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
     AFL_VERIFY(Stage != EStage::Aborted);
-    AFL_VERIFY(Stage == EStage::Constructed);
+    AFL_VERIFY(Stage == EStage::Constructed)("real", Stage);
 
     DoCompile(context);
     DoOnAfterCompile();
@@ -66,8 +66,10 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
+    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     Stage = EStage::Aborted;
+    AbortedReason = context.ErrorMessage;
     OnFinish(self, context);
 }
 
@@ -92,9 +94,17 @@ void TColumnEngineChanges::StartEmergency() {
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason);
-    Stage = EStage::Aborted;
-    OnAbortEmergency();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
+    if (Stage == EStage::Aborted) {
+        AbortedReason += "; AnotherReason: " + reason;
+    } else {
+        Stage = EStage::Aborted;
+        AbortedReason = reason;
+        if (!!LockGuard) {
+            LockGuard->AbortLock();
+        }
+        OnAbortEmergency();
+    }
 }
 
 void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

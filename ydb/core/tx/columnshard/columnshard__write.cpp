@@ -162,7 +162,12 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
 
-    NEvWrite::TWriteMeta writeMeta(writeId, tableId, source);
+    std::optional<ui32> granuleShardingVersion;
+    if (record.HasGranuleShardingVersion()) {
+        granuleShardingVersion = record.GetGranuleShardingVersion();
+    }
+
+    NEvWrite::TWriteMeta writeMeta(writeId, tableId, source, granuleShardingVersion);
     writeMeta.SetDedupId(dedupId);
     Y_ABORT_UNLESS(record.HasLongTxId());
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
@@ -278,7 +283,7 @@ bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorCon
     TString txBody;
     Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
     Y_UNUSED(Self->GetProgressTxController().StartProposeOnExecute(
-        TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, {}, txc));
+        TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId(), Source, Cookie, {}), txBody, txc));
     return true;
 }
 
@@ -362,7 +367,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
-        NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source), arrowData, nullptr, nullptr);
+        NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source, {}), arrowData, nullptr, nullptr);
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
         return;
@@ -370,7 +375,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
 
-    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie);
+    std::optional<ui32> granuleShardingVersionId;
+    if (record.HasGranuleShardingVersionId()) {
+        granuleShardingVersionId = record.GetGranuleShardingVersionId();
+    }
+
+    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);

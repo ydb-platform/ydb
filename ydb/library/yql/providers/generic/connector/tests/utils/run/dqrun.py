@@ -203,10 +203,13 @@ class DqRunner(Runner):
         self,
         dqrun_path: Path,
         settings: Settings,
+        udf_dir: Path,
     ):
         self.gateways_conf_renderer = GatewaysConfRenderer()
         self.dqrun_path = dqrun_path
         self.settings = settings
+
+        self.udf_dir = udf_dir
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
@@ -227,7 +230,7 @@ class DqRunner(Runner):
         result_path = artifacts.make_path(test_name, 'result.yson')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path} --format="binary" -v 7'
+        cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path}  --udfs-dir={self.udf_dir}  --format="binary" -v 7'
 
         output = None
         data_out = None
@@ -249,8 +252,8 @@ class DqRunner(Runner):
         else:
             LOGGER.info('Execution succeeded: ')
             # Parse output
-            with open(result_path, 'r') as f:
-                result = yson.loads(f.read().encode('ascii'))
+            with open(result_path, 'rb') as f:
+                result = yson.loads(f.read())
 
             # Dqrun's data output is missing type information (everything is a string),
             # so we have to recover schema and transform the results to make them comparable with the inputs
@@ -264,7 +267,7 @@ class DqRunner(Runner):
             artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
 
         finally:
-            with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:
+            with open(artifacts.make_path(test_name, "dqrun.out"), "w") as f:
                 f.write(output.decode('utf-8'))
 
         return Result(

@@ -9,7 +9,11 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
   - 2024
 
+    {% include [TechInternals](./_includes/conferences/2024/TechInternals.md) %}
+
     {% include [Conf42](./_includes/conferences/2024/Conf42.md) %}
+
+    {% include [Devworld](./_includes/conferences/2024/Devworld.md) %}
 
   - 2023
 
@@ -19,10 +23,10 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
     {% include [webinars](./_includes/webinars/2023/webinars.md) %}
 
-  - 2022  
+  - 2022
 
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
-    
+
     {% include [webinars](./_includes/webinars/2022/webinars.md) %}
 
 

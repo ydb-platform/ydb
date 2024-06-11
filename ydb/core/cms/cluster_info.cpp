@@ -3,7 +3,7 @@
 #include "node_checkers.h"
 
 #include <ydb/core/base/nameservice.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -278,7 +278,7 @@ bool TVDiskInfo::NameToId(const TString &name, TVDiskID &id)
     if (size != static_cast<int>(name.size()))
         return false;
 
-    id = TVDiskID(TIdWrapper<ui32, TGroupIdTag>::FromValue(group), gen, ring, domain, vdisk);
+    id = TVDiskID(TGroupId::FromValue(group), gen, ring, domain, vdisk);
 
     return true;
 }
@@ -503,7 +503,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
         return;
     }
 
-    TVDiskID vdiskId(TIdWrapper<ui32, TGroupIdTag>::FromValue(info.GetGroupId()),
+    TVDiskID vdiskId(TGroupId::FromProto(&info, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId),
                      info.GetGroupGeneration(),
                      info.GetFailRealmIdx(),
                      info.GetFailDomainIdx(),

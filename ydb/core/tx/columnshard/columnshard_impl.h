@@ -28,6 +28,8 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "data_sharing/modification/events/change_owning.h"
 
+#include "subscriber/abstract/manager/manager.h"
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -84,10 +86,11 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
-
+class TTxFinishAsyncTransaction;
 class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
+class TWaitEraseTablesTxSubscriber;
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -150,6 +153,8 @@ class TColumnShard
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
+    friend class TTxFinishAsyncTransaction;
+    friend class TWaitEraseTablesTxSubscriber;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -409,6 +414,7 @@ private:
         ui32 WritePartId;
         NLongTxService::TLongTxId LongTxId;
         ui64 PreparedTxId = 0;
+        std::optional<ui32> GranuleShardingVersionId;
     };
 
     class TWritesMonitor {
@@ -489,6 +495,7 @@ private:
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
+    std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
@@ -531,10 +538,10 @@ private:
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
 
-    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
-    TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);
+    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
+    TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
-    void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId);
+    void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion);
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 

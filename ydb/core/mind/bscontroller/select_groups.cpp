@@ -116,7 +116,7 @@ void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQue
 
             };
 
-            if (TGroupInfo *group = FindGroup(TGroupId::FromValue(g.GetGroupID())); group && !hasResources()) {
+            if (TGroupInfo *group = FindGroup(TGroupId::FromProto(&g, &NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::GetGroupID)); group && !hasResources()) {
                 group->FillInGroupParameters(&g);
                 if (!hasResources()) {
                     // any of PDisks will do

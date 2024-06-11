@@ -516,15 +516,16 @@ private:
 
 template<typename TLayout, bool Nullable>
 class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, Nullable, TFixedSizeArrayBuilder<TLayout, Nullable>> {
-    using TDerived = TFixedSizeArrayBuilder<TLayout, Nullable>;
+    using TSelf = TFixedSizeArrayBuilder<TLayout, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TLayout, Nullable, TSelf>;
 
 public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
-        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {}
 
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
-        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen, totalAllocated)
+        : TBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {}
 
     void DoAddNotNull(TUnboxedValuePod value) {
@@ -936,13 +937,11 @@ private:
     i32 TypeLen = 0;
 };
 
-template<bool Nullable>
-class TTupleArrayBuilder final : public TArrayBuilderBase {
+template<bool Nullable, typename TDerived>
+class TTupleArrayBuilderBase : public TArrayBuilderBase {
 public:
-    TTupleArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
-                       TVector<TArrayBuilderBase::Ptr>&& children, size_t* totalAllocated)
+    TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
-        , Children(std::move(children))
     {
         Reserve();
     }
@@ -951,70 +950,50 @@ public:
         if constexpr (Nullable) {
             if (!value) {
                 NullBuilder->UnsafeAppend(0);
-                for (ui32 i = 0; i < Children.size(); ++i) {
-                    Children[i]->AddDefault();
-                }
+                static_cast<TDerived*>(this)->AddToChildrenDefault();
                 return;
             }
             NullBuilder->UnsafeAppend(1);
         }
 
-        auto elements = value.GetElements();
-        if (elements) {
-            for (ui32 i = 0; i < Children.size(); ++i) {
-                Children[i]->Add(elements[i]);
-            }
-        } else {
-            for (ui32 i = 0; i < Children.size(); ++i) {
-                auto element = value.GetElement(i);
-                Children[i]->Add(element);
-            }
-        }
+        static_cast<TDerived*>(this)->AddToChildren(value);
     }
 
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
                 NullBuilder->UnsafeAppend(0);
-                for (ui32 i = 0; i < Children.size(); ++i) {
-                    Children[i]->AddDefault();
-                }
+                static_cast<TDerived*>(this)->AddToChildrenDefault();
                 return;
             }
             NullBuilder->UnsafeAppend(1);
         }
 
-        auto elements = value.AsTuple();
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Children[i]->Add(elements[i]);
-        }
+        static_cast<TDerived*>(this)->AddToChildren(value);
     }
 
     void DoAdd(TInputBuffer& input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAdd(TBlockItem{});
+                NullBuilder->UnsafeAppend(0);
+                static_cast<TDerived*>(this)->AddToChildrenDefault();
+                return;
             }
             NullBuilder->UnsafeAppend(1);
         }
 
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Children[i]->Add(input);
-        }
+        static_cast<TDerived*>(this)->AddToChildren(input);
     }
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
             NullBuilder->UnsafeAppend(1);
         }
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Children[i]->AddDefault();
-        }
+        static_cast<TDerived*>(this)->AddToChildrenDefault();
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
-        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             if (array.buffers.front()) {
@@ -1026,14 +1005,11 @@ public:
             }
         }
 
-        for (size_t i = 0; i < Children.size(); ++i) {
-            Children[i]->AddMany(*array.child_data[i], popCount, sparseBitmap, array.length);
-        }
+        static_cast<TDerived*>(this)->AddManyToChildren(array, sparseBitmap, popCount);
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
-        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
@@ -1041,14 +1017,11 @@ public:
             }
         }
 
-        for (size_t i = 0; i < Children.size(); ++i) {
-            Children[i]->AddMany(*array.child_data[i], beginIndex, count);
-        }
+        static_cast<TDerived*>(this)->AddManyToChildren(array, beginIndex, count);
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
-        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             for (size_t i = 0; i < count; ++i) {
@@ -1056,9 +1029,7 @@ public:
             }
         }
 
-        for (size_t i = 0; i < Children.size(); ++i) {
-            Children[i]->AddMany(*array.child_data[i], indexes, count);
-        }
+        static_cast<TDerived*>(this)->AddManyToChildren(array, indexes, count);
     }
 
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
@@ -1074,10 +1045,7 @@ public:
 
         Y_ABORT_UNLESS(length);
         result->Payload.push_back(arrow::ArrayData::Make(ArrowType, length, { nullBitmap }));
-        result->Children.reserve(Children.size());
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            result->Children.emplace_back(Children[i]->BuildTree(finish));
-        }
+        static_cast<TDerived*>(this)->BuildChildrenTree(finish, result->Children);
 
         if (!finish) {
             Reserve();
@@ -1104,9 +1072,144 @@ private:
     }
 
 private:
-    TVector<std::unique_ptr<TArrayBuilderBase>> Children;
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
 };
+
+template<bool Nullable>
+class TTupleArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>> {
+public:
+
+    TTupleArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
+                       TVector<TArrayBuilderBase::Ptr>&& children, size_t* totalAllocated = nullptr)
+        : TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
+        , Children_(std::move(children)) {}
+
+    void AddToChildrenDefault() {
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Children_[i]->AddDefault();
+        }
+    }
+    
+    void AddToChildren(NUdf::TUnboxedValuePod value) {
+        auto elements = value.GetElements();
+        if (elements) {
+            for (ui32 i = 0; i < Children_.size(); ++i) {
+                Children_[i]->Add(elements[i]);
+            }
+        } else {
+            for (ui32 i = 0; i < Children_.size(); ++i) {
+                auto element = value.GetElement(i);
+                Children_[i]->Add(element);
+            }
+        }
+    }
+    
+    void AddToChildren(TBlockItem value) {
+        auto elements = value.AsTuple();
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Children_[i]->Add(elements[i]);
+        }
+    }
+
+    void AddToChildren(TInputBuffer& input) {
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            Children_[i]->Add(input);
+        }
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
+        Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            Children_[i]->AddMany(*array.child_data[i], popCount, sparseBitmap, array.length);
+        }
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
+        Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            Children_[i]->AddMany(*array.child_data[i], beginIndex, count);
+        }
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
+        Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            Children_[i]->AddMany(*array.child_data[i], indexes, count);
+        }
+    }
+    
+    void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
+        resultChildren.reserve(Children_.size());
+        for (ui32 i = 0; i < Children_.size(); ++i) {
+            resultChildren.emplace_back(Children_[i]->BuildTree(finish));
+        }
+    }
+
+private:
+TVector<std::unique_ptr<TArrayBuilderBase>> Children_;
+};
+
+template<typename TDate, bool Nullable>
+class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>> {
+    using TDateLayout = typename TDataType<TDate>::TLayout;
+    static constexpr auto DataSlot = TDataType<TDate>::Slot;
+
+public:
+    TTzDateArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
+        , DateBuilder_(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen)
+        , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen)
+        {
+        }
+
+    void AddToChildrenDefault() {
+        DateBuilder_.AddDefault();
+        TimezoneBuilder_.AddDefault();
+    }
+    
+    void AddToChildren(NUdf::TUnboxedValuePod value) {
+        DateBuilder_.Add(value);
+        TimezoneBuilder_.Add(TBlockItem(value.GetTimezoneId()));
+    }
+    
+    void AddToChildren(TBlockItem value) {
+        DateBuilder_.Add(value);
+        TimezoneBuilder_.Add(TBlockItem(value.GetTimezoneId()));
+    }
+
+    void AddToChildren(TInputBuffer& input) {
+        DateBuilder_.Add(input);
+        TimezoneBuilder_.Add(input);
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
+        Y_ABORT_UNLESS(array.child_data.size() == 2);
+        DateBuilder_.AddMany(*array.child_data[0], popCount, sparseBitmap, array.length);
+        TimezoneBuilder_.AddMany(*array.child_data[1], popCount, sparseBitmap, array.length);
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
+        Y_ABORT_UNLESS(array.child_data.size() == 2);
+        DateBuilder_.AddMany(*array.child_data[0], beginIndex, count);
+        TimezoneBuilder_.AddMany(*array.child_data[1], beginIndex, count);
+    }
+
+    void AddManyToChildren(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
+        Y_ABORT_UNLESS(array.child_data.size() == 2);
+        DateBuilder_.AddMany(*array.child_data[0], indexes, count);
+        TimezoneBuilder_.AddMany(*array.child_data[1], indexes, count);
+    }
+    
+    void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
+        resultChildren.emplace_back(DateBuilder_.BuildTree(finish));
+        resultChildren.emplace_back(TimezoneBuilder_.BuildTree(finish));
+    }
+
+private:
+    TFixedSizeArrayBuilder<TDateLayout, false> DateBuilder_;
+    TFixedSizeArrayBuilder<ui16, false> TimezoneBuilder_;
+};
+
 
 class TExternalOptionalArrayBuilder final : public TArrayBuilderBase {
 public:
@@ -1306,7 +1409,13 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
             return std::make_unique<TStringArrayBuilder<arrow::BinaryType, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-            return std::make_unique<TStringArrayBuilder<arrow::StringType, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
+            return std::make_unique<TStringArrayBuilder<arrow::StringType, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzDate:
+            return std::make_unique<TTzDateArrayBuilder<TTzDate, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzDatetime:
+            return std::make_unique<TTzDateArrayBuilder<TTzDatetime, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzTimestamp:
+            return std::make_unique<TTzDateArrayBuilder<TTzTimestamp, Nullable>>(typeInfoHelper, type, pool, maxLen);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

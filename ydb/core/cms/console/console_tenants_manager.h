@@ -530,6 +530,7 @@ public:
         bool IsExternalSysViewProcessor;
         bool IsExternalStatisticsAggregator;
         bool IsExternalBackupController;
+        bool IsGraphShardEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

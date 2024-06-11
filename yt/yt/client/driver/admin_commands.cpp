@@ -95,8 +95,7 @@ void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
                     .Item("cell_id").Value(pair.first)
                     .Item("snapshot_id").Value(pair.second)
                 .EndMap();
-        })
-    );
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

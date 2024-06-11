@@ -6,7 +6,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
@@ -84,7 +84,6 @@ public:
     using TVDiskIds = TStackVec<TVDiskID, 16>;
     using TServiceIds = TStackVec<TActorId, 16>;
     using TOrderNums = TStackVec<ui32, 16>;
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
     enum EBlobStateFlags {
         EBSF_DISINTEGRATED = 1, // Group is disintegrated.
         EBSF_UNRECOVERABLE = 1 << 1, // Recoverability: Blob can not be recovered. Ever.

@@ -29,7 +29,7 @@ void FillKey(NKikimrSysView::TVSlotKey* key, const TVSlotId& id) {
 }
 
 TGroupId TransformKey(const NKikimrSysView::TGroupKey& key) {
-    return TGroupId::FromValue(key.GetGroupId());
+    return TGroupId::FromProto(&key, &NKikimrSysView::TGroupKey::GetGroupId);
 }
 
 void FillKey(NKikimrSysView::TGroupKey* key, const TGroupId& id) {
@@ -469,10 +469,10 @@ void TBlobStorageController::UpdateSystemViews() {
             if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& ss = bsConfig.GetServiceSet();
                 for (const auto& group : ss.GetGroups()) {
-                    if (!SysViewChangedGroups.count(TGroupId::FromValue(group.GetGroupID()))) {
+                    if (!SysViewChangedGroups.count(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
                         continue;
                     }
-                    auto *pb = &state.Groups[TGroupId::FromValue(group.GetGroupID())];
+                    auto *pb = &state.Groups[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                     pb->SetGeneration(group.GetGroupGeneration());
                     pb->SetEncryptionMode(group.GetEncryptionMode());
                     pb->SetLifeCyclePhase(group.GetLifeCyclePhase());

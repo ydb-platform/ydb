@@ -10,7 +10,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -33,6 +33,7 @@ static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
 
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);
+
 
 struct TStorageStatusFlags {
     ui32 Raw = 0;
@@ -103,7 +104,7 @@ enum class EGroupConfigurationType : ui32 {
 struct TGroupID {
     TGroupID() = default;
     TGroupID(const TGroupID&) = default;
-    TGroupID(const TIdWrapper<ui32, TGroupIdTag> wrappedId)
+    TGroupID(const TGroupId wrappedId)
         : Raw(wrappedId.GetRawId()) {}
 
     TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) {
@@ -440,6 +441,10 @@ inline IEventHandle *CreateEventForBSProxy(TActorId sender, ui32 groupId, IEvent
     return CreateEventForBSProxy(sender, MakeBlobStorageProxyID(groupId), ev, cookie, std::move(traceId));
 }
 
+inline IEventHandle *CreateEventForBSProxy(TActorId sender, TGroupId groupId, IEventBase *ev, ui64 cookie, NWilson::TTraceId traceId = {}) {
+    return CreateEventForBSProxy(sender, MakeBlobStorageProxyID(groupId), ev, cookie, std::move(traceId));
+}
+
 inline bool SendToBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, recipient, ev, cookie, std::move(traceId)));
 }
@@ -454,6 +459,15 @@ inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 co
 }
 
 inline bool SendToBSProxy(const TActorContext &ctx, ui32 groupId, IEventBase *ev, ui64 cookie = 0,
+        NWilson::TTraceId traceId = {}) {
+    return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
+}
+
+inline bool SendToBSProxy(TActorId sender, TGroupId groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+    return TActivationContext::Send(CreateEventForBSProxy(sender, groupId, ev, cookie, std::move(traceId)));
+}
+
+inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase *ev, ui64 cookie = 0,
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
 }
@@ -791,6 +805,7 @@ struct TEvBlobStorage {
         EvRequestProxySessionsState,
         EvProxySessionsState,
         EvBunchOfEvents,
+        EvDeadline,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,
@@ -847,6 +862,8 @@ struct TEvBlobStorage {
         EvNodeWardenStorageConfigConfirm,
         EvNodeWardenQueryBaseConfig,
         EvNodeWardenBaseConfig,
+        EvNodeWardenDynamicConfigSubscribe,
+        EvNodeWardenDynamicConfigPush,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -888,8 +905,6 @@ struct TEvBlobStorage {
     struct TEvPatchResult;
     struct TEvInplacePatchResult;
     struct TEvAssimilateResult;
-
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
 
     struct TEvPut : public TEventLocal<TEvPut, EvPut> {
         enum ETactic {
@@ -1821,7 +1836,7 @@ struct TEvBlobStorage {
         NKikimrProto::EReplyStatus Status;
         TLogoBlobID From;
         TLogoBlobID To;
-        
+
         TVector<TResponse> Responses;
         const TGroupId GroupId;
         TString ErrorReason;

@@ -336,31 +336,31 @@ class YtError(Exception):
         return self.find_matching_error(predicate=pred_new) or self.find_matching_error(predicate=pred_old)
 
     def is_row_is_blocked(self):
-        """Row is blocked"""
+        """Row is blocked."""
         return self.contains_code(1712)
 
     def is_blocked_row_wait_timeout(self):
-        """Timed out waiting on blocked row"""
+        """Timed out waiting on blocked row."""
         return self.contains_code(1713)
 
     def is_chunk_not_preloaded(self):
-        """Chunk data is not preloaded yet"""
+        """Chunk data is not preloaded yet."""
         return self.contains_code(1735)
 
     def is_no_in_sync_replicas(self):
-        """No in-sync replicas found"""
+        """No in-sync replicas found."""
         return self.contains_code(1736)
 
     def is_already_present_in_group(self):
-        """Member is already present in group"""
+        """Member is already present in group."""
         return self.contains_code(908)
 
     def is_prohibited_cross_cell_copy(self):
-        """Cross-cell "copy"/"move" command is explicitly disabled"""
+        """Cross-cell "copy"/"move" command is explicitly disabled."""
         return self.contains_code(1002)
 
     def is_sequoia_retriable_error(self):
-        """Probably lock conflict in Sequoia tables"""
+        """Probably lock conflict in Sequoia tables."""
         return self.contains_code(6002)
 
 

@@ -14,6 +14,19 @@ namespace NKikimr::NOlap {
 
     class TChunksNormalizer : public TNormalizationController::INormalizerComponent {
     public:
+
+        static TString GetClassNameStatic() {
+            return ::ToString(ENormalizerSequentialId::Chunks);
+        }
+
+        virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
+            return ENormalizerSequentialId::Chunks;
+        }
+
+        virtual TString GetClassName() const override {
+            return GetClassNameStatic();
+        }
+
         class TNormalizerResult;
 
         class TKey {
@@ -83,15 +96,11 @@ namespace NKikimr::NOlap {
             }
         };
 
-        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(ENormalizerSequentialId::Chunks);
+        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(GetClassNameStatic());
     public:
         TChunksNormalizer(const TNormalizationController::TInitContext& info)
             : DsGroupSelector(info.GetStorageInfo())
         {}
-
-        virtual ENormalizerSequentialId GetType() const override {
-            return ENormalizerSequentialId::Chunks;
-        }
 
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 

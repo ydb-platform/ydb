@@ -68,7 +68,7 @@ public:
 
     TAutoPtr<TEvBlobStorage::TEvPutResult> PutWithResult(const TLogoBlobID& id, const TString& buffer,
             TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault) {
-        SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(),
+        SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(),
                     NKikimrBlobStorage::TabletLog, tactic));
         auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         CTEST << (TStringBuilder() << "PutResult: " << resp->Get()->ToString() << Endl);
@@ -160,7 +160,7 @@ public:
         auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0U /*shift*/, 0U /*size*/, TInstant::Max(),
             NKikimrBlobStorage::FastRead, mustRestoreFirst, !data);
         query->PhantomCheck = isRepl;
-        SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), query.release());
+        SendToBSProxy(GetActorContext(), Info->GroupID, query.release());
         auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         TEvBlobStorage::TEvGetResult *msg = resp->Get();
         UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);

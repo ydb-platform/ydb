@@ -4,5 +4,8 @@
 
 Ключевые статьи для начала работы с этим разделом:
 
-* [Первоначальное развертывание](initial-deployment.md)
-* [Подготовка виртуальных машин с помощью Terraform](preparing-vms-with-terraform.md)
+* [{#T}](initial-deployment.md)
+* [{#T}](preparing-vms-with-terraform.md)
+* [{#T}](restart.md)
+* Наблюдаемость:
+  * [{#T}](observability/logging.md)

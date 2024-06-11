@@ -3,6 +3,8 @@
 #include "columnshard_impl.h"
 #include "engines/reader/transaction/tx_scan.h"
 
+#include <ydb/core/protos/kqp.pb.h>
+
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {

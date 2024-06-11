@@ -95,6 +95,11 @@ namespace NKikimr {
                 const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
             Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, vctx->VDiskLogPrefix
+                << "TDelayedCompactionDeleter: Update recordLsn# " << recordLsn << " removedHugeBlobs.size# "
+                << removedHugeBlobs.Size() << " CurrentSnapshots.size# " << CurrentSnapshots.size()
+                << " CurrentSnapshots.front# " << (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)
+                << " CurrentSnapshots.back# " << (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first));
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature, wId);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
         }
@@ -217,8 +222,12 @@ namespace NKikimr {
                 TReleaseQueueItem& item = ReleaseQueue.front();
                 if (CurrentSnapshots.empty() || (item.RecordLsn <= CurrentSnapshots.begin()->first)) {
                     // matching record -- commit it to huge hull keeper and throw out of the queue
-                    ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
-                        item.RecordLsn, item.Signature, item.WId));
+                    if (item.WId) {
+                        ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
+                            item.RecordLsn, item.Signature, item.WId));
+                    } else {
+                        Y_ABORT_UNLESS(item.RemovedHugeBlobs.Empty());
+                    }
                     if (item.ChunksToForget) {
                         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(vctx->VDiskLogPrefix,
                             "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(),

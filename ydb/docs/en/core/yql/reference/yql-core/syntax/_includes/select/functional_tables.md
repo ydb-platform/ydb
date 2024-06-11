@@ -20,7 +20,7 @@ The following functions are defined for these purposes:
 
 {% note warning %}
 
-CONCAT and EACH join the tables in the original order of enumeration; RANGE, LIKE and FILTER - in the lexicographic order of the tables' names.
+All of the above functions don't guarantee the order of the table union.
 
 The list of tables is calculated **before** executing the query. Therefore, the tables created during the query execution won't be included in the function results.
 

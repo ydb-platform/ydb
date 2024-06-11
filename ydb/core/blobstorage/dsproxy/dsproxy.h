@@ -61,6 +61,16 @@ constexpr bool WithMovingPatchRequestToStaticNode = true;
 // Common types
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct TDiskDelayPrediction {
+    ui64 PredictedNs;
+    ui32 DiskIdx;
+
+    bool operator<(const TDiskDelayPrediction& other) const {
+        return PredictedNs > other.PredictedNs;
+    }
+};
+
+using TDiskDelayPredictions = TStackVec<TDiskDelayPrediction, TypicalDisksInSubring>;
 
 struct TEvDeathNote : public TEventLocal<TEvDeathNote, TEvBlobStorage::EvDeathNote> {
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
@@ -311,7 +321,7 @@ public:
             SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
         }
         ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID.GetRawId());
+        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
         TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
         return true;
@@ -347,6 +357,12 @@ public:
             case TEvents::TSystem::Poison: {
                 ErrorReason = "Request got Poison";
                 Derived().ReplyAndDie(NKikimrProto::ERROR);
+                return true;
+            }
+
+            case TEvBlobStorage::EvDeadline: {
+                ErrorReason = "Deadline timer hit";
+                Derived().ReplyAndDie(NKikimrProto::DEADLINE);
                 return true;
             }
         }

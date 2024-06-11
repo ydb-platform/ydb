@@ -483,7 +483,7 @@ namespace NKikimr::NStorage {
                 sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
 
                 auto *sDisk = sSet->AddVDisks();
-                VDiskIDFromVDiskID(TVDiskID(TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId), groupGeneration, vdiskId), sDisk->MutableVDiskID());
+                VDiskIDFromVDiskID(TVDiskID(TGroupId::FromValue(groupId), groupGeneration, vdiskId), sDisk->MutableVDiskID());
                 sDisk->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
                 sDisk->MutableVDiskLocation()->CopyFrom(*sLoc);
                 if (const auto it = donors.find(vdiskId); it != donors.end()) {

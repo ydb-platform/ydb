@@ -253,15 +253,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (transientIssues) {
-            NYql::TIssues issues = *transientIssues;
-            for (const auto& issue: *query.mutable_transient_issue()) {
-                issues.AddIssue(NYql::IssueFromMessage(issue));
-            }
-
-            NYql::TIssues newIssues;
-            std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
-
-            NYql::IssuesToMessage(newIssues, query.mutable_transient_issue());
+            AddTransientIssues(query.mutable_transient_issue(), std::move(*transientIssues));
         }
 
         if (request.internal_issues().size()) {

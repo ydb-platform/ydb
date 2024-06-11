@@ -22,7 +22,7 @@
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -678,7 +678,6 @@ namespace NKikimr {
         ui64 AllocateMessageId() {
             return NextUniqueMessageId++;
         }
-        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
         ////////////////////////////////////////////////////////////////////////
         // NOTIFICATIONS
         ////////////////////////////////////////////////////////////////////////
@@ -725,7 +724,7 @@ namespace NKikimr {
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         ctx.ExecutorThread.ActorSystem, baseInfo.DeviceType, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
-                        baseInfo.ReplNodeResponseQuoter, Config->BurstThresholdNs, Config->DiskTimeAvailableScale);
+                        baseInfo.ReplNodeResponseQuoter);
 
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
@@ -1209,7 +1208,7 @@ namespace NKikimr {
         void HandleRequestWithQoS(const TActorContext &ctx, TAutoPtr<TEventHandle<TEvent>> &ev, const char *msgName, ui64 cost,
                                   TIntQueueClass &intQueue) {
             CheckEvent(ev, msgName);
-            const ui64 advancedCost = VCtx->CostTracker->GetCost(*ev->Get());
+            const ui64 advancedCost = VCtx->CostTracker ? VCtx->CostTracker->GetCost(*ev->Get()) : 0;
             const ui32 recByteSize = ev->Get()->GetCachedByteSize();
             auto &record = ev->Get()->Record;
             auto &msgQoS = *record.MutableMsgQoS();
@@ -1260,10 +1259,14 @@ namespace NKikimr {
                 } else {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
                         CostGroup.SkeletonFrontUserCostNs() += cost;
-                        VCtx->CostTracker->CountUserCost(advancedCost);
+                        if (VCtx->CostTracker) {
+                            VCtx->CostTracker->CountUserCost(advancedCost);
+                        }
                     } else {
                         CostGroup.SkeletonFrontInternalCostNs() += cost;
-                        VCtx->CostTracker->CountInternalCost(advancedCost);
+                        if (VCtx->CostTracker) {
+                            VCtx->CostTracker->CountInternalCost(advancedCost);
+                        }
                     }
                 }
             }
@@ -1610,7 +1613,9 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this);
-            VCtx->CostTracker->CountPDiskResponse();
+            if (VCtx->CostTracker) {
+                VCtx->CostTracker->CountPDiskResponse();
+            }
             if (!ev->Get()->DoNotResend) {
                 TActivationContext::Send(event.release());
             }

@@ -155,6 +155,15 @@ public:
 
     bool IsBoxed() const { return EMarkers::Boxed == GetMarkers(); }
     bool IsEmbedded() const { return EMarkers::Embedded == GetMarkers(); }
+    inline void SetTimezoneId(ui16 id) {
+        UDF_VERIFY(GetMarkers() == EMarkers::Embedded, "Value is not a datetime");
+        Raw.Simple.TimezoneId = id;
+    }
+
+    inline ui16 GetTimezoneId() const {
+        UDF_VERIFY(GetMarkers() == EMarkers::Embedded, "Value is not a datetime");
+        return Raw.Simple.TimezoneId;
+    }
 
 private:
     union TRaw {
@@ -180,7 +189,8 @@ private:
             union {
                 ui64 FullMeta;
                 struct {
-                    ui8 Reserved[7];
+                    TTimezoneId TimezoneId;
+                    ui8 Reserved[5];
                     ui8 Meta;
                 };
             };

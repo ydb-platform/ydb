@@ -84,6 +84,17 @@ constexpr auto CYPRES_ACCESS_ERROR = R"(
 ]
 )";
 
+constexpr auto CYPRESS_BLACKBOX_ERROR = R"(
+[
+    {
+        "error" = {
+            "code" = 111;
+            "message" = "Blackbox rejected token";
+        }
+    }
+]
+)";
+
 TVector<IYtGateway::TFolderResult::TFolderItem> EXPECTED_ITEMS {
     {"test/a/a", "table", R"({"user_attributes"={}})"},
     {"test/a/b", "table", R"({"user_attributes"={}})"},
@@ -131,10 +142,12 @@ public:
 
         return true;
     }
-    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand): 
-        HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {}
-    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand, std::function<void(const NYT::TNode& request)> assertion): 
-        Assertion_(assertion), HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {}
+    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand, TMaybe<std::function<void(const NYT::TNode& request)>> assertion): 
+        HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {
+            if (assertion) {
+                Assertion_ = assertion.GetRef();
+            }
+        }
 
 private:
     THttpResponse HandleExecuteBatch(THttpInput& input) {
@@ -186,6 +199,24 @@ std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TP
     return {ytState, ytGateway};
 }
 
+IYtGateway::TFolderResult GetFolderResult(TYtReplier::THandler handleList, TYtReplier::THandler handleGet, 
+TMaybe<std::function<void(const NYT::TNode& request)>> gatewayRequestAssertion, std::function<IYtGateway::TFolderOptions(TString)> makeFolderOptions) {
+    const auto port = NTesting::GetFreePort();
+    NMock::TMockServer mockServer{port, 
+        [gatewayRequestAssertion, handleList, handleGet] () {return new TYtReplier(handleList, handleGet, gatewayRequestAssertion);}
+    };
+
+    auto [ytState, ytGateway] = InitTest(port);
+
+    IYtGateway::TFolderOptions folderOptions = makeFolderOptions(ytState->SessionId);
+    auto folderFuture = ytGateway->GetFolder(std::move(folderOptions));
+
+    folderFuture.Wait();
+    ytState->Gateway->CloseSession({ytState->SessionId});
+    auto folderRes = folderFuture.GetValue();
+    return folderRes;
+}
+
 Y_UNIT_TEST(GetFolder) {
     THashMap<TString, THashSet<TString>> requiredAttributes {
         {"//test/a", {"type", "broken", "target_path", "user_attributes"}},
@@ -231,30 +262,25 @@ Y_UNIT_TEST(GetFolder) {
         }
         return THttpResponse{HTTP_NOT_FOUND};
     };
-
-    const auto port = NTesting::GetFreePort();
-    NMock::TMockServer mockServer{port, 
-        [checkRequiredAttributes, handleList, handleGet] () {return new TYtReplier(handleList, handleGet, checkRequiredAttributes);}
+    
+    const auto makeFolderOptions = [] (const TString& sessionId) {
+        IYtGateway::TFolderOptions folderOptions{sessionId};
+        TYtSettings ytSettings {};
+        folderOptions.Cluster("ut_cluster")
+            .Config(std::make_shared<TYtSettings>(ytSettings))
+            .Prefix("//test/a")
+            .Attributes({"user_attributes"});
+        return folderOptions;
     };
 
-    auto [ytState, ytGateway] = InitTest(port);
-    IYtGateway::TFolderOptions folderOptions{ytState->SessionId};
-    TYtSettings ytSettings {};
-    folderOptions.Cluster("ut_cluster")
-        .Config(std::make_shared<TYtSettings>(ytSettings))
-        .Prefix("//test/a")
-        .Attributes({"user_attributes"});
-    auto folderFuture = ytGateway->GetFolder(std::move(folderOptions));
-
-    folderFuture.Wait();
-    ytState->Gateway->CloseSession({ytState->SessionId});
-    auto folderRes = folderFuture.GetValue();
+    auto folderRes 
+        = GetFolderResult(handleList, handleGet, checkRequiredAttributes, makeFolderOptions);
 
     UNIT_ASSERT_EQUAL_C(folderRes.Success(), true, folderRes.Issues().ToString());
     UNIT_ASSERT_EQUAL(
         folderRes.ItemsOrFileLink, 
         (std::variant<TVector<IYtGateway::TFolderResult::TFolderItem>, TFileLinkPtr>(EXPECTED_ITEMS)));
-}
+    }
 
 Y_UNIT_TEST(EmptyResolveIsNotError) {
     const auto port = NTesting::GetFreePort();
@@ -277,25 +303,60 @@ Y_UNIT_TEST(EmptyResolveIsNotError) {
         return resp;
     };
 
-    NMock::TMockServer mockServer{port, 
-        [handleList, handleGet] () {return new TYtReplier(handleList, handleGet);}
+    const auto makeFolderOptions = [] (const TString& sessionId) {
+        IYtGateway::TFolderOptions folderOptions{sessionId};
+        TYtSettings ytSettings {};
+        folderOptions.Cluster("ut_cluster")
+            .Config(std::make_shared<TYtSettings>(ytSettings))
+            .Prefix("//test/a")
+            .Attributes({"user_attributes"});
+        return folderOptions;
     };
 
-    auto [ytState, ytGateway] = InitTest(port);
-    IYtGateway::TResolveOptions options{ytState->SessionId};
-
-    IYtGateway::TFolderOptions folderOptions{ytState->SessionId};
-    TYtSettings ytSettings {};
-    folderOptions.Cluster("ut_cluster")
-        .Config(std::make_shared<TYtSettings>(ytSettings))
-        .Prefix("//test");
-    auto folderFuture = ytGateway->GetFolder(std::move(folderOptions));
-
-    folderFuture.Wait();
-    ytState->Gateway->CloseSession({ytState->SessionId});
-    auto folderRes = folderFuture.GetValue();
+    auto folderRes 
+        = GetFolderResult(handleList, handleGet, Nothing(), makeFolderOptions);
     
     UNIT_ASSERT_EQUAL_C(folderRes.Success(), true, folderRes.Issues().ToString());
+}
+
+Y_UNIT_TEST(GetFolderException) {
+    const auto port = NTesting::GetFreePort();
+
+    const auto handleList = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(path);
+        Y_UNUSED(attributes);
+
+        THttpResponse resp{HTTP_UNAUTHORIZED};
+        auto header = R"({"code":900,"message":"Authentication failed"})";
+        resp.AddHeader(THttpInputHeader("X-YT-Error", header));
+        resp.SetContent(CYPRESS_BLACKBOX_ERROR);
+        return resp;
+    };
+
+    const auto handleGet = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(path);
+        Y_UNUSED(attributes);
+
+        THttpResponse resp{HTTP_OK};
+        resp.SetContent("");
+        return resp;
+    };
+
+    const auto makeFolderOptions = [] (const TString& sessionId) {
+        IYtGateway::TFolderOptions folderOptions{sessionId};
+        TYtSettings ytSettings {};
+        folderOptions.Cluster("ut_cluster")
+            .Config(std::make_shared<TYtSettings>(ytSettings))
+            .Prefix("//test/a")
+            .Attributes({"user_attributes"});
+        return folderOptions;
+    };
+
+    const auto folderRes 
+        = GetFolderResult(handleList, handleGet, Nothing(), makeFolderOptions);
+    
+    UNIT_ASSERT(!folderRes.Issues().Empty());
+    UNIT_ASSERT_STRING_CONTAINS(folderRes.Issues().ToString(), "Authentication failed");
 }
 }
 

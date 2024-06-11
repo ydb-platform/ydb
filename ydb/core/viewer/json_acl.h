@@ -80,7 +80,6 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
             //TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
             const auto& pbRecord(DescribeResult->GetRecord());
@@ -155,8 +154,9 @@ public:
 
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:
-                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
-                break;
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                PassAway();
+                return;
             default:
                 break;
             }
@@ -164,7 +164,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -176,36 +176,60 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonACL> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TMetaInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TMetaInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonACL> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"schemeshard_id","in":"query","description":"schemeshard identifier (tablet id)","required":false,"type":"integer"},
-                      {"name":"path_id","in":"query","description":"path id","required":false,"type":"integer"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: schemeshard_id
+              in: query
+              description: schemeshard identifier (tablet id)
+              required: false
+              type: integer
+            - name: path_id
+              in: query
+              description: path id
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonACL> {
     static TString GetSummary() {
-        return "\"ACL information\"";
+        return "ACL information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonACL> {
     static TString GetDescription() {
-        return "\"Returns information about acl of an object\"";
+        return "Returns information about acl of an object";
     }
 };
 

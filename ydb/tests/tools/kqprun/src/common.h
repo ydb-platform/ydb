@@ -16,7 +16,9 @@ constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 struct TYdbSetupSettings {
     i32 NodeCount = 1;
     TString DomainName = "Root";
+    TDuration InitializationTimeout = TDuration::Seconds(10);
 
+    bool MonitoringEnabled = false;
     bool TraceOptEnabled = false;
     TMaybe<TString> LogOutputFile;
 
@@ -46,6 +48,7 @@ struct TRunnerOptions {
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    TMaybe<TString> InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;

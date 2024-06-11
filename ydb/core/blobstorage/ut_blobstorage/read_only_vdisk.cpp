@@ -44,7 +44,7 @@ struct TTetsEnv {
         const TActorId sender = Env.Runtime->AllocateEdgeActor(VDiskActorId.NodeId(), __FILE__, __LINE__);
         auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
         Env.Runtime->WrapInActorContext(sender, [&] {
-            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
         });
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, expectedStatus);
@@ -64,7 +64,7 @@ struct TTetsEnv {
             mustRestoreFirst
         );
         Env.Runtime->WrapInActorContext(sender, [&] () {
-            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
         });
         TInstant getDeadline = Env.Now() + TDuration::Seconds(30);
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, /* termOnCapture */ false, getDeadline);
@@ -125,7 +125,7 @@ struct TTetsEnv {
             nullptr, nullptr, TInstant::Max()
         );
         Env.Runtime->WrapInActorContext(sender, [&] {
-            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
         });
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender, false);
         Env.Sim(TDuration::Seconds(10));
@@ -138,7 +138,7 @@ struct TTetsEnv {
             1, 1, false, true, TInstant::Max(), 0, false
         );
         Env.Runtime->WrapInActorContext(sender, [&] {
-            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
         });
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, false);
         return res;

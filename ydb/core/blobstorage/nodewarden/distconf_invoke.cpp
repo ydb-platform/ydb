@@ -317,7 +317,7 @@ namespace NKikimr::NStorage {
                         continue;
                     }
                     if (!vslot.GetReady()) {
-                        const TVDiskID vdiskId(TIdWrapper<ui32, TGroupIdTag>::FromValue(vslot.GetGroupId()), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                        const TVDiskID vdiskId(TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
                             vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
                         failedVDisks |= {&GroupInfo->GetTopology(), vdiskId};
                     }

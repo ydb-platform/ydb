@@ -33,8 +33,10 @@ private:
     NArrow::TReplaceKey StartReplaceKey;
     NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
+    YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -123,7 +125,7 @@ public:
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
-        return Finish.ExtractSortingPosition();
+        return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
     }
     void IncIntervalsCount() {
         ++IntervalsCount;
@@ -181,17 +183,19 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval);
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
-        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
-        const TSnapshot& recordSnapshotMax, const ui32 recordsCount)
+    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
+                const ui32 recordsCount, const std::optional<ui64> shardingVersion)
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
         , Context(context)
+        , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)
         , RecordsCount(recordsCount)
+        , ShardingVersionOptional(shardingVersion)
     {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
@@ -305,7 +309,7 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
+        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(), portion->GetShardingVersionOptional())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion))
     {
@@ -377,7 +381,7 @@ public:
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetRecordsCount())
+        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetSnapshot(), committed.GetRecordsCount(), {})
         , CommittedBlob(committed) {
 
     }

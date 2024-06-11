@@ -121,7 +121,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     Y_ABORT_UNLESS(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
-    Y_ABORT_UNLESS(ev->Get()->Generation == ScanGen);
+    AFL_VERIFY(ev->Get()->Generation == ScanGen)("ev_gen", ev->Get()->Generation)("scan_gen", ScanGen);
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     Y_ABORT_UNLESS(ev->Get()->MaxChunksCount == 1);

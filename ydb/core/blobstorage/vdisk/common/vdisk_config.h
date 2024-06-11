@@ -1,5 +1,8 @@
 #pragma once
 #include "defs.h"
+
+#include "vdisk_performance_params.h"
+
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
@@ -154,6 +157,11 @@ namespace NKikimr {
         ui32 SyncLogAdvisedIndexedBlockSize;
         ui64 SyncLogMaxMemAmount;
 
+        TControlWrapper EnableLocalSyncLogDataCutting;
+        TControlWrapper EnableSyncLogChunkCompression;
+        TControlWrapper MaxSyncLogChunksInFlight;
+        ui32 MaxSyncLogChunkSize;
+
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
         TDuration ReplRequestTimeout;
@@ -212,8 +220,8 @@ namespace NKikimr {
         TControlWrapper EnableVPatch = true;
 
         ///////////// COST METRICS SETTINGS ////////////////
-        ui64 BurstThresholdNs = 1'000'000'000;
-        float DiskTimeAvailableScale = 1;
+        bool UseCostTracker = true;
+        TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

@@ -199,6 +199,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterCdcStream);
     GENERIC_HELPERS(DropCdcStream);
 
+    // continuous backup
+    GENERIC_HELPERS(CreateContinuousBackup);
+    GENERIC_HELPERS(AlterContinuousBackup);
+    GENERIC_HELPERS(DropContinuousBackup);
+
     // olap store
     GENERIC_HELPERS(CreateOlapStore);
     GENERIC_HELPERS(AlterOlapStore);

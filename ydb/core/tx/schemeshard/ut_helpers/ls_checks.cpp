@@ -13,6 +13,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+#include <contrib/libs/protobuf/src/google/protobuf/util/field_comparator.h>
+#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
+
 namespace NSchemeShardUT_Private {
 namespace NLs {
 
@@ -1249,6 +1253,24 @@ TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeR
             UNIT_ASSERT(!domainDesc.HasServerlessComputeResourcesMode());
         }
     };
+}
+
+void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString* const config, TInverseTag inverse) {
+    UNIT_ASSERT(inverse.Value xor record.GetPathDescription().GetPersQueueGroup()
+        .GetPQTabletConfig().HasOffloadConfig());
+
+    if (config) {
+        NKikimrPQ::TOffloadConfig expectedConfig;
+
+        bool parseResult = google::protobuf::TextFormat::ParseFromString(*config, &expectedConfig);
+        UNIT_ASSERT(parseResult);
+
+        google::protobuf::util::MessageDifferencer md;
+        auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
+        md.set_field_comparator(&fieldComparator);
+        auto& givenConfig = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetOffloadConfig();
+        UNIT_ASSERT(md.Compare(expectedConfig, givenConfig));
+    }
 }
 
 #undef DESCRIBE_ASSERT_EQUAL

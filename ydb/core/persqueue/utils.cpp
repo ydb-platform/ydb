@@ -33,7 +33,7 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return 0 < config.GetPartitionStrategy().GetMaxPartitionCount();
+    return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
@@ -202,7 +202,7 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     for (const auto& p : partitions) {
-        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId()));
+        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId(), p.GetKeyRange().GetFromBound(), p.GetKeyRange().GetToBound()));
     }
 
     std::deque<TPartitionGraph::Node*> queue;
@@ -248,9 +248,11 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     return result;
 }
 
-TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
+TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const TString& to)
     : Id(id)
-    , TabletId(tabletId) {
+    , TabletId(tabletId)
+    , From(from)
+    , To(to) {
 }
 
 bool TPartitionGraph::Node::IsRoot() const {

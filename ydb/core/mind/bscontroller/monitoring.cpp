@@ -421,7 +421,7 @@ public:
                         case NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk: {
                             const auto& cmd = q.GetReassignGroupDisk();
 
-                            const TVDiskID vdiskId(TGroupId::FromValue(cmd.GetGroupId()), cmd.GetGroupGeneration(),
+                            const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId), cmd.GetGroupGeneration(),
                                 cmd.GetFailRealmIdx(), cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
                             std::optional<TPDiskId> pdiskId;

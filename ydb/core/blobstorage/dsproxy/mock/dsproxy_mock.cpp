@@ -10,8 +10,7 @@ namespace NKikimr {
 
         class TBlobStorageGroupProxyMockActor
             : public TActor<TBlobStorageGroupProxyMockActor>
-        {   
-            using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+        {
             TIntrusivePtr<NFake::TProxyDS> Model;
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
@@ -118,7 +117,7 @@ namespace NKikimr {
         return new TBlobStorageGroupProxyMockActor(std::move(model));
     }
 
-    IActor *CreateBlobStorageGroupProxyMockActor(TIdWrapper<ui32, TGroupIdTag> groupId) {
+    IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
     }
 

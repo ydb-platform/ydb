@@ -34,8 +34,8 @@ private:
     };
 
 public:
-    TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion)
-        : TOutputSerializer(stateType, stateVersion)
+    TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
+        : TOutputSerializer(stateType, stateVersion, ctx)
         , Context(context)
     {} 
 
@@ -83,7 +83,7 @@ private:
     };
 
 public:
-    TMrInputSerializer(TSerializerContext& context, const NUdf::TStringRef& state)
+    TMrInputSerializer(TSerializerContext& context, const NUdf::TUnboxedValue& state)
         : TInputSerializer(state, EMkqlStateType::SIMPLE_BLOB)
         , Context(context) {    
     }

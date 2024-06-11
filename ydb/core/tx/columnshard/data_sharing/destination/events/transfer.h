@@ -20,7 +20,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 class TPathIdData {
 private:
     YDB_READONLY(ui64, PathId, 0);
-    YDB_READONLY_DEF(std::vector<TPortionInfo>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<TPortionInfo>, Portions);
 
     TPathIdData() = default;
 
@@ -49,7 +49,7 @@ public:
     std::vector<TPortionInfo> DetachPortions() {
         return std::move(Portions);
     }
-    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId,
+    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
         const TTransferContext& context, const TVersionedIndex& index);
 
     void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {

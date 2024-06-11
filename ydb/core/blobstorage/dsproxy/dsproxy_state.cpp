@@ -240,6 +240,7 @@ namespace NKikimr {
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(StoragePoolCounters, {}));
+            CheckDeadlines();
         }
     }
 
@@ -255,7 +256,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::PassAway() {
-        for (const TActorId actorId : ActiveRequests) {
+        for (const auto& [actorId, _] : ActiveRequests) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
         if (Sessions) { // may be null if not properly configured yet

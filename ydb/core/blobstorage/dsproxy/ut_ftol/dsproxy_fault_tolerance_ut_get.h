@@ -55,7 +55,7 @@ public:
                 items[i].Set(ids[i]);
             }
 
-            SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), new TEvBlobStorage::TEvGet(items, ids.size(), TInstant::Max(),
+            SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvGet(items, ids.size(), TInstant::Max(),
                 NKikimrBlobStorage::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(1, index)));
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TGetWithRecoverFaultToleranceTest::ProcessUnexpectedEvent);
             TEvBlobStorage::TEvGetResult *msg = resp->Get();

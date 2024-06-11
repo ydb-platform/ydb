@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
             if (auto *result = GetResultingGroupInfo()) {
                 STLOG(PRI_INFO, BS_NODE, NW86, "TGroupResolverActor::ProcessResultAndFinish", (GroupId, GroupId),
                     (Result, *result));
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvUpdateGroupInfo(TIdWrapper<ui32, TGroupIdTag>::FromValue(GroupId),
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvUpdateGroupInfo(TGroupId::FromValue(GroupId),
                     result->GetGroupGeneration(), *result));
                 PassAway();
             } else { // restart from the beginning

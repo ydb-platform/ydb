@@ -111,6 +111,7 @@ message TEvWrite {
     // Writes are performed "over" the specified snapshot when specified
     // This mostly affects the minimum MVCC version of the resulting write
     optional TMvccSnapshot MvccSnapshot = 8;
+    optional uint32 GranuleShardingVersionId = 9;
 }
 
 message TEvWriteResult {
@@ -121,7 +122,7 @@ message TEvWriteResult {
         STATUS_ABORTED = 3;
         STATUS_INTERNAL_ERROR = 4;
         STATUS_OVERLOADED = 5;
-        STATUS_CANCELLED = 6;        
+        STATUS_CANCELLED = 6;
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;

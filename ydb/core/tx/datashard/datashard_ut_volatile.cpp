@@ -4,7 +4,6 @@
 #include "datashard_active_transaction.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/id_wrapper.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
 namespace NKikimr {
@@ -2148,7 +2147,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 putResponses.emplace_back(new IEventHandle(
                     ev->Sender,
                     ev->GetRecipientRewrite(),
-                    msg->MakeErrorResponse(NKikimrProto::BLOCKED, "Fake blocked response", TIdWrapper<ui32, TGroupIdTag>::Zero()).release(),
+                    msg->MakeErrorResponse(NKikimrProto::BLOCKED, "Fake blocked response", TGroupId::Zero()).release(),
                     0,
                     ev->Cookie));
                 Cerr << "... dropping put " << msg->Id << Endl;
@@ -2355,7 +2354,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         for (auto& ev : blockedPuts) {
             auto proxy = ev->Recipient;
             ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId));
+            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
             runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 0, true);
         }
 

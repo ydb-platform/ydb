@@ -5,6 +5,7 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
 
+#include <ydb/core/protos/key.pb.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -169,8 +170,28 @@ void TNodeWarden::Bootstrap() {
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
-        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
-        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
+        const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+
+        icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
+        icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
+        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, "VDiskControls.EnableLocalSyncLogDataCutting");
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, "VDiskControls.EnableSyncLogChunkCompressionHDD");
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
+
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsHDD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsSSD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsNVME");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleHDD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleSSD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleNVME");
     }
 
     // start replication broker
@@ -630,7 +651,7 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
                     const TVDiskID vdiskId = VDiskIDFromVDiskID(item.GetVDiskID());
                     if (vdiskId.GroupID.GetRawId() == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
                             item.HasDonorMode() && item.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId), 0,
+                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(TGroupId::FromValue(groupId), 0,
                             info->GetVDiskId(r->OrderNumber)));
                         break;
                     }
@@ -723,7 +744,7 @@ bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfi
         auto &record = keyConfig.GetKeys(0);
         return ObtainKey(key, record);
     } else {
-        Cerr << "No Keys in KeyConfig! Encrypted group DsProxies will not start" << Endl;
+        STLOG(PRI_INFO, BS_NODE, NW66, "No Keys in KeyConfig! Encrypted group DsProxies will not start");
         return false;
     }
 }
@@ -734,7 +755,7 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
 
     ui32 keysSize = keyConfig.KeysSize();
     if (!keysSize) {
-        Cerr << "No Keys in PDiskKeyConfig! Encrypted pdisks will not start" << Endl;
+        STLOG(PRI_INFO, BS_NODE, NW69, "No Keys in PDiskKeyConfig! Encrypted pdisks will not start");
         mainKey->ErrorReason = "Empty PDiskKeyConfig";
         mainKey->Keys = { NPDisk::YdbDefaultPDiskSequence };
         mainKey->IsInitialized = true;

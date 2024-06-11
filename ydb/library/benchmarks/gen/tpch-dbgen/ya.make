@@ -1,7 +1,20 @@
-SUBSCRIBER(g:yql)
 LIBRARY()
+
+IF(LINUX)
+
+CONLYFLAGS(
+    -Wno-deprecated-non-prototype
+    -Wno-format
+    -Wno-misleading-indentation
+    -Wno-missing-field-initializers
+    -Wno-string-plus-int
+    -Wno-unused-but-set-variable
+    -Wno-unused-parameter
+    -Wno-unused-variable
+)
+
 CONLYFLAGS(GLOBAL -DVECTORWISE GLOBAL -DLINUX GLOBAL -DTPCH GLOBAL -DRNG_TEST)
-NO_WERROR()
+
 SRCS(
     build.c 
     bm_utils.c 
@@ -14,4 +27,6 @@ SRCS(
     permute.c 
     rng64.c
 )
+
+ENDIF()
 END()

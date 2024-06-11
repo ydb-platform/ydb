@@ -92,6 +92,7 @@ private:
 };
 
 struct TTaskState {
+    bool AllocatedExecutionUnit = false;
     ui64 ScanQueryMemory = 0;
     ui64 ExternalDataQueryMemory = 0;
     ui32 ExecutionUnits = 0;
@@ -106,7 +107,35 @@ struct TTxState {
     ui32 TxExecutionUnits = 0;
     TInstant CreatedAt;
 
-    bool IsDataQuery = false;
+    TTaskState& Allocated(ui64 taskId, TInstant now, const TKqpResourcesRequest& resources, bool memoryAsExternal = false) {
+        ui64 externalMemory = resources.ExternalMemory;
+        ui64 resourceBrokerMemory = 0;
+        if (memoryAsExternal) {
+            externalMemory += resources.Memory;
+        } else {
+            resourceBrokerMemory = resources.Memory;
+        }
+
+        TxExternalDataQueryMemory += externalMemory;
+        TxScanQueryMemory += resourceBrokerMemory;
+        if (!CreatedAt) {
+            CreatedAt = now;
+        }
+
+        if (resources.ExecutionUnits) {
+            Y_ABORT_UNLESS(!Tasks.contains(taskId));
+        }
+
+        auto& taskState = Tasks[taskId];
+        taskState.ExecutionUnits += resources.ExecutionUnits;
+        taskState.ScanQueryMemory += resourceBrokerMemory;
+        taskState.ExternalDataQueryMemory += externalMemory;
+        if (!taskState.CreatedAt) {
+            taskState.CreatedAt = now;
+        }
+
+        return taskState;
+    }
 };
 
 struct TTxStatesBucket {
@@ -175,7 +204,7 @@ public:
         }
     }
 
-    bool AllocateExecutionUnits(ui32 cnt) override {
+    bool AllocateExecutionUnits(ui32 cnt) {
         i32 prev = ExecutionUnitsResource.fetch_sub(cnt);
         if (prev < (i32)cnt) {
             ExecutionUnitsResource.fetch_add(cnt);
@@ -186,7 +215,7 @@ public:
         }
     }
 
-    void FreeExecutionUnits(ui32 cnt) override {
+    void FreeExecutionUnits(ui32 cnt) {
         if (cnt == 0) {
             return;
         }
@@ -195,30 +224,55 @@ public:
         Counters->RmComputeActors->Sub(cnt);
     }
 
-    bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        TKqpNotEnoughResources* details = nullptr) override {
-        if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
-            NotifyExternalResourcesAllocated(txId, taskId, resources);
-            return true;
+    TKqpRMAllocateResult AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override
+    {
+        TKqpRMAllocateResult result;
+        if (resources.ExecutionUnits) {
+            if (!AllocateExecutionUnits(resources.ExecutionUnits)) {
+                TStringBuilder error;
+                error << "TxId: " << txId << ", NodeId: " << SelfId.NodeId() << ", not enough compute actors resource.";
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
+                return result;
+            }
         }
-        Y_ABORT_UNLESS(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
+
+        Y_DEFER {
+            if (!result) {
+                if (resources.ExecutionUnits) {
+                    FreeExecutionUnits(resources.ExecutionUnits);
+                }
+            }
+        };
+
         if (Y_UNLIKELY(resources.Memory == 0)) {
-            return true;
+            return result;
         }
 
         auto now = ActorSystem->Timestamp();
         bool hasScanQueryMemory = true;
         ui64 queryMemoryLimit = 0;
+        // NOTE(gvit): the first memory request from the data query pool always satisfied.
+        // all other requests are not guaranteed to be satisfied.
+        // In the nearest future we need to implement several layers of memory requests.
+        bool isFirstAllocationRequest = (resources.ExecutionUnits > 0 && resources.MemoryPool == EKqpMemoryPool::DataQuery);
+        if (isFirstAllocationRequest) {
+            auto& txBucket = TxBucket(txId);
+            with_lock(txBucket.Lock) {
+                auto& tx = txBucket.Txs[txId];
+                tx.Allocated(taskId, now, resources, /*memoryAsExternal=*/true);
+                ExternalDataQueryMemory.fetch_add(resources.Memory + resources.ExternalMemory);
+                Counters->RmExternalMemory->Add(resources.Memory + resources.ExternalMemory);
+            }
+
+            return result;
+        }
 
         with_lock (Lock) {
             if (Y_UNLIKELY(!ResourceBroker)) {
                 TStringBuilder reason;
                 reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
-                if (details) {
-                    details->FailReason = reason;
-                }
-
-                return false;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
+                return result;
             }
 
             hasScanQueryMemory = ScanQueryMemoryResource.Has(resources.Memory);
@@ -232,11 +286,8 @@ public:
             Counters->RmNotEnoughMemory->Inc();
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
-            if (details) {
-                details->FailReason = reason;
-                details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-            }
-            return false;
+            result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
+            return result;
         }
 
         ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
@@ -245,25 +296,24 @@ public:
 
         auto& txBucket = TxBucket(txId);
         with_lock (txBucket.Lock) {
-            if (auto it = txBucket.Txs.find(txId); it != txBucket.Txs.end()) {
-                ui64 txTotalRequestedMemory = it->second.TxScanQueryMemory + resources.Memory;
-                if (txTotalRequestedMemory > queryMemoryLimit) {
+            Y_DEFER {
+                if (!result) {
                     auto unguard = ::Unguard(txBucket.Lock);
-
+                    Counters->RmNotEnoughMemory->Inc();
                     with_lock (Lock) {
                         ScanQueryMemoryResource.Release(resources.Memory);
                     } // with_lock (Lock)
-
-                    Counters->RmNotEnoughMemory->Inc();
-                    TStringBuilder reason;
-                    reason << "TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
-                        << "requested " << txTotalRequestedMemory;
-                    if (details) {
-                        details->FailReason = reason;
-                        details->Status = NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED;
-                    }
-                    return false;
                 }
+            };
+
+            auto& tx = txBucket.Txs[txId];
+            ui64 txTotalRequestedMemory = tx.TxScanQueryMemory + resources.Memory;
+            if (txTotalRequestedMemory > queryMemoryLimit) {
+                TStringBuilder reason;
+                reason << "TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
+                    << "requested " << txTotalRequestedMemory;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED, reason);
+                return result;
             }
 
             bool allocated = ResourceBroker->SubmitTaskInstant(
@@ -271,37 +321,15 @@ public:
                 SelfId);
 
             if (!allocated) {
-                auto unguard = ::Unguard(txBucket.Lock);
-
-                with_lock (Lock) {
-                    ScanQueryMemoryResource.Release(resources.Memory);
-                } // with_lock (Lock)
-
-                Counters->RmNotEnoughMemory->Inc();
                 TStringBuilder reason;
                 reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: "
                     << "requested " << resources.Memory;
                 LOG_AS_N(reason);
-                if (details) {
-                    details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-                    details->FailReason = reason;
-                }
-                return false;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
+                return result;
             }
 
-            auto& txState = txBucket.Txs[txId];
-
-            txState.TxScanQueryMemory += resources.Memory;
-            if (!txState.CreatedAt) {
-                txState.CreatedAt = now;
-            }
-
-            auto& taskState = txState.Tasks[taskId];
-            taskState.ScanQueryMemory += resources.Memory;
-            if (!taskState.CreatedAt) {
-                taskState.CreatedAt = now;
-            }
-
+            auto& taskState = tx.Allocated(taskId, now, resources);
             if (!taskState.ResourceBrokerTaskId) {
                 taskState.ResourceBrokerTaskId = rbTaskId;
             } else {
@@ -319,21 +347,12 @@ public:
         }
 
         FireResourcesPublishing();
-        return true;
-    }
-
-    bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        IKqpResourceManager::TResourcesAllocatedCallback&& onSuccess, IKqpResourceManager::TNotEnoughtResourcesCallback&& onFail, TDuration timeout = {}) override {
-        Y_UNUSED(txId, taskId, resources, onSuccess, onFail, timeout);
-
-        // TODO: for DataQuery resources only
-        return false;
+        return result;
     }
 
     void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
 
         if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
-            NotifyExternalResourcesFreed(txId, taskId, resources);
             return;
         }
 
@@ -373,6 +392,7 @@ public:
 
     void FreeResources(ui64 txId, ui64 taskId) override {
         ui64 releaseScanQueryMemory = 0;
+        ui64 releaseExternalDataQueryMemory = 0;
         ui32 remainsTasks = 0;
 
         auto& txBucket = TxBucket(txId);
@@ -386,30 +406,39 @@ public:
                 return;
             }
 
-            if (txIt->second.IsDataQuery) {
-                guard.Clear();
-                return NotifyExternalResourcesFreed(txId, taskId);
-            }
-
-            auto taskIt = txIt->second.Tasks.find(taskId);
-            if (taskIt == txIt->second.Tasks.end()) {
+            auto& tx = txIt->second;
+            auto taskIt = tx.Tasks.find(taskId);
+            if (taskIt == tx.Tasks.end()) {
                 return;
             }
 
-            releaseScanQueryMemory = taskIt->second.ScanQueryMemory;
+            auto& task = taskIt->second;
+            if (task.ExecutionUnits) {
+                FreeExecutionUnits(task.ExecutionUnits);
+            }
 
-            bool finished = ResourceBroker->FinishTaskInstant(
-                TEvResourceBroker::TEvFinishTask(taskIt->second.ResourceBrokerTaskId), SelfId);
-            Y_DEBUG_ABORT_UNLESS(finished);
+            releaseExternalDataQueryMemory = task.ExternalDataQueryMemory;
+            releaseScanQueryMemory = task.ScanQueryMemory;
 
-            remainsTasks = txIt->second.Tasks.size() - 1;
+            if (task.ResourceBrokerTaskId) {
+                bool finished = ResourceBroker->FinishTaskInstant(
+                    TEvResourceBroker::TEvFinishTask(task.ResourceBrokerTaskId), SelfId);
+                Y_DEBUG_ABORT_UNLESS(finished);
+            }
+
+            remainsTasks = tx.Tasks.size() - 1;
 
             if (remainsTasks == 0) {
                 txBucket.Txs.erase(txIt);
             } else {
-                txIt->second.Tasks.erase(taskIt);
-                txIt->second.TxScanQueryMemory -= releaseScanQueryMemory;
+                tx.Tasks.erase(taskIt);
+                tx.TxScanQueryMemory -= releaseScanQueryMemory;
+                tx.TxExternalDataQueryMemory -= releaseExternalDataQueryMemory;
             }
+
+            i64 prev = ExternalDataQueryMemory.fetch_sub(releaseExternalDataQueryMemory);
+            Counters->RmExternalMemory->Sub(releaseExternalDataQueryMemory);
+            Y_DEBUG_ABORT_UNLESS(prev >= 0);
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
@@ -428,50 +457,6 @@ public:
         FireResourcesPublishing();
     }
 
-    void FreeResources(ui64 txId) override {
-        ui64 releaseScanQueryMemory = 0;
-
-        auto& txBucket = TxBucket(txId);
-
-        {
-            TMaybe<TGuard<TMutex>> guard;
-            guard.ConstructInPlace(txBucket.Lock);
-
-            auto txIt = txBucket.Txs.find(txId);
-            if (txIt == txBucket.Txs.end()) {
-                return;
-            }
-            if (txIt->second.IsDataQuery) {
-                guard.Clear();
-                return NotifyExternalResourcesFreed(txId);
-            }
-
-            for (auto& [taskId, taskState] : txIt->second.Tasks) {
-                bool finished = ResourceBroker->FinishTaskInstant(
-                    TEvResourceBroker::TEvFinishTask(taskState.ResourceBrokerTaskId), SelfId);
-                Y_DEBUG_ABORT_UNLESS(finished);
-            }
-
-            releaseScanQueryMemory = txIt->second.TxScanQueryMemory;
-
-            txBucket.Txs.erase(txIt);
-        } // with_lock (txBucket.Lock)
-
-        with_lock (Lock) {
-            ScanQueryMemoryResource.Release(releaseScanQueryMemory);
-        } // with_lock (Lock)
-
-        LOG_AS_D("TxId: " << txId << ". Released resources, "
-            << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << "Tx completed.");
-
-        Counters->RmMemory->Sub(releaseScanQueryMemory);
-
-        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
-
-        FireResourcesPublishing();
-    }
-
     void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". External allocation: " << resources.ToString());
 
@@ -481,130 +466,11 @@ public:
 
         auto& txBucket = TxBucket(txId);
         with_lock (txBucket.Lock) {
-            auto& tx = txBucket.Txs[txId];
-            tx.IsDataQuery = true;
-            auto& task = tx.Tasks[taskId];
-
-            task.ExternalDataQueryMemory = resources.Memory;
-            tx.TxExternalDataQueryMemory += resources.Memory;
+            txBucket.Txs[txId].Allocated(taskId, TInstant(), resources);
+            ExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+            Counters->RmExternalMemory->Add(resources.ExternalMemory);
         } // with_lock (txBucket.Lock)
 
-        with_lock (Lock) {
-            ExternalDataQueryMemory += resources.Memory;
-        } // with_lock (Lock)
-
-        Counters->RmExternalMemory->Add(resources.Memory);
-
-        FireResourcesPublishing();
-    }
-
-    void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
-        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". External free: " << resources.ToString());
-
-        YQL_ENSURE(resources.MemoryPool == EKqpMemoryPool::DataQuery);
-
-        ui64 releaseMemory = 0;
-
-        auto& txBucket = TxBucket(txId);
-        with_lock (txBucket.Lock) {
-            auto txIt = txBucket.Txs.find(txId);
-            if (txIt == txBucket.Txs.end()) {
-                return;
-            }
-
-            auto taskIt = txIt->second.Tasks.find(taskId);
-            if (taskIt == txIt->second.Tasks.end()) {
-                return;
-            }
-
-            if (taskIt->second.ExternalDataQueryMemory <= resources.Memory) {
-                releaseMemory = taskIt->second.ExternalDataQueryMemory;
-                if (txIt->second.Tasks.size() == 1) {
-                    txBucket.Txs.erase(txId);
-                } else {
-                    txIt->second.Tasks.erase(taskIt);
-                    txIt->second.TxExternalDataQueryMemory -= releaseMemory;
-                }
-            } else {
-                releaseMemory = resources.Memory;
-                taskIt->second.ExternalDataQueryMemory -= resources.Memory;
-            }
-        } // with_lock (txBucket.Lock)
-
-        with_lock (Lock) {
-            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
-            ExternalDataQueryMemory -= releaseMemory;
-        } // with_lock (Lock)
-
-        Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
-
-        FireResourcesPublishing();
-    }
-
-    void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId) override {
-        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". External free.");
-
-        ui64 releaseMemory = 0;
-
-        auto& txBucket = TxBucket(txId);
-        with_lock (txBucket.Lock) {
-            auto txIt = txBucket.Txs.find(txId);
-            if (txIt == txBucket.Txs.end()) {
-                return;
-            }
-
-            auto taskIt = txIt->second.Tasks.find(taskId);
-            if (taskIt == txIt->second.Tasks.end()) {
-                return;
-            }
-
-            releaseMemory = taskIt->second.ExternalDataQueryMemory;
-
-            if (txIt->second.Tasks.size() == 1) {
-                txBucket.Txs.erase(txId);
-            } else {
-                txIt->second.Tasks.erase(taskIt);
-                txIt->second.TxExternalDataQueryMemory -= releaseMemory;
-            }
-        } // with_lock (txBucket.Lock)
-
-        with_lock (Lock) {
-            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
-            ExternalDataQueryMemory -= releaseMemory;
-        } // with_lock (Lock)
-
-        Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
-
-        FireResourcesPublishing();
-    }
-
-    void NotifyExternalResourcesFreed(ui64 txId) {
-        LOG_AS_D("TxId: " << txId << ". External free.");
-
-        ui64 releaseMemory = 0;
-
-        auto& txBucket = TxBucket(txId);
-        with_lock (txBucket.Lock) {
-            auto txIt = txBucket.Txs.find(txId);
-            if (txIt == txBucket.Txs.end()) {
-                return;
-            }
-
-            for (auto task : txIt->second.Tasks) {
-                releaseMemory += task.second.ExternalDataQueryMemory;
-            }
-            txBucket.Txs.erase(txId);
-        } // with_lock (txBucket.Lock)
-
-        with_lock (Lock) {
-            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
-            ExternalDataQueryMemory -= releaseMemory;
-        } // with_lock (Lock)
-
-        Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -714,7 +580,7 @@ public:
     std::atomic<i32> ExecutionUnitsResource;
     std::atomic<i32> ExecutionUnitsLimit;
     TLimitedResource<ui64> ScanQueryMemoryResource;
-    ui64 ExternalDataQueryMemory = 0;
+    std::atomic<i64> ExternalDataQueryMemory = 0;
 
     // current state
     std::array<TTxStatesBucket, BucketsCount> Buckets;
@@ -865,7 +731,7 @@ private:
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            LOG_E("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            LOG_I("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
         PublishResourceUsage("kqp_proxy");
@@ -1042,7 +908,7 @@ private:
                 str << "State storage key: " << WbState.Tenant << Endl;
                 with_lock (ResourceManager->Lock) {
                     str << "ScanQuery memory resource: " << ResourceManager->ScanQueryMemoryResource.ToString() << Endl;
-                    str << "External DataQuery memory: " << ResourceManager->ExternalDataQueryMemory << Endl;
+                    str << "External DataQuery memory: " << ResourceManager->ExternalDataQueryMemory.load() << Endl;
                     str << "ExecutionUnits resource: " << ResourceManager->ExecutionUnitsResource.load() << Endl;
                 }
                 str << "Last resource broker task id: " << ResourceManager->LastResourceBrokerTaskId.load() << Endl;

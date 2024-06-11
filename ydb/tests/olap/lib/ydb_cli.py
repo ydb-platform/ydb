@@ -12,17 +12,6 @@ class WorkloadType(StrEnum):
     TPC_H = 'tpch'
 
 
-class WorkloadOptions:
-    def __init__(self, path_option: str) -> None:
-        self.path_option = path_option
-
-
-_workload_options: dict[WorkloadType, WorkloadOptions] = {
-    WorkloadType.Clickbench: WorkloadOptions('table'),
-    WorkloadType.TPC_H: WorkloadOptions('path'),
-}
-
-
 class YdbCliHelper:
     @staticmethod
     def get_cli_command() -> list[str]:
@@ -32,8 +21,6 @@ class YdbCliHelper:
         elif cli == 'main':
             path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
             return [yatest.common.binary_path(path)]
-        elif cli == 'ya':
-            return [yatest.common.source_path('ya'), 'ydb']
         else:
             return [cli]
 
@@ -58,8 +45,7 @@ class YdbCliHelper:
             cmd = YdbCliHelper.get_cli_command() + [
                 '-e', YdbCluster.ydb_endpoint,
                 '-d', f'/{YdbCluster.ydb_database}',
-                'workload', str(type), 'run',
-                f'--{_workload_options.get(type).path_option}', path,
+                'workload', str(type), '--path', path, 'run',
                 '--json', json_path,
                 '--output', qout_path,
                 '--executer', 'generic',

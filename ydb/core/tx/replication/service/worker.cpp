@@ -23,13 +23,15 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TVector<TRecord>& records)
-    : Records(records)
+TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
+    : Source(source)
+    , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
-    : Records(std::move(records))
+TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
+    : Source(source)
+    , Records(std::move(records))
 {
 }
 
@@ -42,18 +44,21 @@ void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
 
 TString TEvWorker::TEvData::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
+        << " Source: " << Source
         << " Records [" << JoinSeq(",", Records) << "]"
     << " }";
 }
 
-TEvWorker::TEvGone::TEvGone(EStatus status)
+TEvWorker::TEvGone::TEvGone(EStatus status, const TString& errorDescription)
     : Status(status)
+    , ErrorDescription(errorDescription)
 {
 }
 
 TString TEvWorker::TEvGone::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Status: " << Status
+        << " ErrorDescription: " << ErrorDescription
     << " }";
 }
 
@@ -115,7 +120,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Reader.Registered();
-            if (!InFlightRecords) {
+            if (!InFlightData) {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
@@ -123,8 +128,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Writer.Registered();
-            if (InFlightRecords) {
-                Send(Writer, new TEvWorker::TEvData(InFlightRecords));
+            if (InFlightData) {
+                Send(Writer, new TEvWorker::TEvData(InFlightData->Source, InFlightData->Records));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -142,7 +147,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        InFlightRecords.clear();
+        InFlightData.Reset();
         if (Reader) {
             Send(ev->Forward(Reader));
         }
@@ -157,8 +162,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        Y_ABORT_UNLESS(InFlightRecords.empty());
-        InFlightRecords = ev->Get()->Records;
+        Y_ABORT_UNLESS(!InFlightData);
+        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -169,31 +174,37 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
                 << ": sender# " << ev->Sender);
-            MaybeRecreateActor(ev->Get()->Status, Reader);
+            MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
                 << ": sender# " << ev->Sender);
-            MaybeRecreateActor(ev->Get()->Status, Writer);
+            MaybeRecreateActor(ev, Writer);
         } else {
             LOG_W("Unknown actor has gone"
                 << ": sender# " << ev->Sender);
         }
     }
 
-    void MaybeRecreateActor(TEvWorker::TEvGone::EStatus status, TActorInfo& info) {
-        switch (status) {
+    void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
+        switch (ev->Get()->Status) {
         case TEvWorker::TEvGone::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
                 return info.Register(this);
             }
             [[fallthrough]];
         default:
-            return Leave();
+            return Leave(ev);
         }
     }
 
-    void Leave() {
-        // TODO: signal to parent
+    void Leave(TEvWorker::TEvGone::TPtr& ev) {
+        LOG_I("Leave"
+            << ": status# " << ev->Get()->Status
+            << ", error# " << ev->Get()->ErrorDescription);
+
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
+
         PassAway();
     }
 
@@ -210,8 +221,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_WORKER;
     }
 
-    explicit TWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn)
-        : Reader(std::move(createReaderFn))
+    explicit TWorker(
+            const TActorId& parent, 
+            std::function<IActor*(void)>&& createReaderFn,
+            std::function<IActor*(void)>&& createWriterFn)
+        : Parent(parent)
+        , Reader(std::move(createReaderFn))
         , Writer(std::move(createWriterFn))
     {
     }
@@ -236,14 +251,19 @@ public:
 
 private:
     static constexpr ui32 MaxAttempts = 3;
+    const TActorId Parent;
     mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
-    TVector<TEvWorker::TEvData::TRecord> InFlightRecords;
+    THolder<TEvWorker::TEvData> InFlightData;
 };
 
-IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn) {
-    return new TWorker(std::move(createReaderFn), std::move(createWriterFn));
+IActor* CreateWorker(
+        const TActorId& parent,
+        std::function<IActor*(void)>&& createReaderFn,
+        std::function<IActor*(void)>&& createWriterFn)
+{
+    return new TWorker(parent, std::move(createReaderFn), std::move(createWriterFn));
 }
 
 }

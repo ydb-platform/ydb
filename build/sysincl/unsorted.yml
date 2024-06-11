@@ -162,7 +162,6 @@
   - cpuid.h
   - nan.h
   - omp.h
-  - unlocked-io.h
   - cygwin/version.h
   - zircon/syscalls.h
   - zircon/types.h
@@ -464,7 +463,6 @@
   - md2.h
   - md4.h
   - mp.h
-  - pcap-int.h
   - sys/_iovec.h
   - sys/_null.h
   - sys/_pthreadtypes.h

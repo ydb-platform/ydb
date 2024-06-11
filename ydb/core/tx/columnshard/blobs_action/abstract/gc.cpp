@@ -34,6 +34,20 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
     }
 }
 
+void IBlobsGCAction::OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
+    if (!AbortedFlag) {
+        if (!DoOnCompleteTxBeforeCleaning(self, taskAction)) {
+            return;
+        }
+    }
+}
+
+void IBlobsGCAction::OnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
+    if (!AbortedFlag) {
+        return DoOnExecuteTxBeforeCleaning(self, dbBlobs);
+    }
+}
+
 void IBlobsGCAction::Abort() {
     Y_ABORT_UNLESS(IsInProgress());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_aborted")("action_guid", GetActionGuid());

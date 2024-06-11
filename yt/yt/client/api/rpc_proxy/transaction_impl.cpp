@@ -53,7 +53,7 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::move(stickyParameters->ProxyAddress) : TString())
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger.WithTag("TransactionId: %v, %v",
+    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
         Id_,
         Connection_->GetLoggingTag()))
     , Proxy_(Channel_)

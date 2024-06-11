@@ -1011,10 +1011,10 @@ private:
     }
 };
 
-TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
+TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc)
 {
-    return new TDqTaskRunner(alloc, ctx, settings, logFunc);
+    return new TDqTaskRunner(*alloc, ctx, settings, logFunc);
 }
 
 } // namespace NYql::NDq

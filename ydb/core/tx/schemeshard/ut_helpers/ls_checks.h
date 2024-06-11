@@ -167,6 +167,18 @@ namespace NLs {
     TCheckFunc SharedHive(ui64 sharedHiveId);
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
+    struct TInverseTag {
+        bool Value = false;
+    };
+
+    void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString* const config, TInverseTag inverse);
+    inline TCheckFunc HasOffloadConfig(TString config) {
+        return [config] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            return HasOffloadConfigBase(record, config ? &config : nullptr, {});
+        };
+    }
+    inline void HasNotOffloadConfig(const NKikimrScheme::TEvDescribeSchemeResult& record) { return HasOffloadConfigBase(record, nullptr, {.Value = true}); }
+
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
         check(result);

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <util/str_stl.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <util/digest/numeric.h>
 
 namespace NKikimrBlobStorage {
@@ -18,7 +19,6 @@ struct TVDiskIdShort;
 ////////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 4)
 struct TVDiskID {
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
     TGroupId GroupID = TGroupId::Zero();
     ui32 GroupGeneration = 0;
     ui8 FailRealm = 0;

@@ -9,7 +9,7 @@
 #include "vdisk_outofspace.h"
 #include "vdisk_histograms.h"
 #include "vdisk_mongroups.h"
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -35,7 +35,6 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////////////////////
     class TVDiskContext : public TBSProxyContext {
     public:
-        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
         // ActorId of the main VDisk actor (currently ActorId of SkeletonFront)
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
@@ -70,7 +69,7 @@ namespace NKikimr {
         TString LocalRecoveryErrorStr;
 
         std::unique_ptr<TCostModel> CostModel;
-        std::shared_ptr<TBsCostTracker> CostTracker;
+        std::unique_ptr<TBsCostTracker> CostTracker;
 
         // oos logging
         std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
@@ -106,9 +105,7 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
-                ui64 burstThresholdNs = 1'000'000'000,
-                float diskTimeAvailableScale = 1);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL
@@ -127,6 +124,7 @@ namespace NKikimr {
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
                     }
                     return true;
+                case NKikimrProto::ERROR:
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until
@@ -182,7 +180,9 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountDefragRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountDefragRequest(ev);
+            }
         }
 
         template<class TEvent>
@@ -190,7 +190,9 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountScrubRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountScrubRequest(ev);
+            }
         }
 
         template<class TEvent>
@@ -198,12 +200,14 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
             }
-            CostTracker->CountCompactionRequest(ev);
+            if (CostTracker) {
+                CostTracker->CountCompactionRequest(ev);
+            }
         }
 
         void UpdateCostModel(std::unique_ptr<TCostModel>&& newCostModel) {
             CostModel = std::move(newCostModel);
-            if (CostModel) {
+            if (CostModel && CostTracker) {
                 CostTracker->UpdateCostModel(*CostModel);
             }
         }

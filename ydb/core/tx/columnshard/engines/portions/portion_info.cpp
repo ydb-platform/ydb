@@ -122,7 +122,7 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
 void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
     FullValidation();
     db.WritePortion(*this);
-   if (!saveOnlyMeta) {
+    if (!saveOnlyMeta) {
         for (auto& record : Records) {
             db.WriteColumn(*this, record, firstPKColumnId);
         }
@@ -366,14 +366,15 @@ void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange
 
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const {
     THashMap<TString, THashSet<TBlobRangeLink16::TLinkId>> local;
-    THashSet<TBlobRangeLink16::TLinkId>* currentHashLocal;
-    THashSet<TUnifiedBlobId>* currentHashResult;
-    ui32 lastEntityId = 0;
+    THashSet<TBlobRangeLink16::TLinkId>* currentHashLocal = nullptr;
+    THashSet<TUnifiedBlobId>* currentHashResult = nullptr;
+    std::optional<ui32> lastEntityId;
     TString lastStorageId;
     ui32 lastBlobIdx = BlobIds.size();
     for (auto&& i : Records) {
-        if (lastEntityId != i.GetEntityId()) {
+        if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
             const TString& storageId = GetColumnStorageId(i.GetEntityId(), indexInfo);
+            lastEntityId = i.GetEntityId();
             if (storageId != lastStorageId) {
                 currentHashResult = &result[storageId];
                 currentHashLocal = &local[storageId];
@@ -383,13 +384,15 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
         }
         if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
             auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+            AFL_VERIFY(currentHashResult);
             AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
             lastBlobIdx = i.GetBlobRange().GetBlobIdxVerified();
         }
     }
     for (auto&& i : Indexes) {
-        if (lastEntityId != i.GetEntityId()) {
+        if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
             const TString& storageId = indexInfo.GetIndexStorageId(i.GetEntityId());
+            lastEntityId = i.GetEntityId();
             if (storageId != lastStorageId) {
                 currentHashResult = &result[storageId];
                 currentHashLocal = &local[storageId];
@@ -399,6 +402,7 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
         }
         if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
             auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
+            AFL_VERIFY(currentHashResult);
             AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
             lastBlobIdx = i.GetBlobRange().GetBlobIdxVerified();
         }
@@ -670,6 +674,13 @@ TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapsho
 
 TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const {
     return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
+}
+
+bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {
+    if (ShardingVersion && shardingInfo.GetSnapshotVersion() <= *ShardingVersion) {
+        return false;
+    }
+    return true;
 }
 
 std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::AssembleForSeqAccess() const {

@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -15,8 +14,10 @@
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 #include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql {
 
@@ -179,7 +180,7 @@ public:
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& sourceWrap, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         double size = 0;
-        double cols = 0;
+        int cols = 0;
         double rows = 0;
         if (const auto& maybeParseSettings = TMaybeNode<TS3ParseSettings>(sourceWrap->Child(0))) {
             const auto& parseSettings = maybeParseSettings.Cast();
@@ -195,12 +196,28 @@ public:
                 }
             }
 
+            TVector<TString>* primaryKey = nullptr;
+            if (auto constraints = GetSetting(parseSettings.Settings().Ref(), "constraints"sv)) {
+                auto node = NYT::NodeFromYsonString(constraints->Child(1)->Content());
+                auto* primaryKeyNode = node.AsMap().FindPtr("primary_key");
+                if (primaryKeyNode) {
+                    TVector<TString> parsed;
+                    for (auto col : primaryKeyNode->AsList()) {
+                        parsed.push_back(col.AsString());
+                    }
+                    State_->PrimaryKeys.emplace_back(std::move(parsed));
+                    primaryKey = &State_->PrimaryKeys.back();
+                }
+            }
+
             if (parseSettings.RowType().Maybe<TCoStructType>()) {
                 cols = parseSettings.RowType().Ptr()->ChildrenSize();
             }
 
             rows = size / 1024; // magic estimate
-            return TOptimizerStatistics(rows, cols, size);
+            return primaryKey 
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
+                : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();
         }
@@ -400,6 +417,8 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+
 #if defined(_linux_) || defined(_darwin_)
 
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
@@ -410,7 +429,7 @@ public:
 
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
-            
+
             YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
 
             if (useRuntimeListing) {
@@ -422,8 +441,8 @@ public:
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(), 
-                        std::make_move_iterator(pathsChunk.begin()), 
+                    paths.insert(paths.end(),
+                        std::make_move_iterator(pathsChunk.begin()),
                         std::make_move_iterator(pathsChunk.end()));
                 }
 
@@ -434,11 +453,11 @@ public:
                     builder.AddPath(f.Path, f.Size, f.IsDirectory);
                 });
                 builder.Save(&range);
-                
+
                 TVector<TString> serialized(1);
                 TStringOutput out(serialized.front());
                 range.Save(&out);
-                
+
                 paths.clear();
                 ReadPathsList(srcDesc, {}, serialized, paths);
 
@@ -485,12 +504,18 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
+                ui64 readLimit = std::numeric_limits<ui64>::max();
+                if (const auto sizeLimitIter = srcDesc.MutableSettings()->find("sizeLimit"); sizeLimitIter != srcDesc.MutableSettings()->cend()) {
+                    readLimit = FromString<ui64>(sizeLimitIter->second);
+                }
+
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,
                         std::move(paths),
                         fileQueuePrefetchSize,
                         fileSizeLimit,
+                        readLimit,
                         useRuntimeListing,
                         consumersCount,
                         fileQueueBatchSizeLimit,

@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
             (let read0 (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"input"))) (Void) '()))
             (let world (Left! read0))
-            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('())))))) '('set_ops '('push))))) '('mode 'delete))))
+            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('('('push)))))))) '('set_ops '('push))))) '('mode 'delete))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -312,6 +312,21 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(AlterTableStmt) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq');");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
     Y_UNIT_TEST(VariableShowStmt) {
         auto res = PgSqlToYql("Show server_version_num");
         UNIT_ASSERT(res.Root);
@@ -473,7 +488,7 @@ SELECT COUNT(*) FROM public.t;");
                         '('result '((PgResultItem '"" (Void) (lambda '() (PgStar)))
                             (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
-                        '('join_ops '('()))
+                        '('join_ops '('('('push))))
                         '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown)))))) '('unknowns_allowed)))))
                         '('set_ops '('push)))
                     )

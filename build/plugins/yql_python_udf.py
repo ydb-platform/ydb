@@ -29,7 +29,7 @@ def onregister_yql_python_udf(unit, *args):
         yql_python_dir = '/'.join([yql_base_dir, 'udfs/common/python'])
 
     unit.onyql_abi_version(['2', '27', '0'])
-    unit.onpeerdir(['/'.join([yql_python_dir, '/python_udf'])])
+    unit.onpeerdir(['/'.join([yql_base_dir, '/udfs/common/python/python_udf'])])
     unit.onpeerdir(['/'.join([yql_base_dir, '/public/udf'])])
 
     if add_libra_modules:
@@ -41,13 +41,13 @@ def onregister_yql_python_udf(unit, *args):
         unit.onpeerdir(
             ['library/python/runtime', '/'.join([yql_python_dir, '/main'])]
             if not py3
-            else ['library/python/runtime_py3', '/'.join([yql_python_dir, '/main_py3'])]
+            else ['library/python/runtime_py3', '/'.join([yql_base_dir, '/udfs/common/python/main_py3'])]
         )
     else:
         flavor = 'System'
 
     output_includes = [
-        '/'.join([yql_python_dir, '/python_udf/python_udf.h']),
+        '/'.join([yql_base_dir, '/udfs/common/python/python_udf/python_udf.h']),
         '/'.join([yql_base_dir, '/public/udf/udf_registrator.h']),
     ]
     if add_libra_modules:
@@ -64,7 +64,6 @@ def onregister_yql_python_udf(unit, *args):
             path,
             libra_flag,
             yql_base_dir,
-            yql_python_dir,
             'OUT',
             path,
             'OUTPUT_INCLUDES',

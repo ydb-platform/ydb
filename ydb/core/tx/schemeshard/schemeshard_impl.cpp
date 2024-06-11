@@ -1239,7 +1239,72 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
 
         if (item.HasPathVersion()) {
             const auto requiredVersion = item.GetPathVersion();
-            const auto actualVersion = GetPathVersion(TPath::Init(pathId, this)).GetGeneralVersion();
+            arc_ui64 actualVersion;
+            auto path = TPath::Init(pathId, this);
+            auto pathVersion = GetPathVersion(path);
+
+            if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
+                switch(path.Base()->PathType) {
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                        actualVersion = pathVersion.GetPQVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                        actualVersion = pathVersion.GetSubDomainVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTable:
+                        actualVersion = pathVersion.GetTableSchemaVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                        actualVersion = pathVersion.GetBSVVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                        actualVersion = pathVersion.GetFileStoreVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                        actualVersion = pathVersion.GetKesusVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                        actualVersion = pathVersion.GetRTMRVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                        actualVersion = pathVersion.GetSolomonVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                        actualVersion = pathVersion.GetTableIndexVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                        actualVersion = pathVersion.GetColumnStoreVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                        actualVersion = pathVersion.GetColumnTableVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                        actualVersion = pathVersion.GetCdcStreamVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                        actualVersion = pathVersion.GetSequenceVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        actualVersion = pathVersion.GetReplicationVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                        actualVersion = pathVersion.GetExternalTableVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                        actualVersion = pathVersion.GetExternalDataSourceVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeView:
+                        actualVersion = pathVersion.GetViewVersion();
+                        break;
+                    default:
+                        actualVersion = pathVersion.GetGeneralVersion();
+                        break;
+                }
+            } else {
+                actualVersion = pathVersion.GetGeneralVersion();
+            }
+
             if (requiredVersion != actualVersion) {
                 errStr = TStringBuilder()
                     << "fail user constraint in ApplyIf section:"
@@ -1452,6 +1517,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateExternalTable:
     case TTxState::TxCreateExternalDataSource:
     case TTxState::TxCreateView:
+    case TTxState::TxCreateContinuousBackup:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1485,6 +1551,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterExternalTable:
     case TTxState::TxAlterExternalDataSource:
     case TTxState::TxAlterView:
+    case TTxState::TxAlterContinuousBackup:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1507,6 +1574,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropExternalTable:
     case TTxState::TxDropExternalDataSource:
     case TTxState::TxDropView:
+    case TTxState::TxDropContinuousBackup:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -4064,9 +4132,6 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 result.SetColumnTableVersion(tableInfo->AlterVersion);
                 generalVersion += result.GetColumnTableVersion();
 
-                result.SetColumnTableShardingVersion(tableInfo->Description.GetSharding().GetVersion());
-                generalVersion += result.GetColumnTableShardingVersion();
-
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
                 } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->GetOlapStorePathIdVerified()) {
@@ -4425,6 +4490,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvRemoveSession, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShard, Handle);
@@ -4468,6 +4534,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvRemoveSession, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
@@ -4505,7 +4572,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //
         HFuncTraced(TEvColumnShard::TEvProposeTransactionResult, Handle);
-        HFuncTraced(NBackgroundTasks::TEvAddTaskResult, Handle);
         HFuncTraced(TEvColumnShard::TEvNotifyTxCompletionResult, Handle);
 
         // sequence shard
@@ -5161,6 +5227,12 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TAct
     Execute(CreateTxInitRootCompatibility(ev), ctx);
 }
 
+void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
+    auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
+    AFL_VERIFY(!!txRemove);
+    Execute(txRemove.release(), ctx);
+}
+
 void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx) {
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
@@ -5655,38 +5727,6 @@ void TSchemeShard::Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TA
     } else {
         Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
     }
-}
-
-void TSchemeShard::Handle(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Handle NBackgroundTasks::TEvAddTaskResult"
-        << ", at schemeshard: " << TabletID()
-        << ", message: " << ev->Get()->GetDebugString());
-    TOperationId id;
-    if (!id.DeserializeFromString(ev->Get()->GetTaskId())) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult cannot parse operation id in result"
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    if (!Operations.contains(id.GetTxId())) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult for unknown txId, ignore it"
-            << ", txId: " << id.SerializeToString()
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    if (!ev->Get()->IsSuccess()) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult cannot execute"
-            << ", txId: " << id.SerializeToString()
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    Execute(CreateTxOperationReply(id, ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
@@ -6620,6 +6660,11 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 break;
             }
 
+            case NKikimrSchemeOp::EPathTypeTable: {
+                // TODO: move BackupImplTable under special scheme element
+                break;
+            }
+
             default:
                 Y_FAIL_S("Unexpected table's child"
                     << ": tableId# " << tableId
@@ -6882,6 +6927,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
+            nullptr,
             appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit()
         );
     }
@@ -7143,6 +7189,18 @@ void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
 }
 
+void TSchemeShard::AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) {
+    if (storageType == EUserFacingStorageType::Ssd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD].Add(data);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD].Add(index);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD].Add(data + index);
+    } else if (storageType == EUserFacingStorageType::Hdd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD].Add(data);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD].Add(index);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD].Add(data + index);
+    }
+}
+
 void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
@@ -7157,6 +7215,14 @@ void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
 
 void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) {
+    if (storageType == EUserFacingStorageType::Ssd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD].Add(addend);
+    } else if (storageType == EUserFacingStorageType::Hdd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
+    }
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {

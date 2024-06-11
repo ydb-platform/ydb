@@ -25,16 +25,6 @@ protected:
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
         Name = description.GetName();
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
         if (!DoDeserialize(description, errors)) {
@@ -71,7 +61,7 @@ public:
             }
         }
         tableInfo->AlterVersion = 1;
-        auto shardingValidation = NSharding::TShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
+        auto shardingValidation = NSharding::IShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
         if (shardingValidation.IsFail()) {
             errors.AddError(shardingValidation.GetErrorMessage());
             return nullptr;
@@ -170,7 +160,7 @@ private:
         for (auto&& i : layoutConclusion->MutableTabletIds()) {
             description.MutableSharding()->AddColumnShards(i);
         }
-        auto shardingObject = NSharding::TShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
+        auto shardingObject = NSharding::IShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
         if (shardingObject.IsFail()) {
             return shardingObject;
         }
@@ -184,7 +174,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
-    bool HasDataChannels = false;
+    ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
         if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
@@ -197,7 +187,9 @@ private:
             return false;
         }
 
-        HasDataChannels = description.GetStorageConfig().HasDataChannelCount();
+        if (description.GetStorageConfig().HasDataChannelCount()) {
+            ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
+        }
 
         TOlapSchemaUpdate schemaDiff;
         if (!schemaDiff.Parse(description.GetSchema(), errors)) {
@@ -213,9 +205,7 @@ private:
 private:
     TConclusionStatus BuildDescription(const TOperationContext& /*context*/, TColumnTableInfo::TPtr& table) const override {
         auto& description = table->Description;
-        if (HasDataChannels) {
-            description.MutableStorageConfig()->SetDataChannelCount(1);
-        }
+        description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
         return TConclusionStatus::Success();
     }

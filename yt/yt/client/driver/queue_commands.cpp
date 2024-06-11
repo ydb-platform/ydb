@@ -155,7 +155,7 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TPullConsumerCommand::Register(TRegistrar registrar)
+void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("consumer_path", &TThis::ConsumerPath);
 
@@ -194,11 +194,11 @@ void TPullConsumerCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
-void TPullConsumerCommand::DoExecute(ICommandContextPtr context)
+void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
-    auto result = WaitFor(client->PullConsumer(
+    auto result = WaitFor(client->PullQueueConsumer(
         ConsumerPath,
         QueuePath,
         Offset,
@@ -246,6 +246,65 @@ void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
         WaitFor(transaction->Commit())
             .ThrowOnError();
     }
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("producer_path", &TThis::ProducerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("session_id", &TThis::SessionId);
+    registrar.Parameter("user_meta", &TThis::UserMeta)
+        .Optional();
+}
+
+void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    std::optional<NYson::TYsonString> requestUserMeta;
+    if (UserMeta) {
+        requestUserMeta = NYson::ConvertToYsonString(UserMeta);
+    }
+
+    auto result = WaitFor(client->CreateQueueProducerSession(
+        ProducerPath,
+        QueuePath,
+        SessionId,
+        requestUserMeta))
+        .ValueOrThrow();
+
+    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("epoch").Value(result.Epoch)
+                .Item("sequence_number").Value(result.SequenceNumber)
+                .Item("user_meta").Value(result.UserMeta)
+            .EndMap();
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRemoveQueueProducerSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("producer_path", &TThis::ProducerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("session_id", &TThis::SessionId);
+}
+
+void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    WaitFor(client->RemoveQueueProducerSession(
+        ProducerPath,
+        QueuePath,
+        SessionId))
+        .ThrowOnError();
 
     ProduceEmptyOutput(context);
 }

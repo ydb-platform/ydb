@@ -125,7 +125,7 @@ namespace NKqp {
             }
         }
         for (auto shard : shards) {
-            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), shard, false));
         }
     }
@@ -133,9 +133,17 @@ namespace NKqp {
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        if (NScheme::NTypeIds::Pg == Type) {
+        switch (Type) {
+        case NScheme::NTypeIds::Pg:
             str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
-        } else {
+            break;
+        case NScheme::NTypeIds::Decimal: {
+            TTypeBuilder builder;
+            builder.Decimal(TDecimalType(22, 9));
+            str << builder.Build();
+            break;
+        }
+        default:
             str << NScheme::GetTypeName(Type);
         }
         if (!NullableFlag) {

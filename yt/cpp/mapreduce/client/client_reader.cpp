@@ -216,7 +216,11 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
 
             Input_ = Response_->GetResponseStream();
 
-            YT_LOG_DEBUG("RSP %v - table stream (RequestId: %v, RangeIndex: %v, RowIndex: %v)", requestId, rangeIndex, rowIndex);
+            YT_LOG_DEBUG(
+                "RSP %v - table stream (RangeIndex: %v, RowIndex: %v)",
+                requestId,
+                rangeIndex,
+                rowIndex);
 
             return;
         } catch (const TErrorResponse& e) {

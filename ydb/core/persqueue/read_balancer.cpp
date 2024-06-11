@@ -390,6 +390,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const T
     } else {
         THolder<TEvPersQueue::TEvDescribeResponse> res{new TEvPersQueue::TEvDescribeResponse};
         res->Record.MutableConfig()->CopyFrom(TabletConfig);
+        res->Record.MutableConfig()->ClearAllPartitions();
         res->Record.SetVersion(Version);
         res->Record.SetTopicName(Topic);
         res->Record.SetPartitionPerTablet(MaxPartsPerTablet);
@@ -450,6 +451,28 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = std::move(record.GetPath());
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
+
+    if (!TabletConfig.GetAllPartitions().size()) {
+        for (auto& p : record.GetPartitions()) {
+            auto* ap = TabletConfig.AddAllPartitions();
+            ap->SetPartitionId(p.GetPartition());
+            ap->SetTabletId(p.GetTabletId());
+            ap->SetCreateVersion(p.GetCreateVersion());
+            if (p.HasKeyRange()) {
+                ap->MutableKeyRange()->CopyFrom(p.GetKeyRange());
+            }
+            ap->SetStatus(p.GetStatus());
+            ap->MutableParentPartitionIds()->Reserve(p.GetParentPartitionIds().size());
+            for (const auto parent : p.GetParentPartitionIds()) {
+                ap->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            ap->MutableChildPartitionIds()->Reserve(p.GetChildPartitionIds().size());
+            for (const auto children : p.GetChildPartitionIds()) {
+                ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
+            }
+        }
+    }
+
     Migrate(TabletConfig);
 
     SchemeShardId = record.GetSchemeShardId();
@@ -480,9 +503,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     if (SplitMergeEnabled(TabletConfig)) {
         if (!PartitionsScaleManager) {
-            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, record);
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, PathId, Version, TabletConfig);
         } else {
-            PartitionsScaleManager->UpdateBalancerConfig(record);
+            PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
     }
 
@@ -510,13 +533,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (it == PartitionsInfo.end()) {
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), {}};
-            if (SplitMergeEnabled(TabletConfig)) {
-                partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
-            }
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
             newPartitionsIds.push_back(p.GetPartition());
-            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, partitionsInfo[p.GetPartition()].KeyRange});
+            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, p.GetKeyRange()});
 
             ++NumActiveParts;
 
@@ -540,13 +560,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
 
+    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+
     Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
 
     if (SubDomainPathId && (!WatchingSubDomainPathId || *WatchingSubDomainPathId != *SubDomainPathId)) {
         StartWatchingSubDomainPathId();
     }
 
-    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+    UpdateConfigCounters();
 }
 
 
@@ -676,11 +698,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
-            TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
-                .Id = partitionId,
-                .KeyRange = PartitionsInfo[partitionId].KeyRange
-            };
-            PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, partRes.GetScaleStatus(), ctx);
+            PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx);
         }
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -799,29 +817,21 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     UpdateCounters(ctx);
 }
 
-void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
-    if (!AggregatedStats.Stats.size())
+void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
+    if (!DatabasePath) {
         return;
+    }
 
-    if (!DatabasePath)
+    if (DynamicCounters) {
         return;
-
-    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-    THolder<TPartitionLabeledCounters> labeledCounters;
-    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
-    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
-
-
-    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
-    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
-
-    auto counters = AppData(ctx)->Counters;
-    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+    }
 
     TStringBuf name = TStringBuf(Path);
     name.SkipPrefix(DatabasePath);
     name.SkipPrefix("/");
-    counters = counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
+
+    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+    DynamicCounters = AppData(ctx)->Counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
                 ->GetSubgroup("host", "")
                 ->GetSubgroup("database", DatabasePath)
                 ->GetSubgroup("cloud_id", CloudId)
@@ -829,20 +839,52 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
                 ->GetSubgroup("database_id", DatabaseId)
                 ->GetSubgroup("topic", TString(name));
 
+    ActivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.active_count", false);
+    InactivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.inactive_count", false);
+}
+
+void TPersQueueReadBalancer::UpdateConfigCounters() {
+    if (!DynamicCounters) {
+        return;
+    }
+
+    size_t inactiveCount = std::count_if(TabletConfig.GetAllPartitions().begin(), TabletConfig.GetAllPartitions().end(), [](auto& p) {
+        return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
+    });
+
+    ActivePartitionCountCounter->Set(PartitionsInfo.size() - inactiveCount);
+    InactivePartitionCountCounter->Set(inactiveCount);
+}
+
+void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
+    if (!AggregatedStats.Stats.size())
+        return;
+
+    if (!DynamicCounters)
+        return;
+
+    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+    THolder<TPartitionLabeledCounters> labeledCounters;
+    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
+    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
+
+    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
+    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
+
     if (AggregatedCounters.empty()) {
         for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
             TString name = labeledCounters->GetNames()[i];
             TStringBuf nameBuf = name;
             nameBuf.SkipPrefix("PQ/");
             name = nameBuf;
-            AggregatedCounters.push_back(name.empty() ? nullptr : counters->GetExpiringNamedCounter("name", name, false));
+            AggregatedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
         }
     }
 
     for (auto& [consumer, info]: Consumers) {
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
         if (info.AggregatedCounters.empty()) {
-            auto clientCounters = counters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
+            auto clientCounters = DynamicCounters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
             for (ui32 i = 0; i < labeledConsumerCounters->GetCounters().Size(); ++i) {
                 TString name = labeledConsumerCounters->GetNames()[i];
                 TStringBuf nameBuf = name;
@@ -1106,6 +1148,9 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
             if (attr.GetKey() == "cloud_id") CloudId = attr.GetValue();
             if (attr.GetKey() == "database_id") DatabaseId = attr.GetValue();
         }
+
+        InitCounters(ctx);
+        UpdateConfigCounters();
     }
 
     if (PartitionsScaleManager) {
@@ -1196,17 +1241,13 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
         return;
     }
     auto& record = ev->Get()->Record;
-    auto partitionInfoIt = PartitionsInfo.find(record.GetPartitionId());
-    if (partitionInfoIt == PartitionsInfo.end()) {
+    auto* node = PartitionGraph.GetPartition(record.GetPartitionId());
+    if (!node) {
         return;
     }
 
     if (PartitionsScaleManager) {
-        TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
-            .Id = record.GetPartitionId(),
-            .KeyRange = partitionInfoIt->second.KeyRange
-        };
-        PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, record.GetScaleStatus(), ctx);
+        PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
     }
 }
 

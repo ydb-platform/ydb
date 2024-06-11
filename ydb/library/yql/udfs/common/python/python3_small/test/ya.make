@@ -1,7 +1,3 @@
-SUBSCRIBER(
-    g:yql
-)
-
 YQL_UDF_YDB_TEST()
 
 TIMEOUT(300)

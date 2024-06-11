@@ -20,8 +20,9 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
             TGuard<TMutex> g(mutexLocal);
             Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
         }
-        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.SelfId(), std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
-            SharedBlobsManager->GetStorageManagerGuarantee(storageId));
+        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.SelfId(), 
+            std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
+            SharedBlobsManager->GetStorageManagerGuarantee(storageId), Shard.Executor()->Generation());
 #else
         return nullptr;
 #endif

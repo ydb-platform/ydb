@@ -24,9 +24,16 @@ class TDqConfig;
 
 class IDqGateway : public TThrRefBase {
 public:
+    struct TStageStats {
+        i64 InputRows = 0;
+        i64 OutputRows = 0;
+        i64 InputBytes = 0;
+        i64 OutputBytes = 0;
+    };
+
     using TPtr = TIntrusivePtr<IDqGateway>;
     using TFileResource = Yql::DqsProto::TFile;
-    using TDqProgressWriter = std::function<void(const TString&)>;
+    using TDqProgressWriter = std::function<void(const TString&, const std::unordered_map<ui64, IDqGateway::TStageStats>&)>;
 
     struct TFileResourceHash {
         std::size_t operator()(const TFileResource& f) const {
@@ -75,7 +82,7 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard) = 0;
+                bool discard, ui64 executionTimeout) = 0;
 
     virtual TString GetVanillaJobPath() {
         return "";

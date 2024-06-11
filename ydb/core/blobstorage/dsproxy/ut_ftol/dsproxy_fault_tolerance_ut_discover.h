@@ -42,7 +42,7 @@ public:
         }
 
         // put blocks
-        SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), new TEvBlobStorage::TEvBlock(1, numGenerations - 1, TInstant::Max()));
+        SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvBlock(1, numGenerations - 1, TInstant::Max()));
         auto response = WaitForSpecificEvent<TEvBlobStorage::TEvBlockResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
 
@@ -68,7 +68,7 @@ public:
             const bool restorable = Info->GetQuorumChecker().CheckFailModelForSubgroup(failedSubgroupDisks);
 
             SetFailedDisks(failedDisks);
-            SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), new TEvBlobStorage::TEvDiscover(tabletId, 0, false, false,
+            SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, false, false,
                 TInstant::Max(), 0, true));
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
 
@@ -109,7 +109,7 @@ public:
                     TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
                     disks, false);
 
-            SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), new TEvBlobStorage::TEvDiscover(tabletId, 0, true, true, TInstant::Max(), 0, true));
+            SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, true, TInstant::Max(), 0, true));
             auto response = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>(&TDiscoverFaultToleranceTest::ProcessUnexpectedEvent);
 
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);

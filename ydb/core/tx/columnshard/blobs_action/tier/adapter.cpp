@@ -26,7 +26,6 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(std::uni
     TLogoBlobID logoBlobId;
     TString error;
     Y_ABORT_UNLESS(ev->Key);
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Key, error))("error", error)("str_blob_id", *ev->Key);
     if (ev->IsSuccess()) {
         return std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);

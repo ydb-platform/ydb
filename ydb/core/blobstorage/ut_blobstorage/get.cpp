@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(Get) {
                 NKikimrBlobStorage::AsyncRead, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
         ev->ReaderTabletData = readerTabletData;
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(Get) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max());
 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(Get) {
         auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, blockedTabletGeneration, TInstant::Max());
 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
 
         auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});

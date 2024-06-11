@@ -77,7 +77,7 @@ namespace NKikimr::NBsController {
             // apply new report
             auto& record = ev->Get()->Record;
             for (const NKikimrBlobStorage::TEvGroupStatReport& item : record.GetPerGroupReport()) {
-                const TGroupId groupId = TGroupId::FromValue(item.GetGroupId());
+                const TGroupId groupId = TGroupId::FromProto(&item, &NKikimrBlobStorage::TEvGroupStatReport::GetGroupId);
                 auto it = Groups.find(groupId);
                 if (it != Groups.end()) {
                     it->second.Update(item, now, groupId, GroupCleanupSchedule);

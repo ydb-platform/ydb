@@ -7,12 +7,13 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>

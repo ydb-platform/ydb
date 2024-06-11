@@ -58,9 +58,11 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         auto manager = shard.GetStoragesManager()->GetOperatorVerified(i.first);
         const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            Cerr << shard.TabletID() << " SHARING_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
             i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
         }
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
+            Cerr << shard.TabletID() << " BORROWED_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
             i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
         }
     }
@@ -112,9 +114,11 @@ bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
             return false;
         }
     }

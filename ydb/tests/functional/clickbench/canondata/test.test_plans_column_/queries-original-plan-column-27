@@ -41,6 +41,12 @@
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
                                                             }
                                                         ],
                                                         "Limit": "25",
@@ -94,6 +100,7 @@
                                                                             "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
@@ -239,6 +246,7 @@
                                                                             "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {

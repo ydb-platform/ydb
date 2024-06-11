@@ -638,7 +638,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     auto erasure = (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies();
     TBlobStorageGroupType type(erasure);
     TBlobStorageGroupInfo::TTopology topology(type);
-    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromValue(group.GetGroupID()), group.GetGroupGeneration());
+    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration());
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
@@ -917,8 +917,7 @@ TString TBlobStorageGroupInfo::ToString() const {
 
 
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
-    return TVDiskID(TGroupId::FromValue(x.GetGroupID()), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
+    return TVDiskID(TGroupId::FromProto(&x, &NKikimrBlobStorage::TVDiskID::GetGroupID), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }
 
 void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
@@ -957,7 +956,6 @@ TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet) {
         }
         groupGeneration = IntFromString<ui32, 10>(parts[1]);
     }
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
     return TVDiskID(TGroupId::FromValue(IntFromString<ui32, 16>(parts[0])),
         groupGeneration,
         IntFromString<ui8, 10>(parts[2]),

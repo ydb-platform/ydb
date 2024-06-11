@@ -3,7 +3,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/templates.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>

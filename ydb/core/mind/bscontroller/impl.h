@@ -124,7 +124,7 @@ public:
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
 
     public:
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 
@@ -499,12 +499,12 @@ public:
             switch (Status) {
                 case NKikimrBlobStorage::EDriveStatus::UNKNOWN:
                 case NKikimrBlobStorage::EDriveStatus::BROKEN:
-                    return false;
-
-                case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                    return false;
+
+                case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                     return true;
 
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -1572,7 +1572,8 @@ private:
     void UpdateSystemViews();
 
     bool CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription);
+        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription,
+        NKikimrBlobStorage::TConfigResponse *response = nullptr);
 
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);

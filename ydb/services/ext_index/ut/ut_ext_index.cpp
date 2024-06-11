@@ -87,7 +87,6 @@ Y_UNIT_TEST_SUITE(ExternalIndex) {
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
             .SetEnableExternalIndex(true)
-            .SetEnableBackgroundTasks(true)
             .SetEnableOlapSchemaOperations(true);
         ;
 

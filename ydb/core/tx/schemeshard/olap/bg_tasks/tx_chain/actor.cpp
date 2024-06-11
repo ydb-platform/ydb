@@ -40,10 +40,10 @@ void TTxChainActor::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPt
 }
 
 void TTxChainActor::OnSessionProgressSaved() {
-    if (SessionLogic->GetStepForExecute() < SessionLogic->GetTxData().GetTransactions().size()) {
-        NActors::TActivationContext::AsActorContext().Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1));
+    if (SessionLogic->IsFinished()) {
+        SaveSessionState();
     } else {
-        Session->FinishActor();
+        NActors::TActivationContext::AsActorContext().Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1));
     }
 }
 

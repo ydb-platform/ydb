@@ -930,7 +930,7 @@ namespace NKikimr::NBsController {
             const auto& settings = bsConfig.GetAutoconfigSettings();
             const auto& ss = bsConfig.GetServiceSet();
             for (const auto& group : ss.GetGroups()) {
-                auto& content = sh->GroupsToUpdate[TGroupId::FromValue(group.GetGroupID())];
+                auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
@@ -938,7 +938,7 @@ namespace NKikimr::NBsController {
                     .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, settings.GetGeometry()),
                 };
 
-                const TVDiskID vdiskId(TGroupId::FromValue(group.GetGroupID()), group.GetGroupGeneration(), 0, 0, 0);
+                const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);
                 for (auto it = StaticVDiskMap.lower_bound(vdiskId); it != StaticVDiskMap.end() &&
                         it->first.GroupID.GetRawId() == group.GetGroupID() &&
                         it->first.GroupGeneration == group.GetGroupGeneration(); ++it) {
@@ -1006,6 +1006,7 @@ namespace NKikimr::NBsController {
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
                     }
+                    SysViewChangedVSlots.insert(vslotId);
                 }
                 if (slot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     // we can release donor slots without further notice then the VDisk is completely replicated; we
@@ -1031,6 +1032,7 @@ namespace NKikimr::NBsController {
                     .ReadySince = vslot.ReadySince,
                     .VDiskStatus = vslot.VDiskStatus,
                 });
+                SysViewChangedVSlots.insert(vslotId);
             }
         }
 

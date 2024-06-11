@@ -193,7 +193,7 @@ namespace NKikimr {
                 TMap<TVDiskIdShort, TVSlotId> replacedSlots;
                 i64 requiredSpace = Min<i64>();
 
-                bool sanitizingRequest = (State.SanitizingRequests.find(groupId.GetRawId()) != State.SanitizingRequests.end());
+                bool sanitizingRequest = (State.SanitizingRequests.find(groupId) != State.SanitizingRequests.end());
 
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // scan through all VSlots and find matching PDisks

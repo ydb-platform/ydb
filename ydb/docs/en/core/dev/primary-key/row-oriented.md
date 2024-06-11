@@ -22,7 +22,7 @@ Writing data to a table with the ```( timestamp, userid, userevent, PRIMARY KEY 
 
 ### Using a hash of key column values as a primary key {#key-hash}
 
-To obtain a more even distribution of inserts across a table's partitions, make the primary key "prefix" (initial part) values more varied. To do this, make the primary key include the value of a hash of the entire primary key or a part of the primary key.
+To obtain a more even distribution of operations across a table's partitions and reduce the size of internal data structures, make the primary key "prefix" (initial part) values more varied. To do this, make the primary key include the value of a hash of the entire primary key or a part of the primary key.
 
 For instance, the schema of this table with the schema ```( timestamp, userid, userevent, PRIMARY KEY (userid, timestamp) )``` might be made to include an additional field computed as a hash: ```userhash = HASH(userid)```. This would change the table schema as follows:
 

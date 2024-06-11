@@ -174,20 +174,19 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
-        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
-            for (auto type : Cfg->BlobStorageConfig.GetCostMetricsSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasBurstThresholdNs()) {
-                        vdiskConfig->BurstThresholdNs = type.GetBurstThresholdNs();
-                    }
-                    if (type.HasDiskTimeAvailableScale()) {
-                        vdiskConfig->DiskTimeAvailableScale = type.GetDiskTimeAvailableScale();
-                    }
-                }
-            }
+        vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+        if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+        } else {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
+
+        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
+
+        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
             for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {

@@ -1,0 +1,24 @@
+#pragma once
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
+#include <util/generic/vector.h>
+
+namespace NKikimr::NChangeExchange {
+
+class IChangeSenderResolver {
+public:
+    virtual ~IChangeSenderResolver() = default;
+
+    virtual void Resolve() = 0;
+    virtual bool IsResolving() const = 0;
+    virtual bool IsResolved() const = 0;
+
+    virtual const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const = 0;
+    virtual const TVector<NScheme::TTypeInfo>& GetSchema() const = 0;
+    virtual NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const = 0;
+};
+
+} // NKikimr::NChangeExchange

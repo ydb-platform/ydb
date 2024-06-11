@@ -32,8 +32,10 @@ int Main(int argc, const char *argv[])
     bool showResults;
     TString udfsDir;
     TString LLVMSettings;
+    TString blockEngineSettings;
     opts.AddHelpOption();
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
+    opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&blockEngineSettings).DefaultValue("disable");
     opts.AddLongOption('c', "count", "count of input rows").StoreResult(&count).DefaultValue(1000000);
     opts.AddLongOption('g', "gen-sql", "SQL query to generate data").StoreResult(&genSql).DefaultValue("select index from Input");
     opts.AddLongOption('t', "test-sql", "SQL query to test").StoreResult(&testSql).DefaultValue("select count(*) as count from Input");
@@ -49,6 +51,7 @@ int Main(int argc, const char *argv[])
     auto factoryOptions = TProgramFactoryOptions();
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
+    factoryOptions.SetBlockEngineSettings(blockEngineSettings);
     auto factory = MakeProgramFactory(factoryOptions);
 
     NYT::TNode members{NYT::TNode::CreateList()};
@@ -140,7 +143,7 @@ int main(int argc, const char *argv[]) {
     try {
         return Main(argc, argv);
     } catch (const TCompileError& e) {
-        Cerr << e.GetIssues();
+        Cerr << e.what() << "\n" << e.GetIssues();
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;

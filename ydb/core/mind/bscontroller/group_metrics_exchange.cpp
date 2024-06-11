@@ -22,7 +22,7 @@ namespace NKikimr::NBsController {
             NIceDb::TNiceDb db(txc.DB);
 
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
-                if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(item.GetGroupId()))) {
+                if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
                     group->GroupMetrics = std::move(item);
 
                     TString s;

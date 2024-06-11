@@ -390,7 +390,7 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
 
         TPrettyTable table(AnalyzeMode ? explainAnalyzeColumnNames : explainColumnNames,
-            TPrettyTableConfig().WithoutRowDelimiters());
+            TPrettyTableConfig().WithoutRowDelimiters().MaxWidth(MaxWidth));
 
         Y_ENSURE(queryPlan.GetMapSafe().contains("Plans"));
 
@@ -445,7 +445,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
     auto& newRow = table.AddRow();
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NColorizer::AutoColors(Output);
     TStringBuf color;
     switch(offset.size() % 3) {
         case 0: 

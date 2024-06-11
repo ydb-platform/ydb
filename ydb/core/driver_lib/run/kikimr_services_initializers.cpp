@@ -169,6 +169,8 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -176,14 +178,15 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/service/service.h>
+#include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/service/service.h>
+#include <ydb/core/tx/limiter/usage/config.h>
+#include <ydb/core/tx/limiter/usage/service.h>
 
 #include <ydb/core/backup/controller/tablet.h>
 
-#include <ydb/services/bg_tasks/ds_table/executor.h>
-#include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/service/executor.h>
 
@@ -236,8 +239,6 @@
 
 #include <util/system/hostname.h>
 
-#include <thread>
-
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -258,7 +259,7 @@ static TCpuMask ParseAffinity(const TConfig& cfg) {
     if (cfg.GetCpuList()) {
         result = TCpuMask(cfg.GetCpuList());
     } else if (cfg.GetX().size() > 0) {
-        result = TCpuMask(cfg.GetX().begin(), cfg.GetX().size());
+        result = TCpuMask(cfg.GetX().data(), cfg.GetX().size());
     } else { // use all processors
         TAffinity available;
         available.Current();
@@ -1016,39 +1017,29 @@ TStateStorageServiceInitializer::TStateStorageServiceInitializer(const TKikimrRu
 }
 
 void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    bool found = false;
-
     TIntrusivePtr<TStateStorageInfo> ssrInfo;
     TIntrusivePtr<TStateStorageInfo> ssbInfo;
     TIntrusivePtr<TStateStorageInfo> sbrInfo;
 
+    std::unique_ptr<IActor> proxyActor;
+
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
-        found = true;
 
         BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);
 
         StartLocalStateStorageReplicas(CreateStateStorageReplica, ssrInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
+
+        proxyActor.reset(CreateStateStorageProxy(ssrInfo, ssbInfo, sbrInfo));
     }
-    if (!found) {
-        auto stubInfo = MakeIntrusive<TStateStorageInfo>();
-        stubInfo->NToSelect = 1;
-        stubInfo->Rings.push_back(TStateStorageInfo::TRing{
-            .IsDisabled = false,
-            .UseRingSpecificNodeSelection = false,
-            .Replicas{
-                TActorId()
-            }
-        });
-        stubInfo->StateStorageVersion = 0;
-        ssrInfo = ssbInfo = sbrInfo = stubInfo;
+    if (!proxyActor) {
+        proxyActor.reset(CreateStateStorageProxyStub());
     }
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(),
-        TActorSetupCmd(CreateStateStorageProxy(ssrInfo, ssbInfo, sbrInfo),
-        TMailboxType::ReadAsFilled, appData->SystemPoolId)));
+        TActorSetupCmd(proxyActor.release(), TMailboxType::ReadAsFilled, appData->SystemPoolId)));
 
     setup->LocalServices.emplace_back(
         TActorId(),
@@ -1342,35 +1333,41 @@ void TTabletResolverInitializer::InitializeServices(
 
 }
 
-// TTabletPipePeNodeCachesInitializer
+// TTabletPipePerNodeCachesInitializer
 
-TTabletPipePeNodeCachesInitializer::TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig)
+TTabletPipePerNodeCachesInitializer::TTabletPipePerNodeCachesInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TTabletPipePeNodeCachesInitializer::InitializeServices(
+void TTabletPipePerNodeCachesInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData)
 {
     auto counters = GetServiceCounters(appData->Counters, "tablets");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
+    TIntrusivePtr<TPipePerNodeCacheConfig> leaderPipeConfig = new TPipePerNodeCacheConfig();
     leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-    leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
     leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
+    TIntrusivePtr<TPipePerNodeCacheConfig> followerPipeConfig = new TPipePerNodeCacheConfig();
     followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
     followerPipeConfig->PipeConfig.AllowFollower = true;
-    followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
     followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE");
 
+    TIntrusivePtr<TPipePerNodeCacheConfig> persistentPipeConfig = new TPipePerNodeCacheConfig();
+    persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
+    persistentPipeConfig->PipeConfig = TPipePerNodeCacheConfig::DefaultPersistentPipeConfig();
+    persistentPipeConfig->Counters = counters->GetSubgroup("type", "PERSISTENT_PIPE_CACHE");
+
     setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(false),
-        TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+        MakePipePerNodeCacheID(false),
+        TActorSetupCmd(CreatePipePerNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
     setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(true),
-        TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+        MakePipePerNodeCacheID(true),
+        TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+    setup->LocalServices.emplace_back(
+        MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+        TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
 // TTabletMonitoringProxyInitializer
@@ -2149,19 +2146,42 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto federatedQuerySetupFactory = NKqp::MakeKqpFederatedQuerySetupFactory(setup, appData, Config);
 
+        auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             Config.GetQueryServiceConfig(),  Config.GetMetadataProviderConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
-            federatedQuerySetupFactory
+            federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // Create finalize script service
-        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+        auto finalize = NKqp::CreateKqpFinalizeScriptService(
+            Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory, s3ActorsFactory
+        );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TCompDiskLimiterInitializer::TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TCompDiskLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NLimiter::TConfig serviceConfig;
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto<NLimiter::TCompDiskLimiterPolicy>(Config.GetCompDiskLimiterConfig()));
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_DISK_LIMITER");
+
+        auto service = NLimiter::TCompDiskOperator::CreateService(serviceConfig, countersGroup);
+
+        setup->LocalServices.push_back(std::make_pair(
+            NLimiter::TCompDiskOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 
@@ -2269,24 +2289,6 @@ void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup
         auto service = NMetadata::NProvider::CreateService(serviceConfig);
         setup->LocalServices.push_back(std::make_pair(
             NMetadata::NProvider::MakeServiceId(NodeId),
-            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
-    }
-}
-
-TBackgroundTasksInitializer::TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TBackgroundTasksInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NBackgroundTasks::TConfig serviceConfig;
-    if (Config.HasBackgroundTasksConfig()) {
-        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
-    }
-
-    if (serviceConfig.IsEnabled()) {
-        auto service = NBackgroundTasks::CreateService(serviceConfig);
-        setup->LocalServices.push_back(std::make_pair(
-            NBackgroundTasks::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

@@ -8,6 +8,9 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "debug, relwithdebinfo, release-asan, release-tsan, release, release-cmake14"
+  put_build_results_to_cache:
+    required: false
+    default: "true"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -21,6 +24,9 @@ inputs:
     required: false
     default: "8"
     description: "link threads count"
+  additional_ya_make_args:
+    type: string
+    default: ""
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -65,7 +71,7 @@ runs:
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
@@ -107,6 +113,10 @@ runs:
             ;;
         esac
         
+        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
+          extra_params+=(${{ inputs.additional_ya_make_args }})
+        fi
+
         echo "::debug::get version"
         ./ya --version
         
@@ -140,8 +150,14 @@ runs:
       run: |
         set -x
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
           echo "Build failed. see the [build logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
 

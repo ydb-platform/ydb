@@ -189,28 +189,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "Data has merged" << Endl;
     }
 
-    template <typename T>
-    void TestSwagger() {
-        T h;
-        h.Init();
-
-        TStringStream json;
-        json << "{";
-        h.PrintForSwagger(json);
-        json << "}";
-
-        NJson::TJsonReaderConfig jsonCfg;
-        jsonCfg.DontValidateUtf8 = true;
-        jsonCfg.AllowComments = false;
-
-        ValidateJsonThrow(json.Str(), jsonCfg);
-    }
-
-    Y_UNIT_TEST(Swagger) {
-        TestSwagger<TViewerJsonHandlers>();
-        TestSwagger<TVDiskJsonHandlers>();
-    }
-
     struct THttpRequest : NMonitoring::IHttpRequest {
         HTTP_METHOD Method;
         TCgiParameters CgiParameters;

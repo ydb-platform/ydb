@@ -198,6 +198,8 @@ public:
 private:
     EStage Stage = EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    TString AbortedReason;
+
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
@@ -211,7 +213,6 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
-
     }
 
     TBlobsAction BlobsAction;
@@ -231,6 +232,10 @@ public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
         virtual ~IMemoryPredictor() = default;
     };
+
+    virtual bool NeedDiskWriteLimiter() const {
+        return false;
+    }
 
     void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
 

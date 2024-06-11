@@ -102,6 +102,7 @@ namespace NKikimr {
                                     maxBlobInBytes, overhead, freeChunksReservation))
             , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
+            , PersistentLsn(entryPointLsn)
         {
             ParseFromString(entryPointData);
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
@@ -129,6 +130,7 @@ namespace NKikimr {
                                     maxBlobInBytes, overhead, freeChunksReservation))
             , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
+            , PersistentLsn(entryPointLsn)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
@@ -304,7 +306,7 @@ namespace NKikimr {
         }
 
         ui64 THullHugeKeeperPersState::FirstLsnToKeep(ui64 minInFlightLsn) const {
-            const ui64 res = Min(minInFlightLsn, LogPos.EntryPointLsn);
+            const ui64 res = Min(minInFlightLsn, PersistentLsn);
 
             Y_VERIFY_S(FirstLsnToKeepReported <= res, "FirstLsnToKeepReported# " << FirstLsnToKeepReported
                 << " res# " << res << " state# " << FirstLsnToKeepDecomposed() << " minInFlightLsn# " << minInFlightLsn);
@@ -321,13 +323,18 @@ namespace NKikimr {
 
         bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn,
                 ui32 itemsAfterCommit) const {
-            return freeUpToLsn < minInFlightLsn && (LogPos.EntryPointLsn <= freeUpToLsn || itemsAfterCommit > 10000);
+            return freeUpToLsn < minInFlightLsn && (PersistentLsn <= freeUpToLsn || itemsAfterCommit > 10000);
         }
 
         // initiate commit
-        void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn) {
+        void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn) {
             Y_ABORT_UNLESS(lsn > LogPos.EntryPointLsn);
             LogPos.EntryPointLsn = lsn;
+            PersistentLsn = Min(lsn, minInFlightLsn);
+
+            // these metabases never have huge blobs and we never care about them actually
+            LogPos.BlocksDbSlotDelLsn = lsn;
+            LogPos.BarriersDbSlotDelLsn = lsn;
         }
 
         // finish commit
@@ -349,6 +356,7 @@ namespace NKikimr {
                                 Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeAddChunk(rec.ChunkId);
                 LogPos.ChunkAllocationLsn = lsn;
+                PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
@@ -376,6 +384,7 @@ namespace NKikimr {
                                 Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeRemoveChunks(rec.ChunkIds);
                 LogPos.ChunkFreeingLsn = lsn;
+                PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
@@ -420,6 +429,7 @@ namespace NKikimr {
                     Heap->RecoveryModeFree(x);
 
                 *logPosDelLsn = lsn;
+                PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
@@ -468,6 +478,7 @@ namespace NKikimr {
                     Heap->RecoveryModeAllocate(rec.DiskAddr);
                 }
                 LogPos.HugeBlobLoggedLsn = lsn;
+                PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
@@ -485,7 +496,6 @@ namespace NKikimr {
                 ui64 lsn,
                 const TString &data)
         {
-
             if (!CheckEntryPoint(data))
                 return TRlas(false, true);
 
@@ -508,7 +518,6 @@ namespace NKikimr {
                 ui64 lsn,
                 const TContiguousSpan &data)
         {
-
             if (!CheckEntryPoint(data))
                 return TRlas(false, true);
 
@@ -525,7 +534,6 @@ namespace NKikimr {
 
             return TRlas(true, false);
         }
-
 
         void THullHugeKeeperPersState::FinishRecovery(const TActorContext &ctx) {
             // handle AllocatedSlots

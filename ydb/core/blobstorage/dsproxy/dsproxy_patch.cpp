@@ -34,8 +34,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     static constexpr ui32 TypicalMaxPartsCount = TypicalPartPlacementCount * TypicalPartsInBlob;
 
     TString Buffer;
-    
-    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+
     TGroupId OriginalGroupId;
     TLogoBlobID OriginalId;
     TLogoBlobID PatchedId;
@@ -569,7 +568,7 @@ public:
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
-            SendToBSProxy(SelfId(), OriginalGroupId.GetRawId(), get.release(), PatchedId.Hash(), Span.GetTraceId());
+            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }
 

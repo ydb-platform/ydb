@@ -97,7 +97,7 @@ namespace NKikimr::NTable::NPage {
             Ptr = buf.mutable_begin();
             End = buf.end();
 
-            WriteUnaligned<TLabel>(Advance(sizeof(TLabel)), TLabel::Encode(EPage::BTreeIndex, 1, pageSize));
+            WriteUnaligned<TLabel>(Advance(sizeof(TLabel)), TLabel::Encode(EPage::BTreeIndex, TBtreeIndexNode::FormatVersion, pageSize));
 
             auto &header = Place<THeader>();
             header.KeysCount = Keys.size();

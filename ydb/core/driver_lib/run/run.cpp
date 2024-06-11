@@ -110,6 +110,7 @@
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
+#include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -212,6 +213,7 @@ public:
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
+        appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
@@ -589,6 +591,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["query_service"] = &hasQueryService;
         TServiceCfg hasKeyValue = services.empty();
         names["keyvalue"] = &hasKeyValue;
+        TServiceCfg hasReplication = services.empty();
+        names["replication"] = &hasReplication;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -870,6 +874,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies[0]));
         }
 
+        if (hasReplication) {
+            server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasReplication.IsRlAllowed()));
+        }
+
         if (ModuleFactories) {
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);
@@ -1105,8 +1114,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
-        AppData->SharedCacheConfigPtr = std::make_unique<NKikimrSharedCache::TSharedCacheConfig>();
-        AppData->SharedCacheConfigPtr->CopyFrom(runConfig.AppConfig.GetSharedCacheConfig());
+        AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
     }
 
     if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
@@ -1119,6 +1127,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasGraphConfig()) {
         AppData->GraphConfig.CopyFrom(runConfig.AppConfig.GetGraphConfig());
+    }
+
+    if (runConfig.AppConfig.HasMetadataCacheConfig()) {
+        AppData->MetadataCacheConfig.CopyFrom(runConfig.AppConfig.GetMetadataCacheConfig());
     }
 
     // setup resource profiles
@@ -1439,7 +1451,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableTabletResolver) {
         sil->AddServiceInitializer(new TTabletResolverInitializer(runConfig));
-        sil->AddServiceInitializer(new TTabletPipePeNodeCachesInitializer(runConfig));
+        sil->AddServiceInitializer(new TTabletPipePerNodeCachesInitializer(runConfig));
     }
     if (serviceMask.EnableTabletMonitoringProxy) {
         sil->AddServiceInitializer(new TTabletMonitoringProxyInitializer(runConfig));
@@ -1541,6 +1553,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCompDiskLimiter) {
+        sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
+    }
+
     if (serviceMask.EnableScanConveyor) {
         sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
     }
@@ -1551,10 +1567,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableInsertConveyor) {
         sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableBackgroundTasks) {
-        sil->AddServiceInitializer(new TBackgroundTasksInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

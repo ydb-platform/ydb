@@ -15,3 +15,6 @@
 
 ## Testing{ #testing }
  <span class = "testing-tag tags-shape tags-color-text"> Testing </span>
+
+## General{ #general }
+ <span class = "general-tag tags-shape tags-color-text"> General </span>

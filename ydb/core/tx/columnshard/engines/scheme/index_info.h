@@ -25,7 +25,9 @@ namespace arrow {
 }
 
 namespace NKikimr::NOlap {
-
+namespace NStorageOptimizer {
+class IOptimizerPlannerConstructor;
+}
 class TPortionInfoWithBlobs;
 struct TInsertedData;
 class TSnapshotColumnInfo;
@@ -42,6 +44,7 @@ private:
     std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
+    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
@@ -49,6 +52,8 @@ private:
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
     }
@@ -233,7 +238,17 @@ public:
     }
 
     /// Returns an id of the column located by name. The name should exists in the schema.
-    ui32 GetColumnId(const std::string& name) const;
+    ui32 GetColumnIdVerified(const std::string& name) const;
+    ui32 GetColumnId(const std::string& name) const {
+        return GetColumnIdVerified(name);
+    }
+    std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
+        std::set<ui32> result;
+        for (auto&& i : names) {
+            AFL_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
+        }
+        return result;
+    }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.

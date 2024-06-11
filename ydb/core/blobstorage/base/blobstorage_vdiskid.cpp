@@ -1,7 +1,6 @@
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
-#include <ydb/core/base/id_wrapper.h>
 
 namespace NKikimr {
 

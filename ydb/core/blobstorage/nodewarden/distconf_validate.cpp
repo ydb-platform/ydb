@@ -318,7 +318,7 @@ namespace NKikimr::NStorage {
                         const ui32 vslotId = l.GetVDiskSlotID();
                         const ui64 pdiskGuid = l.GetPDiskGuid();
 
-                        const TVDiskID vdiskId(TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId), groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
+                        const TVDiskID vdiskId(TGroupId::FromValue(groupId), groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
 
                         if (const auto it = vdisks.find(vdiskId); it == vdisks.end()) {
                             return TStringBuilder() << "vslot with specific VDiskID is not found"

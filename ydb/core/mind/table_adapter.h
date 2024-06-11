@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 namespace NKikimr {
 
     // inline table specifier

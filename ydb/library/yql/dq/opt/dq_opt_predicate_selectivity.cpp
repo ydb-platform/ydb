@@ -56,7 +56,7 @@ namespace {
             // Currently, with the basic statistics we just return 1/nRows
 
             else if (IsConstantExpr(right.Ptr())) {
-                if (stats->KeyColumns.size()==1 && attributeName==stats->KeyColumns[0]) {
+                if (stats->KeyColumns && stats->KeyColumns->Data.size()==1 && attributeName==stats->KeyColumns->Data[0]) {
                     if (stats->Nrows > 1) {
                         return 1.0 / stats->Nrows;
                     }
@@ -221,7 +221,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         if (IsAttribute(left, attributeName) && IsConstantExpr(right.Ptr())) {
             if (right.Ptr()->IsCallable("AsList")) {
                 auto size = right.Ptr()->Child(0)->ChildrenSize();
-                if (stats->KeyColumns.size()==1 && attributeName==stats->KeyColumns[0]) {
+                if (stats->KeyColumns && stats->KeyColumns->Data.size()==1 && attributeName==stats->KeyColumns->Data[0]) {
                     result = size / stats->Nrows;
                 } else {
                     result = 0.1 + 0.2 / (1 + std::exp(size));

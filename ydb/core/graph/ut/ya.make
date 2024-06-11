@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/core/graph)
 
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 SIZE(SMALL)
 
 SRC(

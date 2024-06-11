@@ -48,6 +48,7 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
+    select_positive.py
     collection.py
     conftest.py
     test.py
@@ -65,6 +66,7 @@ PEERDIR(
 
 DEPENDS(
     ydb/library/yql/tools/dqrun
+    ydb/library/yql/udfs/common/json2
     ydb/tests/tools/kqprun
     library/recipes/docker_compose/bin
 )

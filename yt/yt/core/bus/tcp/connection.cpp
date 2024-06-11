@@ -131,7 +131,7 @@ TTcpConnection::TTcpConnection(
         EndpointDescription_,
         Config_->EncryptionMode,
         Config_->VerificationMode))
-    , Logger(BusLogger().WithTag(LoggingTag_.c_str()))
+    , Logger(BusLogger().WithRawTag(LoggingTag_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)

@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         {
             const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
             env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
                     1, id.Channel(), true, id.Generation(), id.Step(), new TVector<TLogoBlobID>{id}, nullptr,
                     TInstant::Max(), true, false));
             });
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         env.Runtime->WrapInActorContext(edge, [&] {
 //            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
 //                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true));
-            SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvRange(id.TabletID(), id, id, true, TInstant::Max(), true));
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvRange(id.TabletID(), id, id, true, TInstant::Max(), true));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);

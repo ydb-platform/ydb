@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max());
 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvGet>(getQueries, 1, TInstant::Max(),
                 NKikimrBlobStorage::AsyncRead);
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPatch>(test.Info->GroupID.GetRawId(), originalBlobId, patchedBlobId,
                 mask, std::move(diffArr), diffs.size(), TInstant::Max());
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvPatchResult);

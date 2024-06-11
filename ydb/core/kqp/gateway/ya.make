@@ -32,3 +32,5 @@ RECURSE(
     local_rpc
     utils
 )
+
+RECURSE_FOR_TESTS(ut)

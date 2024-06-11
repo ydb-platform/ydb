@@ -17,7 +17,7 @@
 
 namespace NYT::NHttps {
 
-static const auto& Logger = NHttp::HttpLogger;
+static constexpr auto& Logger = NHttp::HttpLogger;
 
 using namespace NNet;
 using namespace NHttp;

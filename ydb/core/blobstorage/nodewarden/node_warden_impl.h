@@ -5,7 +5,6 @@
 #include "node_warden_events.h"
 
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/base/id_wrapper.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -134,8 +133,16 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePutBatching;
         TControlWrapper EnableVPatch;
 
+        TControlWrapper EnableLocalSyncLogDataCutting;
+        TControlWrapper EnableSyncLogChunkCompressionHDD;
+        TControlWrapper EnableSyncLogChunkCompressionSSD;
+        TControlWrapper MaxSyncLogChunksInFlightHDD;
+        TControlWrapper MaxSyncLogChunksInFlightSSD;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
+
+        TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
     public:
         struct TGroupRecord;
@@ -149,6 +156,16 @@ namespace NKikimr::NStorage {
             : Cfg(cfg)
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+            , EnableLocalSyncLogDataCutting(0, 0, 1)
+            , EnableSyncLogChunkCompressionHDD(1, 0, 1)
+            , EnableSyncLogChunkCompressionSSD(0, 0, 1)
+            , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
+            , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+            , CostMetricsParametersByMedia({
+                TCostMetricsParameters{200},
+                TCostMetricsParameters{50},
+                TCostMetricsParameters{32},
+            })
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
@@ -623,6 +640,8 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigPush, ForwardToDistributedConfigKeeper);
 
                 hFunc(TEvNodeWardenQueryBaseConfig, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);

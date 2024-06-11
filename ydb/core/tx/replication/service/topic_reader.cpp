@@ -61,7 +61,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             records.emplace_back(msg.GetOffset(), std::move(msg.GetData()));
         }
 
-        Send(Worker, new TEvWorker::TEvData(std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
@@ -69,15 +69,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
-    void Leave(TEvWorker::TEvGone::EStatus status) {
+    template <typename... Args>
+    void Leave(Args&&... args) {
         LOG_I("Leave");
-        Send(Worker, new TEvWorker::TEvGone(status));
+
+        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 

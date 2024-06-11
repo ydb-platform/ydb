@@ -131,6 +131,9 @@ struct TTxState {
         item(TxDropView, 85) \
         item(TxCopySequence, 86) \
         item(TxDropReplication, 87) \
+        item(TxCreateContinuousBackup, 88) \
+        item(TxAlterContinuousBackup, 89) \
+        item(TxDropContinuousBackup, 90) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -347,6 +350,7 @@ struct TTxState {
         case TxCreateExternalDataSource:
         case TxCreateView:
         case TxCopySequence:
+        case TxCreateContinuousBackup:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -381,6 +385,7 @@ struct TTxState {
         case TxDropExternalTable:
         case TxDropExternalDataSource:
         case TxDropView:
+        case TxDropContinuousBackup:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -412,6 +417,7 @@ struct TTxState {
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
         case TxAlterView:
+        case TxAlterContinuousBackup:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -445,6 +451,7 @@ struct TTxState {
         case TxDropExternalTable:
         case TxDropExternalDataSource:
         case TxDropView:
+        case TxDropContinuousBackup:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -480,6 +487,7 @@ struct TTxState {
         case TxCreateExternalDataSource:
         case TxCreateView:
         case TxCopySequence:
+        case TxCreateContinuousBackup:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -511,6 +519,7 @@ struct TTxState {
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
         case TxAlterView:
+        case TxAlterContinuousBackup:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -541,6 +550,7 @@ struct TTxState {
         case TxDropReplication:
         case TxDropReplicationCascade:
         case TxDropBlobDepot:
+        case TxDropContinuousBackup:
             return true;
         case TxDropTableIndex:
         case TxRmDir:
@@ -581,6 +591,7 @@ struct TTxState {
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
         case TxCreateView:
+        case TxCreateContinuousBackup:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -613,6 +624,7 @@ struct TTxState {
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
         case TxAlterView:
+        case TxAlterContinuousBackup:
             return false;
         case TxInvalid:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");

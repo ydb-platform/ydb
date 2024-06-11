@@ -4,7 +4,7 @@ During [initial deployment](../initial-deployment.md), the Ansible playbook sets
 
 ## View logs via Ansible playbook
 
-[ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) repository contains a playbook called `ydb_platform.ydb.logs` that can be used to show logs of all {{ ydb-short-name }} nodes in a cluster. The playbook gathers logs from nodes and outputs them to `stdout`, which allows to pipe them for further processing, for example with commands like `grep` or `awk`.
+[ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.logs` that can be used to show logs of all {{ ydb-short-name }} nodes in a cluster. The playbook gathers logs from nodes and outputs them to `stdout`, which allows to pipe them for further processing, for example with commands like `grep` or `awk`.
 
 ### All logs of all nodes
 

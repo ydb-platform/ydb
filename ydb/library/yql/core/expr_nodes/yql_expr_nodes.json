@@ -31,6 +31,10 @@
             ]
         },
         {
+            "Name": "TCoNameValueTupleList",
+            "ListBase": "TCoNameValueTuple"
+        },
+        {
             "Name": "TCoIndex",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -38,16 +42,13 @@
                 {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"}
+                {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "TableSettings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
             "Name": "TCoIndexList",
             "ListBase": "TCoIndex"
-        },
-        {
-            "Name": "TCoNameValueTupleList",
-            "ListBase": "TCoNameValueTuple"
         },
         {
             "Name": "TCoChangefeed",

@@ -48,8 +48,8 @@ $v2 = (
        v1.s_store_name = v1_lead.s_store_name and
        v1.s_company_name = v1_lag.s_company_name and
        v1.s_company_name = v1_lead.s_company_name and
-       v1.rn = v1_lag.rn + 1 and
-       v1.rn = v1_lead.rn - 1);
+       v1.rn = v1_lag.rn + 1U and
+       v1.rn = v1_lead.rn - 1U);
 
 
 -- start query 1 in stream 0 using template query47.tpl and seed 2031708268

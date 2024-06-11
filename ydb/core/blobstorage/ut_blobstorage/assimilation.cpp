@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
             for (size_t i = 0; i < numBlocks; ++i) {
                 const ui64 tabletId = 1 + i;
                 const ui32 generation = 1;
-                SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvBlock(tabletId, generation, TInstant::Max()));
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, generation, TInstant::Max()));
                 blocks.emplace(tabletId, generation);
             }
 
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
                 const ui64 tabletId = 1 + RandomNumber(10u);
                 TString data = TStringBuilder() << i;
                 TLogoBlobID id(tabletId, 2, 2, 0, data.size(), i);
-                SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
                 blobs.emplace(id);
             }
 
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
                 const ui32 collectGen = 1 + i;
                 const ui32 collectStep = 1 + i;
                 const bool hard = RandomNumber(2u);
-                SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGen,
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGen,
                     recordGenCounter, channel, true, collectGen, collectStep, nullptr, nullptr, TInstant::Max(),
                     false, hard));
 

@@ -540,7 +540,7 @@ namespace {
 
                 const auto paramName = func->Child(0)->Content();
                 const auto calcSpec = func->Child(1);
-                YQL_ENSURE(calcSpec->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits"}));
+                YQL_ENSURE(calcSpec->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
 
                 auto traitsInputTypeNode = calcSpec->Child(0);
                 YQL_ENSURE(traitsInputTypeNode->GetTypeAnn());
@@ -1429,6 +1429,45 @@ namespace {
 
     IGraphTransformer::TStatus ListSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return OptListWrapperImpl<3U>(input, output, ctx, "Sort");
+    }
+
+    IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error;
+        }
+        
+        TStringBuf newName = input->Content();
+        newName.Skip(4);
+        bool desc = false;
+        if (newName.EndsWith("Asc")) {
+            newName.Chop(3);
+        } else if (newName.EndsWith("Desc")) {
+            newName.Chop(4);
+            desc = true;
+        }
+
+        TExprNode::TPtr sortLambda = nullptr;
+        if (input->ChildrenSize() == 3) {
+            sortLambda = input->ChildPtr(2);
+        } else {
+            sortLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("item")
+                    .Arg("item")
+                .Seal()
+            .Build();
+        }
+        
+        return OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
+            .Callable(newName)
+                .Add(0, input->ChildPtr(0))
+                .Add(1, input->ChildPtr(1))
+                .Callable(2, "Bool")
+                    .Atom(0, desc ? "false" : "true")
+                .Seal()
+                .Add(3, sortLambda)
+            .Seal()
+        .Build(), output, ctx, newName);
     }
 
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -5909,7 +5948,7 @@ namespace {
             }
             auto currColumn = input->Child(i)->Child(0)->Content();
             auto calcSpec = input->Child(i)->Child(1);
-            if (!calcSpec->IsCallable({"WindowTraits", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "Void"})) {
+            if (!calcSpec->IsCallable({"WindowTraits", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile", "Void"})) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(calcSpec->Pos()),
                                          "Invalid traits or special function for calculation on window"));
                 return IGraphTransformer::TStatus::Error;
@@ -6270,6 +6309,64 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus WinCumeDistWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto options = input->Child(1);
+        if (!EnsureTuple(*options, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (const auto& option : options->Children()) {
+            if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(option->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto optionName = option->Head().Content();
+            static const THashSet<TStringBuf> supportedOptions =
+                {"ansi"};
+            if (!supportedOptions.contains(optionName)) {
+                ctx.Expr.AddError(
+                    TIssue(ctx.Expr.GetPosition(option->Pos()),
+                        TStringBuilder() << "Unknown " << input->Content() << "option '" << optionName));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus WinNTileWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
+        auto status = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus WinRankWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6364,7 +6461,8 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(input->IsCallable("PercentRank") ? 
+            EDataSlot::Double : EDataSlot::Uint64);
         if (!isAnsi && keyType->GetKind() == ETypeAnnotationKind::Optional) {
             outputType = ctx.Expr.MakeType<TOptionalExprType>(outputType);
         }

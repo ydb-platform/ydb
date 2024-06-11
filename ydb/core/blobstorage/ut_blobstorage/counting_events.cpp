@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max());
 
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
 
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvGet>(blobId, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead);
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(blobId.TabletID(), blobId.Generation(),
             blobId.Step(), blobId.Channel(), true, blobId.Generation(), blobId.Step(), nullptr, nullptr, TInstant::Max(), false);
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), ev.release());
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvCollectGarbageResult);
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
 
     TIntrusivePtr<TGroupQueues> ReceiveGroupQueues(const TTestInfo &test) {
         test.Runtime->WrapInActorContext(test.Edge, [&] {
-            SendToBSProxy(test.Edge, test.Info->GroupID.GetRawId(), new TEvRequestProxySessionsState);
+            SendToBSProxy(test.Edge, test.Info->GroupID, new TEvRequestProxySessionsState);
         });
         std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL_C(handle->Type, TEvBlobStorage::EvProxySessionsState, "expected# " << (ui64)TEvBlobStorage::EvProxySessionsState

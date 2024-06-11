@@ -8,7 +8,6 @@ namespace NKikimr {
 namespace NFake {
 
     class TProxyDS : public TThrRefBase {
-        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
         using TTabletId = ui64;
         using TChannel = ui8;
         using TGeneration = ui32;

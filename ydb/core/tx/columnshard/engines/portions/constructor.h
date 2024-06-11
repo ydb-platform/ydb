@@ -1,6 +1,6 @@
 #pragma once
-#include "constructor_meta.h"
 #include "column_record.h"
+#include "constructor_meta.h"
 #include "index_chunk.h"
 #include "portion_info.h"
 
@@ -11,6 +11,7 @@ class TPortionInfo;
 class TVersionedIndex;
 class ISnapshotSchema;
 class TIndexChunkLoadContext;
+class TGranuleShardingInfo;
 
 class TPortionInfoConstructor {
 private:
@@ -22,10 +23,12 @@ private:
     std::optional<TSnapshot> MinSnapshotDeprecated;
     std::optional<TSnapshot> RemoveSnapshot;
     std::optional<ui64> SchemaVersion;
+    std::optional<ui64> ShardingVersion;
 
     std::vector<TIndexChunk> Indexes;
     YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
     std::vector<TUnifiedBlobId> BlobIds;
+
 public:
     void SetPortionId(const ui64 value) {
         AFL_VERIFY(value);
@@ -58,7 +61,7 @@ public:
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
-    {
+        , ShardingVersion(portion.GetShardingVersionOptional()) {
         if (withMetadata) {
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
@@ -75,7 +78,7 @@ public:
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
-    {
+        , ShardingVersion(portion.GetShardingVersionOptional()) {
         MetaConstructor = TPortionMetaConstructor(portion.Meta);
         Indexes = std::move(portion.Indexes);
         Records = std::move(portion.Records);
@@ -94,14 +97,23 @@ public:
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
         ui32 entityId = 0;
         ui32 chunkIdx = 0;
+
+        const auto debugString = [&]() {
+            TStringBuilder sb;
+            for (auto&& i : chunks) {
+                sb << i.GetAddress().DebugString() << ";";
+            }
+            return sb;
+        };
+
         for (auto&& i : chunks) {
             if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
+                AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
             AFL_VERIFY(i.GetEntityId());
@@ -152,8 +164,13 @@ public:
     }
 
     void SetSchemaVersion(const ui64 version) {
-//        AFL_VERIFY(version); engines/ut
+//        AFL_VERIFY(version);
         SchemaVersion = version;
+    }
+
+    void SetShardingVersion(const ui64 version) {
+//        AFL_VERIFY(version);
+        ShardingVersion = version;
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
@@ -226,6 +243,10 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
+        sb << (PortionId ? *PortionId : 0) << ";";
+        for (auto&& i : Records) {
+            sb << i.DebugString() << ";";
+        }
         return sb;
     }
 
@@ -287,6 +308,7 @@ public:
 class TPortionConstructors {
 private:
     THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Constructors;
+
 public:
     THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>>::iterator begin() {
         return Constructors.begin();
@@ -326,7 +348,6 @@ public:
         itPortionId->second.Merge(std::move(constructor));
         return &itPortionId->second;
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap

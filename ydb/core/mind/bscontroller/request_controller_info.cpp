@@ -42,7 +42,7 @@ public:
         };
 
         if (requestRecord.HasGroupId()) {
-            if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(requestRecord.GetGroupId()))) {
+            if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&requestRecord, &NKikimrBlobStorage::TEvRequestBSControllerInfo::GetGroupId))) {
                 processGroup(group);
             }
         } else {

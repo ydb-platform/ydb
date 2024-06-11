@@ -1,7 +1,7 @@
 #include "prepare.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_services.h>
@@ -245,7 +245,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
                                ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) {
     TOnePDisk &pdisk = pdisks->Get(pDiskID);
     vdisk.ActorID = MakeBlobStorageVDiskID(1, id + 1, 0);
-    vdisk.VDiskID = TVDiskID(TIdWrapper<ui32, TGroupIdTag>::Zero(), 1, 0, d, j);
+    vdisk.VDiskID = TVDiskID(TGroupId::Zero(), 1, 0, d, j);
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
             pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId,
@@ -256,6 +256,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
         modifier(vdisk.Cfg.Get());
     }
     vdisk.Cfg->RunRepl = runRepl;
+    vdisk.Cfg->UseCostTracker = false;
 
     return true;
 }

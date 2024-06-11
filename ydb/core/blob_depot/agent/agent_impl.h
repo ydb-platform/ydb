@@ -4,7 +4,6 @@
 #include "resolved_value.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
-#include <ydb/core/base/id_wrapper.h>
 
 namespace NKikimr::NBlobDepot {
 

@@ -293,7 +293,7 @@ namespace NKikimr::NBsController {
 
         bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
                 bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
-                TTransactionContext& txc, TString *errorDescription) {
+                TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
             NIceDb::TNiceDb db(txc.DB);
 
             for (TGroupId groupId : state.GroupContentChanged) {
@@ -309,6 +309,11 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            bool errors = false;
+            std::vector<TGroupId> disintegratedByExpectedStatus;
+            std::vector<TGroupId> disintegrated;
+            std::vector<TGroupId> degraded;
+
             if (!suppressDisintegratedGroupsChecking) {
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
                     if (base && overlay->second) {
@@ -316,9 +321,8 @@ namespace NKikimr::NBsController {
                         const TGroupInfo::TGroupStatus& status = overlay->second->Status;
                         if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
                                 status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
-                            *errorDescription = TStringBuilder() << "GroupId# " << overlay->first
-                                << " ExpectedStatus# DISINTEGRATED";
-                           return false;
+                            disintegratedByExpectedStatus.push_back(overlay->first);
+                            errors = true;
                         }
                      }
                 }
@@ -340,18 +344,47 @@ namespace NKikimr::NBsController {
                         // check the failure model
                         auto& checker = *topology.QuorumChecker;
                         if (!checker.CheckFailModelForGroup(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
-                                << " may lose data while modifying group";
-                            return false;
+                            disintegrated.push_back(groupId);
+                            errors = true;
                         } else if (!suppressDegradedGroupsChecking && checker.IsDegraded(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
-                                << " may become DEGRADED while modifying group";
-                            return false;
+                            degraded.push_back(groupId);
+                            errors = true;
                         }
                     } else {
                         Y_ABORT_UNLESS(group); // group must exist
                     }
                 }
+            }
+
+            if (errors) {
+                TStringStream msg;
+                if (!degraded.empty()) {
+                    msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
+                    if (response) {
+                        for (const auto& id: degraded) { 
+                            response->MutableGroupsGetDegraded()->Add(id.GetRawId());
+                        }
+                    }
+                }
+                if (!disintegrated.empty()) {
+                    msg << "Disintegrated GroupIds# " << FormatList(disintegrated) << ' ';
+                    if (response) {
+                        for (const auto& id: disintegrated) {
+                            response->MutableGroupsGetDisintegrated()->Add(id.GetRawId());
+                        }
+                    }
+                }
+                if (!disintegratedByExpectedStatus.empty()) {
+                    msg << "DisintegratedByExpectedStatus GroupIds# " << FormatList(disintegratedByExpectedStatus) << ' ';
+                    if (response) {
+                        for (const auto& id: disintegratedByExpectedStatus) {
+                            response->MutableGroupsGetDisintegratedByExpectedStatus()->Add(id.GetRawId());
+                        }
+                    }
+                }
+                *errorDescription = msg.Str();
+                errorDescription->pop_back();
+                return false;
             }
 
             // trim PDisks awaiting deletion

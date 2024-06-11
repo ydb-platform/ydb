@@ -1,0 +1,15 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["na";["DataType";"Date"]];
+        ["nd";["DataType";"Datetime"]];
+        ["nt";["DataType";"Timestamp"]];
+        ["naz";["DataType";"TzDate"]];
+        ["ndz";["DataType";"TzDatetime"]];
+        ["ntz";["DataType";"TzTimestamp"]];
+        ["wa";["DataType";"Date32"]];
+        ["wd";["DataType";"Datetime64"]];
+        ["wt";["DataType";"Timestamp64"]];
+        ["ni";["DataType";"Interval"]];
+        ["wi";["DataType";"Interval64"]];
+    ]];
+}}

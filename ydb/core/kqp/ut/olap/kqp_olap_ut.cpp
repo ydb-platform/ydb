@@ -1622,7 +1622,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event" << Endl);
                             Cerr.Flush();
                             for (auto&& i : csController->GetShardActualIds()) {
-                                runtime->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                                runtime->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                                     new TEvents::TEvPoisonPill(), i, false));
                             }
                         } else {
@@ -2557,7 +2557,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (ExpandMap (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideToBlocks"), plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideMap"), plan.QueryStats->Getquery_ast());
                     break;
             }
         }
@@ -2588,6 +2588,80 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BlockChannelForce) {
         RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
     }
+
+    Y_UNIT_TEST(CompactionPlanner) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"logic_name" : "slices"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"logic_name" : "one_head"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        {
+            auto alterQuery = TStringBuilder() << "(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`error-buckets`);";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[120000u;]])");
+        }
+
+    }
+
 }
 
 }

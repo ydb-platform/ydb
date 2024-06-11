@@ -130,12 +130,14 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+    bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
+        switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
-    VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
         if (!ActualizationStarted) {
             ActualizationStarted = true;
@@ -145,6 +147,11 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         }
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
+        }
+    }
+    if (switchOptimizer) {
+        for (auto&& i : GranulesStorage->GetTables()) {
+            i.second->ResetOptimizer(indexInfoActual->GetCompactionPlannerConstructor(), StoragesManager, indexInfoActual->GetPrimaryKey());
         }
     }
 }
@@ -162,11 +169,18 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Loaded = true;
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
-        TMemoryProfileGuard g("TTxInit/LoadColumns");
+        TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
+        if (!VersionedIndex.LoadShardingInfo(db)) {
+            return false;
+        }
+    }
+
+    {
         auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {
             return false;
         }
+        TMemoryProfileGuard g("TTxInit/LoadCounters");
         if (!LoadCounters(db)) {
             return false;
         }
@@ -189,6 +203,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
@@ -199,6 +214,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
             auto currentSchema = schema.GetSchema(portion);
@@ -209,6 +225,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         }
     }
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
             constructor->LoadIndex(loadContext);
@@ -216,14 +233,20 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         };
     }
-    for (auto&& [granuleId, pathConstructors] : constructors) {
-        auto g = GetGranulePtrVerified(granuleId);
-        for (auto&& [portionId, constructor] : pathConstructors) {
-            g->UpsertPortionOnLoad(constructor.Build(false));
+    {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
+        for (auto&& [granuleId, pathConstructors] : constructors) {
+            auto g = GetGranulePtrVerified(granuleId);
+            for (auto&& [portionId, constructor] : pathConstructors) {
+                g->UpsertPortionOnLoad(constructor.Build(false));
+            }
         }
     }
-    for (auto&& i : GranulesStorage->GetTables()) {
-        i.second->OnAfterPortionsLoad();
+    {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
+        for (auto&& i : GranulesStorage->GetTables()) {
+            i.second->OnAfterPortionsLoad();
+        }
     }
     return true;
 }
@@ -283,7 +306,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
     return changes;
 }
 
-std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept {
+std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept {
     if (pathsToDrop.empty()) {
         return nullptr;
     }
@@ -291,7 +314,6 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
-    THashSet<ui64> pathsToRemove;
     for (ui64 pathId : pathsToDrop) {
         if (!HasDataInPathId(pathId)) {
             changes->TablesToDrop.emplace(pathId);
@@ -300,9 +322,6 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
         if (txSize > txSizeLimit) {
             break;
         }
-    }
-    for (auto&& i : pathsToRemove) {
-        pathsToDrop.erase(i);
     }
     if (changes->TablesToDrop.empty()) {
         return nullptr;
@@ -322,6 +341,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
+    THashSet<TPortionAddress> uniquePortions;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
@@ -339,6 +359,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
+            const auto inserted = uniquePortions.emplace(info->GetAddress()).second;
+            Y_ABORT_UNLESS(inserted);
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
@@ -356,14 +378,17 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
-            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += it->second[i].GetTxVolume();
-            } else {
-                limitExceeded = true;
-                break;
+            const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
+            if (inserted) {
+                Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+                if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                    txSize += it->second[i].GetTxVolume();
+                } else {
+                    limitExceeded = true;
+                    break;
+                }
+                changes->PortionsToDrop.push_back(std::move(it->second[i]));
             }
-            changes->PortionsToDrop.push_back(std::move(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }
@@ -395,6 +420,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
 
     TSaverContext saverContext(StoragesManager);
     NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, SignalCounters, ActualizationController);
+    const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag(TDuration::Seconds(1));
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);
         if (g) {
@@ -402,7 +428,8 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
                 g->StartActualizationIndex();
             }
             g->RefreshTiering(i.second);
-            g->BuildActualizationTasks(context);
+            context.ResetActualInstantForTest();
+            g->BuildActualizationTasks(context, actualizationLag);
         }
     }
 
@@ -412,7 +439,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             if (pathEviction.contains(i.first)) {
                 continue;
             }
-            i.second->BuildActualizationTasks(context);
+            i.second->BuildActualizationTasks(context, actualizationLag);
         }
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("skip", "not_ready_tiers");
@@ -443,10 +470,6 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr
         db.WriteCounter(LAST_TX_ID, LastSnapshot.GetTxId());
     }
     return true;
-}
-
-void TColumnEngineForLogs::EraseTable(const ui64 pathId) {
-    GranulesStorage->EraseTable(pathId);
 }
 
 void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo) {

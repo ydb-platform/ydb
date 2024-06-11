@@ -1,16 +1,16 @@
 Registering pre-existing tables
-	INT4_TBL
-	INT2_TBL
-	text_tbl
-	FLOAT8_TBL
-	tenk2
-	TEXT_TBL
-	int4_tbl
-	int8_tbl
 	onek
-	float8_tbl
+	int4_tbl
+	INT4_TBL
 	tenk1
+	text_tbl
+	float8_tbl
+	INT2_TBL
+	tenk2
 	int2_tbl
+	TEXT_TBL
+	FLOAT8_TBL
+	int8_tbl
 <sql-statement>
 --
 -- JOIN
@@ -2149,6 +2149,14 @@ where t1.unique1 < i4.f1;
     -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
     	-- variant that isn't quite a star-schema case
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- variant that isn't quite a star-schema case
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- variant that isn't quite a star-schema case
+	^
 <sql-statement>
 -- this variant is foldable by the remove-useless-RESULT-RTEs code
 explain (costs off)
@@ -2759,7 +2767,7 @@ select t1.* from
     -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
         	select t1.* from
 	^
 <sql-statement>
@@ -2797,7 +2805,7 @@ select t1.* from
     -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
         	select t1.* from
 	^
 <sql-statement>
@@ -2837,7 +2845,7 @@ select t1.* from
     -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
         	select t1.* from
 	^
 <sql-statement>
@@ -3629,6 +3637,14 @@ select atts.relid::regclass, s.* from pg_stats s join
     -stdin-:<main>:6:45: Error: Generator functions are not allowed in: SELECT
     	    a.attrelid::regclass::text join (select unnest(indkey) attnum,
 	                                            ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	--
+	^
 <sql-statement>
 --
 -- Test LATERAL
@@ -4541,7 +4557,7 @@ alter table fkest add constraint fk
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table fkest add constraint fk
 	^
 <sql-statement>
@@ -4583,7 +4599,7 @@ alter table fkest1
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table fkest1
 	^
 <sql-statement>

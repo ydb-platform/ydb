@@ -15,18 +15,24 @@ void TManager::UnregisterLock(const TString& processId) {
     AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
 }
 
-std::optional<TString> TManager::IsLocked(const TPortionInfo& portion) const {
+std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const {
     for (auto&& i : ProcessLocks) {
-        if (auto lockName = i.second->IsLocked(portion)) {
+        if (excludedLocks.contains(i.first)) {
+            continue;
+        }
+        if (auto lockName = i.second->IsLocked(portion, excludedLocks)) {
             return lockName;
         }
     }
     return {};
 }
 
-std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule) const {
+std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const {
     for (auto&& i : ProcessLocks) {
-        if (auto lockName = i.second->IsLocked(granule)) {
+        if (excludedLocks.contains(i.first)) {
+            continue;
+        }
+        if (auto lockName = i.second->IsLocked(granule, excludedLocks)) {
             return lockName;
         }
     }
@@ -44,6 +50,13 @@ TManager::TGuard::~TGuard() {
 void TManager::TGuard::Release(TManager& manager) {
     AFL_VERIFY(!Released);
     manager.UnregisterLock(ProcessId);
+    Released = true;
+}
+
+void TManager::TGuard::AbortLock() {
+    if (!Released) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("message", "aborted data locks manager");
+    }
     Released = true;
 }
 

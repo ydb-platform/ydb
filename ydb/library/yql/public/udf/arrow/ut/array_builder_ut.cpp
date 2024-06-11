@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -18,7 +19,7 @@ struct TArrayBuilderTestData {
         , Env(Alloc)
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")
-        , ArrowPool(arrow::default_memory_pool())
+        , ArrowPool(GetYqlMemoryPool())
     {
     }
 
@@ -173,6 +174,30 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         const auto resource2 = reinterpret_cast<TTestResource*>(boxed2);
         UNIT_ASSERT_VALUES_EQUAL(*resource2->Get(), 22222222);
         UNIT_ASSERT_VALUES_EQUAL(resource2->GetResourceTag(), ResourceName);
+    }
+
+    Y_UNIT_TEST(TestTzDateBuilder_Layout) {
+        TArrayBuilderTestData data;
+        const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType, 
+            *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
+
+        auto makeTzDate = [] (ui16 val, ui16 tz) {
+            TUnboxedValuePod tzDate {val};
+            tzDate.SetTimezoneId(tz);
+            return tzDate;
+        };
+
+        TVector<TUnboxedValuePod> dates{makeTzDate(1234, 1), makeTzDate(1234, 2), makeTzDate(45678, 333)};
+        for (auto date: dates) {
+            arrayBuilder->Add(date);
+        }
+        
+        const auto datum = arrayBuilder->Build(true);
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
+        const auto childData = datum.array()->child_data;
+        UNIT_ASSERT_VALUES_EQUAL_C(childData.size(), 2, "Expected date and timezone children");
     }
 
     Y_UNIT_TEST(TestResourceStringValueBuilderReader) {

@@ -3,7 +3,6 @@
 #include "incrhuge_keeper_recovery_scan.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
-#include <ydb/core/base/id_wrapper.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/queue.h>
@@ -27,7 +26,6 @@ namespace NKikimr {
         }
 
         void TKeeper::Bootstrap(const TActorContext& ctx) {
-            using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
             // send yard init message
             TVDiskID myVDiskId(TGroupId::FromValue(~0), ~0, 'H', 'I', 'K');
             ctx.Send(State.Settings.PDiskActorId, new NPDisk::TEvYardInit(State.Settings.InitOwnerRound, myVDiskId,

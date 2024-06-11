@@ -342,11 +342,11 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         // find matching TVSlotInfo entity
-        const TVDiskID vdiskId(TGroupId::FromValue(cmd.GetGroupId()), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
-            cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
+        const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
+                               cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
         // validate group and generation
-        const TGroupInfo *group = Groups.Find(TGroupId::FromValue(cmd.GetGroupId()));
+        const TGroupInfo *group = Groups.Find(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId));
         if (!group) {
             throw TExError() << "GroupId# " << cmd.GetGroupId() << " not found";
         } else if (group->Generation != cmd.GetGroupGeneration()) {
@@ -693,7 +693,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = TMood::Wipe;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
@@ -701,7 +701,7 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         ui32 groupId = cmd.GetGroupId();
-        SanitizingRequests.emplace(groupId);
+        SanitizingRequests.emplace(TGroupId::FromValue(groupId));
         const TGroupInfo *group = Groups.Find(TGroupId::FromValue(groupId));
         if (group) {
             Fit.PoolsAndGroups.emplace(group->StoragePoolId, TGroupId::FromValue(groupId));
@@ -739,7 +739,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = targetMood;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();

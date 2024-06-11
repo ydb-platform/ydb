@@ -1,5 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/base/id_wrapper.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include "ut_helpers.h"
 
 Y_UNIT_TEST_SUITE(GroupReconfiguration) {
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         // Start load actors
         for (ui32 nodeId = 1; nodeId < numNodes - 1; ++nodeId) {
             if (loadNodesWVDisks || (nodesInGroup.count(nodeId) > 0 && nodeId != toNodeId && nodeId != fromNodeId)) {
-                TInflightActor* newActor = new TInflightActorPut({100, 1, TDuration::MilliSeconds(100), TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId)}, 1_KB);
+                TInflightActor* newActor = new TInflightActorPut({100, 1, TDuration::MilliSeconds(100), TGroupId::FromValue(groupId)}, 1_KB);
                 actors.push_back(newActor);
                 env->Runtime->Register(newActor, nodeId);
             }
@@ -460,7 +460,6 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
             "Put", "HugePut", "Get", "HugeGet", "Patch", "HugePatch",
         };
 
-        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
 
         for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
             std::vector<TInflightActor*> newActors = {

@@ -23,7 +23,7 @@ public:
     {
         const auto& proto = Event->Get()->Record;
         NodeId = proto.GetNodeId();
-        GroupId = TGroupId::FromValue(proto.GetGroupId());
+        GroupId = TGroupId::FromProto(&proto, &NKikimrBlobStorage::TEvControllerProposeGroupKey::GetGroupId);
         LifeCyclePhase = proto.GetLifeCyclePhase();
         MainKeyId =  proto.GetMainKeyId();
         EncryptedGroupKey = proto.GetEncryptedGroupKey();
@@ -36,7 +36,7 @@ public:
     void ReadStep() {
         const auto prevStatus = std::exchange(Status, NKikimrProto::ERROR); // assume error
         TGroupInfo *group = Self->FindGroup(GroupId);
-        if (TGroupID(GroupId.GetRawId()).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+        if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId.GetRawId(), GroupId.GetRawId()));
         } else if (!group) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId.GetRawId(), GroupId.GetRawId()));

@@ -9,6 +9,10 @@ namespace NKikimrColumnShardProto {
 class TSnapshot;
 }
 
+namespace NJson {
+class TJsonValue;
+};
+
 namespace NKikimr::NOlap {
 
 class TSnapshot {
@@ -79,7 +83,12 @@ public:
         return TConclusionStatus::Success();
     }
 
+    TConclusionStatus DeserializeFromString(const TString& data);
+
+    TString SerializeToString() const;
+
     TString DebugString() const;
+    NJson::TJsonValue DebugJson() const;
 };
 
 } // namespace NKikimr::NOlap

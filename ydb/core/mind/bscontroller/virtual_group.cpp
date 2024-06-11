@@ -87,6 +87,7 @@ namespace NKikimr::NBsController {
             group->SeenOperational = true;
         }
 
+        GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
 
         NKikimrBlobDepot::TBlobDepotConfig config;
@@ -127,6 +128,7 @@ namespace NKikimr::NBsController {
             group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
             group->Database = cmd.HasDatabase() ? MakeMaybe(cmd.GetDatabase()) : Nothing();
             group->NeedAlter = true;
+            GroupFailureModelChanged.insert(group->ID);
             group->CalculateGroupStatus();
 
             NKikimrBlobDepot::TBlobDepotConfig config;
@@ -189,7 +191,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TCancelVirtualGroup& cmd, TStatus& /*status*/) {
-        const TGroupId groupId = TGroupId::FromValue(cmd.GetGroupId());
+        const TGroupId groupId = TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TCancelVirtualGroup::GetGroupId);
         TGroupInfo *group = Groups.FindForUpdate(groupId);
         if (!group) {
             throw TExGroupNotFound(groupId.GetRawId());

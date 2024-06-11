@@ -298,7 +298,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
-            f"Please check [build logs]({test_log_file_url})."
+            f"Please check [test log]({test_log_file_url})."
         ]
     elif summary.is_failed:
         result = f"Some tests failed, follow the links below."
@@ -314,7 +314,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
         links.append(f"[Test history]({test_history_url})")
 
     if test_log_file_url:
-        links.append(f"[Tests log]({test_log_file_url})")
+        links.append(f"[Test log]({test_log_file_url})")
 
     if links:
         body.append("")

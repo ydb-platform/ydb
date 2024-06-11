@@ -11,7 +11,7 @@ namespace NYT::NLogging {
 // If format is not a string literal or argument list
 // is not valid, no check is made -- macro turns to
 // a no-op.
-#define STATIC_ANALYSIS_CHECK_LOG_FORMAT(...)
+#define YT_STATIC_ANALYSIS_CHECK_LOG_FORMAT(...)
 
 ////////////////////////////////////////////////////////////////////////////////
 

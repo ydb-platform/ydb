@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStaticAnalysis, ValidFormats)
+TEST(TStaticAnalysisTest, ValidFormats)
 {
     // Mock for actual error -- we only care that
     // it is some runtime object.
@@ -25,7 +25,7 @@ TEST(TStaticAnalysis, ValidFormats)
 }
 
 // Uncomment this test to see that we don't have false negatives!
-// TEST(TStaticAnalysis, InvalidFormats)
+// TEST(TStaticAnalysisTest, InvalidFormats)
 // {
 //     YT_LOG_CHECK_FORMAT("Hello", 1);
 //     YT_LOG_CHECK_FORMAT("Hello %");

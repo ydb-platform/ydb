@@ -104,11 +104,11 @@ TEST(TAllSucceededBoundedConcurrencyTest, AllSucceededFail)
 
     std::vector<TCallback<TFuture<void>()>> callbacks;
     for (int i = 0; i < 9; ++i) {
-        callbacks.push_back(BIND([x, startingSleepCount, finishedSleepCount] () mutable {
-            int cur_x = (*x)++;
-            if (cur_x < 5) {
+        callbacks.push_back(BIND([x, startingSleepCount, finishedSleepCount]() mutable {
+            int curX = (*x)++;
+            if (curX < 5) {
                 return;
-            } else if (cur_x == 5) {
+            } else if (curX == 5) {
                 //Make sure other callbacks have a chance to start first
                 Sleep(TDuration::MilliSeconds(5));
                 THROW_ERROR_EXCEPTION("My Error");

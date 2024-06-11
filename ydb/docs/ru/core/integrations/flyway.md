@@ -294,7 +294,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 
 ![_assets/flyway-migrate-step-1.png](_assets/flyway-migrate-step-1.png)
 
-Затем мы изменяем схему, добавляя [вторичный индекс](../yql/reference/syntax/alter_table.md) в таблицу `series`:
+Затем мы изменяем схему, добавляя [вторичный индекс](../yql/reference/syntax/alter_table/index.md) в таблицу `series`:
 
 ```
 db/migration:

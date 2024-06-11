@@ -1,7 +1,5 @@
 {% note info %}
 
-The `ydbops` utility is in active development. 
-
-We will do our best to maintain backwards compatibility, but breaking changes may still occur.
+The `ydbops` utility is under active development. Although backward-incompatible changes are unlikely, they may still occur.
 
 {% endnote %}

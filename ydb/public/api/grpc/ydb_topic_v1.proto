@@ -102,8 +102,6 @@ service TopicService {
     //        <----------------
     //         DirectReadResponse(PartitionSessionID1, DirectReadID2, Secret1, ...)
     //        <----------------
-    //         UpdateDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
-    //        ---------------->
     //         StopDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
     //        <----------------
     rpc StreamDirectRead(stream StreamDirectReadMessage.FromClient) returns (stream StreamDirectReadMessage.FromServer);

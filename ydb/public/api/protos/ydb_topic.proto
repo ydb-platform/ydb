@@ -489,7 +489,7 @@ message StreamReadMessage {
         PartitionLocation partition_location = 4;
     }
 
-    // Signal for server that cient is ready to recive data for partition.
+    // Signal for server that client is ready to recive data for partition.
     message StartPartitionSessionResponse {
         // Partition session identifier of partition to start read.
         int64 partition_session_id = 1;
@@ -652,8 +652,10 @@ message StreamDirectReadMessage {
 
         // Partition session identifier.
         int64 partition_session_id = 3;
-    }
 
+        // Partition generation.
+        int64 generation = 2;
+    }
 
     // Messages that have been read directly from the partition node.
     // It's a response to StreamRead.ReadRequest

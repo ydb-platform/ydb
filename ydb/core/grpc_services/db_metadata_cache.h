@@ -60,6 +60,7 @@ private:
         auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = Path;
         request->Request.set_return_verbose_status(true);
+        request->Request.set_merge_records(true);
         Send(NHealthCheck::MakeHealthCheckID(), request.release());
         Counters->GetCounter(HEALTHCHECK_REQUESTS_MADE_COUNTER, true)->Inc();
     }

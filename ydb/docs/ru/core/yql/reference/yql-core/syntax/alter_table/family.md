@@ -1,6 +1,6 @@
-# Создание и изменение групп колонок {#column-family}
+# Создание и изменение групп колонок
 
-{% notewarning %}
+{% note warning %}
 
 {% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 

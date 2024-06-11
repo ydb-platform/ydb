@@ -1565,7 +1565,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
       - graceful/non-graceful StopPartitionSession (sdk should respond in either way)
       - tablet relocation to another/same node
       - schedule callback, recreate DirectReadSessionManager, the scheduled callback should do nothing (?)
-
+      - ReestablishConnectionAndSendStartRequests: If a connection is lost and reestablished,
+        Start requests for all previously active partition sessions are sent.
     */
 
 } // Y_UNIT_TEST_SUITE(DirectReadSession)

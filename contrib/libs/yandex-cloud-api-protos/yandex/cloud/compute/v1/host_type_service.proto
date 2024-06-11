@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/compute/v1/host_type.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// Set of methods to view possible host configurations.
+service HostTypeService {
+  // Returns information about specified host type.
+  rpc Get (GetHostTypeRequest) returns (HostType) {
+    option (google.api.http) = { get: "/compute/v1/hostTypes/{host_type_id}" };
+  }
+
+  // List avaliable host types.
+  rpc List (ListHostTypesRequest) returns (ListHostTypesResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostTypes" };
+  }
+}
+
+message GetHostTypeRequest {
+  // ID of the host type to return.
+  //
+  // To get a host type ID make a [HostTypeService.List] request.
+  string host_type_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListHostTypesRequest {
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListHostTypesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 1 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListHostTypesResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 2 [(length) = "<=100"];
+}
+
+message ListHostTypesResponse {
+  // Lists host types.
+  repeated HostType host_types = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListHostTypesRequest.page_size], use `next_page_token` as the value
+  // for the [ListHostTypesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

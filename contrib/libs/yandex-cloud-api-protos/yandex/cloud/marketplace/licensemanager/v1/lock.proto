@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.licensemanager.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/licensemanager/v1;licensemanager";
+option java_package = "yandex.cloud.api.marketplace.licensemanager.v1";
+
+message Lock {
+    // ID of the subscription lock.
+    string id = 1;
+    // ID of the subscription instance.
+    string instance_id = 2;
+    // ID of the resource.
+    string resource_id = 3;
+    // Timestamp of the start of the subscription lock.
+    google.protobuf.Timestamp start_time = 4;
+    // Timestamp of the end of the subscription lock.
+    google.protobuf.Timestamp end_time = 5;
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 6;
+    // Update timestamp.
+    google.protobuf.Timestamp updated_at = 7;
+    // Subscription lock state.
+    State state = 8;
+    // ID of the subscription template.
+    string template_id = 9;
+
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        // Subscription unlocked.
+        UNLOCKED = 1;
+        // Subscription locked to the resource.
+        LOCKED = 2;
+        // Subscription lock deleted.
+        DELETED = 3;
+    }
+}

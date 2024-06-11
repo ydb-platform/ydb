@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.licensemanager.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/marketplace/licensemanager/v1/instance.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/licensemanager/v1;licensemanager";
+option java_package = "yandex.cloud.api.marketplace.licensemanager.v1";
+
+// A set of methods for managing subscription instances.
+service InstanceService {
+    // Returns the specified subscription instance.
+    //
+    // To get the list of all available subscription instances, make a [List] request.
+    rpc Get(GetInstanceRequest) returns (Instance) {
+        option (google.api.http) = { get: "/marketplace/license-manager/v1/instances/{instance_id}" };
+    }
+
+    // Retrieves the list of subscription instances in the specified folder.
+    rpc List(ListInstancesRequest) returns (ListInstancesResponse) {
+        option (google.api.http) = { get: "/marketplace/license-manager/v1/instances" };
+    }
+}
+
+message GetInstanceRequest {
+    // ID of the subscription instance.
+    string instance_id = 1 [(required) = true];
+}
+
+message ListInstancesRequest {
+    // ID of the folder that the subscription instance belongs to.
+    string folder_id = 1 [(required) = true];
+
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than `page_size`, the service returns a [ListInstancesResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests.
+    // Default value: 100.
+    int64 page_size = 2 [(value) = "0-1000"];
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListInstancesResponse.next_page_token] returned by a previous list request.
+    string page_token = 3 [(length) = "<=100"];
+    // A filter expression that filters subscription instances listed in the response.
+    //
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on [Instance.name] field.
+    // 2. An operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+    // 3. The value. Must be in double quotes `""`. Must be 3-63 characters long and match the regular expression `^[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    // Example of a filter: `name="my-subscription-instance"`.
+    string filter = 4 [(length) = "<=1000"];
+    // Sorting order for the list of subscription instances.
+    string order_by = 5 [(length) = "<=100"];
+}
+
+message ListInstancesResponse {
+    // List of subscription instances.
+    repeated Instance instances = 1;
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListInstancesRequest.page_size], use `next_page_token` as the value
+    // for the [ListInstancesRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}

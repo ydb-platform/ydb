@@ -1,0 +1,430 @@
+syntax = "proto3";
+
+package yandex.cloud.apploadbalancer.v1;
+
+import "google/protobuf/duration.proto";
+import "yandex/cloud/apploadbalancer/v1/payload.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/apploadbalancer/v1;apploadbalancer";
+option java_package = "yandex.cloud.api.apploadbalancer.v1";
+
+// A virtual host resource.
+// For details about the concept, see [documentation](/docs/application-load-balancer/concepts/http-router#virtual-host).
+message VirtualHost {
+  // Name of the virtual host. The name is unique within the HTTP router.
+  string name = 1 [(required) = true];
+
+  // List of domains that are attributed to the virtual host.
+  //
+  // The host is selected to process the request received by the load balancer
+  // if the domain specified in the HTTP/1.1 `Host` header or the HTTP/2 `:authority` pseudo-header matches a domain
+  // specified in the host.
+  //
+  // A wildcard asterisk character (`*`) matches 0 or more characters.
+  //
+  // If not specified, all domains are attributed to the host, which is the same as specifying a `*` value.
+  // An HTTP router must not contain more than one virtual host to which all domains are attributed.
+  repeated string authority = 2;
+
+  // Routes of the virtual host.
+  //
+  // A route contains a set of conditions (predicates) that are used by the load balancer to select the route
+  // for the request and an action on the request.
+  // For details about the concept, see [documentation](/docs/application-load-balancer/concepts/http-router#routes).
+  //
+  // The order of routes matters: the first route whose predicate matches the request is selected.
+  // The most specific routes should be at the top of the list, so that they are not overridden.
+  // For example, if the first HTTP route is configured, via [HttpRoute.match], to match paths prefixed with just `/`,
+  // other routes are never matched.
+  repeated Route routes = 3;
+
+  // Deprecated, use route_options.modify_request_headers.
+  repeated HeaderModification modify_request_headers = 4;
+
+  // Deprecated, use route_options.modify_response_headers.
+  repeated HeaderModification modify_response_headers = 5;
+
+  RouteOptions route_options = 6;
+}
+
+message RouteOptions {
+  // Apply the following modifications to the request headers.
+  repeated HeaderModification modify_request_headers = 1;
+
+  // Apply the following modifications to the response headers.
+  repeated HeaderModification modify_response_headers = 2;
+
+  RBAC rbac = 3;
+
+  // Security profile that will take effect to all requests routed via particular virtual host.
+  string security_profile_id = 4;
+}
+
+// Role Based Access Control (RBAC) provides router, virtual host, and route access control for the ALB
+// service. Requests are allowed or denied based on the `action` and whether a matching principal is
+// found. For instance, if the action is ALLOW and a matching principal is found the request should be
+// allowed.
+message RBAC {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+
+    // Allows the request if and only if there is a principal that matches the request.
+    ALLOW = 1;
+
+    // Allows the request if and only if there are no principal that match the request.
+    DENY = 2;
+  }
+
+  // The action to take if a principal matches. Every action either allows or denies a request.
+  Action action = 1 [(required) = true];
+
+  // Required. A match occurs when at least one matches the request.
+  repeated Principals principals = 2 [(size) = ">=1"];
+}
+
+// Principals define a group of identities for a request.
+message Principals {
+  // Required. A match occurs when all principals match the request.
+  repeated Principal and_principals = 1 [(size) = ">=1"];
+}
+
+// Principal defines an identity for a request.
+message Principal {
+  oneof identifier {
+    option (exactly_one) = true;
+
+    // A header (or pseudo-header such as :path or :method) of the incoming HTTP request.
+    HeaderMatcher header = 1;
+
+    // A CIDR block or IP that describes the request remote/origin address, e.g. ``192.0.0.0/24`` or``192.0.0.4`` .
+    string remote_ip = 2;
+
+    // When any is set, it matches any request.
+    bool any = 3;
+  }
+
+  message HeaderMatcher {
+    // Specifies the name of the header in the request.
+    string name = 1 [(required) = true];
+
+    // Specifies how the header match will be performed to route the request.
+    // In the absence of value a request that has specified header name will match,
+    // regardless of the header's value.
+    StringMatch value = 2;
+  }
+}
+
+// A header modification resource.
+message HeaderModification {
+  // Name of the header.
+  string name = 1;
+
+  // Operation to perform on the header.
+  oneof operation {
+    // Appends the specified string to the header value.
+    //
+    // Variables [defined for Envoy proxy](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#custom-request-response-headers)
+    // are supported.
+    string append = 2;
+
+    // Replaces the value of the header with the specified string.
+    //
+    // Variables [defined for Envoy proxy](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#custom-request-response-headers)
+    // are supported.
+    string replace = 3;
+
+    // Removes the header.
+    bool remove = 4;
+
+    // Replaces the name of the header with the specified string.
+    // This operation is only supported for ALB Virtual Hosts.
+    string rename = 5;
+  }
+}
+
+// A route resource.
+// For details about the concept, see [documentation](/docs/application-load-balancer/concepts/http-router#routes).
+message Route {
+  // Name of the route.
+  string name = 1 [(required) = true];
+
+  // Route configuration.
+  oneof route {
+    option (exactly_one) = true;
+    // HTTP route configuration.
+    HttpRoute http = 2;
+
+    // gRPC route configuration.
+    GrpcRoute grpc = 3;
+  }
+  RouteOptions route_options = 4;
+}
+
+// An HTTP route configuration resource.
+message HttpRoute {
+  // Condition (predicate) used to select the route.
+  HttpRouteMatch match = 1;
+
+  // Action performed on the request if the route is selected.
+  oneof action {
+    option (exactly_one) = true;
+
+    // Forwards the request to a backend group for processing as configured.
+    HttpRouteAction route = 2;
+
+    // Redirects the request as configured.
+    RedirectAction redirect = 3;
+
+    // Instructs the load balancer to respond directly as configured.
+    DirectResponseAction direct_response = 4;
+  }
+}
+
+// A gRPC route configuration resource.
+message GrpcRoute {
+  // Condition (predicate) used to select the route.
+  GrpcRouteMatch match = 1;
+
+  // Action performed on the request if the route is selected.
+  oneof action {
+    option (exactly_one) = true;
+
+    // Forwards the request to a backend group for processing as configured.
+    GrpcRouteAction route = 2;
+
+    // Instructs the load balancer to respond directly with a specified status.
+    GrpcStatusResponseAction status_response = 3;
+  }
+}
+
+// An HTTP route condition (predicate) resource.
+message HttpRouteMatch {
+  // HTTP method specified in the request.
+  repeated string http_method = 1;
+
+  // Match settings for the path specified in the request.
+  //
+  // If not specified, the route matches all paths.
+  StringMatch path = 2;
+}
+
+// A gRPC route condition (predicate) resource.
+message GrpcRouteMatch {
+  // Match settings for gRPC service method called in the request.
+  //
+  // A match string must be a fully qualified method name, e.g. `foo.bar.v1.BazService/Get`, or a prefix of such.
+  //
+  // If not specified, the route matches all methods.
+  StringMatch fqmn = 1;
+}
+
+// A string matcher resource.
+message StringMatch {
+  // Match string for either exact or prefix match.
+  oneof match {
+    option (exactly_one) = true;
+
+    // Exact match string.
+    string exact_match = 1;
+
+    // Prefix match string.
+    string prefix_match = 2;
+
+    // Regular expression match string.
+    string regex_match = 3;
+  }
+}
+
+// A redirect action resource.
+message RedirectAction {
+  // URI scheme replacement.
+  //
+  // If `http` or `https` scheme is to be replaced and `80` or `443` port is specified in the original URI,
+  // the port is also removed.
+  //
+  // If not specified, the original scheme and port are used.
+  string replace_scheme = 1;
+
+  // URI host replacement.
+  //
+  // If not specified, the original host is used.
+  string replace_host = 2;
+
+  // URI host replacement.
+  //
+  // If not specified, the original host is used.
+  int64 replace_port = 3;
+
+  // URI path replacement.
+  //
+  // If not specified, the original path is used.
+  oneof path {
+    // Replacement for the whole path.
+    string replace_path = 4;
+
+    // Replacement for the path prefix matched by [StringMatch].
+    //
+    // For instance, if [StringMatch.prefix_match] value is `/foo` and `replace_prefix` value is `/bar`,
+    // a request with `https://example.com/foobaz` URI is redirected to `https://example.com/barbaz`.
+    // For [StringMatch.exact_match], the whole path is replaced.
+    string replace_prefix = 5;
+  }
+
+  // Removes URI query.
+  bool remove_query = 6;
+
+  // HTTP status codes supported for use in redirect responses.
+  enum RedirectResponseCode {
+
+    // `301 Moved Permanently` status code.
+    MOVED_PERMANENTLY = 0;
+
+    // `302 Found` status code.
+    FOUND = 1;
+
+    // `303 See Other` status code.
+    SEE_OTHER = 2;
+
+    // `307 Temporary Redirect` status code.
+    TEMPORARY_REDIRECT = 3;
+
+    // `308 Permanent Redirect` status code.
+    PERMANENT_REDIRECT = 4;
+  }
+
+  // HTTP status code to use in redirect responses.
+  RedirectResponseCode response_code = 7;
+}
+
+// A direct response action resource.
+message DirectResponseAction {
+  // HTTP status code to use in responses.
+  int64 status = 1 [(value) = "100-599"];
+
+  // Response body.
+  Payload body = 2;
+}
+
+// A gRPC status response action resource.
+message GrpcStatusResponseAction {
+  // gRPC status code supported for use in responses.
+  enum Status {
+
+    // `OK` (0) status code.
+    OK = 0;
+
+    // `INVALID_ARGUMENT` (3) status code.
+    INVALID_ARGUMENT = 1;
+
+    // `NOT_FOUND` (5) status code.
+    NOT_FOUND = 2;
+
+    // `PERMISSION_DENIED` (7) status code.
+    PERMISSION_DENIED = 3;
+
+    // `UNAUTHENTICATED` (16) status code.
+    UNAUTHENTICATED = 4;
+
+    // `UNIMPLEMENTED` (12) status code.
+    UNIMPLEMENTED = 5;
+
+    // `INTERNAL` (13) status code.
+    INTERNAL = 6;
+
+    // `UNAVAILABLE` (14) status code.
+    UNAVAILABLE = 7;
+  }
+
+  // gRPC [status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html) to use in responses.
+  Status status = 1;
+}
+
+// An HTTP route action resource.
+message HttpRouteAction {
+  // Backend group to forward requests to.
+  //
+  // Stream (TCP) backend groups are not supported.
+  string backend_group_id = 1 [(required) = true];
+
+  // Overall timeout for an HTTP connection between a load balancer node an a backend from the backend group:
+  // the maximum time the connection is kept alive for, regardless of whether data is transferred over it.
+  //
+  // If a connection times out, the load balancer responds to the client with a `504 Gateway Timeout` status code.
+  //
+  // Default value: `60`.
+  google.protobuf.Duration timeout = 2;
+
+  // Idle timeout for an HTTP connection between a load balancer node an a backend from the backend group:
+  // the maximum time the connection is allowed to be idle, i.e. without any data transferred over it.
+  //
+  // Specifying meaningful values for both [timeout] and `idle_timeout` is useful for implementing
+  // server-push mechanisms such as long polling, server-sent events (`EventSource` interface) etc.
+  //
+  // If a connection times out, the load balancer responds to the client with a `504 Gateway Timeout` status code.
+  //
+  // If not specified, no idle timeout is used, and an alive connection may be idle for any duration (see [timeout]).
+  google.protobuf.Duration idle_timeout = 3;
+
+  // Value rewrite settings for HTTP/1.1 `Host` headers and HTTP/2 `:authority` pseudo-headers.
+  //
+  // If not specified, the host is not changed.
+  oneof host_rewrite_specifier {
+    // Host replacement.
+    string host_rewrite = 4;
+
+    // Automatically replaces the host with that of the target.
+    bool auto_host_rewrite = 5;
+  }
+
+  // Replacement for the path prefix matched by [StringMatch].
+  //
+  // For instance, if [StringMatch.prefix_match] value is `/foo` and `prefix_rewrite` value is `/bar`,
+  // a request with `/foobaz` path is forwarded with `/barbaz` path.
+  // For [StringMatch.exact_match], the whole path is replaced.
+  //
+  // If not specified, the path is not changed.
+  string prefix_rewrite = 6;
+
+  // Supported values for HTTP `Upgrade` header. E.g. `websocket`.
+  repeated string upgrade_types = 7;
+}
+
+// A gRPC route action resource.
+message GrpcRouteAction {
+  // Backend group to forward requests to.
+  string backend_group_id = 1 [(required) = true];
+
+  // Overall timeout for an underlying HTTP connection between a load balancer node an a backend from the backend group:
+  // the maximum time the connection is kept alive for, regardless of whether data is transferred over it.
+  //
+  // If a client specifies a lower timeout in HTTP `grpc-timeout` header, the `max_timeout` value is ignored.
+  //
+  // If a connection times out, the load balancer responds to the client with an `UNAVAILABLE` status code.
+  //
+  // Default value: `60`.
+  google.protobuf.Duration max_timeout = 2;
+
+  // Idle timeout for an underlying HTTP connection between a load balancer node an a backend from the backend group:
+  // the maximum time the connection is allowed to be idle, i.e. without any data transferred over it.
+  //
+  // Specifying meaningful values for both [max_timeout] and `idle_timeout` is useful for implementing
+  // server-push mechanisms such as long polling, server-sent events etc.
+  //
+  // If a connection times out, the load balancer responds to the client with an `UNAVAILABLE` status code.
+  //
+  // If not specified, no idle timeout is used, and an alive connection may be idle for any duration
+  // (see [max_timeout]).
+  google.protobuf.Duration idle_timeout = 3;
+
+  // Value rewrite settings for HTTP/1.1 `Host` headers and HTTP/2 `:authority` pseudo-headers.
+  //
+  // If not specified, the host is not changed.
+  oneof host_rewrite_specifier {
+    // Host replacement.
+    string host_rewrite = 4;
+
+    // Automatically replaces the host with that of the target.
+    bool auto_host_rewrite = 5;
+  }
+}

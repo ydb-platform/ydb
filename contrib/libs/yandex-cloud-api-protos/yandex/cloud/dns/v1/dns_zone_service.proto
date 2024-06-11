@@ -1,0 +1,410 @@
+syntax = "proto3";
+
+package yandex.cloud.dns.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/dns/v1/dns_zone.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dns/v1;dns";
+option java_package = "yandex.cloud.api.dns.v1";
+
+// A set of methods for managing DNS zones.
+service DnsZoneService {
+  // Returns the specified DNS zone.
+  //
+  // To get the list of all available DNS zones, make a [List] request.
+  rpc Get (GetDnsZoneRequest) returns (DnsZone) {
+    option (google.api.http) = { get: "/dns/v1/zones/{dns_zone_id}" };
+  };
+  
+  // Retrieves the list of DNS zones in the specified folder.
+  rpc List (ListDnsZonesRequest) returns (ListDnsZonesResponse) {
+    option (google.api.http) = { get: "/dns/v1/zones" };
+  };
+  
+  // Creates a DNS zone in the specified folder.
+  rpc Create (CreateDnsZoneRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dns/v1/zones" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDnsZoneMetadata"
+      response: "DnsZone"
+    };
+  };
+  
+  // Updates the specified DNS zone.
+  rpc Update (UpdateDnsZoneRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/dns/v1/zones/{dns_zone_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateDnsZoneMetadata"
+      response: "DnsZone"
+    };
+  };
+  
+  // Deletes the specified DNS zone. 
+  rpc Delete (DeleteDnsZoneRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/dns/v1/zones/{dns_zone_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDnsZoneMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  // Returns the specified record set.
+  rpc GetRecordSet (GetDnsZoneRecordSetRequest) returns (RecordSet) {
+    option (google.api.http) = { get: "/dns/v1/zones/{dns_zone_id}:getRecordSet" };
+  };
+
+  // Retrieves the list of record sets in the specified folder.
+  rpc ListRecordSets (ListDnsZoneRecordSetsRequest) returns (ListDnsZoneRecordSetsResponse) {
+    option (google.api.http) = { get: "/dns/v1/zones/{dns_zone_id}:listRecordSets" };
+  };
+
+  // Method with strict control for changing zone state. Returns error when:
+  // 1. Deleted record is not found.
+  // 2. Found record with matched type and name but different TTL or value.
+  // 3. Attempted to add record with existing name and type.
+  // Deletions happen first. If a record with the same name and type exists in both lists,
+  // then the existing record will be deleted, and a new one added.
+  rpc UpdateRecordSets (UpdateRecordSetsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dns/v1/zones/{dns_zone_id}:updateRecordSets" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateRecordSetsMetadata"
+      response: "RecordSetDiff"
+    };
+  };
+
+  // Method without strict control for changing zone state. Nothing happens if deleted record doesn't exist.
+  // Deletes records that match all specified fields which allows to delete only specified records from a record set.
+  rpc UpsertRecordSets (UpsertRecordSetsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dns/v1/zones/{dns_zone_id}:upsertRecordSets" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpsertRecordSetsMetadata"
+      response: "RecordSetDiff"
+    };
+  };
+
+  // Lists operations for the specified DNS zone.
+  rpc ListOperations (ListDnsZoneOperationsRequest) returns (ListDnsZoneOperationsResponse) {
+    option (google.api.http) = { get: "/dns/v1/zones/{dns_zone_id}/operations" };
+  };
+  
+
+  // Lists existing access bindings for the specified DNS zone.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/dns/v1/zones/{resource_id}:listAccessBindings" };
+  };
+  
+  // Sets access bindings for the specified DNS zone.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dns/v1/zones/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+  
+  // Updates access bindings for the specified DNS zone.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/dns/v1/zones/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Atomically updates zone private networks
+  rpc UpdatePrivateNetworks(UpdateDnsZonePrivateNetworksRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/dns/v1/zones/{dns_zone_id}:updatePrivateNetworks" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateDnsZonePrivateNetworksMetadata"
+      response: "DnsZone"
+    };
+  }
+}
+
+message UpdateDnsZonePrivateNetworksRequest {
+  // ID of the DNS zone which private networks will be updated
+  string dns_zone_id = 1;
+
+  // Network IDs to remove
+  repeated string private_network_id_additions = 2;
+
+  // Network IDs to add
+  repeated string private_network_id_deletions = 3;
+}
+
+message UpdateDnsZonePrivateNetworksMetadata {
+  // ID of the DNS zone which private networks was updated
+  string dns_zone_id = 1;
+}
+
+message GetDnsZoneRequest {
+  // ID of the DNS zone to return.
+  //
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(required) = true];
+}
+
+message ListDnsZonesRequest {
+  // ID of the folder to list DNS zones in. 
+  //
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListDnsZonesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the 
+  // [ListDnsZonesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters DNS zones listed in the response.
+  //
+  // The expression must specify: 
+  // 1. The field name. Currently you can use filtering only on the [DnsZone.name] field. 
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-dns-zone`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListDnsZonesResponse {
+  // List of DNS zones in the specified folder.
+  repeated DnsZone dns_zones = 1;
+  
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDnsZonesRequest.page_size], use `next_page_token` as the value
+  // for the [ListDnsZonesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateDnsZoneRequest {
+  // ID of the folder to create DNS zones in.
+  //
+  // To get a folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(length) = "<=50", (required) = true];
+
+  // Name of the DNS zone. 
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the DNS zone.  
+  string description = 3 [(length) = "<=256"];
+
+  // DNS zone labels as `key:value` pairs.  
+  map<string, string> labels = 4 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  
+  // DNS zone suffix.
+  string zone = 5 [(required) = true, (length) = "<=255", (pattern) = "[.]|[a-z0-9][-a-z0-9.]*\\."];
+
+  // Privately visible zone settings. 
+  // At least one of two visibility fields must be set.
+  PrivateVisibility private_visibility = 6;
+
+  // Publicly visible zone settings.
+  // At least one of two visibility fields must be set.
+  PublicVisibility public_visibility = 7;
+
+  //Prevents accidental zone removal.
+  bool deletion_protection = 8;
+}
+
+message CreateDnsZoneMetadata {
+  // ID of the DNS zone that is being created.
+  string dns_zone_id = 1;
+}
+
+message UpdateDnsZoneRequest {
+  // ID of the DNS zone to update.
+  //  
+  // To get the DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+
+  // Field mask specifying which fields of the DNS zone resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+  
+  // New name for the DNS zone. 
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // New description of the DNS zone.
+  string description = 4 [(length) = "<=256"];
+
+  // DNS zone labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label:
+  // 1. Get the current set of labels with a [DnsZoneService.Get] request.
+  // 2. Add or remove a label in this set.
+  // 3. Send the new set in this field.
+  map<string, string> labels = 5 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  
+
+  // Change network IDs for private visibility.
+  PrivateVisibility private_visibility = 6;
+
+  // Public visibility configuration.
+  PublicVisibility public_visibility = 7;
+
+  //Prevents accidental zone removal.
+  bool deletion_protection = 8;
+}
+
+message UpdateDnsZoneMetadata {
+  // ID of the DNS zone that is being updated.
+  string dns_zone_id = 1;
+}
+
+message DeleteDnsZoneRequest {
+  // ID of the DNS zone to delete.
+  //
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+}
+
+message DeleteDnsZoneMetadata {
+  // ID of the DNS zone that is being deleted.
+  string dns_zone_id = 1;
+}
+
+message GetDnsZoneRecordSetRequest {
+  // ID of the DNS zone to get record set from.
+  //
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+
+  // Name of the record set.
+  string name = 2 [(required) = true, (length) = "<=255"];
+
+  // Type of the record set.
+  string type = 3 [(required) = true, (length) = "<=10"];
+}
+
+message ListDnsZoneRecordSetsRequest {
+  // ID of the DNS zone to list record sets in. 
+  //
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+  
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListDnsZoneRecordSetsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the 
+  // [ListDnsZoneRecordSetsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters record sets listed in the response. The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where: 
+  // 1. `<field>` is the field name. Currently you can use filtering only on the [RecordSet.name] and [RecordSet.type] fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // 3.1. In case of single value condition (`=` or `!=`), the value is a string in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  // 3.2. In case of a list of values condition (`IN` or `NOT IN`), the value is `(<string1>, <string2>, .., <stringN>)`, where `<string>` is a string in double (`"`) or single (`'`) quotes.
+  //
+  // Examples of a filter: `name="my-record-set"`, `type IN ("MX","A") AND name="works.on.my.machine."`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListDnsZoneRecordSetsResponse {
+  // List of record sets in the specified DNS zone.
+  repeated RecordSet record_sets = 1;
+  
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDnsZoneRecordSetsRequest.page_size], use `next_page_token` as the value
+  // for the [ListDnsZoneRecordSetsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message UpdateRecordSetsRequest {
+  // ID of the DNS zone to update record sets in.
+  //  
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+
+  // List of record sets to delete.
+  repeated RecordSet deletions = 2 [(size) = "<=1000"];
+
+  // List of record sets to add.
+  repeated RecordSet additions = 3 [(size) = "<=1000"];
+}
+
+message UpdateRecordSetsMetadata {
+}
+
+message UpsertRecordSetsRequest {
+  // ID of the DNS zone to upsert record sets to.
+  //  
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+
+  // Delete only specified records from corresponding record sets.
+  repeated RecordSet deletions = 2 [(size) = "<=1000"];
+
+  // Entirely replace specified record sets.
+  repeated RecordSet replacements = 3 [(size) = "<=1000"];
+
+  // Replace specified records or add new ones if no such record sets exists.
+  repeated RecordSet merges = 4 [(size) = "<=1000"];
+}
+
+message UpsertRecordSetsMetadata {
+}
+
+message RecordSetDiff {
+  // List of record sets that were added
+  repeated RecordSet additions = 1;
+  // List of record sets that were deleted
+  repeated RecordSet deletions = 2;
+}
+
+message ListDnsZoneOperationsRequest {
+  // ID of the DNS zone to list operations for.
+  //
+  // To get a DNS zone ID, make a [DnsZoneService.List] request.
+  string dns_zone_id = 1 [(length) = "20"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListDnsZoneOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the 
+  // [ListDnsZoneOperationsResponse.next_page_token] returned by a previous list request.  
+  string page_token = 3 [(length) = "<=1000"];
+
+  // A filter expression that filters DNS zones listed in the response.
+  //
+  // The expression must specify: 
+  // 1. The field name. Currently you can use filtering only on the [DnsZone.name] field. 
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-dns-zone`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListDnsZoneOperationsResponse {
+  // List of operations for the specified DNS zone.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDnsZoneOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListDnsZoneOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

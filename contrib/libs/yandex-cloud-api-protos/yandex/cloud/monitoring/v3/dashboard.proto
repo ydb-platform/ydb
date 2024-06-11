@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/monitoring/v3/parametrization.proto";
+import "yandex/cloud/monitoring/v3/widget.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// Dashboard resource.
+message Dashboard {
+  reserved 4 to 19;
+  reserved 2;
+  // Dashboard ID.
+  string id = 1;
+
+  // Container id
+  oneof container {
+    // Folder ID.
+    string folder_id = 3;
+  }
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 20;
+
+  // Modification timestamp.
+  google.protobuf.Timestamp modified_at = 21;
+
+  // ID of the user who created the dashboard.
+  string created_by = 22;
+
+  // ID of the user who modified the dashboard.
+  string modified_by = 23;
+
+  // Dashboard name.
+  string name = 24;
+
+  // Dashboard description.
+  string description = 25;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 26;
+
+  // Dashboard title.
+  string title = 27;
+
+  // List of dashboard widgets.
+  repeated Widget widgets = 28;
+
+  // Dashboard parametrization.
+  Parametrization parametrization = 29;
+
+  // Dashboard etag.
+  string etag = 30;
+
+  reserved 31;
+
+  // Entity that controls dashboard
+  // Must match the regular expression "[\w \-]{1,100}"
+  string managed_by = 32;
+
+  // Information about entity that controls dashboard
+  // Must be valid URI
+  string managed_link = 33;
+}

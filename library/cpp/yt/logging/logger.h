@@ -305,7 +305,7 @@ void LogStructuredEvent(
     YT_LOG_EVENT_WITH_ANCHOR(logger, level, nullptr, __VA_ARGS__)
 
 #if !defined(NDEBUG) && !defined(YT_DISABLE_FORMAT_STATIC_ANALYSIS)
-    #define YT_LOG_CHECK_FORMAT(...) STATIC_ANALYSIS_CHECK_LOG_FORMAT(__VA_ARGS__)
+    #define YT_LOG_CHECK_FORMAT(...) YT_STATIC_ANALYSIS_CHECK_LOG_FORMAT(__VA_ARGS__)
 #else
     #define YT_LOG_CHECK_FORMAT(...)
 #endif

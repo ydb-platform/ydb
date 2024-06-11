@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package yandex.cloud.backup.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/backup/v1/resource.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/backup/v1;backup";
+option java_package = "yandex.cloud.api.backup.v1";
+
+// A set of methods for managing backup resources: [Compute Cloud instances](/docs/backup/concepts/vm-connection#os).
+service ResourceService {
+    // List resources: Compute Cloud instances.
+    rpc List(ListResourcesRequest) returns (ListResourcesResponse) {
+        option (google.api.http) = { get: "/backup/v1/resources" };
+    };
+
+    // Get specific Compute Cloud instance.
+    rpc Get(GetResourceRequest) returns (GetResourceResponse) {
+        option (google.api.http) = { get: "/backup/v1/resources/{compute_instance_id}" };
+    };
+
+    // Delete specific Compute Cloud instance from Cloud Backup. It does not delete
+    // instance from Cloud Compute service.
+    rpc Delete(DeleteResourceRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/backup/v1/resources/{compute_instance_id}" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "DeleteResourceMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+
+    // List tasks of resources.
+    rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+        option (google.api.http) = { get: "/backup/v1/resources/{compute_instance_id}/tasks" };
+    };
+
+    // ListDirectory returns all subdirectories found in requested directory identified
+    // by the id.
+    rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse);
+
+    // CreateDirectory creates new directory by requested path.
+    rpc CreateDirectory(CreateDirectoryRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+          metadata: "CreateDirectoryMetadata"
+          response: "google.protobuf.Empty"
+        };
+    };
+
+    // ListOperations return all operations in backup service for given instance
+    rpc ListOperations (ListResourceOperationsRequest) returns (ListResourceOperationsResponse);
+}
+
+message ListResourcesRequest {
+    // Folder ID.
+    string folder_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Number of results per page.
+    int64 page_size = 2 [ (value) = "<=1000" ];
+    // Token for the results page.
+    string page_token = 3 [ (length) = "<=100" ];
+}
+
+message ListResourcesResponse {
+    // Set of resource parameters.
+    repeated Resource resources = 1;
+    // Token for the next results page.
+    string next_page_token = 2;
+}
+
+message GetResourceRequest {
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message GetResourceResponse {
+    // Set of resource parameters.
+    Resource resource = 1;
+}
+
+message DeleteResourceRequest {
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Resource ID is used to identify Compute Cloud instance in backup service.
+    string resource_id = 2 [ (required) = true ];
+}
+
+message DeleteResourceMetadata {
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1;
+}
+
+message ListTasksRequest {
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Number of results per page. 
+    int64 page_size = 2 [ (value) = "<=1000" ];
+    // Token for the results page.
+    string page_token = 3 [ (length) = "<=100" ];
+}
+
+message ListTasksResponse {
+    // Set of tasks parameters.
+    repeated Task tasks = 1;
+    // Token for the next results page.
+    string next_page_token = 2;
+}
+
+message ListDirectoryRequest {
+    // Folder ID.
+    string folder_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2 [ (required) = true ];
+    // Path to list items in.
+    string path = 3 [ (required) = false ];
+}
+
+message ListDirectoryResponse {
+    message FilesystemItem {
+        enum Type {
+            TYPE_UNSPECIFIED = 0;
+            VOLUME = 1;
+            DIRECTORY = 2;
+            FILE = 3;
+        }
+
+        // Item name.
+        string name = 1;
+        // Might be Volume, Directory of File.
+        Type type = 2;
+        // Might be Directory or File.
+        Type file_type = 3;
+        int64 size = 4;
+    }
+
+    repeated FilesystemItem items = 1;
+}
+
+message CreateDirectoryRequest {
+    // Folder ID.
+    string folder_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2 [ (required) = true ];
+    // Path to create directory in.
+    string path = 3 [ (required) = true ];
+}
+
+message CreateDirectoryMetadata {
+    // Compute Cloud instance ID.
+    string compute_instance_id = 1;
+    // Path to create directory metadata in.
+    string path = 2;
+}
+
+message ListResourceOperationsRequest {
+     // Compute Cloud instance ID.
+    string compute_instance_id = 1 [ (required) = true, (length) = "<=50" ];
+
+    // Number of results per page. 
+    int64 page_size = 2 [ (value) = "<=1000" ];
+    // Token for the results page.
+    string page_token = 3 [ (length) = "<=100" ];
+}
+  
+message ListResourceOperationsResponse {
+    // List of operations for the specified instance.
+    repeated operation.Operation operations = 1;
+
+     // Token for the next results page.
+    string next_page_token = 2;
+}

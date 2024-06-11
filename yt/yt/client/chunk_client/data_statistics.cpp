@@ -68,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator + (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;

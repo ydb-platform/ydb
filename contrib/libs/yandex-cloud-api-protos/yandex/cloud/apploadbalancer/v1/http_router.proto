@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package yandex.cloud.apploadbalancer.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/apploadbalancer/v1/virtual_host.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/apploadbalancer/v1;apploadbalancer";
+option java_package = "yandex.cloud.api.apploadbalancer.v1";
+
+// An HTTP router resource.
+// For details about the concept, see [documentation](/docs/application-load-balancer/concepts/http-router).
+message HttpRouter {
+  // ID of the router. Generated at creation time.
+  string id = 1;
+
+  // Name of the router. The name is unique within the folder.
+  string name = 2;
+
+  // Description of the router.
+  string description = 3;
+
+  // ID of the folder that the router belongs to.
+  string folder_id = 4;
+
+  // Router labels as `key:value` pairs.
+  // For details about the concept, see [documentation](/docs/overview/concepts/services#labels).
+  map<string, string> labels = 5;
+
+  // Virtual hosts that combine routes inside the router.
+  // For details about the concept, see [documentation](/docs/application-load-balancer/concepts/http-router#virtual-host).
+  //
+  // Only one virtual host with no authority (default match) can be specified.
+  repeated VirtualHost virtual_hosts = 6;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 7;
+
+  RouteOptions route_options = 8;
+}

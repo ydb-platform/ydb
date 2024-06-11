@@ -1,0 +1,1174 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/disk.proto";
+import "yandex/cloud/compute/v1/instance.proto";
+import "yandex/cloud/compute/v1/maintenance.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing Instance resources.
+service InstanceService {
+  // Returns the specified Instance resource.
+  //
+  // To get the list of available Instance resources, make a [List] request.
+  rpc Get(GetInstanceRequest) returns (Instance) {
+    option (google.api.http) = {get: "/compute/v1/instances/{instance_id}"};
+  }
+
+  // Retrieves the list of Instance resources in the specified folder.
+  rpc List(ListInstancesRequest) returns (ListInstancesResponse) {
+    option (google.api.http) = {get: "/compute/v1/instances"};
+  }
+
+  // Creates an instance in the specified folder.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Create(CreateInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateInstanceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Updates the specified instance.
+  rpc Update(UpdateInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/instances/{instance_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Deletes the specified instance.
+  rpc Delete(DeleteInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/compute/v1/instances/{instance_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteInstanceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates the metadata of the specified instance.
+  rpc UpdateMetadata(UpdateInstanceMetadataRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}/updateMetadata"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceMetadataMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Returns the serial port output of the specified Instance resource.
+  rpc GetSerialPortOutput(GetInstanceSerialPortOutputRequest) returns (GetInstanceSerialPortOutputResponse) {
+    option (google.api.http) = {get: "/compute/v1/instances/{instance_id}:serialPortOutput"};
+  }
+
+  // Stops the running instance.
+  //
+  // You can start the instance later using the [InstanceService.Start] method.
+  rpc Stop(StopInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/instances/{instance_id}:stop"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopInstanceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Starts the stopped instance.
+  rpc Start(StartInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/instances/{instance_id}:start"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartInstanceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Restarts the running instance.
+  rpc Restart(RestartInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/instances/{instance_id}:restart"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "RestartInstanceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Attaches the disk to the instance.
+  rpc AttachDisk(AttachInstanceDiskRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:attachDisk"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AttachInstanceDiskMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Detaches the disk from the instance.
+  rpc DetachDisk(DetachInstanceDiskRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:detachDisk"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DetachInstanceDiskMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Attaches the filesystem to the instance.
+  //
+  // The instance and the filesystem must reside in the same availability zone.
+  //
+  // To use the instance with an attached filesystem, the latter must be mounted.
+  // For details, see [documentation](/docs/compute/operations/filesystem/attach-to-vm).
+  rpc AttachFilesystem(AttachInstanceFilesystemRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:attachFilesystem"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AttachInstanceFilesystemMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Detaches the filesystem from the instance.
+  rpc DetachFilesystem(DetachInstanceFilesystemRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:detachFilesystem"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DetachInstanceFilesystemMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Attaches the network-interface to the instance.
+  //
+  // To attach a network-interface, the instance must have a `STOPPED` status ([Instance.status]).
+  // To check the instance status, make a [InstanceService.Get] request.
+  // To stop the running instance, make a [InstanceService.Stop] request.
+  rpc AttachNetworkInterface(AttachInstanceNetworkInterfaceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:attachNetworkInterface"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AttachInstanceNetworkInterfaceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Detaches the network-interface to the instance.
+  //
+  // To Detach a network-interface, the instance must have a `STOPPED` status ([Instance.status]).
+  // To check the instance status, make a [InstanceService.Get] request.
+  // To stop the running instance, make a [InstanceService.Stop] request.
+  rpc DetachNetworkInterface(DetachInstanceNetworkInterfaceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:detachNetworkInterface"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DetachInstanceNetworkInterfaceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Enables One-to-one NAT on the network interface.
+  rpc AddOneToOneNat(AddInstanceOneToOneNatRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}/addOneToOneNat"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddInstanceOneToOneNatMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Removes One-to-one NAT from the network interface.
+  rpc RemoveOneToOneNat(RemoveInstanceOneToOneNatRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}/removeOneToOneNat"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveInstanceOneToOneNatMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Updates the specified instance network interface.
+  rpc UpdateNetworkInterface(UpdateInstanceNetworkInterfaceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/instances/{instance_id}/updateNetworkInterface"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceNetworkInterfaceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Lists operations for the specified instance.
+  rpc ListOperations(ListInstanceOperationsRequest) returns (ListInstanceOperationsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instances/{instance_id}/operations"};
+  }
+
+  // Moves the specified instance to another folder of the same cloud.
+  //
+  // The instance must be stopped before moving. To stop the instance, make a [Stop] request.
+  //
+  // After moving, the instance will start recording its Monitoring default metrics to its new folder. Metrics
+  // that have been recorded to the source folder prior to moving will be retained.
+  rpc Move(MoveInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:move"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveInstanceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // Moves the specified instance to another availability zone
+  //
+  // Running instance will be restarted during this operation.
+  rpc Relocate(RelocateInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:relocate"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RelocateInstanceMetadata"
+      response: "Instance"
+    };
+  }
+
+  // maintenance
+
+  rpc SimulateMaintenanceEvent(SimulateInstanceMaintenanceEventRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{instance_id}:simulateMaintenanceEvent"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SimulateInstanceMaintenanceEventMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // access
+
+  // Lists access bindings for the instance.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/compute/v1/instances/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the instance.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the instance.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/instances/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+enum InstanceView {
+
+  // Doesn't include the metadata of the instance in the server response.
+  BASIC = 0;
+
+  // Returns the metadata of the instance in the server response.
+  FULL = 1;
+}
+
+message GetInstanceRequest {
+  // ID of the Instance resource to return.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Defines which information about the Instance resource should be returned in the server response.
+  InstanceView view = 2;
+}
+
+message ListInstancesRequest {
+  // ID of the Folder to list instances in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListInstancesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListInstancesResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  string filter = 4 [(length) = "<=1000"];
+
+  // By which column the listing should be ordered and in which direction,
+  // format is "createdAt desc". "id asc" if omitted.
+  // The default sorting order is ascending
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListInstancesResponse {
+  // List of Instance resources.
+  repeated Instance instances = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListInstancesRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListInstancesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateInstanceRequest {
+  // ID of the folder to create an instance in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the instance.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the instance.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // ID of the availability zone where the instance resides.
+  // To get a list of available zones, use the [yandex.cloud.compute.v1.ZoneService.List] request
+  string zone_id = 5 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the hardware platform configuration for the instance.
+  // This field affects the available values in [resources_spec] field.
+  //
+  // Platforms allows you to create various types of instances: with a large amount of memory,
+  // with a large number of cores, with a burstable performance.
+  // For more information, see [Platforms](/docs/compute/concepts/vm-platforms).
+  string platform_id = 6 [(required) = true];
+
+  // Computing resources of the instance, such as the amount of memory and number of cores.
+  // To get a list of available values, see [Levels of core performance](/docs/compute/concepts/performance-levels).
+  ResourcesSpec resources_spec = 7 [(required) = true];
+
+  // The metadata `key:value` pairs that will be assigned to this instance. This includes custom metadata and predefined keys.
+  // The total size of all keys and values must be less than 512 KB.
+  //
+  // Values are free-form strings, and only have meaning as interpreted by the programs which configure the instance.
+  // The values must be 256 KB or less.
+  //
+  // For example, you may use the metadata in order to provide your public SSH key to the instance.
+  // For more information, see [Metadata](/docs/compute/concepts/vm-metadata).
+  map<string, string> metadata = 8;
+
+  // Options allow user to configure access to instance's metadata
+  MetadataOptions metadata_options = 19;
+
+  // Boot disk to attach to the instance.
+  AttachedDiskSpec boot_disk_spec = 9 [(required) = true];
+
+  // Array of secondary disks to attach to the instance.
+  repeated AttachedDiskSpec secondary_disk_specs = 10 [(size) = "<=3"];
+
+  // Array of local disks to attach to the instance.
+  repeated AttachedLocalDiskSpec local_disk_specs = 18;
+
+  // Array of filesystems to attach to the instance.
+  //
+  // The filesystems must reside in the same availability zone as the instance.
+  //
+  // To use the instance with an attached filesystem, the latter must be mounted.
+  // For details, see [documentation](/docs/compute/operations/filesystem/attach-to-vm).
+  repeated AttachedFilesystemSpec filesystem_specs = 17;
+
+  // Network configuration for the instance. Specifies how the network interface is configured
+  // to interact with other services on the internal network and on the internet.
+  // Currently only one network interface is supported per instance.
+  repeated NetworkInterfaceSpec network_interface_specs = 11 [(size) = "1"];
+
+  // Host name for the instance.
+  // This field is used to generate the [yandex.cloud.compute.v1.Instance.fqdn] value.
+  // The host name must be unique within the network and region.
+  // If not specified, the host name will be equal to [yandex.cloud.compute.v1.Instance.id] of the instance
+  // and FQDN will be `<id>.auto.internal`. Otherwise FQDN will be `<hostname>.<region_id>.internal`.
+  string hostname = 12 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Scheduling policy configuration.
+  SchedulingPolicy scheduling_policy = 13;
+
+  // ID of the service account to use for [authentication inside the instance](/docs/compute/operations/vm-connect/auth-inside-vm).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 14;
+
+  // Network settings.
+  NetworkSettings network_settings = 15;
+
+  // Placement policy configuration.
+  PlacementPolicy placement_policy = 16;
+
+  // GPU settings.
+  GpuSettings gpu_settings = 20;
+
+  // Behaviour on maintenance events
+  MaintenancePolicy maintenance_policy = 21;
+
+  // Time between notification via metadata service and maintenance
+  google.protobuf.Duration maintenance_grace_period = 22 [(value) = "1s-24h"];
+
+  // Serial port settings
+  SerialPortSettings serial_port_settings = 23;
+}
+
+message CreateInstanceMetadata {
+  // ID of the instance that is being created.
+  string instance_id = 1 [(length) = "<=50"];
+}
+
+message UpdateInstanceRequest {
+  // ID of the Instance resource to update.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the Instance resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the instance.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the instance.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // ID of the hardware platform configuration for the instance.
+  // This field affects the available values in [resources_spec] field.
+  //
+  // Platforms allows you to create various types of instances: with a large amount of memory,
+  // with a large number of cores, with a burstable performance.
+  // For more information, see [Platforms](/docs/compute/concepts/vm-platforms).
+  string platform_id = 6;
+
+  // Computing resources of the instance, such as the amount of memory and number of cores.
+  // To get a list of available values, see [Levels of core performance](/docs/compute/concepts/performance-levels).
+  ResourcesSpec resources_spec = 7;
+
+  // The metadata `key:value` pairs that will be assigned to this instance. This includes custom metadata and predefined keys.
+  // The total size of all keys and values must be less than 512 KB.
+  //
+  // Existing set of `metadata` is completely replaced by the provided set.
+  //
+  // Values are free-form strings, and only have meaning as interpreted by the programs which configure the instance.
+  // The values must be 256 KB or less.
+  //
+  // For example, you may use the metadata in order to provide your public SSH key to the instance.
+  // For more information, see [Metadata](/docs/compute/concepts/vm-metadata).
+  map<string, string> metadata = 8;
+
+  // Options allow user to configure access to instance's metadata
+  MetadataOptions metadata_options = 13;
+
+  // ID of the service account to use for [authentication inside the instance](/docs/compute/operations/vm-connect/auth-inside-vm).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 9;
+
+  // Network settings.
+  NetworkSettings network_settings = 10;
+
+  // Placement policy configuration.
+  PlacementPolicy placement_policy = 11;
+
+  // Scheduling policy configuration.
+  SchedulingPolicy scheduling_policy = 12;
+
+  // Behaviour on maintenance events
+  MaintenancePolicy maintenance_policy = 14;
+
+  // Time between notification via metadata service and maintenance
+  google.protobuf.Duration maintenance_grace_period = 15 [(value) = "1s-24h"];
+
+  // Serial port settings
+  SerialPortSettings serial_port_settings = 16;
+}
+
+message UpdateInstanceMetadata {
+  // ID of the Instance resource that is being updated.
+  string instance_id = 1;
+}
+
+message DeleteInstanceRequest {
+  // ID of the instance to delete.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteInstanceMetadata {
+  // ID of the instance that is being deleted.
+  string instance_id = 1;
+}
+
+message UpdateInstanceMetadataRequest {
+  // ID of the instance that is being updated.
+  string instance_id = 1;
+
+  // List of keys to be deleted.
+  repeated string delete = 2;
+
+  // The metadata `key:value` pairs that will be added or updated to this instance.
+  map<string, string> upsert = 3;
+}
+
+message UpdateInstanceMetadataMetadata {
+  // ID of the instance that is being updated.
+  string instance_id = 1;
+}
+
+message GetInstanceSerialPortOutputRequest {
+  // ID of the instance to return the serial port output for.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Serial port to retrieve data from. The default is 1.
+  int64 port = 2 [(value) = "1,2,3,4"];
+}
+
+message GetInstanceSerialPortOutputResponse {
+  // The contents of the serial port output, starting from the time when the instance
+  // started to boot.
+  string contents = 1;
+}
+
+message StopInstanceRequest {
+  // ID of the instance to stop.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StopInstanceMetadata {
+  // ID of the instance that is being deleted.
+  string instance_id = 1;
+}
+
+message StartInstanceRequest {
+  // ID of the instance to start.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StartInstanceMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+}
+
+message RestartInstanceRequest {
+  // ID of the instance to restart.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message RestartInstanceMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+}
+
+message AttachInstanceDiskRequest {
+  // ID of the instance to attach the disk to.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Disk that should be attached.
+  AttachedDiskSpec attached_disk_spec = 2 [(required) = true];
+}
+
+message AttachInstanceDiskMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+
+  // ID of the disk.
+  string disk_id = 2;
+}
+
+message DetachInstanceDiskRequest {
+  // ID of the instance to detach the disk from.
+  // To get the instance ID, use a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  oneof disk {
+    option (exactly_one) = true;
+
+    // ID of the disk that should be detached.
+    string disk_id = 2 [(length) = "<=50"];
+
+    // Serial number of the disk that should be detached. This value is reflected into the /dev/disk/by-id/ tree
+    // of a Linux operating system running within the instance.
+    string device_name = 3 [(pattern) = "[a-z][a-z0-9-_]{,19}"];
+  }
+}
+
+message DetachInstanceDiskMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+
+  // ID of the disk.
+  string disk_id = 2;
+}
+
+message AttachInstanceFilesystemRequest {
+  // ID of the instance to attach the filesystem to.
+  //
+  // To get the instance ID, make a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Filesystem to attach to the instance.
+  AttachedFilesystemSpec attached_filesystem_spec = 2 [(required) = true];
+}
+
+message AttachInstanceFilesystemMetadata {
+  // ID of the instance that the filesystem is being attached to.
+  string instance_id = 1;
+
+  // ID of the filesystem that is being attached to the instance.
+  string filesystem_id = 2;
+}
+
+message DetachInstanceFilesystemRequest {
+  // ID of the instance to detach the filesystem from.
+  //
+  // To get the instance ID, make a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  oneof filesystem {
+    option (exactly_one) = true;
+
+    // ID of the filesystem that should be detached.
+    string filesystem_id = 2 [(length) = "<=50"];
+
+    // Name of the device used for mounting the filesystem that should be detached.
+    string device_name = 3 [(pattern) = "[a-z][a-z0-9-_]{,19}"];
+  }
+}
+
+message DetachInstanceFilesystemMetadata {
+  // ID of the instance that the filesystem is being detached from.
+  string instance_id = 1;
+
+  // ID of the filesystem that is being detached from the instance.
+  string filesystem_id = 2;
+}
+
+message AttachInstanceNetworkInterfaceRequest {
+  // ID of the instance that in which network interface is being attached to.
+  string instance_id = 1 [(required) = true];
+
+  // The index of the network interface
+  string network_interface_index = 2 [(required) = true];
+
+  // ID of the subnet.
+  string subnet_id = 3 [(required) = true];
+
+  // Primary IPv4 address that will be assigned to the instance for this network interface.
+  PrimaryAddressSpec primary_v4_address_spec = 4;
+
+  reserved 5;
+
+  // ID's of security groups attached to the interface.
+  repeated string security_group_ids = 6 [(required) = true];
+}
+
+message AttachInstanceNetworkInterfaceMetadata {
+  // ID of the instant network interface that is being updated.
+  string instance_id = 1;
+  string network_interface_index = 2;
+}
+
+message DetachInstanceNetworkInterfaceRequest {
+  // ID of the instance that in which network interface is being attached to.
+  string instance_id = 1 [(required) = true];
+
+  // The index of the network interface.
+  string network_interface_index = 2 [(required) = true];
+}
+
+message DetachInstanceNetworkInterfaceMetadata {
+  // ID of the instant network interface that is being updated.
+  string instance_id = 1;
+
+  // The index of the network interface.
+  string network_interface_index = 2;
+}
+
+// Enables One-to-one NAT on the network interface.
+message AddInstanceOneToOneNatRequest {
+  // ID of the instance to enable One-to-One NAT on.
+  string instance_id = 1;
+
+  // The index of the network interface to enable One-to-One NAT on.
+  string network_interface_index = 2;
+
+  // The network address that is assigned to the instance for this network interface.
+  string internal_address = 3; // optional
+
+  // An external IP address configuration.
+  // If not specified, then this instance will have no external internet access.
+  OneToOneNatSpec one_to_one_nat_spec = 4;
+}
+
+message AddInstanceOneToOneNatMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+}
+
+message RemoveInstanceOneToOneNatRequest {
+  // ID of the instance to remove One-to-one NAT.
+  string instance_id = 1;
+
+  // The index of the network interface to remove One-to-One NAT from.
+  string network_interface_index = 2;
+
+  // The network address that is assigned to the instance for this network interface.
+  string internal_address = 3; // optional
+}
+
+message RemoveInstanceOneToOneNatMetadata {
+  // ID of the instance.
+  string instance_id = 1;
+}
+
+message UpdateInstanceNetworkInterfaceRequest {
+  // ID of the instance that is being updated.
+  string instance_id = 1 [(required) = true];
+
+  // The index of the network interface to be updated.
+  string network_interface_index = 2 [(required) = true];
+
+  // Field mask that specifies which attributes of the instance should be updated.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // ID of the subnet.
+  string subnet_id = 4;
+
+  // Primary IPv4 address that will be assigned to the instance for this network interface.
+  PrimaryAddressSpec primary_v4_address_spec = 5;
+
+  // Primary IPv6 address that will be assigned to the instance for this network interface. IPv6 not available yet.
+  PrimaryAddressSpec primary_v6_address_spec = 6;
+
+  // ID's of security groups attached to the interface.
+  repeated string security_group_ids = 7;
+}
+
+message UpdateInstanceNetworkInterfaceMetadata {
+  // ID of the instant network interface that is being updated.
+  string instance_id = 1;
+
+  // The index of the network interface.
+  string network_interface_index = 2;
+}
+
+message SimulateInstanceMaintenanceEventRequest {
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message SimulateInstanceMaintenanceEventMetadata {
+  string instance_id = 1;
+}
+
+message ListInstanceOperationsRequest {
+  // ID of the Instance resource to list operations for.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListInstanceOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListInstanceOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListInstanceOperationsResponse {
+  // List of operations for the specified instance.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListInstanceOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListInstanceOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ResourcesSpec {
+  // The amount of memory available to the instance, specified in bytes.
+  int64 memory = 1 [
+    (required) = true,
+    (value) = "<=274877906944"
+  ];
+
+  // The number of cores available to the instance.
+  int64 cores = 2 [
+    (required) = true,
+    (value) = "2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,40,44,48,52,56,60,64,68,72,76,80"
+  ];
+
+  // Baseline level of CPU performance with the ability to burst performance above that baseline level.
+  // This field sets baseline performance for each core.
+  //
+  // For example, if you need only 5% of the CPU performance, you can set core_fraction=5.
+  // For more information, see [Levels of core performance](/docs/compute/concepts/performance-levels).
+  int64 core_fraction = 3 [(value) = "0,5,20,50,100"];
+
+  // The number of GPUs available to the instance.
+  int64 gpus = 4 [(value) = "0,1,2,4"];
+}
+
+message AttachedDiskSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+
+    // Read-only access.
+    READ_ONLY = 1;
+
+    // Read/Write access. Default value.
+    READ_WRITE = 2;
+  }
+
+  // The mode in which to attach this disk.
+  Mode mode = 1;
+
+  // Specifies a unique serial number of your choice that is reflected into the /dev/disk/by-id/ tree
+  // of a Linux operating system running within the instance.
+  //
+  // This value can be used to reference the device for mounting, resizing, and so on, from within the instance.
+  // If not specified, a random value will be generated.
+  string device_name = 2 [(pattern) = "[a-z][a-z0-9-_]{,19}"];
+
+  // Specifies whether the disk will be auto-deleted when the instance is deleted.
+  bool auto_delete = 3;
+
+  oneof disk {
+    option (exactly_one) = true;
+
+    // Disk specification.
+    DiskSpec disk_spec = 4;
+
+    // ID of the disk that should be attached.
+    string disk_id = 5 [(length) = "<=50"];
+  }
+
+  message DiskSpec {
+    // Name of the disk.
+    string name = 1 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+    // Description of the disk.
+    string description = 2 [(length) = "<=256"];
+
+    // ID of the disk type.
+    // To get a list of available disk types, use the [yandex.cloud.compute.v1.DiskTypeService.List] request.
+    string type_id = 3 [(length) = "<=50"];
+
+    // Size of the disk, specified in bytes.
+    int64 size = 4 [
+      (required) = true,
+      (value) = "4194304-4398046511104"
+    ];
+
+    // Block size of the disk, specified in bytes. The default is 4096.
+    int64 block_size = 8;
+
+    // Placement policy configuration.
+    DiskPlacementPolicy disk_placement_policy = 7;
+
+    oneof source {
+      // ID of the image to create the disk from.
+      string image_id = 5 [(length) = "<=50"];
+
+      // ID of the snapshot to restore the disk from.
+      string snapshot_id = 6 [(length) = "<=50"];
+    }
+  }
+}
+
+message AttachedLocalDiskSpec {
+  // Size of the disk, specified in bytes.
+  int64 size = 1 [(required) = true];
+}
+
+message AttachedFilesystemSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+
+    // Read-only access.
+    READ_ONLY = 1;
+
+    // Read/Write access. Default value.
+    READ_WRITE = 2;
+  }
+
+  // Mode of access to the filesystem that should be attached.
+  Mode mode = 1;
+
+  // Name of the device representing the filesystem on the instance.
+  //
+  // The name should be used for referencing the filesystem from within the instance
+  // when it's being mounted, resized etc.
+  //
+  // If not specified, a random value will be generated.
+  string device_name = 2 [(pattern) = "[a-z][a-z0-9-_]{,19}"];
+
+  // ID of the filesystem that should be attached.
+  string filesystem_id = 3 [(length) = "<=50"];
+}
+
+message NetworkInterfaceSpec {
+  reserved 4 to 5;
+  // ID of the subnet.
+  string subnet_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Primary IPv4 address that will be assigned to the instance for this network interface.
+  PrimaryAddressSpec primary_v4_address_spec = 2;
+
+  // Primary IPv6 address that will be assigned to the instance for this network interface. IPv6 not available yet.
+  PrimaryAddressSpec primary_v6_address_spec = 3;
+
+  // ID's of security groups attached to the interface
+  repeated string security_group_ids = 6;
+}
+
+message PrimaryAddressSpec {
+  // An IPv4 internal network address that is assigned to the instance for this network interface.
+  // If not specified by the user, an unused internal IP is assigned by the system.
+  string address = 1; // optional, manual set static internal IP
+
+  // An external IP address configuration.
+  // If not specified, then this instance will have no external internet access.
+  OneToOneNatSpec one_to_one_nat_spec = 2;
+
+  // Internal DNS configuration
+  repeated DnsRecordSpec dns_record_specs = 3;
+}
+
+message OneToOneNatSpec {
+  // External IP address version.
+  IpVersion ip_version = 1; //only if address unspecified
+  string address = 2; //set static IP by value
+
+  // External DNS configuration
+  repeated DnsRecordSpec dns_record_specs = 3;
+}
+
+message DnsRecordSpec {
+  // FQDN (required)
+  string fqdn = 1 [(required) = true];
+  // DNS zone id (optional, if not set, private zone used)
+  string dns_zone_id = 2;
+  // DNS record ttl, values in 0-86400 (optional)
+  int64 ttl = 3 [(value) = "0-86400"];
+  // When set to true, also create PTR DNS record (optional)
+  bool ptr = 4;
+}
+
+message MoveInstanceRequest {
+  // ID of the instance to move.
+  //
+  // To get the instance ID, make a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the folder to move the instance to.
+  //
+  // To get the folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string destination_folder_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message MoveInstanceMetadata {
+  // ID of the instance that is being moved.
+  string instance_id = 1;
+
+  // ID of the folder that the instance is being moved from.
+  string source_folder_id = 2;
+
+  // ID of the folder that the instance is being moved to.
+  string destination_folder_id = 3;
+}
+
+message RelocateInstanceRequest {
+  // ID of the instance to move.
+  //
+  // To get the instance ID, make a [InstanceService.List] request.
+  string instance_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the availability zone to move the instance to.
+  //
+  // To get the zone ID, make a [ZoneService.List] request.
+  string destination_zone_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Network configuration for the instance. Specifies how the network interface is configured
+  // to interact with other services on the internal network and on the internet.
+  // Currently only one network interface is supported per instance.
+  repeated NetworkInterfaceSpec network_interface_specs = 3 [
+    (size) = "1",
+    (required) = true
+  ];
+
+  // Boot disk placement policy configuration in target zone. Must be specified if disk has placement policy.
+  DiskPlacementPolicy boot_disk_placement = 4;
+
+  // Secondary disk placement policy configurations in target zone. Must be specified for each disk that has placement policy.
+  repeated DiskPlacementPolicyChange secondary_disk_placements = 5;
+}
+
+message RelocateInstanceMetadata {
+  // ID of the instance that is being moved.
+  string instance_id = 1;
+
+  // ID of the availability zone that the instance is being moved from.
+  string source_zone_id = 2;
+
+  // ID of the availability zone that the instance is being moved to.
+  string destination_zone_id = 3;
+}
+
+message GuestStopInstanceMetadata {
+  // ID of the instance that was stopped from guest OS.
+  string instance_id = 1;
+}
+
+message PreemptInstanceMetadata {
+  // ID of the instance that is being preempted.
+  string instance_id = 1;
+}
+
+message CrashInstanceMetadata {
+  // ID of the instance that was crashed.
+  string instance_id = 1;
+}

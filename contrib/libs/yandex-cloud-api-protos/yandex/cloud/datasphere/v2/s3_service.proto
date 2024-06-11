@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+// A set of methods for managing S3 configurations.
+service S3Service {
+  // Activates shared s3 for project
+  rpc Activate (ActivateS3Request) returns (operation.Operation) {
+    option (google.api.http) = {post: "/datasphere/v2/s3/activate" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Deactivates shared s3 for project
+  rpc Deactivate (DeactivateS3Request) returns (operation.Operation) {
+    option (google.api.http) = {post: "/datasphere/v2/s3/deactivate" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message ActivateS3Request {
+  string s3_id = 1 [(required) = true, (length) = "<=50"];
+  string project_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message DeactivateS3Request {
+  string s3_id = 1 [(required) = true, (length) = "<=50"];
+  string project_id = 2 [(required) = true, (length) = "<=50"];
+}

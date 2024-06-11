@@ -1,0 +1,488 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.postgresql.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1/config;postgresql";
+option java_package = "yandex.cloud.api.mdb.postgresql.v1.config";
+
+// Options and structure of `PostgresqlConfig` reflects PostgreSQL configuration file
+// parameters which detailed description is available in
+// [PostgreSQL documentation](https://www.postgresql.org/docs/11/runtime-config.html).
+message PostgresqlConfig11 {
+  reserved 127 to 149;
+  reserved 151;
+  reserved 166;
+  reserved 78 to 79;
+  enum BackslashQuote {
+    BACKSLASH_QUOTE_UNSPECIFIED = 0;
+
+    BACKSLASH_QUOTE = 1;
+
+    BACKSLASH_QUOTE_ON = 2;
+
+    BACKSLASH_QUOTE_OFF = 3;
+
+    BACKSLASH_QUOTE_SAFE_ENCODING = 4;
+  }
+
+  enum ByteaOutput {
+    BYTEA_OUTPUT_UNSPECIFIED = 0;
+
+    BYTEA_OUTPUT_HEX = 1;
+
+    BYTEA_OUTPUT_ESCAPED = 2;
+  }
+
+  enum ConstraintExclusion {
+    CONSTRAINT_EXCLUSION_UNSPECIFIED = 0;
+
+    CONSTRAINT_EXCLUSION_ON = 1;
+
+    CONSTRAINT_EXCLUSION_OFF = 2;
+
+    CONSTRAINT_EXCLUSION_PARTITION = 3;
+  }
+
+  enum ForceParallelMode {
+    FORCE_PARALLEL_MODE_UNSPECIFIED = 0;
+
+    FORCE_PARALLEL_MODE_ON = 1;
+
+    FORCE_PARALLEL_MODE_OFF = 2;
+
+    FORCE_PARALLEL_MODE_REGRESS = 3;
+  }
+
+  enum LogErrorVerbosity {
+    LOG_ERROR_VERBOSITY_UNSPECIFIED = 0;
+
+    LOG_ERROR_VERBOSITY_TERSE = 1;
+
+    LOG_ERROR_VERBOSITY_DEFAULT = 2;
+
+    LOG_ERROR_VERBOSITY_VERBOSE = 3;
+  }
+
+  enum LogLevel {
+    LOG_LEVEL_UNSPECIFIED = 0;
+
+    LOG_LEVEL_DEBUG5 = 1;
+
+    LOG_LEVEL_DEBUG4 = 2;
+
+    LOG_LEVEL_DEBUG3 = 3;
+
+    LOG_LEVEL_DEBUG2 = 4;
+
+    LOG_LEVEL_DEBUG1 = 5;
+
+    LOG_LEVEL_LOG = 6;
+
+    LOG_LEVEL_NOTICE = 7;
+
+    LOG_LEVEL_WARNING = 8;
+
+    LOG_LEVEL_ERROR = 9;
+
+    LOG_LEVEL_FATAL = 10;
+
+    LOG_LEVEL_PANIC = 11;
+  }
+
+  enum LogStatement {
+    LOG_STATEMENT_UNSPECIFIED = 0;
+
+    LOG_STATEMENT_NONE = 1;
+
+    LOG_STATEMENT_DDL = 2;
+
+    LOG_STATEMENT_MOD = 3;
+
+    LOG_STATEMENT_ALL = 4;
+  }
+
+  enum PasswordEncryption {
+    PASSWORD_ENCRYPTION_UNSPECIFIED = 0;
+
+    PASSWORD_ENCRYPTION_MD5 = 1;
+
+    PASSWORD_ENCRYPTION_SCRAM_SHA_256 = 2;
+  }
+
+  enum PgHintPlanDebugPrint {
+    PG_HINT_PLAN_DEBUG_PRINT_UNSPECIFIED = 0;
+
+    PG_HINT_PLAN_DEBUG_PRINT_OFF = 1;
+
+    PG_HINT_PLAN_DEBUG_PRINT_ON = 2;
+
+    PG_HINT_PLAN_DEBUG_PRINT_DETAILED = 3;
+
+    PG_HINT_PLAN_DEBUG_PRINT_VERBOSE = 4;
+  }
+
+  enum SharedPreloadLibraries {
+    SHARED_PRELOAD_LIBRARIES_UNSPECIFIED = 0;
+
+    SHARED_PRELOAD_LIBRARIES_AUTO_EXPLAIN = 1;
+
+    SHARED_PRELOAD_LIBRARIES_PG_HINT_PLAN = 2;
+
+    SHARED_PRELOAD_LIBRARIES_TIMESCALEDB = 3;
+
+    SHARED_PRELOAD_LIBRARIES_PG_QUALSTATS = 4;
+
+    SHARED_PRELOAD_LIBRARIES_PG_CRON = 5;
+
+    SHARED_PRELOAD_LIBRARIES_PGLOGICAL = 6;
+
+    SHARED_PRELOAD_LIBRARIES_PG_PREWARM = 7;
+
+    SHARED_PRELOAD_LIBRARIES_PGAUDIT = 8;
+  }
+
+  enum SynchronousCommit {
+    SYNCHRONOUS_COMMIT_UNSPECIFIED = 0;
+
+    SYNCHRONOUS_COMMIT_ON = 1;
+
+    SYNCHRONOUS_COMMIT_OFF = 2;
+
+    SYNCHRONOUS_COMMIT_LOCAL = 3;
+
+    SYNCHRONOUS_COMMIT_REMOTE_WRITE = 4;
+
+    SYNCHRONOUS_COMMIT_REMOTE_APPLY = 5;
+  }
+
+  enum TransactionIsolation {
+    TRANSACTION_ISOLATION_UNSPECIFIED = 0;
+
+    TRANSACTION_ISOLATION_READ_UNCOMMITTED = 1;
+
+    TRANSACTION_ISOLATION_READ_COMMITTED = 2;
+
+    TRANSACTION_ISOLATION_REPEATABLE_READ = 3;
+
+    TRANSACTION_ISOLATION_SERIALIZABLE = 4;
+  }
+
+  enum WalLevel {
+    WAL_LEVEL_UNSPECIFIED = 0;
+
+    WAL_LEVEL_REPLICA = 1;
+
+    WAL_LEVEL_LOGICAL = 2;
+  }
+
+  enum XmlBinary {
+    XML_BINARY_UNSPECIFIED = 0;
+
+    XML_BINARY_BASE64 = 1;
+
+    XML_BINARY_HEX = 2;
+  }
+
+  enum XmlOption {
+    XML_OPTION_UNSPECIFIED = 0;
+
+    XML_OPTION_DOCUMENT = 1;
+
+    XML_OPTION_CONTENT = 2;
+  }
+
+  google.protobuf.Int64Value max_connections = 1;
+
+  google.protobuf.Int64Value shared_buffers = 2; // in bytes.
+
+  google.protobuf.Int64Value temp_buffers = 3; // in bytes.
+
+  google.protobuf.Int64Value max_prepared_transactions = 4;
+
+  google.protobuf.Int64Value work_mem = 5; // in bytes.
+
+  google.protobuf.Int64Value maintenance_work_mem = 6; // in bytes.
+
+  google.protobuf.Int64Value autovacuum_work_mem = 7; // in bytes.
+
+  google.protobuf.Int64Value temp_file_limit = 8; // in bytes.
+
+  google.protobuf.Int64Value vacuum_cost_delay = 9; // in milliseconds.
+
+  google.protobuf.Int64Value vacuum_cost_page_hit = 10;
+
+  google.protobuf.Int64Value vacuum_cost_page_miss = 11;
+
+  google.protobuf.Int64Value vacuum_cost_page_dirty = 12;
+
+  google.protobuf.Int64Value vacuum_cost_limit = 13;
+
+  google.protobuf.Int64Value bgwriter_delay = 14 [(value) = "10-10000"]; // in milliseconds.
+
+  google.protobuf.Int64Value bgwriter_lru_maxpages = 15;
+
+  google.protobuf.DoubleValue bgwriter_lru_multiplier = 16;
+
+  google.protobuf.Int64Value bgwriter_flush_after = 17 [(value) = "0-2097152"]; // in bytes
+
+  google.protobuf.Int64Value backend_flush_after = 18 [(value) = "0-2097152"]; // in bytes
+
+  google.protobuf.Int64Value old_snapshot_threshold = 19 [(value) = "-1-86400000"];
+
+  WalLevel wal_level = 20;
+
+  SynchronousCommit synchronous_commit = 21;
+
+  google.protobuf.Int64Value checkpoint_timeout = 22 [(value) = "30000-86400000"]; // in milliseconds.
+
+  google.protobuf.DoubleValue checkpoint_completion_target = 23;
+
+  google.protobuf.Int64Value checkpoint_flush_after = 24 [(value) = "0-2097152"]; // in bytes
+
+  google.protobuf.Int64Value max_wal_size = 25; // in bytes.
+
+  google.protobuf.Int64Value min_wal_size = 26; // in bytes.
+
+  google.protobuf.Int64Value max_standby_streaming_delay = 27; // in milliseconds.
+
+  google.protobuf.Int64Value default_statistics_target = 28;
+
+  ConstraintExclusion constraint_exclusion = 29;
+
+  google.protobuf.DoubleValue cursor_tuple_fraction = 30;
+
+  google.protobuf.Int64Value from_collapse_limit = 31 [(value) = "1-2147483647"];
+
+  google.protobuf.Int64Value join_collapse_limit = 32 [(value) = "1-2147483647"];
+
+  ForceParallelMode force_parallel_mode = 33;
+
+  LogLevel client_min_messages = 34;
+
+  LogLevel log_min_messages = 35;
+
+  LogLevel log_min_error_statement = 36;
+
+  google.protobuf.Int64Value log_min_duration_statement = 37; // in milliseconds.
+
+  google.protobuf.BoolValue log_checkpoints = 38;
+
+  google.protobuf.BoolValue log_connections = 39;
+
+  google.protobuf.BoolValue log_disconnections = 40;
+
+  google.protobuf.BoolValue log_duration = 41;
+
+  LogErrorVerbosity log_error_verbosity = 42;
+
+  google.protobuf.BoolValue log_lock_waits = 43;
+
+  LogStatement log_statement = 44;
+
+  google.protobuf.Int64Value log_temp_files = 45;
+
+  string search_path = 46;
+
+  google.protobuf.BoolValue row_security = 47;
+
+  TransactionIsolation default_transaction_isolation = 48;
+
+  google.protobuf.Int64Value statement_timeout = 49; // in milliseconds.
+
+  google.protobuf.Int64Value lock_timeout = 50; // in milliseconds.
+
+  google.protobuf.Int64Value idle_in_transaction_session_timeout = 51 [(value) = "0-2147483647"]; // in milliseconds.
+
+  ByteaOutput bytea_output = 52;
+
+  XmlBinary xmlbinary = 53;
+
+  XmlOption xmloption = 54;
+
+  google.protobuf.Int64Value gin_pending_list_limit = 55; // in bytes.
+
+  google.protobuf.Int64Value deadlock_timeout = 56; // in milliseconds.
+
+  google.protobuf.Int64Value max_locks_per_transaction = 57;
+
+  google.protobuf.Int64Value max_pred_locks_per_transaction = 58;
+
+  google.protobuf.BoolValue array_nulls = 59;
+
+  BackslashQuote backslash_quote = 60;
+
+  google.protobuf.BoolValue default_with_oids = 61;
+
+  google.protobuf.BoolValue escape_string_warning = 62;
+
+  google.protobuf.BoolValue lo_compat_privileges = 63;
+
+  google.protobuf.BoolValue operator_precedence_warning = 64;
+
+  google.protobuf.BoolValue quote_all_identifiers = 65;
+
+  google.protobuf.BoolValue standard_conforming_strings = 66;
+
+  google.protobuf.BoolValue synchronize_seqscans = 67;
+
+  google.protobuf.BoolValue transform_null_equals = 68;
+
+  google.protobuf.BoolValue exit_on_error = 69;
+
+  google.protobuf.DoubleValue seq_page_cost = 70;
+
+  google.protobuf.DoubleValue random_page_cost = 71;
+
+  google.protobuf.Int64Value autovacuum_max_workers = 72 [(value) = "1-32"];
+
+  google.protobuf.Int64Value autovacuum_vacuum_cost_delay = 73 [(value) = "-1-100"];
+
+  google.protobuf.Int64Value autovacuum_vacuum_cost_limit = 74 [(value) = "-1-10000"];
+
+  google.protobuf.Int64Value autovacuum_naptime = 75 [(value) = "1000-86400000"]; // in milliseconds.
+
+  google.protobuf.Int64Value archive_timeout = 76 [(value) = "10000-86400000"]; // in milliseconds.
+
+  google.protobuf.Int64Value track_activity_query_size = 77 [(value) = "100-102400"];
+
+  google.protobuf.BoolValue enable_bitmapscan = 80;
+
+  google.protobuf.BoolValue enable_hashagg = 81;
+
+  google.protobuf.BoolValue enable_hashjoin = 82;
+
+  google.protobuf.BoolValue enable_indexscan = 83;
+
+  google.protobuf.BoolValue enable_indexonlyscan = 84;
+
+  google.protobuf.BoolValue enable_material = 85;
+
+  google.protobuf.BoolValue enable_mergejoin = 86;
+
+  google.protobuf.BoolValue enable_nestloop = 87;
+
+  google.protobuf.BoolValue enable_seqscan = 88;
+
+  google.protobuf.BoolValue enable_sort = 89;
+
+  google.protobuf.BoolValue enable_tidscan = 90;
+
+  google.protobuf.Int64Value max_worker_processes = 91 [(value) = "0-1024"];
+
+  google.protobuf.Int64Value max_parallel_workers = 92 [(value) = "0-1024"];
+
+  google.protobuf.Int64Value max_parallel_workers_per_gather = 93 [(value) = "0-1024"];
+
+  google.protobuf.DoubleValue autovacuum_vacuum_scale_factor = 94 [(value) = "0.0-1.0"];
+
+  google.protobuf.DoubleValue autovacuum_analyze_scale_factor = 95 [(value) = "0.0-1.0"];
+
+  google.protobuf.BoolValue default_transaction_read_only = 96;
+
+  string timezone = 97;
+
+  google.protobuf.BoolValue enable_parallel_append = 98;
+
+  google.protobuf.BoolValue enable_parallel_hash = 99;
+
+  google.protobuf.BoolValue enable_partition_pruning = 100;
+
+  google.protobuf.BoolValue enable_partitionwise_aggregate = 101;
+
+  google.protobuf.BoolValue enable_partitionwise_join = 102;
+
+  google.protobuf.BoolValue jit = 103;
+
+  google.protobuf.Int64Value max_parallel_maintenance_workers = 104 [(value) = ">=0"];
+
+  google.protobuf.BoolValue parallel_leader_participation = 105;
+
+  google.protobuf.DoubleValue vacuum_cleanup_index_scale_factor = 106 [(value) = "0.0-10000000000.0"];
+
+  google.protobuf.Int64Value effective_io_concurrency = 107 [(value) = "0-1000"];
+
+  google.protobuf.Int64Value effective_cache_size = 108 [(value) = "0-549755813888"];
+
+  repeated SharedPreloadLibraries shared_preload_libraries = 109;
+
+  google.protobuf.Int64Value auto_explain_log_min_duration = 110 [(value) = "-1-2147483647"]; // in milliseconds.
+
+  google.protobuf.BoolValue auto_explain_log_analyze = 111;
+
+  google.protobuf.BoolValue auto_explain_log_buffers = 112;
+
+  google.protobuf.BoolValue auto_explain_log_timing = 113;
+
+  google.protobuf.BoolValue auto_explain_log_triggers = 114;
+
+  google.protobuf.BoolValue auto_explain_log_verbose = 115;
+
+  google.protobuf.BoolValue auto_explain_log_nested_statements = 116;
+
+  google.protobuf.DoubleValue auto_explain_sample_rate = 117 [(value) = "0.0-1.0"];
+
+  google.protobuf.BoolValue pg_hint_plan_enable_hint = 118;
+
+  google.protobuf.BoolValue pg_hint_plan_enable_hint_table = 119;
+
+  PgHintPlanDebugPrint pg_hint_plan_debug_print = 120;
+
+  LogLevel pg_hint_plan_message_level = 121;
+
+  google.protobuf.BoolValue pg_qualstats_enabled = 122;
+
+  google.protobuf.BoolValue pg_qualstats_track_constants = 123;
+
+  google.protobuf.Int64Value pg_qualstats_max = 124;
+
+  google.protobuf.BoolValue pg_qualstats_resolve_oids = 125;
+
+  google.protobuf.DoubleValue pg_qualstats_sample_rate = 126;
+
+  google.protobuf.Int64Value max_stack_depth = 150 [(value) = "65536-134217728"]; // in bytes.
+
+  google.protobuf.BoolValue geqo = 152; // enable Genetic Query Optimizer, by default is on
+
+  google.protobuf.Int64Value geqo_threshold = 153 [(value) = "2-2147483647"]; // The number of tables to use geqo, default is 12
+
+  google.protobuf.Int64Value geqo_effort = 154 [(value) = "1-10"]; // tradeoff between planning time and query plan quality, default is 5
+
+  google.protobuf.Int64Value geqo_pool_size = 155; // number of individuals in the genetic population, useful values are typically 100 to 1000; default - 0 - choose based on based on geqo_effort
+
+  google.protobuf.Int64Value geqo_generations = 156; // the number of generations used by GEQO, useful values are in the same range as the pool size
+
+  google.protobuf.DoubleValue geqo_selection_bias = 157 [(value) = "1.5-2.0"]; // selective pressure within the population
+
+  google.protobuf.DoubleValue geqo_seed = 158 [(value) = "0.0-1.0"]; // initial value of the random number generator used by GEQO
+
+  google.protobuf.DoubleValue pg_trgm_similarity_threshold = 159 [(value) = "0.0-1.0"];
+
+  google.protobuf.DoubleValue pg_trgm_word_similarity_threshold = 160 [(value) = "0.0-1.0"];
+
+  google.protobuf.DoubleValue pg_trgm_strict_word_similarity_threshold = 161 [(value) = "0.0-1.0"];
+
+  google.protobuf.Int64Value max_standby_archive_delay = 162; // in milliseconds.
+
+  google.protobuf.Int64Value session_duration_timeout = 163 [(value) = "0-2147483647"]; // Terminate any session that exceeds the designated timeout, specified in milliseconds. If a timeout is not specified, the default session timeout is set to 12 hours. To disable it, specify a value of 0.
+
+  google.protobuf.BoolValue log_replication_commands = 164;
+
+  google.protobuf.Int64Value log_autovacuum_min_duration = 165 [(value) = "-1-2147483647"]; // in milliseconds. The default is 1000 (1 sec).
+
+  PasswordEncryption password_encryption = 167; // A default value for `` user_password_encryption `` user-level setting, if it not specified for new users. Possible values are `` PASSWORD_ENCRYPTION_MD5 `` or `` PASSWORD_ENCRYPTION_SCRAM_SHA_256 ``. The default is `` PASSWORD_ENCRYPTION_MD5 ``.
+}
+
+message PostgresqlConfigSet11 {
+  // Effective settings for a PostgreSQL 11 cluster (a combination of settings defined
+  // in [user_config] and [default_config]).
+  PostgresqlConfig11 effective_config = 1;
+
+  // User-defined settings for a PostgreSQL 11 cluster.
+  PostgresqlConfig11 user_config = 2;
+
+  // Default configuration for a PostgreSQL 11 cluster.
+  PostgresqlConfig11 default_config = 3;
+}

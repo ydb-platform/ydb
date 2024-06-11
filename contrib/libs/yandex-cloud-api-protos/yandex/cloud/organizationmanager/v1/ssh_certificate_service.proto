@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+service SshCertificateService {
+  // Members of an organization can generate certificates for themselves
+  // Signing certificates for other users requires a special permission
+  rpc Generate (GenerateSshCertificateRequest) returns (GenerateSshCertificateResponse) {
+    option (google.api.http) = { post: "/organization-manager/v1/sshCertificates:generate" body: "*" };
+  };
+}
+
+message GenerateSshCertificateRequest {
+  oneof scope { // the same certificate is generated for both an organization and a cloud in that organization
+    option (exactly_one) = true;
+
+    string cloud_id = 1 [(length) = "<=50"]; // the cloud must be attached to an organization
+    string organization_id = 2 [(length) = "<=50"];
+  }
+
+  oneof subject { // if empty, use default login for current subject
+    string subject_id = 3 [(length) = "<=50"]; // specify subject to generate certificate for default login
+    string os_login = 4 [(length) = "<=32"]; // specify os_login for a specific login
+  }
+
+  string public_key = 5 [(required) = true, (length) = "<=15000"];
+}
+
+message GenerateSshCertificateResponse {
+  // as per specification https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD
+  string signed_certificate = 1;
+}

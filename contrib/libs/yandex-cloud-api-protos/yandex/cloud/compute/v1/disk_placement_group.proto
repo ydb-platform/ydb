@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+message DiskPlacementGroup {
+  reserved 10;
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    READY = 2;
+    DELETING = 4;
+  }
+
+  // ID of the placement group.
+  string id = 1;
+
+  // ID of the folder that the placement group belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the placement group.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the placement group.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // ID of the availability zone where the placement group resides.
+  string zone_id = 7;
+
+  // Current status of the placement group
+  Status status = 11;
+
+  // Placement strategy.
+  oneof placement_strategy {
+    // Distribute disks over distinct failure domains.
+    DiskSpreadPlacementStrategy spread_placement_strategy = 8;
+
+    // Distribute disks over partitions.
+    DiskPartitionPlacementStrategy partition_placement_strategy = 9;
+  }
+}
+
+message DiskSpreadPlacementStrategy {}
+
+message DiskPartitionPlacementStrategy {
+  int64 partitions = 1;
+}

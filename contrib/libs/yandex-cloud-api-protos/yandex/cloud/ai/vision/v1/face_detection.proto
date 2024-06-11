@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v1;
+
+import "yandex/cloud/ai/vision/v1/primitives.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v1;vision";
+option java_package = "yandex.cloud.api.ai.vision.v1";
+
+message FaceAnnotation {
+  // An array of detected faces for the specified image.
+  repeated Face faces = 1;
+}
+
+message Face {
+  // Area on the image where the face is located.
+  Polygon bounding_box = 1;
+}

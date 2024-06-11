@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+message MlModel {
+  // Name of the the model.
+  string name = 1;
+
+  // ID of the ClickHouse cluster that the model belongs to.
+  string cluster_id = 2;
+
+  // Type of the model.
+  MlModelType type = 3;
+
+  // Model file URL. You can only use models stored in Object Storage.
+  string uri = 4;
+}
+
+enum MlModelType {
+  ML_MODEL_TYPE_UNSPECIFIED = 0;
+
+  // CatBoost model.
+  ML_MODEL_TYPE_CATBOOST = 1;
+}

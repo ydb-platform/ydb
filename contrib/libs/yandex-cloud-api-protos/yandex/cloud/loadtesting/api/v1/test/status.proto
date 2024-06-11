@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+enum Status {
+  // Status is unspecified.
+  STATUS_UNSPECIFIED = 0;
+
+  // Test has been created, but not started by any agent.
+  CREATED = 1;
+
+  // Execution stage: initialization.
+  INITIATED = 2;
+
+  // Execution stage: data preparation and warm-up.
+  PREPARING = 3;
+
+  // Execution stage: load generation.
+  RUNNING = 4;
+
+  // Execution stage: termination.
+  FINISHING = 5;
+
+  // Test is done.
+  DONE = 6;
+
+  // Execution stage: results post-processing.
+  POST_PROCESSING = 7;
+
+  // Test has failed due to some error.
+  FAILED = 8;
+
+  // Test is being stopped.
+  STOPPING = 9;
+
+  // Test has been stopped.
+  STOPPED = 10;
+
+  // Test has been stopped automatically by satisfying autostop condition.
+  AUTOSTOPPED = 11;
+
+  // Execution stage: waiting for a trigger to start.
+  WAITING = 12;
+
+  // Test is being deleted.
+  DELETING = 13;
+
+  // Test status has not been reported in a while during execution stage.
+  //
+  // Means that either an agent is too busy to send it, got offline, or failed without
+  // reporting a final status.
+  LOST = 14;
+}

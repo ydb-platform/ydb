@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1;datatransfer";
+option java_package = "yandex.cloud.api.datatransfer.v1";
+
+import "yandex/cloud/datatransfer/v1/endpoint/clickhouse.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/common.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/kafka.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/metrika.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/mongo.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/mysql.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/postgres.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/ydb.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/yds.proto";
+
+message Endpoint {
+    reserved 3, 7 to 51;
+    string id = 1;
+    string folder_id = 2;
+    string name = 4;
+    string description = 5;
+    map<string,string> labels = 6;
+    EndpointSettings settings = 52;
+}
+message EndpointSettings {
+    reserved 4 to 6, 10 to 15, 17 to 100, 103, 106 to 109, 112 to 145, 147 to 149;
+    oneof settings {
+        endpoint.MysqlSource mysql_source = 1;
+        endpoint.PostgresSource postgres_source = 2;
+        endpoint.YdbSource ydb_source = 3;
+        endpoint.YDSSource yds_source = 7;
+        endpoint.KafkaSource kafka_source = 8;
+        endpoint.MongoSource mongo_source = 9;
+        endpoint.ClickhouseSource clickhouse_source = 16;
+        endpoint.MysqlTarget mysql_target = 101;
+        endpoint.PostgresTarget postgres_target = 102;
+        endpoint.ClickhouseTarget clickhouse_target = 104;
+        endpoint.YdbTarget ydb_target = 105;
+        endpoint.KafkaTarget kafka_target = 110;
+        endpoint.MongoTarget mongo_target = 111;
+        endpoint.MetrikaSource metrika_source = 146;
+        endpoint.YDSTarget yds_target = 150;
+    }
+}

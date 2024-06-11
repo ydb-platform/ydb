@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1;datatransfer";
+option java_package = "yandex.cloud.api.datatransfer.v1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/datatransfer/v1/endpoint.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+service EndpointService {
+    rpc Get(GetEndpointRequest) returns (Endpoint) {
+        option (google.api.http) = { get: "/v1/endpoint/{endpoint_id}" };
+    }
+    rpc List(ListEndpointsRequest) returns (ListEndpointsResponse) {
+        option (google.api.http) = { get: "/v1/endpoints/list/{folder_id}" };
+    }
+    rpc Create(CreateEndpointRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/v1/endpoint" body: "*" };
+        option (api.operation) = {
+            metadata: "CreateEndpointMetadata"
+            response: "Endpoint"
+        };
+    }
+    rpc Update(UpdateEndpointRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/v1/endpoint/{endpoint_id}" body: "*" };
+        option (api.operation) = {
+            metadata: "UpdateEndpointMetadata"
+            response: "Endpoint"
+        };
+    }
+    rpc Delete(DeleteEndpointRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/v1/endpoint/{endpoint_id}" };
+        option (api.operation) = {
+            metadata: "DeleteEndpointMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+message GetEndpointRequest {
+    string endpoint_id = 1;
+}
+message ListEndpointsRequest {
+    // Identifier of the folder containing the endpoints to be listed.
+    string folder_id = 1;
+    // The maximum number of endpoints to be sent in the response message. If the
+    // folder contains more endpoints than `page_size`, `next_page_token` will be
+    // included
+    // in the response message. Include it into the subsequent `ListEndpointRequest` to
+    // fetch the next page. Defaults to `100` if not specified. The maximum allowed
+    // value
+    // for this field is `500`.
+    int64 page_size = 2;
+    // Opaque value identifying the endpoints page to be fetched. Should be empty in
+    // the first `ListEndpointsRequest`. Subsequent requests should have this field
+    // filled
+    // with the `next_page_token` from the previous `ListEndpointsResponse`.
+    string page_token = 3;
+}
+message ListEndpointsResponse {
+    // The list of endpoints. If there are more endpoints in the folder, then
+    // `next_page_token` is a non-empty string to be included into the subsequent
+    // `ListEndpointsRequest` to fetch the next endpoints page.
+    repeated Endpoint endpoints = 1;
+    // Opaque value identifying the next endpoints page. This field is empty if there
+    // are no more endpoints in the folder. Otherwise, it is non-empty and should be
+    // included in the subsequent `ListEndpointsRequest` to fetch the next endpoints
+    // page.
+    string next_page_token = 2;
+}
+message CreateEndpointRequest {
+    reserved 5 to 51;
+    string folder_id = 1;
+    string name = 2;
+    string description = 3;
+    map<string,string> labels = 4;
+    EndpointSettings settings = 52;
+}
+message CreateEndpointMetadata {
+    string endpoint_id = 1;
+}
+message UpdateEndpointRequest {
+    reserved 1 to 9, 14 to 51, 53 to 59;
+    // Identifier of the endpoint to be updated.
+    string endpoint_id = 10;
+    // The new endpoint name. Must be unique within the folder.
+    string name = 11;
+    // The new description for the endpoint.
+    string description = 12;
+    map<string,string> labels = 13;
+    // The new endpoint name. Must be unique within the folder.
+    EndpointSettings settings = 52;
+    // Field mask specifying endpoint fields to be updated. Semantics for this field is
+    // described here:
+    // <https://pkg.go.dev/google.golang.org/protobuf/types/known/fieldmaskpb#FieldMask>
+    // The only exception: if the repeated field is specified in the mask, then
+    // the new value replaces the old one instead of being appended to the old one.
+    google.protobuf.FieldMask update_mask = 60;
+}
+message UpdateEndpointMetadata {
+    string endpoint_id = 1;
+}
+message DeleteEndpointRequest {
+    string endpoint_id = 1;
+}
+message DeleteEndpointMetadata {
+    string endpoint_id = 1;
+}

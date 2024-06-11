@@ -94,38 +94,38 @@ inline constexpr auto InvalidToken = std::monostate{};
 
 //! Parameter pack parsing.
 
-#define STATIC_ANALYSIS_CAPTURE_TYPES(...) \
+#define YT_STATIC_ANALYSIS_CAPTURE_TYPES(...) \
     decltype(::NYT::NLogging::NDetail::AsFormatArgs(__VA_ARGS__)){}
 
-#define STATIC_ANALYSIS_FIRST_TOKEN(...) \
+#define YT_STATIC_ANALYSIS_FIRST_TOKEN(...) \
     PP_STRINGIZE( \
         PP_VA_PICK_1_IMPL(__VA_ARGS__ __VA_OPT__(,) ::NYT::NLogging::NDetail::InvalidToken))
 
-#define STATIC_ANALYSIS_SECOND_TOKEN(...) \
+#define YT_STATIC_ANALYSIS_SECOND_TOKEN(...) \
     PP_STRINGIZE(\
         PP_VA_PICK_2_IMPL( \
             __VA_ARGS__ __VA_OPT__(,) \
             ::NYT::NLogging::NDetail::InvalidToken, \
             ::NYT::NLogging::NDetail::InvalidToken))
 
-#define STATIC_ANALYSIS_FIRST_TOKEN_COND(...) \
-    STATIC_ANALYSIS_FIRST_TOKEN(__VA_ARGS__)[0] == '\"'
+#define YT_STATIC_ANALYSIS_FIRST_TOKEN_COND(...) \
+    YT_STATIC_ANALYSIS_FIRST_TOKEN(__VA_ARGS__)[0] == '\"'
 
-#define STATIC_ANALYSIS_SECOND_TOKEN_COND(...) \
-    STATIC_ANALYSIS_SECOND_TOKEN(__VA_ARGS__)[0] == '\"'
+#define YT_STATIC_ANALYSIS_SECOND_TOKEN_COND(...) \
+    YT_STATIC_ANALYSIS_SECOND_TOKEN(__VA_ARGS__)[0] == '\"'
 
-#undef STATIC_ANALYSIS_CHECK_LOG_FORMAT
-#define STATIC_ANALYSIS_CHECK_LOG_FORMAT(...) \
+#undef YT_STATIC_ANALYSIS_CHECK_LOG_FORMAT
+#define YT_STATIC_ANALYSIS_CHECK_LOG_FORMAT(...) \
     ::NYT \
     ::NLogging \
     ::NDetail \
     ::TAnalyserDispatcher< \
-        STATIC_ANALYSIS_FIRST_TOKEN_COND(__VA_ARGS__), \
-        STATIC_ANALYSIS_SECOND_TOKEN_COND(__VA_ARGS__) \
+        YT_STATIC_ANALYSIS_FIRST_TOKEN_COND(__VA_ARGS__), \
+        YT_STATIC_ANALYSIS_SECOND_TOKEN_COND(__VA_ARGS__) \
     >::Do( \
-        STATIC_ANALYSIS_FIRST_TOKEN(__VA_ARGS__), \
-        STATIC_ANALYSIS_SECOND_TOKEN(__VA_ARGS__), \
-        STATIC_ANALYSIS_CAPTURE_TYPES(__VA_ARGS__))
+        YT_STATIC_ANALYSIS_FIRST_TOKEN(__VA_ARGS__), \
+        YT_STATIC_ANALYSIS_SECOND_TOKEN(__VA_ARGS__), \
+        YT_STATIC_ANALYSIS_CAPTURE_TYPES(__VA_ARGS__))
 
 ////////////////////////////////////////////////////////////////////////////////
 

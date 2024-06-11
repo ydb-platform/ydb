@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.operation;
+
+import "google/protobuf/any.proto";
+import "google/rpc/status.proto";
+import "google/protobuf/timestamp.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/operation;operation";
+option java_package = "yandex.cloud.api.operation";
+
+// An Operation resource. For more information, see [Operation](/docs/api-design-guide/concepts/operation).
+message Operation {
+  // ID of the operation.
+  string id = 1;
+
+  // Description of the operation. 0-256 characters long.
+  string description = 2; // ex: Create VM, Stop VM, Delete Disk, Snapshot Disk, etc
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // ID of the user or service account who initiated the operation.
+  string created_by = 4;
+
+  // The time when the Operation resource was last modified.
+  google.protobuf.Timestamp modified_at = 5;
+
+  // If the value is `false`, it means the operation is still in progress.
+  // If `true`, the operation is completed, and either `error` or `response` is available.
+  bool done = 6;
+
+  // Service-specific metadata associated with the operation.
+  // It typically contains the ID of the target resource that the operation is performed on.
+  // Any method that returns a long-running operation should document the metadata type, if any.
+  google.protobuf.Any metadata = 7;
+
+  // The operation result.
+  // If `done == false` and there was no failure detected, neither `error` nor `response` is set.
+  // If `done == false` and there was a failure detected, `error` is set.
+  // If `done == true`, exactly one of `error` or `response` is set.
+  oneof result {
+    // The error result of the operation in case of failure or cancellation.
+    google.rpc.Status error = 8;
+
+    // The normal response of the operation in case of success.
+    // If the original method returns no data on success, such as Delete,
+    // the response is [google.protobuf.Empty].
+    // If the original method is the standard Create/Update,
+    // the response should be the target resource of the operation.
+    // Any method that returns a long-running operation should document the response type, if any.
+    google.protobuf.Any response = 9;
+  }
+}

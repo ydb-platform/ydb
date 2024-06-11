@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// Title widget.
+message TitleWidget {
+    // Title size.
+    enum TitleSize {
+        TITLE_SIZE_UNSPECIFIED = 0;
+
+        // Extra small size.
+        TITLE_SIZE_XS = 1;
+
+        // Small size.
+        TITLE_SIZE_S = 2;
+
+        // Middle size.
+        TITLE_SIZE_M = 3;
+
+        // Large size.
+        TITLE_SIZE_L = 4;
+    }
+
+    // Title text.
+    string text = 1;
+
+    // Title size.
+    TitleSize size = 2;
+}

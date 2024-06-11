@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package yandex.cloud.dns.v1;
+
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dns/v1;dns";
+option java_package = "yandex.cloud.api.dns.v1";
+
+// A DNS zone. For details about the concept, see [DNS zones](/docs/dns/concepts/dns-zone).
+message DnsZone {
+  // ID of the DNS zone. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the DNS zone belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+  
+  // Name of the DNS zone. 
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the DNS zone.
+  string description = 5;
+
+  // DNS zone labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // DNS zone suffix.
+  string zone = 7;
+
+  // Privately visible zone settings.
+  // Specifies whether records within the zone are visible from a VPC networks only.
+  PrivateVisibility private_visibility = 8;
+
+  // Publicly visible zone settings. 
+  // Indicates whether records within the zone are publicly visible.
+  PublicVisibility public_visibility = 9;
+
+  //Prevents accidental zone removal.
+  bool deletion_protection = 10;
+}
+
+// A record set. For details about the concept, see [Resource record](/docs/dns/concepts/resource-record).
+message RecordSet {
+  // Domain name.
+  string name = 1 [(length) = "1-254"];
+
+  // Record type.
+  string type = 2 [(length) = "1-20"];
+
+  // Time to live in seconds.
+  int64 ttl = 3 [(value) = "0-2147483647"];
+
+  // Data of the record set.
+  repeated string data = 4 [(size) = "1-100", (length) = "1-255", (unique) = true];
+}
+
+// Configuration for privately visible zones.
+message PrivateVisibility {
+  // Network IDs.
+  repeated string network_ids = 1 [(size) = "0-100", (length) = "20", (unique) = true];
+}
+
+// Configuration for publicly visible zones.
+message PublicVisibility {
+}

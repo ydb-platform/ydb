@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package speechkit.stt.v3;
+
+import "yandex/cloud/ai/stt/v3/stt.proto";
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/stt/v3;stt";
+option java_package = "yandex.cloud.api.ai.stt.v3";
+
+// A set of methods for voice recognition.
+service Recognizer {
+
+    // Expects audio in real-time
+    rpc RecognizeStreaming (stream StreamingRequest) returns (stream StreamingResponse) {
+
+    }
+
+}
+
+message GetRecognitionRequest {
+    string operation_id = 1 [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=50"];
+}
+
+// A set of methods for async voice recognition.
+service AsyncRecognizer {
+
+    rpc RecognizeFile (RecognizeFileRequest) returns (yandex.cloud.operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            response: "google.protobuf.Empty"
+        };
+        option (google.api.http) = { post: "/stt/v3/recognizeFileAsync" body: "*" };
+    }
+
+    rpc GetRecognition(GetRecognitionRequest) returns (stream StreamingResponse) {
+        option (google.api.http) = { get: "/stt/v3/getRecognition"};
+    }
+
+}

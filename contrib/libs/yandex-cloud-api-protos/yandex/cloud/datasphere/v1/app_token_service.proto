@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v1;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v1";
+
+// A set of methods for managing app tokens.
+service AppTokenService {
+  // Validates app token.
+  rpc Validate(AppTokenValidateRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = { post: "/datasphere/v1/appTokens/{token}:validate" };
+  }
+}
+
+message AppTokenValidateRequest {
+  // App token to validate.
+  string token = 1;
+}

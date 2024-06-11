@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_resource.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+message LogEntry {
+  // Unique entry ID.
+  //
+  // Useful for logs deduplication.
+  string uid = 1;
+
+  // Entry resource specification.
+  //
+  // May contain information about source service and resource ID.
+  // Also may be provided by the user.
+  LogEntryResource resource = 2;
+
+  // Timestamp of the entry.
+  google.protobuf.Timestamp timestamp = 3;
+
+  // Entry ingestion time observed by [LogIngestionService].
+  google.protobuf.Timestamp ingested_at = 4;
+
+  // Entry save time.
+  //
+  // Entry is ready to be read since this moment.
+  google.protobuf.Timestamp saved_at = 5;
+
+  // Entry severity.
+  //
+  // See [LogLevel.Level] for details.
+  LogLevel.Level level = 6;
+
+  // Entry text message.
+  string message = 7;
+
+  // Entry annotation.
+  google.protobuf.Struct json_payload = 8;
+
+  // Entry stream name.
+  string stream_name = 9 [(length) = "<=63"];
+}
+
+message IncomingLogEntry {
+  // Timestamp of the entry.
+  google.protobuf.Timestamp timestamp = 1 [(required) = true];
+
+  // Entry severity.
+  //
+  // See [LogLevel.Level] for details.
+  LogLevel.Level level = 2;
+
+  // Entry text message.
+  string message = 3 [(bytes) = "<=65536"];
+
+  // Entry annotation.
+  google.protobuf.Struct json_payload = 4 [(bytes) = "<=65536"];
+
+  // Entry stream name.
+  string stream_name = 5 [(length) = "<=63"];
+}
+
+message LogEntryDefaults {
+  reserved 3;
+  // Default entry severity.
+  // Will be applied if entry level is unspecified.
+  //
+  // See [LogLevel.Level] for details.
+  LogLevel.Level level = 2;
+
+  // Default entry annotation.
+  // Will be merged with entry annotation.
+  // Any conflict will be resolved in favor of entry own annotation.
+  google.protobuf.Struct json_payload = 4 [(bytes) = "<=65536"];
+
+  // Entry stream name.
+  string stream_name = 5 [(length) = "<=63"];
+}
+
+message Destination {
+  // Entry destination.
+  oneof destination {
+    option (exactly_one) = true;
+
+    // Entry should be written to log group resolved by ID.
+    string log_group_id = 1 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+
+    // Entry should be written to default log group for the folder.
+    string folder_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  }
+}
+
+message LogLevel {
+  // Possible log levels for entries.
+  enum Level {
+    // Default log level.
+    //
+    // Equivalent to not specifying log level at all.
+    LEVEL_UNSPECIFIED = 0;
+
+    // Trace log level.
+    //
+    // Possible use case: verbose logging of some business logic.
+    TRACE = 1;
+
+    // Debug log level.
+    //
+    // Possible use case: debugging special cases in application logic.
+    DEBUG = 2;
+
+    // Info log level.
+    //
+    // Mostly used for information messages.
+    INFO = 3;
+
+    // Warn log level.
+    //
+    // May be used to alert about significant events.
+    WARN = 4;
+
+    // Error log level.
+    //
+    // May be used to alert about errors in infrastructure, logic, etc.
+    ERROR = 5;
+
+    // Fatal log level.
+    //
+    // May be used to alert about unrecoverable failures and events.
+    FATAL = 6;
+  }
+
+  // Entry level.
+  //
+  // See [Level] for possible values.
+  Level level = 1;
+}

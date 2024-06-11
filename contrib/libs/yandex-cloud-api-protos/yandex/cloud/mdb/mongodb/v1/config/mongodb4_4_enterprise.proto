@@ -1,0 +1,309 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mongodb.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mongodb/v1/config;mongodb";
+option java_package = "yandex.cloud.api.mdb.mongodb.v1.config";
+
+// Configuration of a mongod daemon. Supported options are a limited subset of all
+// options described in [MongoDB documentation](https://docs.mongodb.com/v4.4/reference/configuration-options/).
+message MongodConfig4_4_enterprise {
+  message Storage {
+    // Configuration of WiredTiger storage engine.
+    message WiredTiger {
+      message EngineConfig {
+        // The maximum size of the internal cache that WiredTiger will use for all data.
+        google.protobuf.DoubleValue cache_size_gb = 1;
+      }
+
+      message CollectionConfig {
+        enum Compressor {
+          COMPRESSOR_UNSPECIFIED = 0;
+
+          // No compression.
+          NONE = 1;
+
+          // The [Snappy](https://docs.mongodb.com/v4.4/reference/glossary/#term-snappy) compression.
+          SNAPPY = 2;
+
+          // The [zlib](https://docs.mongodb.com/v4.4/reference/glossary/#term-zlib) compression.
+          ZLIB = 3;
+
+          // The [zstd](https://docs.mongodb.com/v4.4/reference/glossary/#term-zstd) compression.
+          ZSTD = 4;
+        }
+
+        // Default type of compression to use for collection data.
+        Compressor block_compressor = 1;
+      }
+
+      message IndexConfig {
+        // Enables or disables [prefix compression](https://www.mongodb.com/docs/manual/reference/glossary/#std-term-prefix-compression)
+        google.protobuf.BoolValue prefix_compression = 1;
+      }
+
+      // Engine configuration for WiredTiger.
+      EngineConfig engine_config = 1;
+
+      // Collection configuration for WiredTiger.
+      CollectionConfig collection_config = 2;
+
+      //Index configuration for WiredTiger
+      IndexConfig index_config = 3;
+    }
+
+    message Journal {
+      // Commit interval between journal operations, in milliseconds.
+      // Default: 100.
+      google.protobuf.Int64Value commit_interval = 1 [(value) = "1-500"];
+    }
+
+    // Configuration of the WiredTiger storage engine.
+    WiredTiger wired_tiger = 1;
+
+    // Configuration of the MongoDB [journal](https://docs.mongodb.com/v4.4/reference/glossary/#term-journal).
+    Journal journal = 2;
+  }
+
+  message OperationProfiling {
+    enum Mode {
+      MODE_UNSPECIFIED = 0;
+
+      // The profiler is off and does not collect any data.
+      OFF = 1;
+
+      // The profiler collects data for operations that take longer than the value of [slow_op_threshold].
+      SLOW_OP = 2;
+
+      // The profiler collects data for all operations.
+      ALL = 3;
+    }
+
+    // Mode which specifies operations that should be profiled.
+    Mode mode = 1;
+
+    // The slow operation time threshold, in milliseconds. Operations that run
+    // for longer than this threshold are considered slow, and are processed by the profiler
+    // running in the SLOW_OP mode.
+    google.protobuf.Int64Value slow_op_threshold = 2 [(value) = ">0"];
+
+    // The fraction of slow operations that should be profiled or logged.
+    // operationProfiling.slowOpSampleRate accepts values between 0 and 1, inclusive.
+    google.protobuf.DoubleValue slow_op_sample_rate = 3 [(value) = "0-1"];
+  }
+
+  message Network {
+    message Compression {
+      enum Compressor {
+        COMPRESSOR_UNSPECIFIED = 0;
+
+        // The [Snappy](https://docs.mongodb.com/v4.2/reference/glossary/#term-snappy) compression.
+        SNAPPY = 1;
+
+        // The [zlib](https://docs.mongodb.com/v4.2/reference/glossary/#term-zlib) compression.
+        ZLIB = 2;
+
+        // The [zstd](https://docs.mongodb.com/v4.2/reference/glossary/#term-zstd) compression.
+        ZSTD = 3;
+
+        //No compression
+        DISABLED = 4;
+      }
+      // Specifies the default compressor(s) to use for communication between this mongod or mongos instance and:
+      // - other members of the deployment if the instance is part of a replica set or a sharded cluster
+      // - mongosh
+      // - drivers that support the OP_COMPRESSED message format.
+      // MongoDB supports the following compressors:
+      repeated Compressor compressors = 1 [(size) = "1-3"];
+    }
+
+    // The maximum number of simultaneous connections that mongod will accept.
+    google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-16384"];
+
+    // Compression settings
+    Compression compression = 2;
+  }
+
+  message Security {
+    message KMIP {
+      // KMIP server name
+      string server_name = 1;
+      // KMIP server port
+      google.protobuf.Int64Value port = 2;
+      // KMIP Server CA
+      string server_ca = 3;
+      // KMIP client certificate + private key (unencrypted)
+      string client_certificate = 4;
+      // KMIP Key identifier (if any)
+      string key_identifier = 5;
+    }
+
+    // If encryption at rest should be enabled or not
+    google.protobuf.BoolValue enable_encryption = 1;
+    // `kmip` section of mongod security config
+    KMIP kmip = 2;
+  }
+
+  message AuditLog {
+    // Audit filter
+    string filter = 1;
+  }
+
+  message SetParameter {
+    // Enables the auditing of authorization successes
+    google.protobuf.BoolValue audit_authorization_success = 1;
+    // Enables or disables the mechanism that controls the rate at which the primary applies its writes with the
+    // goal of keeping the secondary members [majority committed](https://www.mongodb.com/docs/v4.2/reference/command/replSetGetStatus/#replSetGetStatus.optimes.lastCommittedOpTime)
+    // lag under a configurable maximum value.
+    google.protobuf.BoolValue enable_flow_control = 2;
+  }
+
+  // `storage` section of mongod configuration.
+  Storage storage = 1;
+
+  // `operationProfiling` section of mongod configuration.
+  OperationProfiling operation_profiling = 2;
+
+  // `net` section of mongod configuration.
+  Network net = 3;
+
+  // `security` section of mongod configuration.
+  Security security = 4;
+
+  // `AuditLog` section of mongod configuration.
+  AuditLog audit_log = 5;
+
+  // `SetParameter` section of mongod configuration.
+  SetParameter set_parameter = 6;
+}
+
+message MongoCfgConfig4_4_enterprise {
+  message Storage {
+    // Configuration of WiredTiger storage engine.
+    message WiredTiger {
+      message EngineConfig {
+        // The maximum size of the internal cache that WiredTiger will use for all data.
+        google.protobuf.DoubleValue cache_size_gb = 1;
+      }
+
+      // Engine configuration for WiredTiger.
+      EngineConfig engine_config = 1;
+    }
+
+    // Configuration of the WiredTiger storage engine.
+    WiredTiger wired_tiger = 1;
+  }
+
+  message OperationProfiling {
+    enum Mode {
+      MODE_UNSPECIFIED = 0;
+
+      // The profiler is off and does not collect any data.
+      OFF = 1;
+
+      // The profiler collects data for operations that take longer than the value of [slow_op_threshold].
+      SLOW_OP = 2;
+
+      // The profiler collects data for all operations.
+      ALL = 3;
+    }
+
+    // Mode which specifies operations that should be profiled.
+    Mode mode = 1;
+
+    // The slow operation time threshold, in milliseconds. Operations that run
+    // for longer than this threshold are considered slow, and are processed by the profiler
+    // running in the SLOW_OP mode. For details see [MongoDB documentation](https://docs.mongodb.com/v4.4/reference/configuration-options/#operationProfiling.slowOpThresholdMs).
+    google.protobuf.Int64Value slow_op_threshold = 2 [(value) = ">0"];
+  }
+
+  message Network {
+    // The maximum number of simultaneous connections that mongocfg will accept.
+    google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-16384"];
+  }
+
+  // `storage` section of mongocfg configuration.
+  Storage storage = 1;
+
+  // `operationProfiling` section of mongocfg configuration.
+  OperationProfiling operation_profiling = 2;
+
+  // `net` section of mongocfg configuration.
+  Network net = 3;
+}
+
+message MongosConfig4_4_enterprise {
+  message Network {
+    message Compression {
+      enum Compressor {
+        COMPRESSOR_UNSPECIFIED = 0;
+
+        // The [Snappy](https://docs.mongodb.com/v4.2/reference/glossary/#term-snappy) compression.
+        SNAPPY = 1;
+
+        // The [zlib](https://docs.mongodb.com/v4.2/reference/glossary/#term-zlib) compression.
+        ZLIB = 2;
+
+        // The [zstd](https://docs.mongodb.com/v4.2/reference/glossary/#term-zstd) compression.
+        ZSTD = 3;
+
+        //No compression
+        DISABLED = 4;
+      }
+      // Specifies the default compressor(s) to use for communication between this mongod or mongos instance and:
+      // - other members of the deployment if the instance is part of a replica set or a sharded cluster
+      // - mongosh
+      // - drivers that support the OP_COMPRESSED message format.
+      // MongoDB supports the following compressors:
+      repeated Compressor compressors = 1 [(size) = "1-3"];
+    }
+
+    // The maximum number of simultaneous connections that mongos will accept.
+    google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-16384"];
+
+    // Compression settings
+    Compression compression = 2;
+  }
+
+  // Network settings for mongos.
+  Network net = 1;
+}
+
+message MongodConfigSet4_4_enterprise {
+  // Effective mongod settings for a MongoDB 4.4 cluster (a combination of settings defined
+  // in [user_config] and [default_config]).
+  MongodConfig4_4_enterprise effective_config = 1;
+
+  // User-defined mongod settings for a MongoDB 4.4 cluster.
+  MongodConfig4_4_enterprise user_config = 2;
+
+  // Default mongod configuration for a MongoDB 4.4 cluster.
+  MongodConfig4_4_enterprise default_config = 3;
+}
+
+message MongoCfgConfigSet4_4_enterprise {
+  // Effective mongocfg settings for a MongoDB 4.4 cluster (a combination of settings defined
+  // in [user_config] and [default_config]).
+  MongoCfgConfig4_4_enterprise effective_config = 1;
+
+  // User-defined mongocfg settings for a MongoDB 4.4 cluster.
+  MongoCfgConfig4_4_enterprise user_config = 2;
+
+  // Default mongocfg configuration for a MongoDB 4.4 cluster.
+  MongoCfgConfig4_4_enterprise default_config = 3;
+}
+
+message MongosConfigSet4_4_enterprise {
+  // Effective mongos settings for a MongoDB 4.4 cluster (a combination of settings defined
+  // in [user_config] and [default_config]).
+  MongosConfig4_4_enterprise effective_config = 1;
+
+  // User-defined mongos settings for a MongoDB 4.4 cluster.
+  MongosConfig4_4_enterprise user_config = 2;
+
+  // Default mongos configuration for a MongoDB 4.4 cluster.
+  MongosConfig4_4_enterprise default_config = 3;
+}

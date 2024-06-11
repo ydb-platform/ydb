@@ -1,0 +1,292 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.kafka.v1;
+
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/kafka/v1;kafka";
+option java_package = "yandex.cloud.api.mdb.kafka.v1";
+
+// An object that represents an Apache Kafka® connector.
+//
+// See [the documentation](/docs/managed-kafka/concepts/connectors) for details.
+message ConnectorSpec {
+  reserved 4 to 9;
+  // Name of the connector.
+  string name = 1;
+
+  // Maximum number of connector tasks. Default value is the number of brokers.
+  google.protobuf.Int64Value tasks_max = 2;
+
+  // A set of properties passed to Managed Service for Apache Kafka® with the connector configuration.
+  // Example: `sync.topics.config.enabled: true`.
+  map<string, string> properties = 3;
+
+  // Additional settings for the connector.
+  oneof connector_config {
+    // Configuration of the MirrorMaker connector.
+    ConnectorConfigMirrorMakerSpec connector_config_mirrormaker = 10;
+
+    // Configuration of S3-Sink connector.
+    ConnectorConfigS3SinkSpec connector_config_s3_sink = 11;
+  }
+}
+
+message UpdateConnectorSpec {
+  reserved 3 to 9;
+  // Maximum number of connector tasks to update.
+  google.protobuf.Int64Value tasks_max = 1;
+
+  // A set of new or changed properties to update for the connector. They are passed with the connector configuration to Managed Service for Apache Kafka®.
+  // Example: `sync.topics.config.enabled: false`.
+  map<string, string> properties = 2;
+
+  // Updated configuration for the connector.
+  oneof connector_config {
+    // Configuration of the MirrorMaker connector.
+    ConnectorConfigMirrorMakerSpec connector_config_mirrormaker = 10;
+
+    // Update specification for S3-Sink Connector.
+    UpdateConnectorConfigS3SinkSpec connector_config_s3_sink = 11;
+  }
+}
+
+message ConnectorConfigMirrorMakerSpec {
+  // Source cluster configuration for the MirrorMaker connector.
+  ClusterConnectionSpec source_cluster = 1;
+
+  // Target cluster configuration for the MirrorMaker connector.
+  ClusterConnectionSpec target_cluster = 2;
+
+  // List of Kafka topics, separated by `,`.
+  string topics = 3;
+
+  // Replication factor for automatically created topics.
+  google.protobuf.Int64Value replication_factor = 4;
+}
+
+message ClusterConnectionSpec {
+  // Alias of cluster connection configuration.
+  // Examples: `source`, `target`.
+  string alias = 1;
+
+  // Type of connection to Apache Kafka® cluster.
+  oneof cluster_connection {
+    // Connection configuration of the cluster the connector belongs to. As all credentials are already known, leave this parameter empty.
+    ThisClusterSpec this_cluster = 2;
+
+    // Configuration of connection to an external cluster with all the necessary credentials.
+    ExternalClusterConnectionSpec external_cluster = 3;
+  }
+}
+
+message ThisClusterSpec {}
+
+message ExternalClusterConnectionSpec {
+  // List of bootstrap servers of the cluster, separated by `,`.
+  string bootstrap_servers = 1;
+
+  // SASL username to use for connection to the cluster.
+  string sasl_username = 2;
+
+  // SASL password to use for connection to the cluster.
+  string sasl_password = 3;
+
+  // SASL mechanism to use for connection to the cluster.
+  string sasl_mechanism = 4;
+
+  // Security protocol to use for connection to the cluster.
+  string security_protocol = 5;
+
+  // CA in PEM format to connect to external cluster.
+  // Lines of certificate separated by '\n' symbol.
+  string ssl_truststore_certificates = 6;
+}
+
+// Specification for Kafka S3-Sink Connector.
+message ConnectorConfigS3SinkSpec {
+  // List of Kafka topics, separated by ','.
+  string topics = 1;
+
+  // The compression type used for files put on GCS.
+  // The supported values are: `gzip`, `snappy`, `zstd`, `none`.
+  // Optional, the default is `none`.
+  string file_compression_type = 2;
+
+  // Max records per file.
+  google.protobuf.Int64Value file_max_records = 3;
+
+  // Credentials for connecting to S3 storage.
+  S3ConnectionSpec s3_connection = 4;
+}
+
+// Specification for update Kafka S3-Sink Connector.
+message UpdateConnectorConfigS3SinkSpec {
+  // List of Kafka topics, separated by ','.
+  string topics = 1;
+
+  // Max records per file.
+  google.protobuf.Int64Value file_max_records = 2;
+
+  // Credentials for connecting to S3 storage.
+  S3ConnectionSpec s3_connection = 3;
+}
+
+// Specification for S3Connection -
+// settings of connection to AWS-compatible S3 storage, that
+// are source or target of Kafka S3-connectors.
+// YC Object Storage is AWS-compatible.
+message S3ConnectionSpec {
+  string bucket_name = 1;
+  oneof storage {
+    ExternalS3StorageSpec external_s3 = 2;
+  }
+}
+
+message ExternalS3StorageSpec {
+  string access_key_id = 1;
+  string secret_access_key = 2;
+  string endpoint = 3;
+  // Default is 'us-east-1'.
+  string region = 4;
+}
+
+message Connector {
+  reserved 7 to 9;
+  enum Health {
+
+    // Health of the connector is unknown.
+    HEALTH_UNKNOWN = 0;
+
+    // Connector is running.
+    ALIVE = 1;
+
+    // Connector has failed to start.
+    DEAD = 2;
+  }
+
+  enum Status {
+
+    // Connector state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Connector is running normally.
+    RUNNING = 1;
+
+    // Connector has encountered a problem and cannot operate.
+    ERROR = 2;
+
+    // Connector is paused.
+    PAUSED = 3;
+  }
+
+  // Name of the connector.
+  string name = 1;
+
+  // Maximum number of connector tasks. Default value is the number of brokers.
+  google.protobuf.Int64Value tasks_max = 2;
+
+  // A set of properties passed to Managed Service for Apache Kafka® with the connector configuration.
+  // Example: `sync.topics.config.enabled: true`.
+  map<string, string> properties = 3;
+
+  // Connector health.
+  Health health = 4;
+
+  // Current status of the connector.
+  Status status = 5;
+
+  // ID of the Apache Kafka® cluster that the connector belongs to.
+  string cluster_id = 6;
+
+  // Additional settings for the connector.
+  oneof connector_config {
+    // Configuration of the MirrorMaker connector.
+    ConnectorConfigMirrorMaker connector_config_mirrormaker = 10;
+
+    // Configuration of S3-Sink connector.
+    ConnectorConfigS3Sink connector_config_s3_sink = 11;
+  }
+}
+
+message ConnectorConfigMirrorMaker {
+  // Source cluster connection configuration.
+  ClusterConnection source_cluster = 1;
+
+  // Target cluster connection configuration.
+  ClusterConnection target_cluster = 2;
+
+  // List of Kafka topics, separated by `,`.
+  string topics = 3;
+
+  // Replication factor for automatically created topics.
+  google.protobuf.Int64Value replication_factor = 4;
+}
+
+message ClusterConnection {
+  // Alias of cluster connection configuration.
+  // Examples: `source`, `target`.
+  string alias = 1;
+
+  // Type of connection to Apache Kafka® cluster.
+  oneof cluster_connection {
+    // Connection configuration of the cluster the connector belongs to. As all credentials are already known, leave this parameter empty.
+    ThisCluster this_cluster = 2;
+
+    // Configuration of connection to an external cluster with all the necessary credentials.
+    ExternalClusterConnection external_cluster = 3;
+  }
+}
+
+message ThisCluster {}
+
+message ExternalClusterConnection {
+  reserved 3;
+  // List of bootstrap servers of the cluster, separated by `,`.
+  string bootstrap_servers = 1;
+
+  // SASL username to use for connection to the cluster.
+  string sasl_username = 2;
+
+  // SASL mechanism to use for connection to the cluster.
+  string sasl_mechanism = 4;
+
+  // Security protocol to use for connection to the cluster.
+  string security_protocol = 5;
+}
+
+// An Apache Kafka® S3-Sink
+// connector resource.
+message ConnectorConfigS3Sink {
+  // List of Kafka topics, separated by ','.
+  string topics = 1;
+
+  // The compression type used for files put on GCS.
+  // The supported values are: `gzip`, `snappy`, `zstd`, `none`.
+  // Optional, the default is `none`.
+  string file_compression_type = 2;
+
+  // Max records per file.
+  google.protobuf.Int64Value file_max_records = 3;
+
+  // Credentials for connecting to S3 storage.
+  S3Connection s3_connection = 4;
+}
+
+// Resource for S3Connection -
+// settings of connection to AWS-compatible S3 storage, that
+// are source or target of Kafka S3-connectors.
+// YC Object Storage is AWS-compatible.
+message S3Connection {
+  string bucket_name = 1;
+  oneof storage {
+    ExternalS3Storage external_s3 = 2;
+  }
+}
+
+message ExternalS3Storage {
+  string access_key_id = 1;
+  string endpoint = 2;
+  // Default is 'us-east-1'
+  string region = 3;
+}

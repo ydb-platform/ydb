@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package yandex.cloud.audittrails.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/audittrails/v1;audittrails";
+option java_package = "yandex.cloud.api.audittrails.v1";
+option java_outer_classname = "AT";
+
+// Trail describes the filtering and destination configuration of the process of sending Audit events
+message Trail {
+  // Placeholder for data_plane_logs_enabled
+  reserved 13;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // The trail is active and Audit events are processed
+    ACTIVE = 1;
+
+    // The trail configuration has issues that are preventing Audit Trails from delivering events
+    ERROR = 2;
+
+    // The trail is being deleted
+    DELETED = 3;
+  }
+
+  // ID of the trail
+  string id = 1;
+
+  // ID of the folder that the trail belongs to
+  string folder_id = 2 [(required) = true, (length) = "<=50"];
+
+  // The timestamp for the creation operation
+  google.protobuf.Timestamp created_at = 3 [(required) = true];
+
+  // The timestamp of the last update operation
+  google.protobuf.Timestamp updated_at = 4 [(required) = true];
+
+  // Name of the trail
+  string name = 5 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the trail
+  string description = 6 [(length) = "<=1024"];
+
+  // Custom labels of the trail as `key:value` pairs. Maximum 64 per key
+  map<string, string> labels = 7 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Destination configuration of the trail
+  Destination destination = 8 [(required) = true];
+
+  // Service account ID of the trail
+  string service_account_id = 9 [(length) = "<=50"];
+
+  // Status of the trail
+  Status status = 10 [(required) = true];
+
+  // Filtering configuration of the trail
+  Filter filter = 11 [(required) = true];
+
+  // Current error message of the trail. Empty in case if the trail is active
+  string status_error_message = 12;
+
+  // ID of the cloud that the trail belongs to
+  string cloud_id = 14 [(required) = true, (length) = "<=50"];
+
+  message Destination {
+    reserved 2;
+
+    oneof destination {
+      option (exactly_one) = true;
+
+      // Configuration for event delivery to Object Storage
+      //
+      // Uploaded objects will have prefix <trail_id>/ by default
+      ObjectStorage object_storage = 1;
+
+      // Configuration for event delivery to Cloud Logging
+      CloudLogging cloud_logging = 3;
+
+      // Configuration for event delivery to YDS
+      DataStream data_stream = 4;
+    }
+  }
+
+  message ObjectStorage {
+    // Name of the destination bucket
+    string bucket_id = 1 [(length) = "3-63"];
+
+    // Prefix for exported objects. Optional
+    // If specified, uploaded objects will have prefix <object_prefix>/<trail_id>/
+    string object_prefix = 2;
+  }
+
+  message CloudLogging {
+    // Placeholder for folder_id
+    reserved 2;
+
+    oneof destination {
+      // ID of the Cloud Logging destination group
+      string log_group_id = 1 [(length) = "<=64"];
+    }
+  }
+
+  message DataStream {
+    // ID of the database hosting the destination YDS
+    string database_id = 1;
+
+    // Name of the destination YDS
+    string stream_name = 2;
+  }
+
+  message Filter {
+    // Configuration of default events gathering for the trail
+    // If not specified, default events won't be gathered for the trail
+    PathFilter path_filter = 1;
+
+    // Configuration of additional events gathering from specific services
+    EventFilter event_filter = 2 [(required) = true];
+  }
+
+  message PathFilter {
+    // Root element of the resource path filter for the trail
+    // Resource described in that filter node must contain the trail itself
+    PathFilterElement root = 1 [(required) = true];
+  }
+
+  message PathFilterElement {
+    oneof element {
+      option (exactly_one) = true;
+      // Filter element with ANY type. If used, configures the trail to gather any events from the resource
+      PathFilterElementAny any_filter = 1;
+
+      // Filter element with SOME type. If used, configures the trail to gather some of the events from the resource
+      PathFilterElementSome some_filter = 2;
+    }
+  }
+
+  message PathFilterElementAny {
+    // Resource definition
+    Resource resource = 1 [(required) = true];
+  }
+
+  message PathFilterElementSome {
+    // Definition of the resource that contains
+    Resource resource = 1 [(required) = true];
+
+    // Filters for the resources contained in the parent resource
+    repeated PathFilterElement filters = 2 [(size) = ">0"];
+  }
+
+  message Resource {
+    // ID of the resource
+    string id = 1 [(required) = true, (length) = "<=64"];
+
+    // Type of the resource
+    string type = 2 [(required) = true, (length) = "<=50"];
+  }
+
+  message EventFilter {
+    // List of filters for services
+    repeated EventFilterElement filters = 1 [(size) = ">=0"];
+  }
+
+  message EventFilterElement {
+    // Service ID of the gathered events
+    string service = 1 [(required) = true];
+
+    // List of the event categories gathered for a specified service
+    repeated EventFilterElementCategory categories = 2 [(size) = ">0"];
+
+    // Resource path filter for a specified service
+    PathFilter path_filter = 3 [(required) = true];
+  }
+
+  message EventFilterElementCategory {
+    // Plane of the gathered category
+    EventCategoryFilter plane = 1 [(required) = true];
+
+    // Type of the gathered category
+    EventAccessTypeFilter type = 2 [(required) = true];
+  }
+
+  enum EventCategoryFilter {
+    EVENT_CATEGORY_FILTER_UNSPECIFIED = 0;
+
+    // The events that are generated during the interaction with the service's resources
+    CONTROL_PLANE = 1;
+
+    // Events that are generated during interaction with data within the service's resources
+    DATA_PLANE = 2;
+  }
+
+  enum EventAccessTypeFilter {
+    EVENT_ACCESS_TYPE_FILTER_UNSPECIFIED = 0;
+
+    // Events for operations that do perform some modification
+    WRITE = 1;
+
+    // Events for operations that do not perform any modifications
+    READ = 2;
+  }
+}

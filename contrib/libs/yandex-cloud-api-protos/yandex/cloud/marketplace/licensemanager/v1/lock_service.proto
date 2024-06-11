@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.licensemanager.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/marketplace/licensemanager/v1/lock.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/licensemanager/v1;licensemanager";
+option java_package = "yandex.cloud.api.marketplace.licensemanager.v1";
+
+// A set of methods for managing subscription locks.
+service LockService {
+    // Returns the specified subscription lock.
+    rpc Get(GetLockRequest) returns (Lock) {
+        option (google.api.http) = { get: "/marketplace/license-manager/v1/locks/{lock_id}" };
+    }
+
+    // Returns the subscription lock for specified subscription instance and resource.
+    rpc GetByInstanceAndResource(GetLockByInstanceAndResourceRequest) returns (Lock) {
+        option (google.api.http) = { get: "/marketplace/license-manager/v1/locks:getByInstanceAndResource" };
+    }
+
+    // Returns subscriptions locks for specified resource and folder.
+    rpc List(ListLocksRequest) returns (ListLocksResponse) {
+       option (google.api.http) = { get: "/marketplace/license-manager/v1/locks" };
+    }
+
+    // Locks the specified subscription instance to the resource.
+    rpc Create(CreateLockRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/marketplace/license-manager/v1/locks" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "CreateLockMetadata"
+            response: "Lock"
+        };
+    }
+
+    // Checks if the she specified subscription is already locked to the specified resource.
+    // If it is not locked, locks the subscription to the resource.
+    rpc Ensure(EnsureLockRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/marketplace/license-manager/v1/locks/{instance_id}:ensure" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "EnsureLockMetadata"
+            response: "Lock"
+        };
+    }
+
+    // Unlocks the specified subscription lock.
+    rpc Delete(DeleteLockRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/marketplace/license-manager/v1/locks/{lock_id}" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeleteLockMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+
+message GetLockRequest {
+    // ID of the subscription lock.
+    string lock_id = 1 [(required) = true];
+}
+
+message CreateLockRequest {
+    // ID of the subscription instance.
+    string instance_id = 1 [(required) = true];
+    // ID of the resource to which the subscription will be locked.
+    string resource_id = 2 [(required) = true];
+}
+
+message EnsureLockRequest {
+    // ID of the subscription instance.
+    string instance_id = 1 [(required) = true];
+    // ID of the resource to which the subscription will be locked.
+    string resource_id = 2 [(required) = true];
+}
+
+message CreateLockMetadata {
+    // ID of the subscription lock.
+    string lock_id = 1;
+}
+
+message EnsureLockMetadata {
+    // ID of the subscription lock.
+    string lock_id = 1;
+}
+
+message DeleteLockRequest {
+    // ID of the subscription lock.
+    string lock_id = 1 [(required) = true];
+}
+
+message DeleteLockMetadata {
+    // ID of the subscription lock.
+    string lock_id = 1;
+}
+
+message GetLockByInstanceAndResourceRequest {
+    // ID of the subscription instance.
+    string instance_id = 1 [(required) = true];
+    // ID of the resource to which the subscription will be locked.
+    string resource_id = 2 [(required) = true];
+}
+
+message ListLocksRequest {
+    // ID of the resource that the subscription locks belong to.
+    string resource_id = 1 [(required) = true];
+    // ID of the folder that the subscription locks belong to.
+    string folder_id = 2 [(required) = true];
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than `page_size`, the service returns a [ListLocksResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests.
+    // Default value: 100.
+    int64 page_size = 3 [(value) = "0-1000"];
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListLocksResponse.next_page_token] returned by a previous list request.
+    string page_token = 4 [(length) = "<=100"];
+    // A filter expression that filters subscription locks listed in the response.
+    //
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on [Lock.product_id] field.
+    // 2. An operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+    // 3. The value. Must be in double quotes `""`. Must be 3-63 characters long and match the regular expression `^[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    // Example of a filter: `product_id="my-product-id"`.
+    string filter = 5 [(length) = "<=1000"];
+    // Sorting order for the list of subscription locks.
+    string order_by = 6 [(length) = "<=100"];
+}
+
+message ListLocksResponse {
+    // List of subscription locks.
+    repeated Lock locks = 1;
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListLocksRequest.page_size], use `next_page_token` as the value
+    // for the [ListLocksRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}

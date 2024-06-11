@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "yandex/cloud/datatransfer/v1/endpoint/common.proto";
+
+message Parser {
+    reserved 3, 5;
+    oneof parser {
+        GenericParserCommon json_parser = 1;
+        AuditTrailsV1Parser audit_trails_v1_parser = 2;
+        CloudLoggingParser cloud_logging_parser = 4;
+        GenericParserCommon tskv_parser = 6;
+    }
+}
+message GenericParserCommon {
+    reserved 4 to 6;
+    DataSchema data_schema = 1;
+    // Allow null keys, if no - null keys will be putted to unparsed data
+    bool null_keys_allowed = 2;
+    // Will add _rest column for all unknown fields
+    bool add_rest_column = 3;
+    // Unescape string values
+    bool unescape_string_values = 7;
+}
+message AuditTrailsV1Parser {
+}
+message CloudLoggingParser {
+}

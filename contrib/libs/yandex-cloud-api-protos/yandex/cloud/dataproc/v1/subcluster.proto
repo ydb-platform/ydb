@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package yandex.cloud.dataproc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/dataproc/v1/common.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";
+option java_package = "yandex.cloud.api.dataproc.v1";
+
+enum Role {
+
+  ROLE_UNSPECIFIED = 0;
+
+  // The subcluster fulfills the master role.
+  //
+  // Master can run the following services, depending on the requested components:
+  // * HDFS: Namenode, Secondary Namenode
+  // * YARN: ResourceManager, Timeline Server
+  // * HBase Master
+  // * Hive: Server, Metastore, HCatalog
+  // * Spark History Server
+  // * Zeppelin
+  // * ZooKeeper
+  MASTERNODE = 1;
+
+  // The subcluster is a DATANODE in a Data Proc cluster.
+  //
+  // DATANODE can run the following services, depending on the requested components:
+  // * HDFS DataNode
+  // * YARN NodeManager
+  // * HBase RegionServer
+  // * Spark libraries
+  DATANODE = 2;
+
+  // The subcluster is a COMPUTENODE in a Data Proc cluster.
+  //
+  // COMPUTENODE can run the following services, depending on the requested components:
+  // * YARN NodeManager
+  // * Spark libraries
+  COMPUTENODE = 3;
+}
+
+message AutoscalingConfig {
+  // Upper limit for total instance subcluster count.
+  int64 max_hosts_count = 1 [(value) = "1-100"];
+
+  // Preemptible instances are stopped at least once every 24 hours, and can be stopped at any time
+  // if their resources are needed by Compute.
+  // For more information, see [Preemptible Virtual Machines](/docs/compute/concepts/preemptible-vm).
+  bool preemptible = 2;
+
+  // Time in seconds allotted for averaging metrics.
+  google.protobuf.Duration measurement_duration = 3 [(required) = true, (value) = "1m-10m"];
+
+  // The warmup time of the instance in seconds. During this time,
+  // traffic is sent to the instance, but instance metrics are not collected.
+  google.protobuf.Duration warmup_duration = 4 [(value) = "<=10m"];
+
+  // Minimum amount of time in seconds allotted for monitoring before
+  // Instance Groups can reduce the number of instances in the group.
+  // During this time, the group size doesn't decrease, even if the new metric values
+  // indicate that it should.
+  google.protobuf.Duration stabilization_duration = 5 [(value) = "1m-30m"];
+
+  // Defines an autoscaling rule based on the average CPU utilization of the instance group.
+  double cpu_utilization_target = 6 [(value) = "0-100"];
+
+  // Timeout to gracefully decommission nodes during downscaling. In seconds. Default value: 120
+  int64 decommission_timeout = 7 [(value) = "0-86400"];
+}
+
+// A Data Proc subcluster. For details about the concept, see [documentation](/docs/data-proc/concepts/).
+message Subcluster {
+  // ID of the subcluster. Generated at creation time.
+  string id = 1;
+
+  // ID of the Data Proc cluster that the subcluster belongs to.
+  string cluster_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the subcluster. The name is unique within the cluster.
+  string name = 4 [(length) = "1-63"];
+
+  // Role that is fulfilled by hosts of the subcluster.
+  Role role = 5;
+
+  // Resources allocated for each host in the subcluster.
+  Resources resources = 6;
+
+  // ID of the VPC subnet used for hosts in the subcluster.
+  string subnet_id = 7;
+
+  // Number of hosts in the subcluster.
+  int64 hosts_count = 8;
+
+  // Assign public ip addresses for all hosts in subcluter.
+  bool assign_public_ip = 9;
+
+  // Configuration for instance group based subclusters
+  AutoscalingConfig autoscaling_config = 10;
+
+  // ID of Compute Instance Group for autoscaling subclusters
+  string instance_group_id = 11;
+}
+
+// A Data Proc host. For details about the concept, see [documentation](/docs/data-proc/concepts/).
+message Host {
+  // Name of the Data Proc host. The host name is assigned by Data Proc at creation time
+  // and cannot be changed. The name is generated to be unique across all Data Proc
+  // hosts that exist on the platform, as it defines the FQDN of the host.
+  string name = 1;
+
+  // ID of the Data Proc subcluster that the host belongs to.
+  string subcluster_id = 2;
+
+  // Status code of the aggregated health of the host.
+  Health health = 3;
+
+  // ID of the Compute virtual machine that is used as the Data Proc host.
+  string compute_instance_id = 4;
+
+  // Role of the host in the cluster.
+  Role role = 5;
+}

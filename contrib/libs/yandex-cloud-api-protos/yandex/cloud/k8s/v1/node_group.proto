@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.v1;
+
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/k8s/v1/maintenance.proto";
+import "yandex/cloud/k8s/v1/node.proto";
+import "yandex/cloud/k8s/v1/version.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1;k8s";
+option java_package = "yandex.cloud.api.k8s.v1";
+
+message NodeGroup {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Node group is waiting for resources to be allocated.
+    PROVISIONING = 1;
+
+    // Node group is running.
+    RUNNING = 2;
+
+    // Node group is waiting for some work to be done, such as upgrading node software.
+    RECONCILING = 3;
+
+    // Node group is being stopped.
+    STOPPING = 4;
+
+    // Node group stopped.
+    STOPPED = 5;
+
+    // Node group is being deleted.
+    DELETING = 6;
+
+    // Node group is being started.
+    STARTING = 7;
+  }
+
+  // ID of the node group.
+  string id = 1;
+
+  // ID of the cluster that the node group belongs to.
+  string cluster_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the node group.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the node group. 0-256 characters long.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+
+  // Status of the node group.
+  Status status = 7;
+
+  // Node template that specifies parameters of the compute instances for the node group.
+  NodeTemplate node_template = 8;
+
+  // Scale policy of the node group.  For more information, see [Scaling policy](/docs/compute/concepts/instance-groups/policies#scale-policy).
+  ScalePolicy scale_policy = 9;
+
+  // Allocation policy by which resources for node group are allocated to zones and regions.
+  NodeGroupAllocationPolicy allocation_policy = 10;
+
+  // Deploy policy according to which the updates are rolled out.
+  DeployPolicy deploy_policy = 18;
+
+  // ID of the managed instance group associated with this node group.
+  string instance_group_id = 11;
+
+  // Version of Kubernetes components that runs on the nodes.
+  // Deprecated. Use version_info.current_version.
+  string node_version = 12;
+
+  // Detailed information about the Kubernetes version that is running on the node.
+  VersionInfo version_info = 13;
+
+  // Maintenance policy of the node group.
+  NodeGroupMaintenancePolicy maintenance_policy = 14;
+
+  // Support for unsafe sysctl parameters. For more details see [documentation](https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/).
+  repeated string allowed_unsafe_sysctls = 15;
+
+  // Taints that are applied to the nodes of the node group at creation time.
+  repeated Taint node_taints = 16;
+
+  // Labels that are assigned to the nodes of the node group at creation time.
+  map<string, string> node_labels = 17;
+}
+
+message ScalePolicy {
+  oneof scale_type {
+    option (exactly_one) = true;
+    // Fixed scale policy of the node group.
+    FixedScale fixed_scale = 1;
+
+    // Auto scale policy of the node group.
+    AutoScale auto_scale = 2;
+  }
+
+  message FixedScale {
+    // Number of nodes in the node group.
+    int64 size = 1 [(value) = "0-100"];
+  }
+
+  message AutoScale {
+    // Minimum number of nodes in the node group.
+    int64 min_size = 1 [(value) = "0-100"];
+    // Maximum number of nodes in the node group.
+    int64 max_size = 2 [(value) = "0-100"];
+    // Initial number of nodes in the node group.
+    int64 initial_size = 3 [(value) = "0-100"];
+  }
+}
+
+message NodeGroupAllocationPolicy {
+  // List of locations where resources for the node group will be allocated.
+  repeated NodeGroupLocation locations = 1;
+}
+
+message NodeGroupLocation {
+  // ID of the availability zone where the nodes may reside.
+  string zone_id = 1 [(required) = true];
+
+  // ID of the subnet. If a network chosen for the Kubernetes cluster has only one subnet in the specified zone, subnet ID may be omitted.
+  string subnet_id = 2;
+}
+
+message NodeGroupMaintenancePolicy {
+  // If set to true, automatic updates are installed in the specified period of time with no interaction from the user.
+  // If set to false, automatic upgrades are disabled.
+  bool auto_upgrade = 1;
+
+  // If set to true, automatic repairs are enabled. Default value is false.
+  bool auto_repair = 2;
+
+  // Maintenance window settings. Update will start at the specified time and last no more than the specified duration.
+  // The time is set in UTC.
+  MaintenanceWindow maintenance_window = 3;
+}
+
+message DeployPolicy {
+  // The maximum number of running instances that can be taken offline (i.e.,
+  // stopped or deleted) at the same time during the update process.
+  // If [max_expansion] is not specified or set to zero, [max_unavailable] must
+  // be set to a non-zero value.
+  int64 max_unavailable = 1 [(value) = "0-100"];
+
+  // The maximum number of instances that can be temporarily allocated above
+  // the group's target size during the update process.
+  // If [max_unavailable] is not specified or set to zero, [max_expansion] must
+  // be set to a non-zero value.
+  int64 max_expansion = 2 [(value) = "0-100"];
+}

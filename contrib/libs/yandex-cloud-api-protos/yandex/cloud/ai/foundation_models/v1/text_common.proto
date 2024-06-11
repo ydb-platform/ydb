@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1;
+
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1;foundation_models";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1";
+
+// Defines the options for completion generation.
+message CompletionOptions {
+  // Enables streaming of partially generated text.
+  bool stream = 1;
+
+  // Affects creativity and randomness of responses. Should be a double number between 0 (inclusive) and 1 (inclusive).
+  // Lower values produce more straightforward responses while higher values lead to increased creativity and randomness.
+  // Default temperature: 0.3
+  google.protobuf.DoubleValue temperature = 2;
+
+  // The limit on the number of tokens used for single completion generation.
+  // Must be greater than zero. This maximum allowed parameter value may depend on the model being used.
+  google.protobuf.Int64Value max_tokens = 3;
+}
+
+// A message object representing a wrapper over the inputs and outputs of the completion model.
+message Message {
+  // The ID of the message sender. Supported roles:
+  // * `system`: Special role used to define the behaviour of the completion model.
+  // * `assistant`: A role used by the model to generate responses.
+  // * `user`: A role used by the user to describe requests to the model.
+  string role = 1;
+
+  // Message content.
+  oneof Content {
+    // Textual content of the message.
+    string text = 2;
+  }
+}
+
+// An object representing the number of content [tokens](/docs/foundation-models/concepts/yandexgpt/tokens) used by the completion model.
+message ContentUsage {
+  // The number of tokens in the textual part of the model input.
+  int64 input_text_tokens = 1;
+
+  // The total number of tokens in the generated completions.
+  int64 completion_tokens = 2;
+
+  // The total number of tokens, including all input tokens and all generated tokens.
+  int64 total_tokens = 3;
+}
+
+// Represents a generated completion alternative, including its content and generation status.
+message Alternative {
+  // Enum representing the generation status of the alternative.
+  enum AlternativeStatus {
+    // Unspecified generation status.
+    ALTERNATIVE_STATUS_UNSPECIFIED = 0;
+
+    // Partially generated alternative.
+    ALTERNATIVE_STATUS_PARTIAL = 1;
+
+    // Incomplete final alternative resulting from reaching the maximum allowed number of tokens.
+    ALTERNATIVE_STATUS_TRUNCATED_FINAL = 2;
+
+    // Final alternative generated without running into any limits.
+    ALTERNATIVE_STATUS_FINAL = 3;
+
+    // Generation was stopped due to the discovery of potentially sensitive content in the prompt or generated response.
+    // To fix, modify the prompt and restart generation.
+    ALTERNATIVE_STATUS_CONTENT_FILTER = 4;
+  }
+
+  // A message containing the content of the alternative.
+  Message message = 1;
+
+  // The generation status of the alternative
+  AlternativeStatus status = 2;
+}
+
+// Represents a token, the basic unit of content, used by the foundation model.
+message Token {
+  // An internal token identifier.
+  int64 id = 1;
+
+  // The textual representation of the token.
+  string text = 2;
+
+  // Indicates whether the token is special or not. Special tokens may define the model's behavior and are not visible to users.
+  bool special = 3;
+}

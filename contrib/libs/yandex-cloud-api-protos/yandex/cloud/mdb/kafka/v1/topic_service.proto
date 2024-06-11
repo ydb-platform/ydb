@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.kafka.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/kafka/v1/topic.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/kafka/v1;kafka";
+option java_package = "yandex.cloud.api.mdb.kafka.v1";
+
+
+// A set of methods for managing Kafka topics.
+service TopicService {
+  // Returns the specified Kafka topic.
+  //
+  // To get the list of available Kafka topics, make a [List] request.
+  rpc Get (GetTopicRequest) returns (Topic) {
+    option (google.api.http) = { get: "/managed-kafka/v1/clusters/{cluster_id}/topics/{topic_name}" };
+  }
+
+  // Retrieves the list of Kafka topics in the specified cluster.
+  rpc List (ListTopicsRequest) returns (ListTopicsResponse) {
+    option (google.api.http) = { get: "/managed-kafka/v1/clusters/{cluster_id}/topics" };
+  }
+
+  // Creates a new Kafka topic in the specified cluster.
+  rpc Create (CreateTopicRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-kafka/v1/clusters/{cluster_id}/topics" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTopicMetadata"
+      response: "Topic"
+    };
+  }
+
+  // Updates the specified Kafka topic.
+  rpc Update (UpdateTopicRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-kafka/v1/clusters/{cluster_id}/topics/{topic_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTopicMetadata"
+      response: "Topic"
+    };
+  }
+
+  // Deletes the specified Kafka topic.
+  rpc Delete (DeleteTopicRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-kafka/v1/clusters/{cluster_id}/topics/{topic_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTopicMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetTopicRequest {
+  // ID of the Apache Kafka® cluster that the topic belongs to.
+  //
+  // To get the cluster ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Kafka topic resource to return.
+  //
+  // To get the name of the topic, make a [TopicService.List] request.
+  string topic_name = 2 [(required) = true, (length) = "1-256", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message ListTopicsRequest {
+  // ID of the Apache Kafka® cluster to list topics in.
+  //
+  // To get the cluster ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListTopicsResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token.
+  //
+  // To get the next page of results, set [page_token] to the [ListTopicsResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListTopicsResponse {
+  // List of Kafka topics.
+  repeated Topic topics = 1;
+
+  // This token allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListTopicsRequest.page_size], use the [next_page_token] as the value for the [ListTopicsRequest.page_token] parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateTopicRequest {
+  // ID of the Apache Kafka® cluster to create a topic in.
+  //
+  // To get the cluster ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Configuration of the topic to create.
+  TopicSpec topic_spec = 2 [(required) = true];
+}
+
+message CreateTopicMetadata {
+  // ID of the Apache Kafka® cluster where a topic is being created.
+  string cluster_id = 1;
+
+  // Name of the Kafka topic that is being created.
+  string topic_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message UpdateTopicRequest {
+  // ID of the Apache Kafka® cluster to update a topic in.
+  //
+  // To get the cluster ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the topic to update.
+  //
+  // To get the name of the topic, make a [TopicService.List] request.
+  string topic_name = 2 [(required) = true, (length) = "1-256", (pattern) = "[a-zA-Z0-9_-]*"];
+
+  google.protobuf.FieldMask update_mask = 3;
+
+  // New configuration of the topic.
+  //
+  // Use [update_mask] to prevent reverting all topic settings that are not listed in [topic_spec] to their default values.
+  TopicSpec topic_spec = 4;
+}
+
+message UpdateTopicMetadata {
+  // ID of the Apache Kafka® cluster where a topic is being updated.
+  string cluster_id = 1;
+
+  // Name of the Kafka topic that is being updated.
+  string topic_name = 2;
+}
+
+message DeleteTopicRequest {
+  // ID of the Apache Kafka® cluster to delete a topic in.
+  //
+  // To get the cluster ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the topic to delete.
+  //
+  // To get the name of the topic, make a [TopicService.List] request.
+  string topic_name = 2 [(required) = true, (length) = "1-256", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message DeleteTopicMetadata {
+  // ID of the Apache Kafka® cluster where a topic is being deleted.
+  string cluster_id = 1;
+
+  // Name of the Kafka topic that is being deleted.
+  string topic_name = 2;
+}

@@ -1,0 +1,479 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+
+// List of secondary (alternative) CNAMEs.
+message SecondaryHostnames {
+    // List of secondary hostname values.
+    repeated string values = 1;
+}
+
+//
+// A CDN resource - representation of providers resource.
+//
+message Resource {
+    // ID of the resource.
+    string id = 1;
+
+    // Folder id.
+    string folder_id = 2;
+
+    // CDN endpoint CNAME, must be unique among resources.
+    string cname = 3;
+
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 4;
+
+    // Update timestamp.
+    google.protobuf.Timestamp updated_at = 5;
+
+    // Flag to create Resource either in active or disabled state.
+    // True - the content from CDN is available to clients.
+    // False - the content from CDN isn't available to clients.
+    bool active = 6;
+
+    // Resource settings and options to tune CDN edge behavior.
+    ResourceOptions options = 7;
+
+    // List of secondary hostname strings.
+    repeated string secondary_hostnames = 8;
+
+    // ID of the origin group.
+    int64 origin_group_id = 9;
+
+    // Name of the origin group.
+    string origin_group_name = 10;
+
+    // Specify the protocol schema to be used in communication with origin.
+    OriginProtocol origin_protocol = 11;
+
+    // SSL certificate options.
+    SSLCertificate ssl_certificate = 12;
+    
+    // Labels of the resource.
+    map<string, string> labels = 13;
+}
+
+// This option defines the protocol that will be used by CDN servers to request
+// content from an origin source. If not specified, we will use HTTP to connect
+// to an origin server.
+enum OriginProtocol {
+    ORIGIN_PROTOCOL_UNSPECIFIED = 0;
+
+    // CDN servers will connect to your origin via HTTP.
+    HTTP = 1;
+
+    // CDN servers will connect to your origin via HTTPS.
+    HTTPS = 2;
+
+    // Connection protocol will be chosen automatically (content on the
+    // origin source should be available for the CDN both through HTTP and HTTPS).
+    MATCH = 3;
+}
+
+// RewriteFlag defines flag for the Rewrite option.
+enum RewriteFlag {
+    REWRITE_FLAG_UNSPECIFIED = 0;
+
+    // Stops processing of the current set of ngx_http_rewrite_module directives and
+    // starts a search for a new location matching changed URI.
+    LAST = 1;
+
+    // Stops processing of the current set of the Rewrite option.
+    BREAK = 2;
+
+    // Returns a temporary redirect with the 302 code; It is used when a replacement string does not start
+    // with "http://", "https://", or "$scheme".
+    REDIRECT = 3;
+
+    // Returns a permanent redirect with the 301 code.
+    PERMANENT = 4;
+}
+
+// SecureKeyURLType defines type of the URL signing.
+enum SecureKeyURLType {
+    SECURE_KEY_URL_TYPE_UNSPECIFIED = 0;
+
+    // Use scpecific IP address in URL signing. URL will be availible only for this IP.
+    ENABLE_IP_SIGNING = 1;
+
+    // Sign URL without using IP address. URL will be available for all IP addresses.
+    DISABLE_IP_SIGNING = 2;
+}
+
+// PolicyType defines type of the policy in IP address acl rules.
+enum PolicyType {
+    POLICY_TYPE_UNSPECIFIED = 0;
+
+    // Allow access to all IP addresses except the ones specified in the excepted_values field.
+    POLICY_TYPE_ALLOW = 1;
+
+    // Block access to all IP addresses except the ones specified in the excepted_values field.
+    POLICY_TYPE_DENY = 2;
+}
+
+// A major set of various resource options.
+message ResourceOptions {
+    // Set up bool values.
+    message BoolOption {
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        bool value = 2;
+    }
+
+    // A set of the string parameters.
+    message StringOption {
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        string value = 2;
+    }
+
+    // A set of the numeric parameters.
+    message Int64Option {
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        int64 value = 2;
+    }
+
+    // A set of the string list parameters.
+    message StringsListOption {
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        repeated string value = 2;
+    }
+
+    // A set of the strings map parameters.
+    message StringsMapOption {
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        map<string,string> value = 2;
+    }
+
+    // A set of the caching response time parameters.
+    message CachingTimes {
+
+        // Caching time for a response with codes 200, 206, 301, 302.
+        // Responses with codes 4xx, 5xx will not be cached. Use `0s` disable to caching.
+        // Use [custom_values] field to specify a custom caching time for a response with specific codes.
+        int64 simple_value = 1;
+
+        // Caching time for a response with specific codes. These settings have a higher priority than the value field.
+        // Response code (`304`, `404` for example). Use `any` to specify caching time for all response codes.
+        // Caching time in seconds (`0s`, `600s` for example). Use `0s` to disable caching for a specific response code.
+        map<string,int64> custom_values = 2;
+    }
+
+    // A set of the edge cache parameters.
+    message EdgeCacheSettings {
+        // True - the option is enabled and its `values_variant` is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        oneof values_variant {
+            // Value of the option.
+            CachingTimes value = 2;
+
+            // Content will be cached according to origin cache settings.
+            // The value applies for a response with codes 200, 201, 204, 206, 301, 302, 303, 304, 307, 308
+            // if an origin server does not have caching HTTP headers.
+            // Responses with other codes will not be cached.
+            int64 default_value = 3;
+        }
+    }
+
+    // A set of the string variable map parameters.
+    message StringVariableMapOption {
+        message OneofString {
+            oneof string_option {
+
+                // Using [StringOption] to set value.
+                StringOption value = 1;
+
+                // Using [StringsListOption] to set values.
+                StringsListOption values = 2;
+            }
+        }
+
+        // True - the option is enabled and its [value] is applied to the resource.
+        // False - the option is disabled and its default value is used for the resource.
+        bool enabled = 1;
+
+        // Value of the option.
+        map<string,OneofString> value = 2;
+    }
+
+    // A set of the query parameters.
+    message QueryParamsOptions {
+        oneof query_params_variant {
+            // Using [BoolOption]. Selected by default. Files with different query parameters are cached as objects with the same key regardless of the parameter value.
+            BoolOption ignore_query_string = 1;
+
+            // Ignore All Except.
+            // Files with the specified query parameters are cached as objects with different keys,
+            // files with other parameters are cached as objects with the same key.
+            StringsListOption query_params_whitelist = 2;
+
+            // Ignore only. Files with the specified query parameters are cached as objects with the same key,
+            // files with other parameters are cached as objects with different keys.
+            StringsListOption query_params_blacklist = 3;
+        }
+    }
+
+    // A set of the redirect parameters.
+    message RedirectOptions {
+        oneof redirect_variant {
+            // Using [BoolOption]. Set up a redirect from HTTPS to HTTP.
+            BoolOption redirect_http_to_https = 1;
+
+            // Using [BoolOption]. Set up a redirect from HTTP to HTTPS.
+            BoolOption redirect_https_to_http = 2;
+        }
+    }
+
+    // A set of the host parameters.
+    message HostOptions {
+        oneof host_variant {
+            // Custom value for the Host header.
+            //
+            // Your server must be able to process requests with the chosen header.
+            //
+            // Default value (if [StringOption.enabled] is `false`) is [Resource.cname].
+            StringOption host = 1;
+
+            // Using [BoolOption]. Choose the Forward Host header option if is important to send in the request to the Origin
+            // the same Host header as was sent in the request to CDN server.
+            BoolOption forward_host_header = 2;
+        }
+    }
+
+    // A set of the compression variant parameters.
+    message CompressionOptions {
+        oneof compression_variant {
+            // The Fetch compressed option helps you to reduce
+            // the bandwidth between origin and CDN servers.
+            // Also, content delivery speed becomes higher because of reducing the time
+            // for compressing files in a CDN.
+            BoolOption fetch_compressed = 1;
+
+            // Using [BoolOption]. GZip compression at CDN servers reduces file size by 70% and can be as high as 90%.
+            BoolOption gzip_on = 2;
+
+            // The option allows to compress content with brotli on the CDN's end.
+            //
+            // Compression is performed on the Origin Shielding. If a pre-cache server doesn't active for a resource, compression does not occur even if the option is enabled.
+            //
+            // Specify the content-type for each type of content you wish to have compressed. CDN servers will request only uncompressed content from the origin.
+            StringsListOption brotli_compression = 3;
+        }
+    }
+
+    // An option for changing or redirecting query paths.
+    message RewriteOption {
+        // True - the option is enabled and its [flag] is applied to the resource.
+        // False - the option is disabled and its default value of the [flag] is used for the resource.
+        bool enabled = 1;
+
+        // Pattern for rewrite.
+        //
+        // The value must have the following format: `<source path> <destination path>`, where both paths are regular expressions which use at least one group. E.g., `/foo/(.*) /bar/$1`.
+        string body = 2;
+
+        // Break flag is applied to the option by default.
+        // It is not shown in the field.
+        RewriteFlag flag = 3;
+    }
+
+    message SecureKeyOption {
+        // True - the option is enabled and its [flag] is applied to the resource.
+        // False - the option is disabled and its default value of the [flag] is used for the resource.
+        bool enabled = 1;
+
+        // The key for the URL signing.
+        string key = 2;
+
+        // The type of the URL signing. The URL could be available for all IP addresses or for the only one IP.
+        SecureKeyURLType type = 3;
+    }
+
+    message IPAddressACLOption {
+        // True - the option is enabled and its [flag] is applied to the resource.
+        // False - the option is disabled and its default value of the [flag] is used for the resource.
+        bool enabled = 1;
+
+        // The policy type. One of allow or deny value.
+        PolicyType policy_type = 2;
+
+        // The list of IP addresses to be allowed or denied.
+        repeated string excepted_values = 3;
+    }
+
+    // Set up a cache status.
+    BoolOption disable_cache = 1;
+
+    // Set up [EdgeCacheSettings].
+    EdgeCacheSettings edge_cache_settings = 2;
+
+    // Using [Int64Option]. Set up a cache period for the end-users browser.
+    // Content will be cached due to origin settings.
+    // If there are no cache settings on your origin, the content will not be cached.
+    // The list of HTTP response codes that can be cached in browsers: 200, 201, 204, 206, 301, 302, 303, 304, 307, 308.
+    // Other response codes will not be cached.
+    // The default value is 4 days.
+    Int64Option browser_cache_settings = 3;
+
+    // List HTTP headers that must be included in responses to clients.
+    StringsListOption cache_http_headers = 4;
+
+    // Set up [QueryParamsOptions].
+    QueryParamsOptions query_params_options = 5;
+
+    // Files larger than 10 MB will be requested and cached in parts (no larger than 10 MB each part). It reduces time to first byte.
+    //
+    // The origin must support HTTP Range requests.
+    //
+    // By default the option is disabled.
+    BoolOption slice = 6;
+
+    // Set up compression variant.
+    CompressionOptions compression_options = 7;
+
+    // Set up redirects.
+    RedirectOptions redirect_options = 8;
+
+    // Set up host parameters.
+    HostOptions host_options = 9;
+
+    // Set up static headers that CDN servers send in responses to clients.
+    StringsMapOption static_headers = 10;
+
+    // Parameter that lets browsers get access to selected resources from a domain
+    // different to a domain from which the request is received.
+    // [Read more](/docs/cdn/concepts/cors).
+    StringsListOption cors = 11;
+
+    // List of errors which instruct CDN servers to serve stale content to clients.
+    //
+    // Possible values: `error`, `http_403`, `http_404`, `http_429`, `http_500`, `http_502`, `http_503`, `http_504`, `invalid_header`, `timeout`, `updating`.
+    StringsListOption stale = 12;
+
+    // HTTP methods for your CDN content. By default the following methods
+    // are allowed: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS.
+    // In case some methods are not allowed to the user, they will get the 405
+    // (Method Not Allowed) response. If the method is not supported,
+    // the user gets the 501 (Not Implemented) response.
+    StringsListOption allowed_http_methods = 13;
+
+    // Allows caching for GET, HEAD and POST requests.
+    BoolOption proxy_cache_methods_set = 14;
+
+    // Disabling proxy force ranges.
+    BoolOption disable_proxy_force_ranges = 15;
+
+    // Set up custom headers that CDN servers send in requests to origins.
+    // The Header name field can contain letters (A-Z, a-z), numbers (0-9), dashes (-) and underscores (_).
+    // The Value field can contain letters (A-Z, a-z), numbers (0-9), dashes (-),
+    // underscores (_), slashes (/), colons (:), equal (=), dots (.), and spaces.
+    StringsMapOption static_request_headers = 16;
+
+    // Wildcard additional CNAME.
+    // If a resource has a wildcard additional CNAME, you can use your own certificate for content delivery via HTTPS. Read-only.
+    StringOption custom_server_name = 17;
+
+    // Using [BoolOption] for ignoring cookie.
+    BoolOption ignore_cookie = 18;
+
+    // Changing or redirecting query paths.
+    RewriteOption rewrite = 19;
+
+    // Secure token to protect contect and limit access by IP addresses and time limits.
+    SecureKeyOption secure_key = 20;
+
+    // Manage the state of the IP access policy option. 
+    // The option controls access to content from the specified IP addresses.
+    IPAddressACLOption ip_address_acl = 21;
+}
+
+// A set of the personal SSL certificate parameters.
+message SSLTargetCertificate {
+    // Type of the certificate.
+    SSLCertificateType type = 1;
+
+    // Certificate data.
+    SSLCertificateData data = 2;
+}
+
+// A SSL certificate parameters.
+message SSLCertificate {
+    // Type of the certificate.
+    SSLCertificateType type = 1;
+
+    // Active status.
+    SSLCertificateStatus status = 2;
+
+    // Certificate data.
+    SSLCertificateData data = 3;
+}
+
+// A certificate type parameters.
+enum SSLCertificateType {
+    // SSL certificate is unspecified.
+    SSL_CERTIFICATE_TYPE_UNSPECIFIED = 0;
+
+    // No SSL certificate is added, the requests are sent via HTTP.
+    DONT_USE = 1;
+
+    // The option is deprecated. Works only if you have already pointed your domain name to the protected IP address in your DNS.
+    LETS_ENCRYPT_GCORE = 2 [deprecated = true];
+
+    // Add your SSL certificate by uploading the certificate in PEM format and your private key.
+    CM = 3;
+}
+
+// A certificate status parameters.
+enum SSLCertificateStatus {
+    // SSL certificate is unspecified.
+    SSL_CERTIFICATE_STATUS_UNSPECIFIED = 0;
+
+    // SSL certificate is ready to use.
+    READY = 1;
+
+    // The option is deprecated. SSL certificate is creating.
+    CREATING = 2 [deprecated = true];
+}
+
+// A certificate data parameters.
+message SSLCertificateData {
+    oneof ssl_certificate_data_variant {
+
+        // Custom (add your SSL certificate by uploading the certificate
+        // in PEM format and your private key).
+        SSLCertificateCMData cm = 1;
+    }
+}
+
+// A certificate data custom parameters.
+message SSLCertificateCMData {
+    // ID of the custom certificate.
+    string id = 1;
+}

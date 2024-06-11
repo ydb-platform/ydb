@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package yandex.cloud.containerregistry.v1;
+
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/containerregistry/v1;containerregistry";
+option java_package = "yandex.cloud.api.containerregistry.v1";
+
+// A ScanResult resource.
+message ScanResult {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+
+        // Image scan is in progress.
+        RUNNING = 1;
+
+        // Image has been scanned and result is ready.
+        READY = 2;
+
+        // Image scan is failed.
+        ERROR = 3;
+    }
+
+    // Output only. ID of the ScanResult.
+    string id = 1;
+
+    // Output only. ID of the Image that the ScanResult belongs to.
+    string image_id = 2;
+
+    // Output only. The timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format when the scan been finished.
+    google.protobuf.Timestamp scanned_at = 3;
+
+    // Output only. The status of the ScanResult.
+    Status status = 4;
+
+    // Output only. Summary information about vulnerabilities found.
+    VulnerabilityStats vulnerabilities = 5;
+}
+
+// A VulnerabilityStats resource.
+message VulnerabilityStats {
+    // Count of CRITICAL vulnerabilities.
+    int64 critical = 1;
+
+    // Count of HIGH vulnerabilities.
+    int64 high = 2;
+
+    // Count of MEDIUM vulnerabilities.
+    int64 medium = 3;
+
+    // Count of LOW vulnerabilities.
+    int64 low = 4;
+
+    // Count of NEGLIGIBLE vulnerabilities.
+    int64 negligible = 5;
+
+    // Count of other vulnerabilities.
+    int64 undefined = 6;
+}
+
+// A Vulnerability resource.
+message Vulnerability {
+    enum Severity {
+        SEVERITY_UNSPECIFIED = 0;
+
+        // Critical severity is a world-burning problem, exploitable for nearly all users.
+        // Includes remote root privilege escalations, or massive data loss.
+        CRITICAL = 1;
+
+        // High severity is a real problem, exploitable for many users in a default installation.
+        // Includes serious remote denial of services, local root privilege escalations, or data loss.
+        HIGH = 2;
+
+        // Medium severity is a real security problem, and is exploitable for many users.
+        // Includes network daemon denial of service attacks, cross-site scripting, and gaining user privileges.
+        // Updates should be made soon for this priority of issue.
+        MEDIUM = 3;
+
+        // Low severity is a security problem, but is hard to exploit due to environment, requires a user-assisted attack,
+        // a small install base, or does very little damage. These tend to be included in security updates only when
+        // higher priority issues require an update, or if many low priority issues have built up.
+        LOW = 4;
+
+        // Negligible severity is technically a security problem, but is only theoretical in nature, requires a very special situation,
+        // has almost no install base, or does no real damage. These tend not to get backport from upstream,
+        // and will likely not be included in security updates unless there is an easy fix and some other issue causes an update.
+        NEGLIGIBLE = 5;
+
+        // Unknown severity is either a security problem that has not been assigned to a priority yet or
+        // a priority that our system did not recognize.
+        UNDEFINED = 6;
+    }
+
+    // Output only. Severity of the Vulnerability.
+    Severity severity = 1;
+
+    // Details of vulnerability depending on type. Only `package` vulnerability is supported at the moment.
+    oneof vulnerability {
+        option (exactly_one) = true;
+        PackageVulnerability package = 2;
+    }
+}
+
+// A PackageVulnerability resource.
+message PackageVulnerability {
+    // Name of vulnerability in CVE database.
+    string name = 1;
+
+    // URL to the page with description of vulnerability.
+    string link = 2;
+
+    // The package name where vulnerability has been found.
+    string package = 3;
+
+    // The package manager name. Ex.: yum, rpm, dpkg.
+    string source = 4;
+
+    // The version of the package where vulnerability has been found.
+    string version = 5;
+
+    // The version of the package where vulnerability has been fixed.
+    string fixed_by = 6;
+
+    // The place where vulnerability is originated (OS, lang package, etc.)
+    string origin = 7;
+
+    // The type of vulnerability origin - name of OS if origin="os" or package type (jar, gobinary, etc.) if origin="lang"
+    string type = 8;
+}

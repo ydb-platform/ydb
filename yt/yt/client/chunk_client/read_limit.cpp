@@ -875,10 +875,10 @@ TReadRange::TReadRange(
     int keyLength)
 {
     if (range.has_lower_limit()) {
-        LowerLimit_ = TReadLimit(range.lower_limit(), /* isUpper */false, keyLength);
+        LowerLimit_ = TReadLimit(range.lower_limit(), /* isUpper */ false, keyLength);
     }
     if (range.has_upper_limit()) {
-        UpperLimit_ = TReadLimit(range.upper_limit(), /* isUpper */true, keyLength);
+        UpperLimit_ = TReadLimit(range.upper_limit(), /* isUpper */ true, keyLength);
     }
 }
 
@@ -940,7 +940,7 @@ void Serialize(const TReadRange& readLimit, NYson::IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NProto::TReadLimit, /*key*/4, TUnversionedOwningRow)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NProto::TReadLimit, /*key*/ 4, TUnversionedOwningRow)
 
 ////////////////////////////////////////////////////////////////////////////////
 

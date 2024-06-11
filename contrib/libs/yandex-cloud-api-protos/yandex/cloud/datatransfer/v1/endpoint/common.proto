@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "google/protobuf/empty.proto";
+
+enum ObjectTransferStage {
+    OBJECT_TRANSFER_STAGE_UNSPECIFIED = 0;
+    // Before data transfer
+    BEFORE_DATA = 1;
+    // After data transfer
+    AFTER_DATA = 2;
+    // Don't copy
+    NEVER = 3;
+}
+enum CleanupPolicy {
+    CLEANUP_POLICY_UNSPECIFIED = 0;
+    // Don't cleanup
+    DISABLED = 1;
+    // Drop
+    DROP = 2;
+    // Truncate
+    TRUNCATE = 3;
+}
+enum ColumnType {
+    COLUMN_TYPE_UNSPECIFIED = 0;
+    INT32 = 1;
+    INT16 = 2;
+    INT8 = 3;
+    UINT64 = 4;
+    UINT32 = 5;
+    UINT16 = 6;
+    UINT8 = 7;
+    DOUBLE = 8;
+    BOOLEAN = 9;
+    STRING = 10;
+    UTF8 = 11;
+    ANY = 12;
+    DATETIME = 13;
+    INT64 = 14;
+}
+message AltName {
+    // Source table name
+    string from_name = 1;
+    // Target table name
+    string to_name = 2;
+}
+message Secret {
+    oneof value {
+        // Raw secret value
+        string raw = 1;
+    }
+}
+message ColSchema {
+    string name = 1;
+    ColumnType type = 2;
+    bool key = 3;
+    bool required = 4;
+    string path = 5;
+}
+message TLSMode {
+    oneof tls_mode {
+        google.protobuf.Empty disabled = 1;
+        TLSConfig enabled = 2;
+    }
+}
+message TLSConfig {
+    // CA certificate
+    // 
+    // X.509 certificate of the certificate authority which issued the server's
+    // certificate, in PEM format. When CA certificate is specified TLS is used to
+    // connect to the server.
+    string ca_certificate = 1;
+}
+message ColumnValue {
+    oneof value {
+        string string_value = 1;
+    }
+}
+message DataTransformationOptions {
+    reserved 6 to 7;
+    // Cloud function
+    string cloud_function = 1;
+    // Number of retries
+    int64 number_of_retries = 2;
+    // Buffer size for function
+    string buffer_size = 3;
+    // Flush interval
+    string buffer_flush_interval = 4;
+    // Invocation timeout
+    string invocation_timeout = 5;
+    // Service account
+    string service_account_id = 8;
+}
+message FieldList {
+    reserved 1;
+    // Column schema
+    repeated ColSchema fields = 2;
+}
+message DataSchema {
+    oneof schema {
+        FieldList fields = 2;
+        string json_fields = 1;
+    }
+}
+// No authentication
+message NoAuth {
+}

@@ -1,0 +1,295 @@
+syntax = "proto3";
+
+package yandex.cloud.backup.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/backup/v1;backup";
+option java_package = "yandex.cloud.api.backup.v1";
+
+message Policy {
+    // Policy ID.
+    string id = 1 [ (required) = true, (length) = "<=50"];
+    // Policy name.
+    string name = 2 [ (required) = true, (length) = "<=50"];
+    google.protobuf.Timestamp created_at = 3;
+    google.protobuf.Timestamp updated_at = 4;
+    // If this field is true, it means that the policy is enabled.
+    bool enabled = 5;
+    // Set of policy settings
+    PolicySettings settings = 6;
+    // ID of the folder that the policy belongs to.
+    string folder_id = 7;
+}
+
+// Format of the backup in policy. For backup locations that can be browsed
+// with a file manager, the backup format determines the number of files and
+// their extension.
+enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    // A legacy backup format used in older versions. It's not recommended to use.
+    VERSION_11 = 1;
+    // A new format recommended in most cases for fast backup and recovery.
+    VERSION_12 = 2;
+    // Automatic version selection. Will be used version 12 unless the protection
+    // plan (policy) appends backups to the ones created by earlier product
+    // versions.
+    AUTO = 3;
+}
+
+// Set of policy settings
+message PolicySettings {
+    // Compression rate of the backups.
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        NORMAL = 1;
+        HIGH = 2;
+        MAX = 3;
+        OFF = 4;
+    }
+
+    message Interval {
+        enum Type {
+            TYPE_UNSPECIFIED = 0;
+            SECONDS = 1;
+            MINUTES = 2;
+            HOURS = 3;
+            DAYS = 4;
+            WEEKS = 5;
+            MONTHS = 6;
+        }
+
+        // A type of the interval.
+        Type type = 1 [ (required) = true ];
+        // The amount of value specified in `Interval.Type`.
+        int64 count = 2 [ (value)=">0" ];
+    }
+
+    message RetriesConfiguration {
+        // If true, enables retry on errors.
+        bool enabled = 1;
+        // An interval between retry attempts.
+        Interval interval = 2 [ (required) = true ];
+        // Max number of retry attempts. Operation will be considered as failed 
+        // when max number of retry attempts is reached.
+        int64 max_attempts = 3 [ (value)=">0" ];
+    }
+
+    message Splitting {
+        // The size of split backup file in bytes.
+        int64 size = 1;
+    }
+
+    // Settings for Volume Shadow Copy Services which allows to notify
+    // VSS-aware applications that backup is about to start. This will
+    // ensure the consistent state of all data used by the applications.
+    message VolumeShadowCopyServiceSettings {
+        enum VSSProvider {
+            VSS_PROVIDER_UNSPECIFIED = 0;
+            NATIVE = 1;
+            TARGET_SYSTEM_DEFINED = 2;
+        }
+
+        // If true, the VSS will be enabled.
+        bool enabled = 1;
+        // A type of VSS provider to use in backup.
+        VSSProvider provider = 2 [ (required) = true ];
+    }
+
+    message ArchiveProperties {
+        // The name of the generated archive. The name may use the following variables: `[Machine Name]`, `[Plan ID]`, `[Plan Name]`, `[Unique ID]`, `[Virtualization Server Type]`.
+        // Default value: `[Machine Name]-[Plan ID]-[Unique ID]A`.
+        string name = 1;
+    }
+
+    message PerformanceWindow {
+        // If true, the time windows will be enabled.
+        bool enabled = 1;
+    }
+
+    enum RepeatePeriod {
+        REPEATE_PERIOD_UNSPECIFIED = 0;
+        HOURLY = 1;
+        DAILY = 2;
+        WEEKLY = 3;
+        MONTHLY = 4;
+    }
+
+    enum Day {
+        DAY_UNSPECIFIED = 0;
+        MONDAY = 1;
+        TUESDAY = 2;
+        WEDNESDAY = 3;
+        THURSDAY = 4;
+        FRIDAY = 5;
+        SATURDAY = 6;
+        SUNDAY = 7;
+    }
+
+    message TimeOfDay {
+        // Hours.
+        int64 hour = 1;
+        // Minutes.
+        int64 minute = 2;
+    }
+
+    message Retention {
+        message RetentionRule {
+            // A list of backup sets where rules are effective.
+            repeated RepeatePeriod backup_set = 1;
+            oneof condition {
+                option (exactly_one) = true;
+                Interval max_age = 2;
+                int64 max_count = 3;
+            }
+        }
+
+        // A list of retention rules.
+        repeated RetentionRule rules = 1;
+
+        reserved 2; // deprecated after_backup field
+
+        // If true, retention rules will be applied before backup is finished.
+        bool before_backup = 3;
+    }
+
+    message Scheduling {
+        message BackupSet {
+            enum Type {
+                TYPE_UNSPECIFIED = 0;
+                TYPE_AUTO = 1;
+                TYPE_FULL = 2;
+                TYPE_INCREMENTAL = 3;
+                TYPE_DIFFERENTIAL = 4;
+            }
+
+            message Time {
+                // Days in a week to perform a backup.
+                repeated Day weekdays = 1 [(unique) = true];
+                // Time to repeat the backup.
+                repeated TimeOfDay repeat_at = 2;
+                // Frequency of backup repetition.
+                Interval repeat_every = 3;
+                // The start time of the backup time interval.
+                TimeOfDay time_from = 4;
+                // The end time of the backup time interval.
+                TimeOfDay time_to = 5;
+
+                // Days in a month to perform a backup.
+                // Allowed values are from 1 to 31.
+                repeated int64 monthdays = 6 [(unique) = true];
+                // If set to true, last day of month will activate
+                // the policy.
+                bool include_last_day_of_month = 7;
+                // Set of values. Allowed values form 1 to 12.
+                repeated int64 months = 8 [(unique) = true];
+                // Possible types: `REPEATE_PERIOD_UNSPECIFIED`, `HOURLY`, `DAILY`, `WEEKLY`, `MONTHLY`.
+                RepeatePeriod type = 9 [ (required) = true ];
+            }
+            message SinceLastExecTime {
+                // The interval between backups.
+                Interval delay = 1 [ (required) = true ];
+            }
+
+            oneof setting {
+                option (exactly_one) = true;
+                Time time = 1;
+                SinceLastExecTime since_last_exec_time = 2;
+            }
+            // BackupSet type -- one of incr, full, differential or auto.
+            // if custom scheme is used the BackupSet type should be specified
+            Type type = 3;
+        }
+
+        // Scheme of backups.
+        enum Scheme {
+            SCHEME_UNSPECIFIED = 0;
+            SIMPLE = 1;
+            ALWAYS_FULL = 2;
+            ALWAYS_INCREMENTAL = 3;
+            WEEKLY_INCREMENTAL = 4;
+            WEEKLY_FULL_DAILY_INCREMENTAL = 5;
+            // Custom will require to specify schedules for full, differential
+            // and incremental backups additionally.
+            CUSTOM = 6;
+            CDP = 7;
+        }
+
+        // A list of schedules with backup sets that compose the whole scheme.
+        repeated BackupSet backup_sets = 1 [ (size)=">0" ];
+        // If true, the backup schedule will be enabled.
+        bool enabled = 2;
+        // Max number of backup processes allowed to run in parallel. Unlimited if not set.
+        int64 max_parallel_backups = 3;
+        // Configuration of the random delay between the execution of parallel tasks.
+        Interval rand_max_delay = 4 [ (required) = true ];
+        // A backup scheme. Available values: `simple`, `always_full`, `always_incremental`, `weekly_incremental`, `weekly_full_daily_incremental`, `custom`, `cdp`.
+        Scheme scheme = 5 [ (required) = true ];
+        // A day of week to start weekly backups.
+        Day weekly_backup_day = 6 [ (required) = true ];
+    }
+
+    enum ChangedBlockTracking {
+        CHANGED_BLOCK_TRACKING_UNSPECIFIED = 0;
+        USE_IF_ENABLED = 1;
+        ENABLE_AND_USE = 2;
+        DO_NOT_USE = 3;
+    }
+
+    // Archive compression level.
+    Compression compression = 1 [ (required) = true ];
+    // Format of the Acronis backup archive.
+    Format format = 2 [ (required) = true ];
+    // If true, snapshots of multiple volumes will be taken simultaneously.
+    bool multi_volume_snapshotting_enabled = 3;
+    // If true, the file security settings will be preserved.
+    bool preserve_file_security_settings = 4;
+    // Configuration of retries on recoverable errors during the backup operations like reconnection to destination. No attempts to fix recoverable errors will be made if retry configuration is not set.
+    RetriesConfiguration reattempts = 5 [ (required) = true ];
+    // If true, a user interaction will be avoided when possible. Equals to false if value is not specified.
+    bool silent_mode_enabled = 6;
+    // Determines the size to split backups on. Splitting is not performed if value is not specified.
+    Splitting splitting = 7 [ (required) = true ];
+    // Configuration of retries on errors during the creation of the virtual machine snapshot. No attempts to fix recoverable errors will be made if retry configuration is not set.
+    RetriesConfiguration vm_snapshot_reattempts = 8 [ (required) = true ];
+    // Settings for the Volume Shadow Copy Service (VSS) provider. If not set, no VSS provider is used.
+    VolumeShadowCopyServiceSettings vss = 9 [ (required) = true ];
+    // The archive properties.
+    ArchiveProperties archive = 10;
+    // Time windows for performance limitations of backup and storage maintenance operations.
+    PerformanceWindow performance_window = 11 [ (required) = true ];
+    // Configuration of backup retention rules.
+    Retention retention = 12 [ (required) = true ];
+
+    reserved 13,14;
+
+    // Configuration of the backup schedule.
+    Scheduling scheduling = 15 [ (required) = true ];
+    // A configuration of Changed Block Tracking (CBT).
+    ChangedBlockTracking cbt = 16 [ (required) = true ];
+    // If true, determines whether a file has changed by the file size and timestamp. Otherwise, the entire file contents are compared to those stored in the backup.
+    bool fast_backup_enabled = 17;
+    // If true, a quiesced snapshot of the virtual machine will be taken.
+    bool quiesce_snapshotting_enabled = 18;
+}
+
+message PolicyApplication {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        // Application is applied and everything is OK.
+        OK = 1;
+        // Application is currently running.
+        RUNNING = 2;
+        // Application is disabled.
+        DISABLED = 3;
+    }
+
+    // Policy ID.
+    string policy_id = 1;
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2;
+    bool enabled = 3;
+    Status status = 4;
+    google.protobuf.Timestamp created_at = 5;
+}

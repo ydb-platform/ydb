@@ -1,0 +1,401 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.saml;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/organizationmanager/v1/saml/federation.proto";
+import "yandex/cloud/organizationmanager/v1/user_account.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.saml";
+
+// A set of methods for managing federations.
+service FederationService {
+  // Returns the specified federation.
+  //
+  // To get the list of available federations, make a [List] request.
+  rpc Get(GetFederationRequest) returns (Federation) {
+    option (google.api.http) = {get: "/organization-manager/v1/saml/federations/{federation_id}"};
+  }
+
+  // Retrieves the list of federations in the specified organization.
+  rpc List(ListFederationsRequest) returns (ListFederationsResponse) {
+    option (google.api.http) = {get: "/organization-manager/v1/saml/federations"};
+  }
+
+  // Creates a federation in the specified organization.
+  rpc Create(CreateFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/organization-manager/v1/saml/federations"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFederationMetadata"
+      response: "Federation"
+    };
+  }
+
+  // Updates the specified federation.
+  rpc Update(UpdateFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/organization-manager/v1/saml/federations/{federation_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFederationMetadata"
+      response: "Federation"
+    };
+  }
+
+  // Deletes the specified federation.
+  rpc Delete(DeleteFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/organization-manager/v1/saml/federations/{federation_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFederationMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Adds users to the specified federation.
+  rpc AddUserAccounts(AddFederatedUserAccountsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/organization-manager/v1/saml/federations/{federation_id}:addUserAccounts"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddFederatedUserAccountsMetadata"
+      response: "AddFederatedUserAccountsResponse"
+    };
+  }
+
+  // Deletes users from the specified federation.
+  rpc DeleteUserAccounts(DeleteFederatedUserAccountsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/organization-manager/v1/saml/federations/{federation_id}:deleteUserAccounts"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFederatedUserAccountsMetadata"
+      response: "DeleteFederatedUserAccountsResponse"
+    };
+  }
+
+  // Lists users for the specified federation.
+  rpc ListUserAccounts(ListFederatedUserAccountsRequest) returns (ListFederatedUserAccountsResponse) {
+    option (google.api.http) = {get: "/organization-manager/v1/saml/federations/{federation_id}:listUserAccounts"};
+  }
+
+  // Lists operations for the specified federation.
+  rpc ListOperations(ListFederationOperationsRequest) returns (ListFederationOperationsResponse) {
+    option (google.api.http) = {get: "/organization-manager/v1/saml/federations/{federation_id}/operations"};
+  }
+}
+
+message GetFederationRequest {
+  // ID of the federation to return.
+  // To get the federation ID, make a [FederationService.List] request.
+  string federation_id = 1 [(length) = "<=50"];
+}
+
+message ListFederationsRequest {
+  // ID of the organization to list federations in.
+  // To get the organization ID, make a [yandex.cloud.organizationmanager.v1.OrganizationService.List] request.
+  string organization_id = 6 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListFederationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100
+  int64 page_size = 3 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListFederationsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 4 [(length) = "<=2000"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on the [Federation.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListFederationsResponse {
+  // List of federations.
+  repeated Federation federations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListFederationsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListFederationsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateFederationRequest {
+  // ID of the organization to create a federation in.
+  // To get the organization ID, make a [yandex.cloud.organizationmanager.v1.OrganizationService.List] request.
+  string organization_id = 1 [(length) = "<=50"];
+
+  // Name of the federation.
+  // The name must be unique within the organization.
+  string name = 2 [(pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the federation.
+  string description = 3 [(length) = "<=256"];
+
+  // Browser cookie lifetime in seconds.
+  // If the cookie is still valid, the management console
+  // authenticates the user immediately and redirects them to the home page.
+  // The default value is `8h`.
+  google.protobuf.Duration cookie_max_age = 4 [(value) = "10m-12h"];
+
+  // Add new users automatically on successful authentication.
+  // The user becomes member of the organization automatically,
+  // but you need to grant other roles to them.
+  //
+  // If the value is `false`, users who aren't added to the organization
+  // can't log in, even if they have authenticated on your server.
+  bool auto_create_account_on_login = 5;
+
+  // ID of the IdP server to be used for authentication.
+  // The IdP server also responds to IAM with this ID after the user authenticates.
+  string issuer = 6 [
+    (required) = true,
+    (length) = "<=8000"
+  ];
+
+  // Single sign-on endpoint binding type. Most Identity Providers support the `POST` binding type.
+  //
+  // SAML Binding is a mapping of a SAML protocol message onto standard messaging
+  // formats and/or communications protocols.
+  BindingType sso_binding = 7;
+
+  // Single sign-on endpoint URL.
+  // Specify the link to the IdP login page here.
+  string sso_url = 8 [
+    (required) = true,
+    (length) = "<=8000"
+  ];
+
+  // Federation security settings.
+  FederationSecuritySettings security_settings = 9;
+
+  // Use case insensitive Name IDs.
+  bool case_insensitive_name_ids = 10;
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 11 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+message CreateFederationMetadata {
+  // ID of the federation that is being created.
+  string federation_id = 1;
+}
+
+message UpdateFederationRequest {
+  reserved 11;
+  // ID of the federation to update.
+  // To get the federation ID, make a [FederationService.List] request.
+  string federation_id = 1 [(length) = "<=50"];
+
+  // Field mask that specifies which fields of the federation are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the federation.
+  // The name must be unique within the organization.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the federation.
+  string description = 4 [(length) = "<=256"];
+
+  // Browser cookie lifetime in seconds.
+  // If the cookie is still valid, the management console
+  // authenticates the user immediately and redirects them to the home page.
+  // The default value is `8h`.
+  google.protobuf.Duration cookie_max_age = 5 [(value) = "10m-12h"];
+
+  // Add new users automatically on successful authentication.
+  // The user becomes member of the organization automatically,
+  // but you need to grant other roles to them.
+  //
+  // If the value is `false`, users who aren't added to the organization
+  // can't log in, even if they have authenticated on your server.
+  bool auto_create_account_on_login = 6;
+
+  // ID of the IdP server to be used for authentication.
+  // The IdP server also responds to IAM with this ID after the user authenticates.
+  string issuer = 7 [
+    (required) = true,
+    (length) = "<=8000"
+  ];
+
+  // Single sign-on endpoint binding type. Most Identity Providers support the `POST` binding type.
+  //
+  // SAML Binding is a mapping of a SAML protocol message onto standard messaging
+  // formats and/or communications protocols.
+  BindingType sso_binding = 8;
+
+  // Single sign-on endpoint URL.
+  // Specify the link to the IdP login page here.
+  string sso_url = 9 [
+    (required) = true,
+    (length) = "<=8000"
+  ];
+
+  // Federation security settings.
+  FederationSecuritySettings security_settings = 10;
+
+  // Use case insensitive name ids.
+  bool case_insensitive_name_ids = 12;
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 13 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+message UpdateFederationMetadata {
+  // ID of the federation that is being updated.
+  string federation_id = 1;
+}
+
+message DeleteFederationRequest {
+  // ID of the federation to delete.
+  // To get the federation ID, make a [FederationService.List] request.
+  string federation_id = 1 [(length) = "<=50"];
+}
+
+message DeleteFederationMetadata {
+  // ID of the federation that is being deleted.
+  string federation_id = 1;
+}
+
+message AddFederatedUserAccountsRequest {
+  // ID of the federation to add users.
+  string federation_id = 1 [(length) = "<=50"];
+  // Name IDs returned by the Identity Provider (IdP) on successful authentication.
+  // These may be UPNs or user email addresses.
+  repeated string name_ids = 2 [(length) = "<=1000"];
+}
+
+message AddFederatedUserAccountsMetadata {
+  // ID of the federation that is being altered.
+  string federation_id = 1;
+}
+
+message AddFederatedUserAccountsResponse {
+  // List of users created by [FederationService.AddUserAccounts] request.
+  repeated UserAccount user_accounts = 1;
+}
+
+message DeleteFederatedUserAccountsRequest {
+  // ID of the federation to delete users from.
+  string federation_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+  // List of subjects to delete.
+  repeated string subject_ids = 2 [
+    (size) = "1-1000",
+    (length) = "1-50"
+  ];
+}
+
+message DeleteFederatedUserAccountsMetadata {
+  // ID of the federation that is being altered.
+  string federation_id = 1;
+}
+
+message DeleteFederatedUserAccountsResponse {
+  // List of subjects deleted by [FederationService.DeleteUserAccounts] request.
+  repeated string deleted_subjects = 1;
+  // List of subjects found in [FederationService.DeleteUserAccounts] request that do not exist.
+  repeated string non_existing_subjects = 2;
+}
+
+message ListFederatedUserAccountsRequest {
+  // ID of the federation to list user accounts for.
+  string federation_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListFederatedUserAccountsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListFederatedUserAccountsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=2000"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on the [name_id] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 1-1000 characters long and match the regular expression
+  //   `[a-z0-9A-Z/@_.\-=+*\\]+`.
+  string filter = 4 [(length) = "<=1010"];
+}
+
+message ListFederatedUserAccountsResponse {
+  // List of user accounts for the specified federation.
+  repeated UserAccount user_accounts = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListFederatedUserAccountsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListFederatedUserAccountsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListFederationOperationsRequest {
+  // ID of the federation to list operations for.
+  string federation_id = 1 [(length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListFederationOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListFederationOperationsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListFederationOperationsResponse {
+  // List of operations for the specified federation.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListFederationOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListFederationOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

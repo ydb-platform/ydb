@@ -1,0 +1,417 @@
+syntax = "proto3";
+
+package yandex.cloud.loadbalancer.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/loadbalancer/v1/network_load_balancer.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadbalancer/v1;loadbalancer";
+option java_package = "yandex.cloud.api.loadbalancer.v1";
+
+// A set of methods for managing NetworkLoadBalancer resources.
+service NetworkLoadBalancerService {
+  // Returns the specified NetworkLoadBalancer resource.
+  //
+  // Get the list of available NetworkLoadBalancer resources by making a [List] request.
+  rpc Get (GetNetworkLoadBalancerRequest) returns (NetworkLoadBalancer) {
+    option (google.api.http) = { get: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}" };
+  }
+
+  // Retrieves the list of NetworkLoadBalancer resources in the specified folder.
+  rpc List (ListNetworkLoadBalancersRequest) returns (ListNetworkLoadBalancersResponse) {
+    option (google.api.http) = { get: "/load-balancer/v1/networkLoadBalancers" };
+  }
+
+  // Creates a network load balancer in the specified folder using the data specified in the request.
+  rpc Create (CreateNetworkLoadBalancerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateNetworkLoadBalancerMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Updates the specified network load balancer.
+  rpc Update (UpdateNetworkLoadBalancerRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateNetworkLoadBalancerMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Deletes the specified network load balancer.
+  rpc Delete (DeleteNetworkLoadBalancerRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteNetworkLoadBalancerMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Starts load balancing and health checking with the specified network load balancer with specified settings.
+  // Changes network load balancer status to `` ACTIVE ``.
+  rpc Start (StartNetworkLoadBalancerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:start" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartNetworkLoadBalancerMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Stops load balancing and health checking with the specified network load balancer.
+  // Changes load balancer status to `` STOPPED ``.
+  rpc Stop (StopNetworkLoadBalancerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:stop" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopNetworkLoadBalancerMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Attaches a target group to the specified network load balancer.
+  rpc AttachTargetGroup (AttachNetworkLoadBalancerTargetGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:attachTargetGroup" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AttachNetworkLoadBalancerTargetGroupMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Detaches the target group from the specified network load balancer.
+  rpc DetachTargetGroup (DetachNetworkLoadBalancerTargetGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:detachTargetGroup" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DetachNetworkLoadBalancerTargetGroupMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Gets states of target resources in the attached target group.
+  rpc GetTargetStates (GetTargetStatesRequest) returns (GetTargetStatesResponse) {
+    option (google.api.http) = { get: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:getTargetStates" };
+  }
+
+  // Adds a listener to the specified network load balancer.
+  rpc AddListener (AddNetworkLoadBalancerListenerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:addListener" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddNetworkLoadBalancerListenerMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Removes the listener from the specified network load balancer.
+  rpc RemoveListener (RemoveNetworkLoadBalancerListenerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}:removeListener" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveNetworkLoadBalancerListenerMetadata"
+      response: "NetworkLoadBalancer"
+    };
+  }
+
+  // Lists operations for the specified network load balancer.
+  rpc ListOperations (ListNetworkLoadBalancerOperationsRequest) returns (ListNetworkLoadBalancerOperationsResponse) {
+    option (google.api.http) = { get: "/load-balancer/v1/networkLoadBalancers/{network_load_balancer_id}/operations" };
+  }
+}
+
+message GetNetworkLoadBalancerRequest {
+  // ID of the NetworkLoadBalancer resource to return.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(length) = "<=50"];
+}
+
+message ListNetworkLoadBalancersRequest {
+  // ID of the folder that the network load balancer belongs to.
+  // To get the folder ID, use a [NetworkLoadBalancerService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [<ResponseMessage>.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListNetworkLoadBalancersResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can only filter by the [NetworkLoadBalancer.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListNetworkLoadBalancersResponse {
+  // List of NetworkLoadBalancer resources.
+  repeated NetworkLoadBalancer network_load_balancers = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkLoadBalancersRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListNetworkLoadBalancersRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateNetworkLoadBalancerRequest {
+  // ID of the folder to create a network load balancer in.
+  // To get the folder ID, use a [NetworkLoadBalancerService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the network load balancer.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the network load balancer.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 4 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // ID of the region where the network load balancer resides.
+  string region_id = 5 [(length) = "<=50"];
+
+  // Type of the network load balancer.
+  NetworkLoadBalancer.Type type = 6 [(required) = true];
+
+  // List of listeners and their specs for the network load balancer.
+  repeated ListenerSpec listener_specs = 7 [(size) = "<=1000"];
+
+  // List of attached target groups for the network load balancer.
+  repeated AttachedTargetGroup attached_target_groups = 8 [(size) = "<=1000"];
+
+  // Specifies if network load balancer protected from deletion.
+  bool deletion_protection = 9;
+}
+
+message CreateNetworkLoadBalancerMetadata {
+  // ID of the network load balancer that is being created.
+  string network_load_balancer_id = 1;
+}
+
+message UpdateNetworkLoadBalancerRequest {
+  // ID of the network load balancer to update.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the NetworkLoadBalancer resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the network load balancer.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the network load balancer.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `` key:value `` pairs.
+  //
+  // The existing set of `` labels `` is completely replaced with the provided set.
+  map<string, string> labels = 5 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // A list of listeners and their specs for the network load balancer.
+  repeated ListenerSpec listener_specs = 6 [(size) = "<=1000"];
+
+  // A list of attached target groups for the network load balancer.
+  repeated AttachedTargetGroup attached_target_groups = 7 [(size) = "<=1000"];
+
+  // Specifies if network load balancer protected from deletion.
+  bool deletion_protection = 8;
+}
+
+message UpdateNetworkLoadBalancerMetadata {
+  // ID of the NetworkLoadBalancer resource that is being updated.
+  string network_load_balancer_id = 1;
+}
+
+message DeleteNetworkLoadBalancerRequest {
+  // ID of the network load balancer to delete.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteNetworkLoadBalancerMetadata {
+  // ID of the NetworkLoadBalancer resource that is being deleted.
+  string network_load_balancer_id = 1;
+}
+
+message StartNetworkLoadBalancerRequest {
+  // ID of the network load balancer to start.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message StartNetworkLoadBalancerMetadata {
+  // ID of the NetworkLoadBalancer resource that is being started.
+  string network_load_balancer_id = 1;
+}
+
+message StopNetworkLoadBalancerRequest {
+  // ID of the network load balancer to stop.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message StopNetworkLoadBalancerMetadata {
+  // ID of the NetworkLoadBalancer resource that is being stopped.
+  string network_load_balancer_id = 1;
+}
+
+message AttachNetworkLoadBalancerTargetGroupRequest {
+  // ID of the network load balancer to attach the target group to.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the attached target group to attach to the network load balancer.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  AttachedTargetGroup attached_target_group = 2 [(required) = true];
+}
+
+message AttachNetworkLoadBalancerTargetGroupMetadata {
+  // ID of the network load balancer that the target group is being attached to.
+  string network_load_balancer_id = 1;
+
+  // ID of the target group.
+  string target_group_id = 2;
+}
+
+message DetachNetworkLoadBalancerTargetGroupRequest {
+  // ID of the network load balancer to detach the target group from.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the target group.
+  string target_group_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message DetachNetworkLoadBalancerTargetGroupMetadata {
+  // ID of the network load balancer that the target group is being detached from.
+  string network_load_balancer_id = 1;
+
+  // ID of the target group.
+  string target_group_id = 2;
+}
+
+message AddNetworkLoadBalancerListenerRequest {
+  // ID of the network load balancer to add a listener to.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Listener spec.
+  ListenerSpec listener_spec = 2 [(required) = true];
+}
+
+message AddNetworkLoadBalancerListenerMetadata {
+  // ID of the network load balancer that the listener is being added to.
+  string network_load_balancer_id = 1;
+}
+
+message RemoveNetworkLoadBalancerListenerRequest {
+  // ID of the network load balancer to remove the listener from.
+  // To get the network load balancer ID, use a [NetworkLoadBalancerService.List] request.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the listener to delete.
+  string listener_name = 2 [(required) = true, (pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+}
+
+message RemoveNetworkLoadBalancerListenerMetadata {
+  // ID of the network load balancer that the listener is being removed from.
+  string network_load_balancer_id = 1;
+}
+
+message ListNetworkLoadBalancerOperationsRequest {
+  // ID of the NetworkLoadBalancer resource to list operations for.
+  string network_load_balancer_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size], the service returns a [ListNetworkLoadBalancerOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListNetworkLoadBalancerOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkLoadBalancerOperationsResponse {
+  // List of operations for the specified network load balancer.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkLoadBalancerOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListNetworkLoadBalancerOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message GetTargetStatesRequest {
+  // ID of the NetworkLoadBalancer resource with an attached target group.
+  string network_load_balancer_id = 1 [(length) = "<=50"];
+
+  // ID of the target group to get states of resources from.
+  string target_group_id = 2 [(length) = "<=50"];
+}
+
+message GetTargetStatesResponse {
+  // List of states of targets within the target group that is specified in the [GetTargetStatesRequest] message.
+  repeated TargetState target_states = 1;
+}
+
+// External address specification that is used by [ListenerSpec].
+message ExternalAddressSpec {
+  // Public IP address for a listener.
+  // If you provide a static public IP address for the [NetworkLoadBalancerService.Update]
+  // method, it will replace the existing listener address.
+  string address = 1;
+
+  // IP version.
+  IpVersion ip_version = 2;
+}
+
+// Internal address specification that is used by [ListenerSpec].
+message InternalAddressSpec {
+  // Internal IP address for a listener.
+  string address = 1;
+
+  // ID of the subnet.
+  string subnet_id = 2;
+
+  // IP version.
+  IpVersion ip_version = 3;
+}
+
+// Listener specification that will be used by a network load balancer.
+message ListenerSpec {
+  // Name of the listener. The name must be unique for each listener on a single load balancer. 3-63 characters long.
+  string name = 1 [(required) = true, (pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Port for incoming traffic.
+  int64 port = 2 [(value) = "1-65535"];
+
+  // Protocol for incoming traffic.
+  Listener.Protocol protocol = 3 [(required) = true];
+
+  // IP address for incoming traffic. Either the ID of the previously created address or the address specification.
+  oneof address {
+    // External IP address specification.
+    ExternalAddressSpec external_address_spec = 4;
+    // Internal IP address specification.
+    InternalAddressSpec internal_address_spec = 6;
+  }
+
+  // Port of a target.
+  // Acceptable values are 1 to 65535, inclusive.
+  int64 target_port = 5;
+}

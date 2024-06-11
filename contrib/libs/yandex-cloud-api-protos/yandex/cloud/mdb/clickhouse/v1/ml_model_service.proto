@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/clickhouse/v1/ml_model.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+// A set of methods for managing machine learning models.
+service MlModelService {
+  // Returns the specified machine learning model.
+  //
+  // To get the list of all available models, make a [List] request.
+  rpc Get (GetMlModelRequest) returns (MlModel) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/mlModels/{ml_model_name}" };
+  }
+
+  // Retrieves the list of machine learning models in the specified cluster.
+  rpc List (ListMlModelsRequest) returns (ListMlModelsResponse) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/mlModels" };
+  }
+
+  // Creates a machine learning model in the specified cluster.
+  rpc Create (CreateMlModelRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-clickhouse/v1/clusters/{cluster_id}/mlModels" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateMlModelMetadata"
+      response: "MlModel"
+    };
+  }
+
+  // Updates the specified machine learning model.
+  rpc Update (UpdateMlModelRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-clickhouse/v1/clusters/{cluster_id}/mlModels/{ml_model_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateMlModelMetadata"
+      response: "MlModel"
+    };
+  }
+
+  // Deletes the specified machine learning model.
+  rpc Delete (DeleteMlModelRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-clickhouse/v1/clusters/{cluster_id}/mlModels/{ml_model_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteMlModelMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetMlModelRequest {
+  // ID of the cluster that the model belongs to.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the model to return.
+  //
+  // To get a model name make a [MlModelService.List] request.
+  string ml_model_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message ListMlModelsRequest {
+  // ID of the cluster that models belongs to.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListMlModelsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListMlModelsResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListMlModelsResponse {
+  // List of models in the specified cluster.
+  repeated MlModel ml_models = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListMlModelsRequest.page_size], use `next_page_token` as the value
+  // for the [ListMlModelsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateMlModelRequest {
+  // ID of the cluster to create a model in.
+  //
+  // To get a cluster ID make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Model name. The model name is one of the arguments of the modelEvaluate() function, which is used to call the model in ClickHouse.
+  string ml_model_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+
+  // Type of the model.
+  MlModelType type = 3 [(required) = true];
+
+  // Model file URL. You can only use models stored in Object Storage.
+  string uri = 4 [(required) = true];
+}
+
+message CreateMlModelMetadata {
+  // ID of the cluster that a model is being added to.
+  string cluster_id = 1;
+
+  // Name of the the model that is being created.
+  string ml_model_name = 2;
+}
+
+message UpdateMlModelRequest {
+  // ID of the cluster to update the model in.
+  //
+  // To get a cluster ID make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the the model to update.
+  string ml_model_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+
+  google.protobuf.FieldMask update_mask = 3;
+
+  // The new model file URL. You can only use models stored in Object Storage.
+  string uri = 4;
+}
+
+message UpdateMlModelMetadata {
+  // ID of the cluster that contains the model being updated.
+  string cluster_id = 1;
+
+  // Name of the the model that is being updated.
+  string ml_model_name = 2;
+}
+
+message DeleteMlModelRequest {
+  // ID of the cluster to delete the model in.
+  //
+  // To get a cluster ID make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the the model to delete.
+  string ml_model_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message DeleteMlModelMetadata {
+  // ID of the cluster that contains the model being deleted.
+  string cluster_id = 1;
+
+  // Name of the the model that is being deleted.
+  string ml_model_name = 2;
+}

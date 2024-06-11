@@ -31,14 +31,6 @@ bool AreFieldSchemasEquivalent(
             return false;
         }
 
-        if (lhsFieldDescriptor->GetMinVersion() != rhsFieldSchema->MinVersion) {
-            return false;
-        }
-
-        if (lhsFieldDescriptor->GetMaxVersion() != rhsFieldSchema->MaxVersion) {
-            return false;
-        }
-
         if (lhsFieldDescriptor->IsDeprecated() != rhsFieldSchema->Deprecated) {
             return false;
         }

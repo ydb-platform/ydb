@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "yandex/cloud/monitoring/v3/unit_format.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// Label values parameter.
+message LabelValuesParameter {
+  reserved 3 to 18;
+  // Container id
+  oneof container {
+    // Required. Folder ID.
+    string folder_id = 2;
+  }
+
+  // Required. Selectors to select metric label values.
+  string selectors = 19;
+
+  // Required. Label key to list label values.
+  string label_key = 20;
+
+  // Specifies the multiselectable values of parameter.
+  bool multiselectable = 21;
+
+  // Default values.
+  repeated string default_values = 22;
+}
+
+// Custom parameter.
+message CustomParameter {
+  // Required. List of parameter values.
+  repeated string values = 1;
+
+  // Specifies the multiselectable values of parameter.
+  bool multiselectable = 2;
+
+  // Default values.
+  repeated string default_values = 3;
+}
+
+// Text parameter.
+message TextParameter {
+  // Default value.
+  string default_value = 1;
+}
+
+// Double parameter.
+message DoubleParameter {
+  // Default value.
+  double default_value = 1;
+
+  // Parameter unit.
+  UnitFormat unit_format = 2;
+}
+
+// Integer parameter.
+message IntegerParameter {
+  // Default value.
+  int64 default_value = 1;
+
+  // Parameter unit.
+  UnitFormat unit_format = 2;
+}
+
+// Text multiple values parameter.
+message TextValuesParameter {
+  // Default value.
+  repeated string default_values = 1;
+}
+
+// Parameter.
+message Parameter {
+  // Parameter identifier.
+  string name = 1;
+
+  // UI-visible title of the parameter.
+  string title = 2;
+
+  // Parameter data.
+  oneof data {
+    // Label values parameter.
+    LabelValuesParameter label_values = 3;
+
+    // Custom parameter.
+    CustomParameter custom = 4;
+
+    // Text parameter.
+    TextParameter text = 5;
+
+    // Integer parameter.
+    IntegerParameter integer_parameter = 7;
+
+    // Double parameter.
+    DoubleParameter double_parameter = 8;
+
+    // Integer parameter.
+    TextValuesParameter text_values = 9;
+  }
+
+  // UI-visibility.
+  bool hidden = 6;
+
+  // Parameter description.
+  string description = 10;
+}
+
+// Parametrization.
+message Parametrization {
+  // Parameters.
+  repeated Parameter parameters = 1;
+
+  // Predefined selectors.
+  string selectors = 2;
+}

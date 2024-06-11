@@ -808,9 +808,9 @@ public:
         const TPausePipelineOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    MOCK_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (

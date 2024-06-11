@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.saml;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.saml";
+
+// A federation.
+// For more information, see [SAML-compatible identity federations](/docs/iam/concepts/federations).
+message Federation {
+
+  // ID of the federation.
+  string id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the organization that the federation belongs to.
+  string organization_id = 2;
+
+  // Name of the federation.
+  string name = 3 [(required) = true, (pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the federation.
+  string description = 4 [(length) = "<=256"];
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Browser cookie lifetime in seconds.
+  // If the cookie is still valid, the management console
+  // authenticates the user immediately and redirects them to the home page.
+  google.protobuf.Duration cookie_max_age = 6 [(value) = "10m-12h"];
+
+  // Add new users automatically on successful authentication.
+  // The user becomes member of the organization automatically,
+  // but you need to grant other roles to them.
+  //
+  // If the value is `false`, users who aren't added to the organization
+  // can't log in, even if they have authenticated on your server.
+  bool auto_create_account_on_login = 7;
+
+  // ID of the IdP server to be used for authentication.
+  // The IdP server also responds to IAM with this ID after the user authenticates.
+  string issuer = 8 [(required) = true, (length) = "<=8000"];
+
+  // Single sign-on endpoint binding type. Most Identity Providers support the `POST` binding type.
+  //
+  // SAML Binding is a mapping of a SAML protocol message onto standard messaging
+  // formats and/or communications protocols.
+  BindingType sso_binding = 9;
+
+  // Single sign-on endpoint URL.
+  // Specify the link to the IdP login page here.
+  string sso_url = 10 [(required) = true, (length) = "<=8000"];
+
+  // Federation security settings.
+  FederationSecuritySettings security_settings = 11;
+
+  // Use case insensitive Name IDs.
+  bool case_insensitive_name_ids = 12;
+
+  // Resource labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 13;
+}
+
+enum BindingType {
+  BINDING_TYPE_UNSPECIFIED = 0;
+
+  // HTTP POST binding.
+  POST = 1;
+
+  // HTTP redirect binding.
+  REDIRECT = 2;
+
+  // HTTP artifact binding.
+  ARTIFACT = 3;
+
+}
+
+// Federation security settings.
+message FederationSecuritySettings {
+  // Enable encrypted assertions.
+  bool encrypted_assertions = 1;
+
+  // Value parameter ForceAuthn in SAMLRequest.
+  bool force_authn = 2;
+}

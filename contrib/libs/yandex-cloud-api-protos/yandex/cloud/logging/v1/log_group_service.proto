@@ -1,0 +1,301 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/logging/v1/log_group.proto";
+import "yandex/cloud/logging/v1/log_resource.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+// A set of methods for managing log groups.
+service LogGroupService {
+  // Returns the specified log group.
+  //
+  // To get the list of all available log groups, make a [List] request.
+  rpc Get (GetLogGroupRequest) returns (LogGroup) {
+    option (google.api.http) = { get: "/logging/v1/logGroups/{log_group_id}" };
+  }
+
+  // Returns stats for the specified log group.
+  rpc Stats (GetLogGroupStatsRequest) returns (GetLogGroupStatsResponse) {
+    option (google.api.http) = { get: "/logging/v1/logGroups/{log_group_id}/stats" };
+  }
+
+  // Retrieves the list of log groups in the specified folder.
+  rpc List (ListLogGroupsRequest) returns (ListLogGroupsResponse) {
+    option (google.api.http) = { get: "/logging/v1/logGroups" };
+  }
+
+  // Creates a log group in the specified folder.
+  rpc Create (CreateLogGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/logging/v1/logGroups" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateLogGroupMetadata"
+      response: "LogGroup"
+    };
+  }
+
+  // Updates the specified log group.
+  rpc Update (UpdateLogGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/logging/v1/logGroups/{log_group_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateLogGroupMetadata"
+      response: "LogGroup"
+    };
+  }
+
+  // Deletes the specified log group.
+  rpc Delete (DeleteLogGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/logging/v1/logGroups/{log_group_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteLogGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the resources (type and IDs) in the specified log group.
+  rpc ListResources (ListResourcesRequest) returns (ListResourcesResponse) {
+    option (google.api.http) = { get: "/logging/v1/logGroups/{log_group_id}:listResources" };
+  }
+
+  // Lists operations for the specified log group.
+  rpc ListOperations (ListOperationsRequest) returns (ListOperationsResponse) {
+    option (google.api.http) = { get: "/logging/v1/logGroups/{log_group_id}/operations" };
+  }
+
+  // Lists existing access bindings for the specified log group.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/logging/v1/logGroups/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the specified log group.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/logging/v1/logGroups/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified log group.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/logging/v1/logGroups/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+}
+
+message GetLogGroupRequest {
+  // ID of the log group to return.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+}
+
+message GetLogGroupStatsRequest {
+  // ID of the log group to return stats for.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+}
+
+message ListLogGroupsRequest {
+  // Folder ID of the log groups to return.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=64"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListLogGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListLogGroupsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters log groups listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [LogGroup.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-log-group`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListLogGroupsResponse {
+  // List of log groups in the specified folder.
+  repeated LogGroup groups = 1;
+
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListLogGroupsRequest.page_size], use `next_page_token` as the value
+  // for the [ListLogGroupsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateLogGroupRequest {
+  // ID of the folder to create a log group in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=64"];
+
+  // Name of the log group.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "([a-z]([-a-z0-9]{1,61}[a-z0-9])?)?"];
+
+  // Description of the log group.
+  string description = 3 [(length) = "<=256"];
+
+  // Log group labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Log group entry retention period.
+  //
+  // Entries will be present in group during this period.
+  // If specified, must be non-negative.
+  // Empty or zero value is treated as no limit.
+  google.protobuf.Duration retention_period = 5;
+  // Data stream name
+
+  // If specified, all log records will be written to this data stream
+  string data_stream = 6 [(length) = "<=512"];
+}
+
+message CreateLogGroupMetadata {
+  // ID of the log group being created.
+  string log_group_id = 1;
+}
+
+message UpdateLogGroupRequest {
+  // ID of the log group to update.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+
+  // Field mask that specifies which attributes of the function should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name of the log group.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "([a-z]([-a-z0-9]{1,61}[a-z0-9])?)?"];
+
+  // New Description of the log group.
+  string description = 4 [(length) = "<=256"];
+
+  // New log group labels as `key:value` pairs.
+  map<string, string> labels = 5 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // New log group entry retention period.
+  //
+  // Entries will be present in group during this period.
+  // If specified, must be non-negative.
+  // Empty or zero value is treated as no limit.
+  google.protobuf.Duration retention_period = 6;
+
+  // Data stream name
+
+  // If specified, log records will be written to this data stream
+  string data_stream = 7 [(length) = "<=512"];
+}
+
+message UpdateLogGroupMetadata {
+  // ID of the log group being updated.
+  string log_group_id = 1;
+}
+
+message DeleteLogGroupRequest {
+  // ID of the log group to delete.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+}
+
+message DeleteLogGroupMetadata {
+  // ID of the log group being deleted.
+  string log_group_id = 1;
+}
+
+message ListResourcesRequest {
+  // ID of the log group to list resources for.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+
+  // Resource type to return resources for.
+  //
+  // If not specified, [ListResourcesResponse] will contain information about all resource types.
+  string type = 2 [(length) = "<=256"];
+}
+
+message ListResourcesResponse {
+  // List of resources present in log group.
+  repeated LogGroupResource resources = 1;
+}
+
+message ListOperationsRequest {
+  // ID of the log group to list operations for.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can be applied to the [operation.Operation.description], [operation.Operation.created_at], [operation.Operation.modified_at], [operation.Operation.created_by], [operation.Operation.done] fields.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Examples of a filter: `done=false`, `created_by='John.Doe'`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListOperationsResponse {
+  // List of operations for the specified log group.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message GetLogGroupStatsResponse {
+  // Log group ID the stats are returned for.
+  string log_group_id = 1;
+
+  // Size of data in log group in bytes.
+  int64 bytes = 2;
+
+  // Amount of records in log group.
+  int64 records = 3;
+}

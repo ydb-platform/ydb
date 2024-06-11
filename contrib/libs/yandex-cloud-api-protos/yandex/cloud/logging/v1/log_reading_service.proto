@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+// A set of methods for reading from log groups.
+service LogReadingService {
+  // Read log entries from the specified log group.
+  rpc Read (ReadRequest) returns (ReadResponse);
+}
+
+message ReadRequest {
+  // Read selector.
+  oneof selector {
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ReadResponse.next_page_token] or [ReadResponse.previous_page_token] returned by a previous read request.
+    string page_token = 1;
+
+    // Read criteria.
+    //
+    // See [Criteria] for details.
+    Criteria criteria = 2;
+  }
+}
+
+message ReadResponse {
+  // Log group ID the read was performed from.
+  string log_group_id = 1;
+
+  // List of matching log entries.
+  repeated LogEntry entries = 2;
+
+  // Token for getting the next page of the log entries.
+  //
+  // After getting log entries initially with [Criteria], you can use `next_page_token` as the value
+  // for the [ReadRequest.page_token] parameter in the next read request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 3;
+
+  // Token for getting the previous page of the log entries.
+  //
+  // After getting log entries initially with [Criteria], you can use `previous_page_token` as the value
+  // for the [ReadRequest.page_token] parameter in the next read request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string previous_page_token = 4;
+}
+
+// Read criteria. Should be used in initial [ReadRequest].
+message Criteria {
+  // ID of the log group to return.
+  //
+  // To get a log group ID make a [LogGroupService.List] request.
+  string log_group_id = 1 [(required) = true, (length) = "<=64"];
+
+  // List of resource types to limit log entries to.
+  //
+  // Empty list disables filter.
+  repeated string resource_types = 2 [(length) = "<=63", (size) = "<=100"];
+
+  // List of resource IDs to limit log entries to.
+  //
+  // Empty list disables filter.
+  repeated string resource_ids = 3 [(length) = "<=63", (size) = "<=100"];
+
+  // Lower bound of log entries timestamps.
+  google.protobuf.Timestamp since = 4;
+
+  // Upper bound of log entries timestamps.
+  google.protobuf.Timestamp until = 5;
+
+  // List of log levels to limit log entries to.
+  //
+  // Empty list disables filter.
+  repeated LogLevel.Level levels = 6 [(size) = "<=10"];
+
+  // Filter expression. For details about filtering, see [documentation](/docs/logging/concepts/filter).
+  string filter = 7 [(length) = "<=1000"];
+
+  // List of stream names to limit log entries to.
+  //
+  // Empty list disables filter.
+  repeated string stream_names = 10 [(length) = "<=63", (size) = "<=100"];
+
+  // The maximum number of results per page to return.
+  int64 page_size = 8  [(value) = "0-1000"];
+
+  // Limits response to maximum size in bytes. Prevents gRPC resource exhaustion.
+  //
+  // Default value for max response size is 3.5 MiB
+  int64 max_response_size = 9 [(value) = "0-10485760"];
+}

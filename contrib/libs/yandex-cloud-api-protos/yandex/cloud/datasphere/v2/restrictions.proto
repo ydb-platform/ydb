@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+message RestrictionMeta {
+  enum RestrictionValueType {
+    RESTRICTION_VALUE_TYPE_UNSPECIFIED = 0;
+    BOOLEAN = 1;
+    LONG = 2;
+    STRING = 3;
+  }
+
+  // Name of restriction.
+  string name = 1;
+
+  // Value type of restriction.
+  RestrictionValueType value_type = 2;
+}
+
+message Restriction {
+  // Name of restriction.
+  string name = 1;
+
+  // List of boolean restriction values. Empty if value type is not boolean.
+  repeated bool bool_value = 2;
+
+  // List of long restriction values. Empty if value type is not long.
+  repeated int64 long_value = 3;
+
+  // List of string restriction values. Empty if value type is not string.
+  repeated string string_value = 4;
+}
+
+message GetRestrictionsMetaResponse {
+  // List of restrictions.
+  repeated RestrictionMeta restrictions_meta = 1;
+}
+
+message RestrictionsResponse {
+  // List of restrictions.
+  repeated Restriction restrictions = 1;
+}

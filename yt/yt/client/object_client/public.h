@@ -224,6 +224,7 @@ DEFINE_ENUM(EObjectType,
 
     // Sequoia nodes
     ((SequoiaMapNode)                              (1504))
+    ((SequoiaLink)                                 (1505))
 
     // Cypress shards
     ((CypressShard)                               (11004))

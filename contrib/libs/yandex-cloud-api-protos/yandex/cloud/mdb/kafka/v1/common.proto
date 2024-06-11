@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.kafka.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/kafka/v1;kafka";
+option java_package = "yandex.cloud.api.mdb.kafka.v1";
+
+enum CompressionType {
+  COMPRESSION_TYPE_UNSPECIFIED = 0;
+
+  // no codec (uncompressed).
+  COMPRESSION_TYPE_UNCOMPRESSED = 1;
+
+  // Zstandard codec.
+  COMPRESSION_TYPE_ZSTD = 2;
+
+  // LZ4 codec.
+  COMPRESSION_TYPE_LZ4 = 3;
+
+  // Snappy codec.
+  COMPRESSION_TYPE_SNAPPY = 4;
+
+  // GZip codec.
+  COMPRESSION_TYPE_GZIP = 5;
+
+  // the codec to use is set by a producer (can be any of `ZSTD`, `LZ4`, `GZIP` or `SNAPPY` codecs).
+  COMPRESSION_TYPE_PRODUCER = 6;
+}
+
+enum SaslMechanism {
+  SASL_MECHANISM_UNSPECIFIED = 0;
+
+  SASL_MECHANISM_SCRAM_SHA_256 = 1;
+
+  SASL_MECHANISM_SCRAM_SHA_512 = 2;
+}

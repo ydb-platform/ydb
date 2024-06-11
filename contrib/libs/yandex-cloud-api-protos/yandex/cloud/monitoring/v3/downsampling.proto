@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// List of available aggregate functions for downsampling.
+message Downsampling {
+  // List of available aggregate functions for downsampling.
+  enum GridAggregation {
+    GRID_AGGREGATION_UNSPECIFIED = 0;
+
+    // Max value.
+    GRID_AGGREGATION_MAX = 1;
+
+    // Min value.
+    GRID_AGGREGATION_MIN = 2;
+
+    // Sum of values.
+    GRID_AGGREGATION_SUM = 3;
+
+    // Average value.
+    GRID_AGGREGATION_AVG = 4;
+
+    // Last value.
+    GRID_AGGREGATION_LAST = 5;
+
+    // Total count of points.
+    GRID_AGGREGATION_COUNT = 6;
+  }
+
+  // List of available gap filling policy for downsampling.
+  enum GapFilling {
+    GAP_FILLING_UNSPECIFIED = 0;
+
+    // Returns `null` as a metric value and `timestamp` as a time series value.
+    GAP_FILLING_NULL = 1;
+
+    // Returns no value and no timestamp.
+    GAP_FILLING_NONE = 2;
+
+    // Returns the value from the previous time interval.
+    GAP_FILLING_PREVIOUS = 3;
+  }
+
+  oneof mode {
+    // Maximum number of points to be returned.
+    int64 max_points = 1;
+
+    // Time interval (grid) for downsampling in milliseconds.
+    // Points in the specified range are aggregated into one time point.
+    int64 grid_interval = 2;
+
+    // Disable downsampling.
+    bool disabled = 3;
+  }
+
+  // Function that is used for downsampling.
+  GridAggregation grid_aggregation = 4;
+
+  // Parameters for filling gaps in data.
+  GapFilling gap_filling = 5;
+}

@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1;datatransfer";
+option java_package = "yandex.cloud.api.datatransfer.v1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/datatransfer/v1/transfer.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+service TransferService {
+    rpc Create(CreateTransferRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/v1/transfer" body: "*" };
+        option (api.operation) = {
+            metadata: "CreateTransferMetadata"
+            response: "Transfer"
+        };
+    }
+    rpc Update(UpdateTransferRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/v1/transfer/{transfer_id}" body: "*" };
+        option (api.operation) = {
+            metadata: "UpdateTransferMetadata"
+            response: "Transfer"
+        };
+    }
+    rpc Delete(DeleteTransferRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/v1/transfer/{transfer_id}" };
+        option (api.operation) = {
+            metadata: "DeleteTransferMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+    rpc List(ListTransfersRequest) returns (ListTransfersResponse) {
+        option (google.api.http) = { get: "/v1/transfers/list/{folder_id}" };
+    }
+    rpc Get(GetTransferRequest) returns (Transfer) {
+        option (google.api.http) = { get: "/v1/transfer/{transfer_id}" };
+    }
+    rpc Deactivate(DeactivateTransferRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/v1/transfer/{transfer_id}:deactivate" body: "*" };
+        option (api.operation) = {
+            metadata: "DeactivateTransferMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+    rpc Activate(ActivateTransferRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/v1/transfer/{transfer_id}:activate" body: "*" };
+        option (api.operation) = {
+            metadata: "ActivateTransferMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+message CreateTransferRequest {
+    reserved 9;
+    string source_id = 1;
+    string target_id = 2;
+    string description = 3;
+    string folder_id = 4;
+    Runtime runtime = 5;
+    TransferType type = 6;
+    string name = 7;
+    map<string,string> labels = 8;
+    Transformation transformation = 10;
+}
+message CreateTransferMetadata {
+    string transfer_id = 1;
+}
+message UpdateTransferRequest {
+    reserved 7;
+    // Identifier of the transfer to be updated.
+    string transfer_id = 1;
+    // The new description for the transfer.
+    string description = 2;
+    Runtime runtime = 3;
+    // The new transfer name. Must be unique within the folder.
+    string name = 4;
+    // Field mask specifying transfer fields to be updated. Semantics for this field is
+    // described here:
+    // <https://pkg.go.dev/google.golang.org/protobuf/types/known/fieldmaskpb#FieldMask>
+    // The only exception: if the repeated field is specified in the mask, then
+    // the new value replaces the old one instead of being appended to the old one.
+    google.protobuf.FieldMask update_mask = 5;
+    map<string,string> labels = 6;
+    Transformation transformation = 8;
+}
+message UpdateTransferMetadata {
+    string transfer_id = 1;
+}
+message DeleteTransferRequest {
+    string transfer_id = 1;
+}
+message DeleteTransferMetadata {
+    string transfer_id = 1;
+}
+message ListTransfersRequest {
+    reserved 1;
+    // Identifier of the folder containing the transfers to be listed.
+    string folder_id = 2;
+    // The maximum number of transfers to be sent in the response message. If the
+    // folder contains more transfers than `page_size`, `next_page_token` will be
+    // included
+    // in the response message. Include it into the subsequent `ListTransfersRequest`
+    // to
+    // fetch the next page. Defaults to `100` if not specified. The maximum allowed
+    // value
+    // for this field is `500`.
+    int64 page_size = 3;
+    // Opaque value identifying the transfers page to be fetched. Should be empty in
+    // the first `ListTransfersRequest`. Subsequent requests should have this field
+    // filled
+    // with the `next_page_token` from the previous `ListTransfersResponse`.
+    string page_token = 4;
+}
+message ListTransfersResponse {
+    // The list of transfers. If there are more transfers in the folder, then
+    // `next_page_token` is a non-empty string to be included into the subsequent
+    // `ListTransfersRequest` to fetch the next transfers page.
+    repeated Transfer transfers = 1;
+    // Opaque value identifying the next transfers page. This field is empty if there
+    // are no more transfers in the folder. Otherwise it is non-empty and should be
+    // included in the subsequent `ListTransfersRequest` to fetch the next transfers
+    // page.
+    string next_page_token = 2;
+}
+message GetTransferRequest {
+    string transfer_id = 1;
+}
+message DeactivateTransferRequest {
+    string transfer_id = 1;
+}
+message DeactivateTransferMetadata {
+    string transfer_id = 1;
+}
+message ActivateTransferRequest {
+    string transfer_id = 1;
+}
+message ActivateTransferMetadata {
+    string transfer_id = 1;
+}

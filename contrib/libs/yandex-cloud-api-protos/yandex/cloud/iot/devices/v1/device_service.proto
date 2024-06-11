@@ -1,0 +1,459 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.devices.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/iot/devices/v1/device.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/devices/v1;devices";
+option java_package = "yandex.cloud.api.iot.devices.v1";
+
+// A set of methods for managing devices.
+service DeviceService {
+  // Returns the specified device.
+  //
+  // To get the list of available devices, make a [List] request.
+  rpc Get(GetDeviceRequest) returns (Device) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices/{device_id}"};
+  }
+
+  rpc GetByName(GetByNameDeviceRequest) returns (Device) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices:getByName"};
+  }
+
+  // Retrieves the list of devices in the specified registry.
+  rpc List(ListDevicesRequest) returns (ListDevicesResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices"};
+  }
+
+  // Creates a device in the specified registry.
+  rpc Create(CreateDeviceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/devices"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDeviceMetadata"
+      response: "Device"
+    };
+  }
+
+  // Updates the specified device.
+  rpc Update(UpdateDeviceRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/iot-devices/v1/devices/{device_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateDeviceMetadata"
+      response: "Device"
+    };
+  }
+
+  // Deletes the specified device.
+  rpc Delete(DeleteDeviceRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/devices/{device_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDeviceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of device certificates for the specified device.
+  rpc ListCertificates(ListDeviceCertificatesRequest) returns (ListDeviceCertificatesResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices/{device_id}/certificates"};
+  }
+
+  // Adds a certificate.
+  rpc AddCertificate(AddDeviceCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/devices/{device_id}/certificates"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddDeviceCertificateMetadata"
+      response: "DeviceCertificate"
+    };
+  }
+
+  // Deletes the specified device certificate.
+  rpc DeleteCertificate(DeleteDeviceCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/devices/{device_id}/certificates/{fingerprint}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDeviceCertificateMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of passwords for the specified device.
+  rpc ListPasswords(ListDevicePasswordsRequest) returns (ListDevicePasswordsResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices/{device_id}/passwords"};
+  }
+
+  // Adds password for the specified device.
+  rpc AddPassword(AddDevicePasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/devices/{device_id}/passwords"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddDevicePasswordMetadata"
+      response: "DevicePassword"
+    };
+  }
+
+  // Deletes the specified password.
+  rpc DeletePassword(DeleteDevicePasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/devices/{device_id}/passwords/{password_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDevicePasswordMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified device.
+  rpc ListOperations(ListDeviceOperationsRequest) returns (ListDeviceOperationsResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/devices/{device_id}/operations"};
+  }
+}
+
+message GetDeviceRequest {
+  // ID of the device to return.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Specifies which parts of the device resource should be returned
+  // in the response.
+  DeviceView device_view = 2;
+}
+
+message GetByNameDeviceRequest {
+  // ID of the registry to get device.
+  //
+  // To get a registry ID make a [yandex.cloud.iot.devices.v1.RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the device to return.
+  //
+  // To get a device name make a [DeviceService.List] request.
+  string device_name = 2 [
+    (required) = true,
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Specifies which parts of the device resource should be returned
+  // in the response.
+  DeviceView device_view = 3;
+}
+
+message ListDevicesRequest {
+  oneof id {
+    option (exactly_one) = true;
+    // ID of the registry to list devices in.
+    //
+    // To get a registry ID make a [yandex.cloud.iot.devices.v1.RegistryService.List] request.
+    string registry_id = 1 [(length) = "<=50"];
+
+    // ID of the folder to list devices in.
+    //
+    // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+    string folder_id = 2 [(length) = "<=50"];
+  }
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListDevicesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 3 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListDevicesResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+
+  // Specifies which parts of the device resource should be returned
+  // in the response.
+  DeviceView device_view = 5;
+}
+
+message ListDevicesResponse {
+  // List of devices.
+  repeated Device devices = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDevicesRequest.page_size], use `next_page_token` as the value
+  // for the [ListDevicesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateDeviceRequest {
+  // ID of the registry to create a device in.
+  //
+  // To get a registry ID, make a [yandex.cloud.iot.devices.v1.RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the device. The name must be unique within the registry.
+  string name = 2 [
+    (required) = true,
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the device.
+  string description = 3 [(length) = "<=256"];
+
+  // Device certificate.
+  repeated Certificate certificates = 4;
+
+  // Alias of a device topic.
+  //
+  // Alias is an alternate name of a device topic assigned by the user. Map alias to canonical topic name prefix, e.g. `my/custom/alias` match to `$device/{id}/events`.
+  map<string, string> topic_aliases = 5;
+
+  // Device password.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 6;
+
+  // Specification of a device certificate.
+  message Certificate {
+    // Public part of the device certificate.
+    string certificate_data = 1;
+  }
+}
+
+message CreateDeviceMetadata {
+  // ID of the device that is being created.
+  string device_id = 1;
+}
+
+message UpdateDeviceRequest {
+  // ID of the device to update.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the device are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the device. The name must be unique within the registry.
+  string name = 3 [
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the device.
+  string description = 4 [(length) = "<=256"];
+
+  // Alias of a device topic.
+  //
+  // Alias is an alternate name of a device topic assigned by the user. Map alias to canonical topic name prefix, e.g. `my/custom/alias` match to `$device/{id}/events`.
+  map<string, string> topic_aliases = 5;
+}
+
+message UpdateDeviceMetadata {
+  // ID of the device that is being updated.
+  string device_id = 1;
+}
+
+message DeleteDeviceRequest {
+  // ID of the device to delete.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteDeviceMetadata {
+  // ID of the device that is being deleted.
+  string device_id = 1;
+}
+
+message ListDeviceCertificatesRequest {
+  // ID of the device to list certificates for.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDeviceCertificatesResponse {
+  // List of certificates for the specified device.
+  repeated DeviceCertificate certificates = 1;
+}
+
+message AddDeviceCertificateRequest {
+  reserved 2;
+  // ID of the device for which the certificate is being added.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Public part of the certificate.
+  string certificate_data = 3;
+}
+
+message AddDeviceCertificateMetadata {
+  // ID of the device certificate that is being added.
+  string device_id = 1;
+
+  // Fingerprint of the certificate that is being added.
+  string fingerprint = 2;
+}
+
+message DeleteDeviceCertificateRequest {
+  // ID of the device to delete a certificate for.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate to delete.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteDeviceCertificateMetadata {
+  // ID of the device certificate that is being deleted.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate that is being deleted.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDevicePasswordsRequest {
+  // ID of the registry to list passwords in.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDevicePasswordsResponse {
+  // List of passwords for the specified device.
+  repeated DevicePassword passwords = 1;
+}
+
+message AddDevicePasswordRequest {
+  // ID of the device to add a password for.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Passwords for the device.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 2 [(length) = ">=14"];
+}
+
+message AddDevicePasswordMetadata {
+  // ID of the device for which the password is being added.
+  string device_id = 1;
+
+  // ID of the password that is being added.
+  string password_id = 2;
+}
+
+message DeleteDevicePasswordRequest {
+  // ID of the device to delete a password for.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password to delete.
+  //
+  // To get a password ID make a [DeviceService.ListPasswords] request.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteDevicePasswordMetadata {
+  // ID of the device for which the password is being deleted.
+  string device_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password that is being deleted.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDeviceOperationsRequest {
+  // ID of the device to list operations for.
+  //
+  // To get a device ID make a [DeviceService.List] request.
+  string device_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListDeviceOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListDeviceOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on [Device.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListDeviceOperationsResponse {
+  // List of operations for the specified device certificate.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDeviceOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListDeviceOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

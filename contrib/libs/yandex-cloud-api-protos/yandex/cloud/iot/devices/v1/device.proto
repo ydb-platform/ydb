@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.devices.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/devices/v1;devices";
+option java_package = "yandex.cloud.api.iot.devices.v1";
+
+enum DeviceView {
+
+  // Server responses without monitoring data.
+  // The default value.
+  BASIC = 0;
+
+  // Server responses with monitoring data.
+  FULL = 1;
+}
+
+// A device. For more information, see [Device](/docs/iot-core/concepts/index#device).
+message Device {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Device is being created.
+    CREATING = 1;
+
+    // Device is ready to use.
+    ACTIVE = 2;
+
+    // Device is being deleted.
+    DELETING = 3;
+  }
+
+  // ID of the device.
+  string id = 1;
+
+  // ID of the registry that the device belongs to.
+  string registry_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the device. The name is unique within the registry.
+  string name = 4;
+
+  // Description of the device. 0-256 characters long.
+  string description = 5;
+
+  // Alias of a device topic.
+  //
+  // Alias is an alternate name of a device topic assigned by the user. Map alias to canonical topic name prefix, e.g. `my/custom/alias` match to `$device/abcdef/events`.
+  map<string, string> topic_aliases = 6;
+
+  // Status of the device.
+  Status status = 7;
+
+  // Device monitoring data, returns if FULL view specified.
+  DeviceMonitoringData monitoring_data = 8;
+}
+
+// A device certificate. For more information, see [Managing device certificates](/docs/iot-core/operations/certificates/device-certificates).
+message DeviceCertificate {
+  // ID of the device that the certificate belongs to.
+  string device_id = 1;
+
+  // SHA256 hash of the certificate.
+  string fingerprint = 2;
+
+  // Public part of the certificate.
+  string certificate_data = 3;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// A device password.
+message DevicePassword {
+  // ID of the device that the password belongs to.
+  string device_id = 1;
+
+  // ID of the password.
+  string id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message DeviceMonitoringData {
+  string last_auth_ip = 1;
+  google.protobuf.Timestamp last_auth_time = 2;
+  google.protobuf.Timestamp last_pub_activity_time = 3;
+  google.protobuf.Timestamp last_sub_activity_time = 4;
+  google.protobuf.Timestamp last_online_time = 5;
+}

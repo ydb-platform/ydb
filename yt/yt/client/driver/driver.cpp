@@ -354,6 +354,7 @@ public:
         REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true,  false, ApiVersion4);
@@ -376,7 +377,7 @@ public:
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TGetPipelineStatusCommand,            "get_pipeline_status",             Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetPipelineStateCommand,            "get_pipeline_state",             Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {

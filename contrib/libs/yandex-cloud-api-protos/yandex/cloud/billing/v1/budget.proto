@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+package yandex.cloud.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// A Budget resource. For more information, see [/docs/billing/concepts/budget].
+message Budget {
+
+    // ID of the budget.
+    string id = 1;
+
+    // Name of the budget.
+    string name = 2;
+
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 3;
+
+    // ID of the billing account that the budget belongs to.
+    string billing_account_id = 4;
+
+    // Status of the budget.
+    BudgetStatus status = 5;
+
+
+    // Specification of the budget.
+    oneof budget_spec {
+        option (exactly_one) = true;
+
+        // Cost budget specification.
+        CostBudgetSpec cost_budget = 6;
+
+        // Expense budget specification.
+        ExpenseBudgetSpec expense_budget = 7;
+
+        // Balance budget specification.
+        BalanceBudgetSpec balance_budget = 8;
+    }
+}
+
+enum BudgetStatus {
+    BUDGET_STATUS_UNSPECIFIED = 0;
+
+    // The budget is being created.
+    CREATING = 1;
+
+    // The budget is active.
+    ACTIVE = 2;
+
+    // The budget is finished.
+    FINISHED = 3;
+}
+
+
+// Cost budget specification describes budget that can be used to control cost of cloud resources usage.
+message CostBudgetSpec {
+
+    // Max cost threshold of the budget. Amount currency is the same as corresponding [yandex.cloud.billing.v1.BillingAccount.currency].
+    string amount = 1 [(required) = true];
+
+    // IDs of the [yandex.cloud.iam.v1.UserAccount].
+    // Specified users will be be notified if the budget exceeds.
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+
+    // List of the [ThresholdRule].
+    // Rules define intermediate cost thresholds of the budget.
+    repeated ThresholdRule threshold_rules = 3;
+
+    // Filter that can be used for specific resources selection. Only consumption cost of selected resources are used for the budget calculation.
+    ConsumptionFilter filter = 4;
+
+    // Start type of the budget.
+    oneof start_type {
+        option (exactly_one) = true;
+
+        // Periodic start type that resets budget after specified period is finished.
+        // First time budget is calculated in the current period, i.e. current month, quarter or year.
+        ResetPeriodType reset_period = 5;
+
+        // Custom start date of the budget.
+        // Must be the first day of a month and must be formatted like YYYY-MM-DD.
+        string start_date = 6;
+    }
+
+    // End date of the budget.
+    // Must be the last day of a month and must be formatted like YYYY-MM-DD.
+    string end_date = 7 [(required) = true];
+}
+
+// Expense budget specification describes budget that can be used to control expense of cloud resources usage.
+message ExpenseBudgetSpec {
+
+    // Max expense threshold of the budget. Amount currency is the same as corresponding [yandex.cloud.billing.v1.BillingAccount.currency].
+    string amount = 1 [(required) = true];
+
+    // IDs of the [yandex.cloud.iam.v1.UserAccount].
+    // Specified users will be be notified if the budget exceeds.
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+
+    // List of the [ThresholdRule].
+    // Rules define intermediate expense thresholds of the budget.
+    repeated ThresholdRule threshold_rules = 3;
+
+    // Filter that can be used for specific resources selection. Only consumption expense of selected resources are used for the budget calculation.
+    ConsumptionFilter filter = 4;
+
+    // Start type of the budget.
+    oneof start_type {
+        option (exactly_one) = true;
+
+        // Periodic start type that resets budget after specified period is finished.
+        // First time budget is calculated in the current period, i.e. current month, quarter or year.
+        ResetPeriodType reset_period = 5;
+
+        // Custom start date of the budget.
+        // Must be the first day of a month and must be formatted like YYYY-MM-DD.
+        string start_date = 6;
+    }
+
+    // End date of the budget.
+    // Must be the last day of a month and must be formatted like YYYY-MM-DD.
+    string end_date = 7 [(required) = true];
+}
+
+
+// Balance budget specification describes budget that can be used to control [yandex.cloud.billing.v1.BillingAccount.balance].
+message BalanceBudgetSpec {
+
+    // Max balance threshold of the budget. Amount currency is the same as corresponding [yandex.cloud.billing.v1.BillingAccount.currency].
+    string amount = 1 [(required) = true];
+
+    // IDs of the [yandex.cloud.iam.v1.UserAccount].
+    // Specified users will be be notified if the budget exceeds.
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+
+    // List of the [ThresholdRule].
+    // Rules define intermediate balance thresholds of the budget.
+    repeated ThresholdRule threshold_rules = 3;
+
+    // Start_date of the budget.
+    // Must be the first day of a month and must be formatted like YYYY-MM-DD.
+    string start_date = 4;
+
+    // End date of the budget.
+    // Must be the last day of a month and must be formatted like YYYY-MM-DD.
+    string end_date = 5 [(required) = true];
+}
+
+enum ResetPeriodType {
+    RESET_PERIOD_TYPE_UNSPECIFIED = 0;
+
+    // Reset budget every month.
+    MONTHLY = 1;
+
+    // Reset budget every quarter.
+    QUARTER = 2;
+
+    // Reset budget every year.
+    ANNUALLY = 3;
+}
+
+
+// Filter that can be used for specific resources selection.
+message ConsumptionFilter {
+
+    // IDs of the [yandex.cloud.billing.v1.Service].
+    // Only consumption of resources corresponding to the given services is used for the budget calculation.
+    // Empty sequence means no services filters.
+    repeated string service_ids = 1;
+
+    // Cloud and folders consumption filter.
+    // Only consumption within specified clouds and folders is used for the budget calculation.
+    // Empty sequence means no cloud and folders filters.
+    repeated CloudFoldersConsumptionFilter cloud_folders_filters = 2;
+}
+
+
+// Filter that can be used for specific cloud and its folders selection.
+message CloudFoldersConsumptionFilter {
+
+    // ID of the [yandex.cloud.resourcemanager.v1.Cloud].
+    // Only consumption within specified cloud is used for the budget calculation.
+    string cloud_id = 1;
+
+    // IDs of the [yandex.cloud.resourcemanager.v1.Folder].
+    // Only consumption within specified folders of the given cloud is used for the budget calculation.
+    // Empty sequence means no folders filters and the whole cloud consumption will be used.
+    repeated string folder_ids = 2;
+}
+
+// Rules that define intermediate cost thresholds of the budget.
+message ThresholdRule {
+
+    // Type of the rule.
+    ThresholdType type = 1 [(required) = true];
+
+    // Amount of the rule.
+    //  * Must be less than 100 if type is PERCENT.
+    //  * Must be less than budget's amount if type is AMOUNT.
+    string amount = 2 [(required) = true];
+
+    // IDs of the [yandex.cloud.iam.v1.UserAccount].
+    // Specified users will be be notified if the threshold exceeds.
+    repeated string notification_user_account_ids = 3;
+}
+
+// Define the unit of the [ThesholdRule.amount].
+enum ThresholdType {
+    THRESHOLD_TYPE_UNSPECIFIED = 0;
+
+    // Percent.
+    PERCENT = 1;
+
+    // The same as budget amount.
+    AMOUNT = 2;
+}

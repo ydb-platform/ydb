@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.sqlserver.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/sqlserver/v1/config;sqlserver";
+option java_package = "yandex.cloud.api.mdb.sqlserver.v1.config";
+
+// SQL Server 2019 Standard edition supported configuration options are listed here.
+//
+// Detailed description for each set of options is available in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/server-configuration-options-sql-server?view=sql-server-2019).
+//
+// Any options that are not listed here are not supported.
+message SQLServerConfig2019std {
+  // Limits the number of processors to use in parallel plan execution per task.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-max-degree-of-parallelism-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value max_degree_of_parallelism  = 1 [(value) = "1-99"];
+
+  // Specifies the threshold at which SQL Server creates and runs parallel plans for queries.
+  //
+  // SQL Server creates and runs a parallel plan for a query only when the estimated cost to run a serial plan for the same query is higher than the value of the option.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-cost-threshold-for-parallelism-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value cost_threshold_for_parallelism = 2 [(value) = "5-32767"];
+
+  // Describes how to configure login auditing to monitor SQL Server Database Engine login activity.
+  //
+  // Possible values:
+  // * 0 - do not log login attempts;
+  // * 1 - log only failed login attempts;
+  // * 2 - log only successful login attempts (not recommended);
+  // * 3 - log all login attempts (not recommended).
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/ssms/configure-login-auditing-sql-server-management-studio?view=sql-server-2019).
+  google.protobuf.Int64Value audit_level = 3 [(value) = "0-3"];
+
+  // Manages the fill factor server configuration option.
+  //
+  // When an index is created or rebuilt, the fill factor determines the percentage of space on each index leaf-level page to be filled with data, reserving the rest as free space for future growth.
+  //
+  // Values 0 and 100 mean full page usage (no space reserved).
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-fill-factor-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value fill_factor_percent = 4 [(value) = "0-100"];
+
+  // Determines whether plans should be cached only after second execution.
+  //
+  // Allows to avoid SQL cache bloat because of single-use plans.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/optimize-for-ad-hoc-workloads-server-configuration-option?view=sql-server-2019).
+  google.protobuf.BoolValue optimize_for_ad_hoc_workloads = 5;
+}
+
+message SQLServerConfigSet2019std {
+  // Effective settings for an SQL Server 2019 cluster (a combination of settings defined in [user_config] and [default_config]).
+  SQLServerConfig2019std effective_config = 1;
+
+  // User-defined settings for an SQL Server 2019 cluster.
+  SQLServerConfig2019std user_config = 2;
+
+  // Default configuration for an SQL Server 2019 cluster.
+  SQLServerConfig2019std default_config = 3;
+}
+
+// SQL Server 2019 Enterprise edition supported configuration options are listed here.
+//
+// Detailed description for each set of options is available in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/server-configuration-options-sql-server?view=sql-server-2019).
+//
+// Any options that are not listed here are not supported.
+message SQLServerConfig2019ent {
+  // Limits the number of processors to use in parallel plan execution per task.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-max-degree-of-parallelism-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value max_degree_of_parallelism  = 1 [(value) = "1-99"];
+
+  // Specifies the threshold at which SQL Server creates and runs parallel plans for queries.
+  //
+  // SQL Server creates and runs a parallel plan for a query only when the estimated cost to run a serial plan for the same query is higher than the value of the option.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-cost-threshold-for-parallelism-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value cost_threshold_for_parallelism = 2 [(value) = "5-32767"];
+
+  // Describes how to configure login auditing to monitor SQL Server Database Engine login activity.
+  //
+  // Possible values:
+  // * 0 - do not log login attempts;
+  // * 1 - log only failed login attempts;
+  // * 2 - log only successful login attempts (not recommended);
+  // * 3 - log all login attempts (not recommended).
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/ssms/configure-login-auditing-sql-server-management-studio?view=sql-server-2019).
+  google.protobuf.Int64Value audit_level = 3 [(value) = "0-3"];
+
+  // Manages the fill factor server configuration option.
+  // When an index is created or rebuilt, the fill factor determines the percentage of space on each index leaf-level page to be filled with data, reserving the rest as free space for future growth.
+  //
+  // Values 0 and 100 mean full page usage (no space reserved).
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/configure-the-fill-factor-server-configuration-option?view=sql-server-2019).
+  google.protobuf.Int64Value fill_factor_percent = 4 [(value) = "0-100"];
+
+  // Determines whether plans should be cached only after second execution.
+  //
+  // Allows to avoid SQL cache bloat because of single-use plans.
+  //
+  // See in-depth description in [SQL Server documentation](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/optimize-for-ad-hoc-workloads-server-configuration-option?view=sql-server-2019).
+  google.protobuf.BoolValue optimize_for_ad_hoc_workloads = 5;
+}
+
+message SQLServerConfigSet2019ent {
+  // Effective settings for an SQL Server 2019 cluster (a combination of settings defined in [user_config] and [default_config]).
+  SQLServerConfig2019ent effective_config = 1;
+
+  // User-defined settings for an SQL Server 2019 cluster.
+  SQLServerConfig2019ent user_config = 2;
+
+  // Default configuration for an SQL Server 2019 cluster.
+  SQLServerConfig2019ent default_config = 3;
+}

@@ -1,0 +1,177 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/cdn/v1/origin.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+
+//
+// Origin management service.
+// Origin is not a standalone entity. It can live only within origin group.
+//
+service OriginService {
+    // Get origin in origin group.
+    rpc Get(GetOriginRequest) returns (Origin) {
+        option (google.api.http) = { get: "/cdn/v1/origins/{origin_id}" };
+    }
+
+    // Lists origins of origin group.
+    rpc List(ListOriginsRequest) returns (ListOriginsResponse) {
+        option (google.api.http) = { get: "/cdn/v1/origins" };
+    }
+
+    // Creates origin inside origin group.
+    rpc Create(CreateOriginRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/origins" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "CreateOriginMetadata"
+          response: "Origin"
+        };
+    }
+
+    // Updates the specified origin from the origin group.
+    //
+    // Changes may take up to 15 minutes to apply. Afterwards, it is recommended to purge cache of the resources that
+    // use the origin via a [CacheService.Purge] request.
+    rpc Update(UpdateOriginRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/cdn/v1/origins/{origin_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdateOriginMetadata"
+          response: "Origin"
+        };
+    }
+
+    // Deletes origin from origin group.
+    rpc Delete(DeleteOriginRequest)  returns (operation.Operation) {
+        option (google.api.http) = { delete: "/cdn/v1/origins/{origin_id}" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeleteOriginMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+
+message GetOriginRequest {
+    // ID of the folder that the origin belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+    
+    // [origin_id] group ID to request origin from.
+    int64 origin_id = 2 [(value) = ">0"];
+}
+
+message ListOriginsRequest {
+    // ID of the folder that the origin belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the group to request origins from.
+    int64 origin_group_id = 2 [(value) = ">0"];
+
+    // NOTE: no pagination required as it is usually score of origins per group.
+}
+
+message ListOriginsResponse {
+    // Origin from response.
+    repeated Origin origins = 1;
+}
+
+message CreateOriginRequest {
+    // ID of the folder that the origin belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // [origin_group_id] group ID to request origins from.
+    int64 origin_group_id = 2 [(value) = ">0"];
+
+    // IP address or Domain name of your origin and the port (if custom).
+    // Used if [meta] variant is `common`.
+    string source = 3 [(required) = true, (length) = "<=50"];
+
+    // The setting allows to enable or disable an Origin source in the Origins group.
+    //
+    // It has two possible values:
+    //
+    // True - The origin is enabled and used as a source for the CDN. An origins
+    // group must contain at least one enabled origin. Default value.
+    // False - The origin is disabled and the CDN is not using it to pull content.
+    google.protobuf.BoolValue enabled = 4;
+
+    // Specifies whether the origin is used in its origin group as backup. 
+    // A backup origin is used when one of active origins becomes unavailable.
+    //
+    // Default value: False.
+    google.protobuf.BoolValue backup = 5;
+
+	// Set up origin of the content.
+    OriginMeta meta = 6;
+}
+
+message CreateOriginMetadata {
+    // ID of the origin.
+    int64 origin_id = 1 [(value) = ">0"];
+    
+    // ID pf the parent origins group.
+    int64 origin_group_id = 2 [(value) = ">0"];
+}
+
+message UpdateOriginRequest {
+    // ID of the folder that the origin belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+    // ID of the origin.
+    int64 origin_id = 2 [(value) = ">0"];
+
+    // PUT behavior, parameter below will be fully rewritten
+
+    // IP address or Domain name of your origin and the port (if custom).
+    // Used if [meta] variant is `common`.
+    // Required.
+    string source = 3;
+    
+    // The setting allows to enable or disable an Origin source in the Origins group.
+    //
+    // It has two possible values:
+    //
+    // True - The origin is enabled and used as a source for the CDN. An origins
+    // group must contain at least one enabled origin. Default value.
+    // False - The origin is disabled and the CDN is not using it to pull content.
+    //
+    // Required. 
+    bool enabled = 4;
+
+    // Specifies whether the origin is used in its origin group as backup. 
+    // A backup origin is used when one of active origins becomes unavailable.
+    //
+    // Required.
+    bool backup = 5;
+
+    // Set up type of the origin.
+    OriginMeta meta = 6;
+}
+
+message UpdateOriginMetadata {
+    // ID of the origin.
+    int64 origin_id = 1 [(value) = ">0"];
+
+    // Parent origins group ID.
+    int64 origin_group_id = 2 [(value) = ">0"];
+}
+
+message DeleteOriginRequest {
+    // ID of the folder that the origin belongs to.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the origin.
+    int64 origin_id = 2 [(value) = ">0"];
+}
+
+message DeleteOriginMetadata {
+    // ID of the origin.
+    int64 origin_id = 1 [(value) = ">0"];
+}

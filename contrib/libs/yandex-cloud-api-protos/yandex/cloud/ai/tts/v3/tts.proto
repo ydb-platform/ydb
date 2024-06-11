@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package speechkit.tts.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tts/v3;tts";
+option java_package = "yandex.cloud.api.ai.tts.v3";
+
+message AudioContent {
+    // The audio source to read the data from.
+    oneof AudioSource {
+        // Bytes with audio data.
+        bytes content = 1;
+    }
+
+    // Description of the audio format.
+    AudioFormatOptions audio_spec = 2;
+}
+
+message AudioFormatOptions {
+    oneof AudioFormat {
+        // The audio format specified in request parameters.
+        RawAudio raw_audio = 1;
+
+        // The audio format specified inside the container metadata.
+        ContainerAudio container_audio = 2;
+    }
+}
+
+message RawAudio {
+    enum AudioEncoding {
+        AUDIO_ENCODING_UNSPECIFIED = 0;
+
+        // Audio bit depth 16-bit signed little-endian (Linear PCM).
+        LINEAR16_PCM = 1;
+    }
+
+    // Encoding type.
+    AudioEncoding audio_encoding = 1;
+
+    // Sampling frequency of the signal.
+    int64 sample_rate_hertz = 2;
+}
+
+message ContainerAudio {
+    enum ContainerAudioType {
+        CONTAINER_AUDIO_TYPE_UNSPECIFIED = 0;
+
+        // Audio bit depth 16-bit signed little-endian (Linear PCM).
+        WAV = 1;
+
+        // Data is encoded using the OPUS audio codec and compressed using the OGG container format.
+        OGG_OPUS = 2;
+
+        // Data is encoded using MPEG-1/2 Layer III and compressed using the MP3 container format.
+        MP3 = 3;
+    }
+    ContainerAudioType container_audio_type = 1;
+}
+
+
+message TextVariable {
+    // The name of the variable.
+    string variable_name = 1;
+    // The text of the variable.
+    string variable_value = 2;
+}
+
+message AudioVariable {
+    // The name of the variable.
+    string variable_name = 1;
+    // Start time of the variable in milliseconds.
+    int64 variable_start_ms = 2;
+    // Length of the variable in milliseconds.
+    int64 variable_length_ms = 3;
+}
+
+message UtteranceSynthesisResponse {
+    // Part of synthesized audio.
+    AudioChunk audio_chunk = 1;
+    // Part of synthesized text.
+    TextChunk text_chunk = 2;
+    // Start time of the audio chunk in milliseconds.
+    int64 start_ms = 3;
+    // Length of the audio chunk in milliseconds.
+    int64 length_ms = 4;
+}
+
+message AudioTemplate {
+    // Audio file.
+    AudioContent audio = 1;
+    // Template and description of its variables.
+    TextTemplate text_template = 2;
+    // Describing variables in audio.
+    repeated AudioVariable variables = 3;
+}
+
+message AudioChunk {
+    // Sequence of bytes of the synthesized audio in format specified in output_audio_spec.
+    bytes data = 1;
+}
+
+message TextChunk {
+    // Synthesized text.
+    string text = 1;
+}
+
+message TextTemplate {
+    // Template text.
+    //
+    // Sample:`The {animal} goes to the {place}.`
+    string text_template = 1;
+    // Defining variables in template text.
+    //
+    // Sample: `{animal: cat, place: forest}`
+    repeated TextVariable variables = 2;
+}
+
+message DurationHint {
+    enum DurationHintPolicy {
+        DURATION_HINT_POLICY_UNSPECIFIED = 0;
+
+        // Limit audio duration to exact value.
+        EXACT_DURATION = 1;
+
+        // Limit the minimum audio duration.
+        MIN_DURATION = 2;
+
+        // Limit the maximum audio duration.
+        MAX_DURATION = 3;
+    }
+
+    // Type of duration constraint.
+    DurationHintPolicy policy = 1;
+
+    // Constraint on audio duration in milliseconds.
+    int64 duration_ms = 2;
+  }
+
+
+message Hints {
+    // The hint for TTS engine to specify synthesised audio characteristics. 
+    oneof Hint {
+
+        // Name of speaker to use.
+        string voice = 1;
+
+        // Template for synthesizing.
+        AudioTemplate audio_template = 2;
+
+        // Hint to change speed.
+        double speed = 3;
+
+        // Hint to regulate normalization level.
+        // * For `MAX_PEAK` loudness_normalization_type: volume changes in a range (0;1], default value is 0.7.
+        // * For `LUFS` loudness_normalization_type: volume changes in a range [-145;0), default value is -19.
+        double volume = 4;
+
+        // Hint to specify pronunciation character for the speaker.
+        string role = 5;
+
+        // Hint to increase (or decrease) speaker's pitch, measured in Hz. Valid values are in range [-1000;1000], default value is 0.
+        double pitch_shift = 6;
+
+        // Hint to limit both minimum and maximum audio duration.
+        DurationHint duration = 7;
+    }
+}
+
+message UtteranceSynthesisRequest {
+
+    // The name of the model.
+    // Specifies basic synthesis functionality. Currently should be empty. Do not use it.
+    string model = 1;
+
+    // Text to synthesis, one of text synthesis markups.
+    oneof Utterance {
+        // Raw text (e.g. "Hello, Alice").
+        string text = 2;
+        // Text template instance, e.g. `{"Hello, {username}" with username="Alice"}`.
+        TextTemplate text_template = 3;
+    }
+
+    // Optional hints for synthesis.
+    repeated Hints hints = 4;
+
+    // Optional. Default: 22050 Hz, linear 16-bit signed little-endian PCM, with WAV header
+    AudioFormatOptions output_audio_spec = 5;
+
+
+    enum LoudnessNormalizationType {
+        LOUDNESS_NORMALIZATION_TYPE_UNSPECIFIED = 0;
+
+        // The type of normalization, wherein the gain is changed to bring the highest PCM sample value or analog signal peak to a given level.
+        MAX_PEAK = 1;
+
+        // The type of normalization based on EBU R 128 recommendation.
+        LUFS = 2;
+    }
+    // Specifies type of loudness normalization.
+    // Optional. Default: `LUFS`.
+    LoudnessNormalizationType loudness_normalization_type = 6;
+
+    // Optional. Automatically split long text to several utterances and bill accordingly. Some degradation in service quality is possible.
+    bool unsafe_mode = 7;
+}

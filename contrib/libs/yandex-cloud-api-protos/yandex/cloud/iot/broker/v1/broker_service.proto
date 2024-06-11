@@ -1,0 +1,435 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.broker.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/iot/broker/v1/broker.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/broker/v1;broker";
+option java_package = "yandex.cloud.api.iot.broker.v1";
+
+// A set of methods for managing broker.
+service BrokerService {
+  // Returns the specified broker.
+  //
+  // To get the list of available brokers, make a [List] request.
+  rpc Get(GetBrokerRequest) returns (Broker) {
+    option (google.api.http) = {get: "/iot-broker/v1/brokers/{broker_id}"};
+  }
+
+  // Retrieves the list of brokers in the specified folder.
+  rpc List(ListBrokersRequest) returns (ListBrokersResponse) {
+    option (google.api.http) = {get: "/iot-broker/v1/brokers"};
+  }
+
+  // Creates a broker in the specified folder.
+  rpc Create(CreateBrokerRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-broker/v1/brokers"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateBrokerMetadata"
+      response: "Broker"
+    };
+  }
+
+  // Updates the specified broker.
+  rpc Update(UpdateBrokerRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/iot-broker/v1/brokers/{broker_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateBrokerMetadata"
+      response: "Broker"
+    };
+  }
+
+  // Deletes the specified broker.
+  rpc Delete(DeleteBrokerRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-broker/v1/brokers/{broker_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteBrokerMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of broker certificates for the specified broker.
+  rpc ListCertificates(ListBrokerCertificatesRequest) returns (ListBrokerCertificatesResponse) {
+    option (google.api.http) = {get: "/iot-broker/v1/brokers/{broker_id}/certificates"};
+  }
+
+  // Adds a certificate.
+  rpc AddCertificate(AddBrokerCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-broker/v1/brokers/{broker_id}/certificates"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddBrokerCertificateMetadata"
+      response: "BrokerCertificate"
+    };
+  }
+
+  // Deletes the specified broker certificate.
+  rpc DeleteCertificate(DeleteBrokerCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-broker/v1/brokers/{broker_id}/certificates/{fingerprint}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteBrokerCertificateMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of passwords for the specified broker.
+  rpc ListPasswords(ListBrokerPasswordsRequest) returns (ListBrokerPasswordsResponse) {
+    option (google.api.http) = {get: "/iot-broker/v1/brokers/{broker_id}/passwords"};
+  }
+
+  // Adds password for the specified broker.
+  rpc AddPassword(AddBrokerPasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-broker/v1/brokers/{broker_id}/passwords"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddBrokerPasswordMetadata"
+      response: "BrokerPassword"
+    };
+  }
+
+  // Deletes the specified password.
+  rpc DeletePassword(DeleteBrokerPasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-broker/v1/brokers/{broker_id}/passwords/{password_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteBrokerPasswordMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified broker.
+  rpc ListOperations(ListBrokerOperationsRequest) returns (ListBrokerOperationsResponse) {
+    option (google.api.http) = {get: "/iot-broker/v1/brokers/{broker_id}/operations"};
+  }
+}
+
+message GetBrokerRequest {
+  // ID of the broker to return.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListBrokersRequest {
+  // ID of the folder to list brokers in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListBrokersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListBrokersResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListBrokersResponse {
+  // List of brokers.
+  repeated Broker brokers = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListBrokersRequest.page_size], use `next_page_token` as the value
+  // for the [ListBrokersRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateBrokerRequest {
+  // ID of the folder to create a broker in.
+  //
+  // To get a folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the broker. The name must be unique within the folder.
+  string name = 2 [
+    (required) = true,
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the broker.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Broker certificates.
+  repeated Certificate certificates = 5;
+
+  // Broker passwords.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 6;
+
+  // Options for logging broker events
+  LogOptions log_options = 7;
+
+  // Specification of a broker certificate.
+  message Certificate {
+    // Public part of the broker certificate.
+    string certificate_data = 1;
+  }
+}
+
+message CreateBrokerMetadata {
+  // ID of the broker that is being created.
+  string broker_id = 1;
+}
+
+message UpdateBrokerRequest {
+  // ID of the broker to update.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the broker are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the broker. The name must be unique within the folder.
+  string name = 3 [
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the broker.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Options for logging broker events
+  LogOptions log_options = 6;
+}
+
+message UpdateBrokerMetadata {
+  // ID of the broker that is being updated.
+  string broker_id = 1;
+}
+
+message DeleteBrokerRequest {
+  // ID of the broker to delete.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteBrokerMetadata {
+  // ID of the broker that is being deleted.
+  string broker_id = 1;
+}
+
+message ListBrokerCertificatesRequest {
+  // ID of the broker to list certificates for.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListBrokerCertificatesResponse {
+  // List of certificates for the specified broker.
+  repeated BrokerCertificate certificates = 1;
+}
+
+message AddBrokerCertificateRequest {
+  reserved 2;
+  // ID of the broker for which the certificate is being added.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Public part of the certificate that is being added.
+  string certificate_data = 3;
+}
+
+message AddBrokerCertificateMetadata {
+  // ID of the broker certificate that is being added.
+  string broker_id = 1;
+
+  // Fingerprint of the certificate that is being added.
+  string fingerprint = 2;
+}
+
+message DeleteBrokerCertificateRequest {
+  // ID of the broker to delete a certificate for.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate that is being deleted.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteBrokerCertificateMetadata {
+  // ID of a broker for which the certificate is being delete.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate to deleted.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListBrokerPasswordsRequest {
+  // ID of the broker to list passwords in.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListBrokerPasswordsResponse {
+  // List of passwords for the specified broker.
+  repeated BrokerPassword passwords = 1;
+}
+
+message AddBrokerPasswordRequest {
+  // ID of the broker to add a password for.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Passwords for the broker.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 2 [(length) = ">=14"];
+}
+
+message AddBrokerPasswordMetadata {
+  // ID of the broker for which the password is being added.
+  string broker_id = 1;
+
+  // ID of a password that is being added.
+  string password_id = 2;
+}
+
+message DeleteBrokerPasswordRequest {
+  // ID of the broker to delete a password for.
+  //
+  // To get a broker ID make a [BrokerService.List] request.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password to delete.
+  //
+  // To get a password ID make a [BrokerService.ListPasswords] request.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteBrokerPasswordMetadata {
+  // ID of a broker for which the password is being delete.
+  string broker_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password to delete.
+  //
+  // To get a password ID make a [BrokerService.ListPasswords] request.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListBrokerOperationsRequest {
+  // ID of the broker to list operations for.
+  string broker_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListBrokerOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListBrokerOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on [Broker.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListBrokerOperationsResponse {
+  // List of operations for the specified broker.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListBrokerOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListBrokerOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

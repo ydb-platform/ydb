@@ -371,30 +371,32 @@ public:
         switch (GetMode()) {
             case EOperatingMode::InMemory:
             case EOperatingMode::ProcessSpilled:
-               return true;
+               return false;
             case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing()) {
                     bool isWaitingForReduce = TryToReduceMemory();
-                    if (isWaitingForReduce) return false;
+                    if (isWaitingForReduce) return true;
                 }
 
                 if (BufferForUsedInputItems.size()) {
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
-                    if (bucket.AsyncWriteOperation.has_value()) return false;
+                    if (bucket.AsyncWriteOperation.has_value()) return true;
 
                     bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
                     BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
                 }
 
-                return true;
+                return false;
             }
         }
     }
 
     bool FlushSpillingBuffersAndWait() {
-        if (GetMode() != EOperatingMode::Spilling || InputStatus == EFetchResult::Finish) return false;
+        if (GetMode() != EOperatingMode::Spilling || InputStatus != EFetchResult::Finish) return false;
+
+        UpdateSpillingBuckets();
 
         ui64 finishedCount = 0;
         for (auto& bucket : SpilledBuckets) {

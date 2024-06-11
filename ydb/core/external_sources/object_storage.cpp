@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
@@ -302,40 +303,66 @@ struct TObjectStorageExternalSource : public IExternalSource {
             authInfo.Token = CredentialsFactory->Create(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature)->CreateProvider()->GetAuthInfo();
         }
 
+        auto httpGateway = NYql::IHTTPGateway::Make();
+        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, NYql::NS3Lister::TListingRequest{
+            .Url = meta->DataSourceLocation,
+            .AuthInfo = authInfo,
+            .Pattern = meta->TableLocation,
+        }, Nothing(), false);
+        auto afterListing = s3Lister->Next().Apply([path = meta->TableLocation](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
+            auto& listRes = listResFut.GetValue();
+            if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
+                auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
+                throw yexception() << error.Issues.ToString();
+            }
+            auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
+            if (entries.Objects.empty()) {
+                throw yexception() << "couldn't find files at " << path;
+            }
+            for (const auto& entry : entries.Objects) {
+                if (entry.Size > 0) {
+                    return entry.Path;
+                }
+            }
+            throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
+        });
+
         auto s3FetcherId = ActorSystem->Register(NObjectStorage::CreateS3FetcherActor(
             meta->DataSourceLocation,
-            NYql::IHTTPGateway::Make(),
+            httpGateway,
             NYql::IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
             std::move(authInfo)
         ));
+
+        meta->Attributes.erase("withinfer");
 
         auto fileFormat = NObjectStorage::NInference::ConvertFileFormat(*format);
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, fileFormat));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId, fileFormat, meta->Attributes));
 
-        meta->Attributes.erase("withinfer");
+        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<TString>& pathFut) {
+            auto promise = NThreading::NewPromise<TMetadataResult>();
+            auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
+                meta->Changed = true;
+                meta->Schema.clear_column();
+                for (const auto& column : response.Fields) {
+                    auto& destColumn = *meta->Schema.add_column();
+                    destColumn = column;
+                }
+                TMetadataResult result;
+                result.SetSuccess();
+                result.Metadata = meta;
+                metaPromise.SetValue(std::move(result));
+            };
+            actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
+                arrowInferencinatorId,
+                new NObjectStorage::TEvInferFileSchema(TString{pathFut.GetValue()}),
+                promise,
+                std::move(schemaToMetadata)
+            ));
 
-        auto promise = NThreading::NewPromise<TMetadataResult>();
-        auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
-            meta->Changed = true;
-            meta->Schema.clear_column();
-            for (const auto& column : response.Fields) {
-                auto& destColumn = *meta->Schema.add_column();
-                destColumn = column;
-            }
-            TMetadataResult result;
-            result.SetSuccess();
-            result.Metadata = meta;
-            metaPromise.SetValue(std::move(result));
-        };
-        ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
-            arrowInferencinatorId,
-            new NObjectStorage::TEvInferFileSchema(TString{meta->TableLocation}),
-            promise,
-            std::move(schemaToMetadata)
-        ));
-
-        return promise.GetFuture().Apply([](const NThreading::TFuture<TMetadataResult>& result) {
+            return promise.GetFuture();
+        }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
             auto& value = result.GetValue();
             if (value.Success()) {
                 return value.Metadata;

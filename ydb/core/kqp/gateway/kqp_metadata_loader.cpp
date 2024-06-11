@@ -507,7 +507,8 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
         } else if (column.type().has_optional_type()) {
             typeId = column.type().optional_type().item().type_id();
         } else {
-            Y_ABORT_UNLESS(false);
+            throw yexception() << "couldn't infer type for column '" << column.name() << "': " << column.type().ShortDebugString() <<
+                ", make sure that the correct input format is specified";
         }
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, nullptr);
         auto typeName = GetTypeName(typeInfoMod);

@@ -880,8 +880,5 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             )
         )
 
-        # Check that getting queue url with custom name still works
-        assert_that(
-            lambda: self._sqs_api.get_queue_url(custom_queue_name),
-            not_(raises(RuntimeError))
-        )
+        received_queue_url = self._sqs_api.get_queue_url(custom_queue_name)
+        assert received_queue_url == queue_url

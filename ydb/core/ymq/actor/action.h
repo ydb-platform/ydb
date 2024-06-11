@@ -82,6 +82,7 @@ public:
                 RequestId_,
                 UserName_,
                 GetQueueName(),
+                FolderId_,
                 configurationFlags)
         );
     }
@@ -637,17 +638,16 @@ private:
             return;
         }
 
-        if (TDerived::NeedExistingQueue()) {
-            if (ev->Get()->Throttled) {
-                MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
-                SendReplyAndDie();
-                return;
-            }
-            if (!ev->Get()->QueueExists) {
-                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
-                SendReplyAndDie();
-                return;
-            }
+        if (ev->Get()->Throttled) {
+            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+            SendReplyAndDie();
+            return;
+        }
+
+        if (TDerived::NeedExistingQueue() && !ev->Get()->QueueExists) {
+            MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
+            SendReplyAndDie();
+            return;
         }
 
         Y_ABORT_UNLESS(SchemeCache_);

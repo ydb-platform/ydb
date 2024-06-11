@@ -1,0 +1,7 @@
+items:
+- { name: Обзор, href: index.md }
+- { name: INDEX, href: secondary_index.md, when: feature_secondary_index }
+- { name: COLUMN, href: columns_edit.md }
+- { name: CDC, href: cdc.md, when: feature_changefeed }
+- { name: RENAME, href: rename.md, when: feature_map_tables }
+- { name: FAMILY, href: family.md }

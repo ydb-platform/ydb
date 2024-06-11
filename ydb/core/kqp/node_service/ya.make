@@ -16,7 +16,6 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/common/http_gateway
 )
 
 YQL_LAST_ABI_VERSION()

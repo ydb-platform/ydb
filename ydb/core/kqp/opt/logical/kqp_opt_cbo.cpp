@@ -45,7 +45,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns[0] == s;}) != joinColumns.end()) {
+    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns->Data[0] == s;}) != joinColumns.end()) {
         return true;
     }
 
@@ -97,8 +97,8 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (prefixSize < node->Stats->KeyColumns.size() && (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
-            return node->Stats->KeyColumns[prefixSize] == s;
+    if (prefixSize < node->Stats->KeyColumns->Data.size() && (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
+            return node->Stats->KeyColumns->Data[prefixSize] == s;
         }) == joinColumns.end())){
             return false;
         }
@@ -118,20 +118,24 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 
     auto rightStats = right->Stats;
 
+    if (!rightStats->KeyColumns) {
+        return false;
+    }
+    
     if (rightStats->Type != EStatisticsType::BaseTable) {
         return false;
     }
-    if (joinConditions.size() > rightStats->KeyColumns.size()) {
+    if (joinConditions.size() > rightStats->KeyColumns->Data.size()) {
         return false;
     }
 
     for (auto [leftCol, rightCol] : joinConditions) {
         // Fix for clang14, somehow structured binding does not create a variable in clang14
         auto r = rightCol;
-        if (find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
+        if (find_if(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), 
             [&r] (const TString& s) {
             return r.AttributeName == s;
-        } ) == rightStats->KeyColumns.end()) {
+        } ) == rightStats->KeyColumns->Data.end()) {
             return false;
         }
     }

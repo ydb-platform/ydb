@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -217,7 +216,7 @@ public:
 
             rows = size / 1024; // magic estimate
             return primaryKey 
-                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, *primaryKey)
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
                 : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();

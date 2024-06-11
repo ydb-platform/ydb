@@ -10,8 +10,6 @@
 #include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/core/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
@@ -69,7 +67,9 @@ namespace NKqp {
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup) {
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    ) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterStreamLookupActorFactory(*factory, counters);
     RegisterKqpReadActor(*factory, counters);
@@ -78,8 +78,8 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
 
     if (federatedQuerySetup) {
         auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
-        RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
-        RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
+        s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
+        s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
 
         if (federatedQuerySetup->ConnectorClient) {
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);

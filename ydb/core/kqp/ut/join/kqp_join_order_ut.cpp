@@ -851,6 +851,44 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(FiveWayJoinOverride) {
+
+        auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = Q_(R"(
+                PRAGMA ydb.OverrideStatistics = '{"/Root/R":{"n_rows":100500, "key_columns":["id"], "columns":[{"name":"id", "n_unique_vals":50}]}}';
+                SELECT *
+                FROM `/Root/R` as R
+                  INNER JOIN
+                     `/Root/S` as S
+                  ON R.id = S.id
+                  INNER JOIN
+                     `/Root/T` as T
+                  ON S.id = T.id
+                  INNER JOIN
+                     `/Root/U` as U
+                  ON T.id = U.id
+                  INNER JOIN
+                     `/Root/V` as V
+                  ON U.id = V.id
+            )");
+
+            auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            //NJson::TJsonValue plan;
+            //NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            //Cout << result.GetPlan();
+        }
+    }
+
     Y_UNIT_TEST_TWIN(FourWayJoinLeftFirst, StreamLookupJoin) {
 
         auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);

@@ -30,6 +30,7 @@
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
 
@@ -154,6 +155,7 @@ namespace Tests {
 
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }

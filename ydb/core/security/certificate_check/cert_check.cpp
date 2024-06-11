@@ -17,6 +17,8 @@ TCertificateChecker::TCertificateChecker(const TCertificateAuthValues& certifica
 { }
 
 TCertificateChecker::TCertificateCheckResult TCertificateChecker::Check(const TString& clientCertificate) const {
+    // ToDo First of all need verify client`s certificate by server CA
+
     TReadCertificateAsPemResult readCertificateAsPemResult = ReadCertificatesAsPem(clientCertificate);
     if (!readCertificateAsPemResult.Error.empty()) {
         return {.Error = readCertificateAsPemResult.Error, .UserSid = "", .Groups = {""}};

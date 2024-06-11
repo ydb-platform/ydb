@@ -351,25 +351,16 @@ public:
         }
     }
 
-    bool CheckToken(const TString& serializedToken, const TVector<TString>& allowedSids) const {
-        if (allowedSids.empty()) {
-            return true;
-        }
-        for (const auto& sid : allowedSids) {
-            NACLib::TUserToken token(serializedToken);
-            if (token.IsExist(sid)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool CheckAccessGetNodeConfig() const {
         const auto serializedToken = TBase::GetSerializedToken();
-        if (!serializedToken.empty()) {
-            if (!CheckToken(serializedToken, AppData()->RegisterDynamicNodeAllowedSIDs)) {
-                return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
+        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
+                NACLib::TUserToken token(serializedToken);
+                if (token.IsExist(sid)) {
+                    return true;
+                }
             }
+            return false;
         }
         return true;
     }

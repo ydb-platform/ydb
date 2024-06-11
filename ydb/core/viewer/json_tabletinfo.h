@@ -9,6 +9,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/util/wildcard.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include "json_pipe_req.h"
 #include "json_wb_req.h"
 #include <span>
@@ -82,7 +83,9 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
+    std::unordered_map<ui64, TString> EndOfRangeKeyPrefix;
     TTabletId HiveId;
+    bool IsBase64Encode = true;
 public:
     TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : TJsonWhiteboardRequest(viewer, ev)
@@ -97,6 +100,7 @@ public:
         ReplyWithDeadTabletsInfo = params.Has("path");
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+            IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
@@ -122,6 +126,52 @@ public:
         }
     }
 
+    TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
+        if (cell.IsNull()) {
+            return "NULL";
+        }
+        switch (type.GetTypeId()) {
+        case NScheme::NTypeIds::Int32:
+            return ToString(cell.AsValue<i32>());
+        case NScheme::NTypeIds::Uint32:
+            return ToString(cell.AsValue<ui32>());
+        case NScheme::NTypeIds::Int64:
+            return ToString(cell.AsValue<i64>());
+        case NScheme::NTypeIds::Uint64:
+            return ToString(cell.AsValue<ui64>());
+        case NScheme::NTypeIds::Int8:
+            return ToString(cell.AsValue<i8>());
+        case NScheme::NTypeIds::Uint8:
+            return ToString(cell.AsValue<ui8>());
+        case NScheme::NTypeIds::Int16:
+            return ToString(cell.AsValue<i16>());
+        case NScheme::NTypeIds::Uint16:
+            return ToString(cell.AsValue<ui16>());
+        case NScheme::NTypeIds::Bool:
+            return cell.AsValue<bool>() ? "true" : "false";
+        case NScheme::NTypeIds::Date:            return "Date";
+        case NScheme::NTypeIds::Datetime:        return "Datetime";
+        case NScheme::NTypeIds::Timestamp:       return "Timestamp";
+        case NScheme::NTypeIds::Interval:        return "Interval";
+        case NScheme::NTypeIds::Date32:          return "Date32";
+        case NScheme::NTypeIds::Datetime64:      return "Datetime64";
+        case NScheme::NTypeIds::Timestamp64:     return "Timestamp64";
+        case NScheme::NTypeIds::Interval64:      return "Interval64";
+        case NScheme::NTypeIds::PairUi64Ui64:    return "PairUi64Ui64";
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return IsBase64Encode ? Base64Encode(cell.AsBuf()) : (TStringBuilder() << '"' << cell.AsBuf() << '"');
+        case NScheme::NTypeIds::Utf8:
+            return TStringBuilder() << '"' << cell.AsBuf() << '"';
+        case NScheme::NTypeIds::Decimal:         return "Decimal";
+        case NScheme::NTypeIds::DyNumber:        return "DyNumber";
+        case NScheme::NTypeIds::Uuid:            return "Uuid";
+        default:
+            return "-";
+        }
+    }
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
         THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
         if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
@@ -132,8 +182,45 @@ public:
             for (auto shard : pathDescription.GetColumnStoreDescription().GetColumnShards()) {
                 Tablets[shard] = NKikimrTabletBase::TTabletTypes::ColumnShard;
             }
-            for (const auto& partition : pathDescription.GetTablePartitions()) {
-                Tablets[partition.GetDatashardId()] = NKikimrTabletBase::TTabletTypes::DataShard;
+            if (pathDescription.HasTable()) {
+                std::vector<NKikimrSchemeOp::TColumnDescription> keyColumns;
+                for (uint32 id : pathDescription.GetTable().GetKeyColumnIds()) {
+                    for (const auto& column : pathDescription.GetTable().GetColumns()) {
+                        if (column.GetId() == id) {
+                            keyColumns.push_back(column);
+                            break;
+                        }
+                    }
+                }
+                for (const auto& partition : pathDescription.GetTablePartitions()) {
+                    Tablets[partition.GetDatashardId()] = NKikimrTabletBase::TTabletTypes::DataShard;
+                    if (partition.HasEndOfRangeKeyPrefix()) {
+                        TSerializedCellVec cellVec;
+                        if (TSerializedCellVec::TryParse(partition.GetEndOfRangeKeyPrefix(), cellVec)) {
+                            TStringBuilder key;
+                            TConstArrayRef<TCell> cells(cellVec.GetCells());
+                            if (cells.size() == keyColumns.size()) {
+                                if (cells.size() > 1) {
+                                    key << "(";
+                                }
+                                for (size_t idx = 0; idx < cells.size(); ++idx) {
+                                    if (idx > 0) {
+                                        key << ",";
+                                    }
+                                    const NKikimrSchemeOp::TColumnDescription& type(keyColumns[idx]);
+                                    const TCell& cell(cells[idx]);
+                                    key << GetColumnValue(cell, type);
+                                }
+                                if (cells.size() > 1) {
+                                    key << ")";
+                                }
+                            }
+                            if (key) {
+                                EndOfRangeKeyPrefix[partition.GetDatashardId()] = key;
+                            }
+                        }
+                    }
+                }
             }
             for (const auto& partition : pathDescription.GetPersQueueGroup().GetPartitions()) {
                 Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::PersQueue;
@@ -242,7 +329,12 @@ public:
             for (const NKikimrWhiteboard::TTabletStateInfo& info : response.GetTabletStateInfo()) {
                 auto tablet = Tablets.find(info.GetTabletId());
                 if (tablet != Tablets.end()) {
-                    result.MutableTabletStateInfo()->Add()->CopyFrom(info);
+                    auto tabletInfo = result.MutableTabletStateInfo()->Add();
+                    tabletInfo->CopyFrom(info);
+                    auto itKey = EndOfRangeKeyPrefix.find(info.GetTabletId());
+                    if (itKey != EndOfRangeKeyPrefix.end()) {
+                        tabletInfo->SetEndOfRangeKeyPrefix(itKey->second);
+                    }
                     Tablets.erase(tablet->first);
                 }
             }

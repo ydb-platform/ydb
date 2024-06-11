@@ -237,6 +237,23 @@
             },
             "formula": "build/external_resources/go_tools/go1.22.json"
         },
+        "jdk17": {
+            "executable": {
+                "jar": [
+                    "bin",
+                    "jar"
+                ],
+                "java": [
+                    "bin",
+                    "java"
+                ],
+                "javac": [
+                    "bin",
+                    "javac"
+                ]
+            },
+            "formula": "build/platform/java/jdk/jdk17/jdk.json"
+        },
         "python": {
             "executable": {
                 "python": [
@@ -1810,6 +1827,61 @@
                 }
             }
         },
+        "jdk17": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "jar": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "jar17": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "java": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "java17": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "javac": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
+                },
+                "javac17": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
+                }
+            }
+        },
         "python": {
             "platforms": [
                 {
@@ -2062,6 +2134,24 @@
         },
         "gofmt": {
             "description": "Run gofmt tool"
+        },
+        "jar": {
+            "description": "Run current jar (17)"
+        },
+        "jar17": {
+            "description": "Run jar from jdk17"
+        },
+        "java": {
+            "description": "Run current java (17)"
+        },
+        "java17": {
+            "description": "Run java 17"
+        },
+        "javac": {
+            "description": "Run current javac (17)"
+        },
+        "javac17": {
+            "description": "Run javac 17"
         },
         "llvm-cov": {
             "description": "Run llvm-cov Clang utility"

@@ -728,6 +728,10 @@ public:
     }
 
     NUdf::TUnboxedValue* Extract() {
+        if (!IsReadyToContinue()) {
+            return nullptr;
+        }
+
         if (SpilledUnboxedValuesIterators.empty()) {
             // No spilled data
             return ExtractInMemory();

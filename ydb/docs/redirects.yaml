@@ -290,6 +290,8 @@ common:
 # YQL syntax redirects
   - from: /yql/reference/syntax/alter_table.md
     to: /yql/reference/syntax/alter_table/index.md
+  - from: /yql/reference/syntax/select.md
+    to: /yql/reference/syntax/select/index.md
 
 ru:
   - from: /concepts/column-table.md

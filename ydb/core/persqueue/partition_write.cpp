@@ -373,7 +373,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
-    DBGTRACE("TPartition::SyncMemoryStateWithKVState");
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty())
@@ -433,7 +432,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     EndOffset = Head.GetNextOffset();
-    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
     NewHead.Clear();
     NewHead.Offset = EndOffset;
 
@@ -444,7 +442,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
 void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::OnHandleWriteResponse");
     KVWriteInProgress = false;
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
@@ -457,7 +454,6 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvHandleWriteResponse)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
@@ -484,24 +480,18 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
-    DBGTRACE("TPartition::HandleWriteResponse");
-    DBGTRACE_LOG("HaveWriteMsg=" << HaveWriteMsg);
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     if (!HaveWriteMsg) {
         return;
     }
     HaveWriteMsg = false;
 
-    DBGTRACE_LOG("TxSourceIdForPostPersist.size=" << TxSourceIdForPostPersist.size());
     for (auto& [sourceId, info] : TxSourceIdForPostPersist) {
-        DBGTRACE_LOG("SourceId=" << sourceId << ", SeqNo=" << info.SeqNo << ", Offset=" << info.Offset);
         auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
         if (it.IsEnd()) {
-            DBGTRACE_LOG("seqNo=" << info.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, ctx.Now());
         } else {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
-            DBGTRACE_LOG("seqNo=" << seqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, ctx.Now()));
         }
     }
@@ -1604,9 +1594,7 @@ void TPartition::BeginProcessWrites(const TActorContext& ctx)
 
 void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::EndProcessWrites");
     if (HeadCleared) {
-        DBGTRACE_LOG("CompactedKeys.size=" << CompactedKeys.size() << ", Head.PackedSize=" << Head.PackedSize);
         Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             DataKeysHead[i].Clear();

@@ -1025,13 +1025,11 @@ void TPartition::WriteInfoResponseHandler(
         std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
         const TActorContext& ctx
 ) {
-    DBGTRACE("TPartition::WriteInfoResponseHandler");
     auto txIter = WriteInfosToTx.find(sender);
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
     auto& tx = (*txIter->second);
     if (auto msg = std::get<0>(ev)) {
-        DBGTRACE_LOG("reset tx.WriteInfo");
         tx.WriteInfo.Reset(msg.Release());
     } else {
         auto err = std::get<1>(ev);
@@ -1045,12 +1043,10 @@ void TPartition::WriteInfoResponseHandler(
 }
 
 TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
-    DBGTRACE("TPartition::ApplyWriteInfoResponse");
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     Y_ABORT_UNLESS(tx.WriteInfo);
     Y_ABORT_UNLESS(!tx.WriteInfoApplied);
     if (!tx.Predicate.GetOrElse(true)) {
-        DBGTRACE_LOG("predicate is false");
         return EProcessResult::Continue;
     }
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
@@ -1059,13 +1055,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
     THashSet<TString> txSourceIds;
     for (auto& s : srcIdInfo) {
-        DBGTRACE_LOG("s.first=" << s.first);
-        DBGTRACE_LOG("s.second.MinSeqNo=" << s.second.MinSeqNo);
         if (TxAffectedSourcesIds.contains(s.first)) {
             ret = EProcessResult::Blocked;
             break;
         }
-        DBGTRACE_LOG("isImmediate=" << isImmediate);
         if (isImmediate) {
             WriteAffectedSourcesIds.insert(s.first);
         } else {
@@ -1079,7 +1072,6 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         auto existing = knownSourceIds.find(s.first);
         if (existing.IsEnd())
             continue;
-        DBGTRACE_LOG("existing->second.SeqNo=" << existing->second.SeqNo);
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
             tx.Predicate = false;
             tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
@@ -1087,7 +1079,6 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             break;
         }
     }
-    DBGTRACE_LOG("WriteKeysSizeEstimate=" << WriteKeysSizeEstimate);
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
         tx.WriteInfoApplied = true;
@@ -1098,7 +1089,6 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             WriteCycleSizeEstimate += blob.GetBlobSize();
         }
     }
-    DBGTRACE_LOG("WriteKeysSizeEstimate=" << WriteKeysSizeEstimate);
 
     return ret;
 }
@@ -1533,7 +1523,6 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvKeyValue::TEvResponse)");
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -1601,7 +1590,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (writeDuration > minWriteLatency) {
         OnHandleWriteResponse(ctx);
     } else {
-        DBGTRACE_LOG("schedule TEvPQ::TEvHandleWriteResponse");
         ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse(response.GetCookie()));
     }
 }
@@ -1675,13 +1663,10 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::ProcessTxsAndUserActs");
-    DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
     if (KVWriteInProgress) {
         return;
     }
     if (DeletePartitionState == DELETION_INITED) {
-        DBGTRACE_LOG("deletion");
         if (!PersistRequest) {
             PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
         }
@@ -1699,14 +1684,11 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
     while (true) {
         if (BatchingState == ETxBatchingState::PreProcessing) {
-            DBGTRACE_LOG("preprocessing");
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
-            DBGTRACE_LOG("preprocessing");
             return; // Still preprocessing - waiting for something;
         }
-        DBGTRACE_LOG("preprocessing completed");
 
         // Preprocessing complete;
         if (CurrentBatchSize > 0) {
@@ -1717,19 +1699,16 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         if (UserActionAndTxPendingCommit.empty()) {
             // Processing stopped and nothing to commit - finalize
             BatchingState = ETxBatchingState::Finishing;
-            DBGTRACE_LOG("finishing");
         } else {
             // Process commit queue
             ProcessCommitQueue();
         }
-        DBGTRACE_LOG("UserActionAndTxPendingCommit.size=" << UserActionAndTxPendingCommit.size());
         if (!UserActionAndTxPendingCommit.empty()) {
             // Still pending for come commits
             return;
         }
         // Commit queue processing complete. Now can either swith to persist or continue preprocessing;
         if (BatchingState == ETxBatchingState::Finishing) { // Persist required;
-            DBGTRACE_LOG("finishing");
             RunPersist();
             return;
         }
@@ -1739,7 +1718,6 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 {
-    DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
     Y_ABORT_UNLESS(!KVWriteInProgress);
 
     if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_KEYS) {
@@ -1790,7 +1768,6 @@ void TPartition::MoveUserActOrTxToCommitState() {
 }
 
 void TPartition::ProcessCommitQueue() {
-    DBGTRACE("TPartition::ProcessCommitQueue");
     CurrentBatchSize = 0;
 
     Y_ABORT_UNLESS(!KVWriteInProgress);
@@ -1828,7 +1805,6 @@ void TPartition::ProcessCommitQueue() {
 }
 
 void TPartition::RunPersist() {
-    DBGTRACE("TPartition::RunPersist");
     TransactionsInflight.clear();
 
     Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
@@ -1926,34 +1902,26 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
-    DBGTRACE("TPartition::PreProcessUserActionOrTransaction(TTransaction)");
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo) { // Pending for write info
-        DBGTRACE_LOG("not ready");
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
-        DBGTRACE_LOG("not applied");
         result = ApplyWriteInfoResponse(*t);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
-            DBGTRACE_LOG("not applied");
             Y_ABORT_UNLESS(result != EProcessResult::Continue);
             return result;
         }
     }
     if (t->ProposeTransaction) { // Immediate TX
-        DBGTRACE_LOG("immediate tx");
         if (!t->Predicate.GetOrElse(true)) {
-            DBGTRACE_LOG("predicate is false");
             t->State = ECommitState::Aborted;
             return EProcessResult::Continue;
         }
-        DBGTRACE_LOG("predicate is true");
         t->Predicate.ConstructInPlace(true);
         return PreProcessImmediateTx(t->ProposeTransaction->Record);
 
     } else if (t->Tx) { // Distributed TX
-        DBGTRACE_LOG("distributed tx");
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
@@ -2108,7 +2076,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
-    DBGTRACE("TPartition::CommitWriteOperations");
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2125,8 +2092,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         }
         HaveWriteMsg = true;
     }
-
-    DBGTRACE_LOG("BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
 
     for (auto i = t.WriteInfo->BlobsFromHead.begin(); i != t.WriteInfo->BlobsFromHead.end(); ++i) {
         auto& blob = *i;
@@ -2150,9 +2115,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             .HeartbeatVersion = std::nullopt,
         }, std::nullopt};
 
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
         ExecRequest(msg, *Parameters, PersistRequest.Get());
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
 
         auto& info = TxSourceIdForPostPersist[blob.SourceId];
         info.SeqNo = blob.SeqNo;
@@ -2417,7 +2380,6 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
 
 TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx)
 {
-    DBGTRACE("TPartition::PreProcessImmediateTx");
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }

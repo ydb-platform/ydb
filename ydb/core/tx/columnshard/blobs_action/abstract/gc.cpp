@@ -10,9 +10,15 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
         auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
+        ui64 sumBytesRemove = 0;
+        ui32 blobsCount = 0;
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             Counters->OnReply(i.GetBlobId().BlobSize());
+            sumBytesRemove += i.GetBlobId().BlobSize();
+            ++blobsCount;
         }
+        Counters->OnGCFinished(sumBytesRemove, blobsCount);
+
         if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
             return;
         }

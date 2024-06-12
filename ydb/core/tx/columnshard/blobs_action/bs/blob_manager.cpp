@@ -127,13 +127,10 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
     , TabletInfo(tabletInfo)
     , CurrentGen(gen)
     , CurrentStep(0)
-    , BlobCountToTriggerGC(BLOB_COUNT_TO_TRIGGER_GC_DEFAULT, 0, Max<i64>())
-    , GCIntervalSeconds(GC_INTERVAL_SECONDS_DEFAULT, 0, Max<i64>()) {
+{
 }
 
-void TBlobManager::RegisterControls(NKikimr::TControlBoard& icb) {
-    icb.RegisterSharedControl(BlobCountToTriggerGC, "ColumnShardControls.BlobCountToTriggerGC");
-    icb.RegisterSharedControl(GCIntervalSeconds, "ColumnShardControls.GCIntervalSeconds");
+void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
 }
 
 bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
@@ -159,12 +156,14 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
 
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
     THashSet<TGenStep> genStepsWithBlobsToKeep;
+    std::map<TGenStep, std::set<TLogoBlobID>> blobsToKeepLocal;
     for (const auto& unifiedBlobId : blobsToKeep) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BS)("add_blob_to_keep", unifiedBlobId.ToStringNew());
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         TGenStep genStep(blobId);
         Y_ABORT_UNLESS(LastCollectedGenStep < genStep);
 
-        AFL_VERIFY(BlobsToKeep[genStep].emplace(blobId).second);
+        AFL_VERIFY(blobsToKeepLocal[genStep].emplace(blobId).second)("blob_to_keep_double", unifiedBlobId.ToStringNew());
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
         const ui64 groupId = dsGroupSelector.GetGroup(blobId);
         // Keep + DontKeep (probably in different gen:steps)
@@ -175,6 +174,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
 
         genStepsWithBlobsToKeep.insert(genStep);
     }
+    std::swap(blobsToKeepLocal, BlobsToKeep);
     BlobsManagerCounters.OnBlobsKeep(BlobsToKeep);
 
     AllocatedGenSteps.clear();
@@ -322,6 +322,10 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
+    if (AppData()->TimeProvider->Now() - PreviousGCTime < TDuration::Seconds(GC_INTERVAL_SECONDS)) {
+        return nullptr;
+    }
+
     PreviousGCTime = AppData()->TimeProvider->Now();
     TGCContext gcContext(sharedBlobsInfo);
     if (FirstGC) {
@@ -367,6 +371,8 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     PopGCBarriers(*CollectGenStepInFlight);
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
 
+    const bool isFull = gcContext.IsFull();
+
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
 
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), *CollectGenStepInFlight,
@@ -375,6 +381,11 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         CollectGenStepInFlight = {};
         return nullptr;
     }
+
+    if (isFull) {
+        PreviousGCTime = TInstant::Zero();
+    }
+
     return result;
 }
 

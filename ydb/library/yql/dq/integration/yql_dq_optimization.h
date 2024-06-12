@@ -29,7 +29,7 @@ public:
         Returns:
             * TDqLookupSourceWrap
     */
-    virtual TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr read, const TTypeAnnotationNode * typeAnn, TExprContext& ctx) = 0;
+    virtual TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr read, TExprContext& ctx) = 0;
 
     /**
         Apply new members subset for DqReadWrap's underlying provider reader

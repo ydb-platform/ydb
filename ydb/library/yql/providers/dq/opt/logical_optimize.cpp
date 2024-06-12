@@ -162,7 +162,7 @@ protected:
     TDqLookupSourceWrap LookupSourceFromRead(TDqReadWrap read, TExprContext& ctx){ //temp replace with yt source
         IDqOptimization* dqOptimization = GetDqOptCallback(read.Input());
         YQL_ENSURE(dqOptimization);
-        return TDqLookupSourceWrap(dqOptimization->RewriteLookupRead(read.Input().Ptr(), read.Raw()->GetTypeAnn(), ctx));
+        return TDqLookupSourceWrap(dqOptimization->RewriteLookupRead(read.Input().Ptr(), ctx));
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {

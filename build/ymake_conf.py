@@ -7,7 +7,6 @@ import base64
 import itertools
 import json
 import logging
-import ntpath
 import optparse
 import os
 import posixpath
@@ -270,10 +269,7 @@ class Platform(object):
             return os
 
     def exe(self, *paths):
-        if self.is_windows:
-            return ntpath.join(*itertools.chain(paths[:-1], (paths[-1] + '.exe',)))
-        else:
-            return posixpath.join(*paths)
+        return posixpath.join(*paths)
 
     def __str__(self):
         return '{name}-{os}-{arch}'.format(name=self.name, os=self.os, arch=self.arch)

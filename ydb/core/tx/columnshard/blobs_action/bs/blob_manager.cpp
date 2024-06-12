@@ -369,7 +369,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
     AFL_VERIFY(CollectGenStepInFlight);
     PopGCBarriers(*CollectGenStepInFlight);
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
 
     const bool isFull = gcContext.IsFull();
 

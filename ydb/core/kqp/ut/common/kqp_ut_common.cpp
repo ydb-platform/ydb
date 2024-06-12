@@ -1338,5 +1338,72 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
 }
 
+NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt) {
+    if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
+        auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
+        if (opName.find("Join") != TString::npos || opName.find("Union") != TString::npos ) {
+            NJson::TJsonValue newChildren;
+
+            for (auto c : opt.GetMapSafe().at("Plans").GetArraySafe()) {
+                newChildren.AppendValue(SimplifyPlan(c));
+            }
+
+            opt["Plans"] = newChildren;
+            return opt;
+        }
+        else if (opName.find("Table") != TString::npos ) {
+            return opt;
+        }
+    }
+
+    auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
+    return SimplifyPlan(firstPlan);
+}
+
+bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
+    auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+    if (op.GetMapSafe().at("Name").GetStringSafe() != ref.GetMapSafe().at("op_name").GetStringSafe()) {
+        return false;
+    }
+
+    auto refMap = ref.GetMapSafe();
+    if (auto args = refMap.find("args"); args != refMap.end()){
+        if (!opt.GetMapSafe().contains("Plans")){
+            Cout << "Error: no plans in " << opt.GetMapSafe().at("Name").GetStringSafe() << "\n";
+            return false;
+        }
+        auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+        if (args->second.GetArraySafe().size() != subplans.size()) {
+            return false;
+        }
+        for (size_t i=0; i<subplans.size(); i++) {
+            if (!JoinOrderAndAlgosMatch(subplans[i],args->second.GetArraySafe()[i])) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        if (!op.GetMapSafe().contains("Table")) {
+            return false;
+        }
+        return op.GetMapSafe().at("Table").GetStringSafe() == refMap.at("table").GetStringSafe();
+    }
+}
+
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(optimized, &optRoot, true);
+    Cout << "Simplifying plan\n";
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
+
+    Cout << "Simplified plan: " << optRoot.GetStringRobust() << "\n";
+    
+    NJson::TJsonValue refRoot;
+    NJson::ReadJsonTree(reference, &refRoot, true);
+
+    Cout << "Comparing plans\n";
+    return JoinOrderAndAlgosMatch(optRoot, refRoot);
+}
+
 } // namspace NKqp
 } // namespace NKikimr

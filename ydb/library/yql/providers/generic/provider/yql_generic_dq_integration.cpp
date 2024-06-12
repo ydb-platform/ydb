@@ -123,13 +123,6 @@ namespace NYql {
 
                     Generic::TSource source;
 
-                    // for backward compability full path can be used (cluster_name.`db_name.table`)
-                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                    TStringBuf db, dbTable;
-                    if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                        dbTable = table;
-                    }
-
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
                         << ": cluster: " << clusterName
@@ -145,7 +138,7 @@ namespace NYql {
 
                     // prepare select
                     auto select = source.mutable_select();
-                    select->mutable_from()->set_table(TString(dbTable));
+                    select->mutable_from()->set_table(TString(table));
                     select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
                     auto items = select->mutable_what()->mutable_items();

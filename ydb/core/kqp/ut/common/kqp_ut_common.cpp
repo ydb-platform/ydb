@@ -1369,7 +1369,6 @@ bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValu
     auto refMap = ref.GetMapSafe();
     if (auto args = refMap.find("args"); args != refMap.end()){
         if (!opt.GetMapSafe().contains("Plans")){
-            Cout << "Error: no plans in " << opt.GetMapSafe().at("Name").GetStringSafe() << "\n";
             return false;
         }
         auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
@@ -1393,15 +1392,11 @@ bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValu
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(optimized, &optRoot, true);
-    Cout << "Simplifying plan\n";
     optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
-
-    Cout << "Simplified plan: " << optRoot.GetStringRobust() << "\n";
     
     NJson::TJsonValue refRoot;
     NJson::ReadJsonTree(reference, &refRoot, true);
 
-    Cout << "Comparing plans\n";
     return JoinOrderAndAlgosMatch(optRoot, refRoot);
 }
 

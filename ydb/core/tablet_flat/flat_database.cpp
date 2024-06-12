@@ -38,26 +38,6 @@ bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
     return Epoch < rhs.Epoch;
 }
 
-bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
-    if (Serial && rhs.Serial) {
-        // When both counters have serial they can be compared directly
-        return Serial < rhs.Serial;
-    }
-
-    if (Epoch == rhs.Epoch) {
-        // When this counter is (0, epoch) but rhs is (non-zero, epoch), it
-        // indicates rhs may have more changes. When serial is zero it means
-        // the current memtable is empty, but rhs epoch is the same, so it
-        // cannot have fewer changes.
-        return Serial < rhs.Serial;
-    }
-
-    // The one with the smaller epoch must have fewer changes. In the worst
-    // case that change may have been a flush (incrementing epoch and serial)
-    // and then compact (possibly resetting serial to zero).
-    return Epoch < rhs.Epoch;
-}
-
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
     , NoMoreReadsFlag(true)

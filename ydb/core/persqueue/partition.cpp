@@ -44,7 +44,6 @@ static const ui32 MAX_USERS = 1000;
 static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
-static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 
 auto GetStepAndTxId(ui64 step, ui64 txId)
 {
@@ -2127,143 +2126,37 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         HaveWriteMsg = true;
     }
 
-    auto& sourceIdBatch = Parameters->SourceIdBatch;
-    ui64 curOffset = EndOffset;
-
     DBGTRACE_LOG("BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
 
     for (auto i = t.WriteInfo->BlobsFromHead.begin(); i != t.WriteInfo->BlobsFromHead.end(); ++i) {
         auto& blob = *i;
 
-        auto sourceId = sourceIdBatch.GetSource(blob.SourceId);
-        ui16 totalParts = blob.PartData.Defined() ? blob.PartData->TotalParts : 1;
-        ui32 totalSize = blob.GetBlobSize();
-        bool headCleared = true;
-        bool needCompactHead = true;
+        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+            .SourceId = blob.SourceId,
+            .SeqNo = blob.SeqNo,
+            .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+            .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+            .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+            .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+            .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+            .DisableDeduplication = false,
+            .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+            .Data = blob.Data,
+            .UncompressedSize = blob.UncompressedSize,
+            .PartitionKey = blob.PartitionKey,
+            .ExplicitHashKey = blob.ExplicitHashKey,
+            .External = false,
+            .IgnoreQuotaDeadline = true,
+            .HeartbeatVersion = std::nullopt,
+        }, std::nullopt};
 
-        PartitionedBlob = TPartitionedBlob(Partition, curOffset, blob.SourceId, blob.SeqNo,
-                                           totalParts, totalSize, Head, NewHead,
-                                           headCleared, needCompactHead, MaxBlobSize);
+        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
+        ExecRequest(msg, *Parameters, PersistRequest.Get());
+        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
 
-        auto newWrite = PartitionedBlob.Add(std::move(blob));
-        DBGTRACE_LOG("newWrite.has_value=" << newWrite.has_value());
-        if (newWrite && !newWrite->second.empty()) {
-            DBGTRACE_LOG("write key=" << TString(newWrite->first.Data(), newWrite->first.Size()));
-            auto write = PersistRequest->Record.AddCmdWrite();
-            write->SetKey(newWrite->first.Data(), newWrite->first.Size());
-            write->SetValue(newWrite->second);
-            Y_ABORT_UNLESS(!newWrite->first.IsHead());
-            auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
-            write->SetStorageChannel(channel);
-            write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-
-            TKey resKey = newWrite->first;
-            resKey.SetType(TKeyPrefix::TypeData);
-            write->SetKeyToCache(resKey.Data(), resKey.Size());
-            DBGTRACE_LOG("cache key=" << TString(resKey.Data(), resKey.Size()));
-            WriteCycleSize += newWrite->second.size();
-
-            LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicName() <<
-                        "' partition " << Partition <<
-                        " part blob sourceId '" << EscapeC(blob.SourceId) <<
-                        "' seqNo " << blob.SeqNo <<
-                        //" partNo " << p.Msg.PartNo <<
-                        " result is " << TStringBuf(newWrite->first.Data(), newWrite->first.Size()) <<
-                        " size " << newWrite->second.size()
-            );
-        }
-
-        bool lastBlobPart = blob.IsLastPart();
-        Y_ABORT_UNLESS(lastBlobPart);
-
-        if (lastBlobPart) {
-            Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
-            ui32 curWrites = 0;
-            for (ui32 i = 0; i < PersistRequest->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-                TKey key(PersistRequest->Record.GetCmdWrite(i).GetKey());
-                if (key.GetType() == TKeyPrefix::TypeTmpData) {
-                    key.SetType(TKeyPrefix::TypeData);
-                    PersistRequest->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
-                    ++curWrites;
-                }
-            }
-            auto formedBlobs = PartitionedBlob.GetFormedBlobs();
-            DBGTRACE_LOG("curWrites=" << curWrites << ", formedBlobs.size=" << formedBlobs.size());
-            Y_ABORT_UNLESS(curWrites <= formedBlobs.size());
-            for (ui32 i = 0; i < formedBlobs.size(); ++i) {
-                const auto& x = formedBlobs[i];
-                if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
-                    auto rename = PersistRequest->Record.AddCmdRename();
-                    TKey key = x.first;
-                    DBGTRACE_LOG("need rename key " << TString(key.Data(), key.Size()));
-                    rename->SetOldKey(TString(key.Data(), key.Size()));
-                    key.SetType(TKeyPrefix::TypeData);
-                    rename->SetNewKey(TString(key.Data(), key.Size()));
-                }
-                if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-                    Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
-                        "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, x.first.ToString().c_str());
-                }
-                LOG_DEBUG_S(
-                        ctx, NKikimrServices::PERSQUEUE,
-                        "writing blob: topic '" << TopicName() << "' partition " << Partition
-                            << " " << x.first.ToString() << " size " << x.second << " WTime " << ctx.Now().MilliSeconds()
-                );
-
-                CompactedKeys.push_back(x);
-                CompactedKeys.back().first.SetType(TKeyPrefix::TypeData);
-            }
-            if (PartitionedBlob.HasFormedBlobs()) { //Head and newHead are cleared
-                Parameters->HeadCleared = true;
-                NewHead.Clear();
-                NewHead.Offset = PartitionedBlob.GetOffset();
-                NewHead.PartNo = PartitionedBlob.GetHeadPartNo();
-                NewHead.PackedSize = 0;
-            }
-            ui32 countOfLastParts = 0;
-            for (auto& x : PartitionedBlob.GetClientBlobs()) {
-                if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
-                    NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
-                    NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
-                }
-                if (x.IsLastPart()) {
-                    ++countOfLastParts;
-                }
-                Y_ABORT_UNLESS(!NewHead.Batches.back().Packed);
-                NewHead.Batches.back().AddBlob(x);
-                NewHead.PackedSize += x.GetBlobSize();
-                if (NewHead.Batches.back().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                    NewHead.Batches.back().Pack();
-                    NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
-
-                    NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-                    NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
-                }
-            }
-
-            Y_ABORT_UNLESS(countOfLastParts == 1);
-
-            LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicName() << "' partition " << Partition
-                        << " part blob complete sourceId '" << EscapeC(blob.SourceId) << "' seqNo " << blob.SeqNo
-                        //<< " partNo " << p.Msg.PartNo
-                        << " FormedBlobsCount " << PartitionedBlob.GetFormedBlobs().size()
-                        << " NewHead: " << NewHead
-            );
-
-            DBGTRACE_LOG("update SourceId: SeqNo=" << blob.SeqNo << ", Offset=" << curOffset);
-            sourceId.Update(blob.SeqNo, curOffset, CurrentTimestamp);
-
-            auto& info = TxSourceIdForPostPersist[blob.SourceId];
-            info.SeqNo = blob.SeqNo;
-            info.Offset = curOffset;
-
-            ++curOffset;
-            PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
-        }
+        auto& info = TxSourceIdForPostPersist[blob.SourceId];
+        info.SeqNo = blob.SeqNo;
+        info.Offset = NewHead.Offset;
     }
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));

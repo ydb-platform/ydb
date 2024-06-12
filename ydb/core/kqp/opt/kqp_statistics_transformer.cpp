@@ -219,6 +219,7 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                     if (stats->ByteSize != 0.0) {
                         YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
                         typeCtx->SetStats(input.Get(), stats);
+                        typeCtx->SetStats(s3DataSource.Raw(), stats);
                     }
                 }
             }

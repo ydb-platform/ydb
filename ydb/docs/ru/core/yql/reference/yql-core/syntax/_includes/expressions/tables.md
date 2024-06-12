@@ -8,9 +8,9 @@
 {% endif %}
 
 Семантика табличного выражения зависит от контекста в котором оно используется. В YQL табличные выражения могут применяться в следующих контекстах:
-* табличный контекст - после [FROM](../../select.md#from).
+* табличный контекст - после [FROM](../../select/from.md).
 Здесь табличные выражения работают как ожидается – например `$input = SELECT a, b, c FROM T; SELECT * FROM $input` вернет таблицу с тремя колонками.
-Табличный контекст также возникает после [UNION ALL](../../select.md#unionall){% if feature_join %}, [JOIN](../../join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](../../process.md#process), [REDUCE](../../reduce.md#reduce){% endif %};
+Табличный контекст также возникает после [UNION ALL](../../select/index.md#unionall){% if feature_join %}, [JOIN](../../join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](../../process.md#process), [REDUCE](../../reduce.md#reduce){% endif %};
 * векторный контекст - после [IN](#in). В этом контексте табличное выражение обязано содержать ровно одну колонку (имя этой колонки никак не влияет на результат выражения).
 Табличное выражение в векторном контексте типизируется как список (тип элемента списка при этом совпадает с типом колонки). Пример: `SELECT * FROM T WHERE key IN (SELECT k FROM T1)`;
 * скалярный контекст возникает _во всех остальных случаях_. Как и в векторном контексте,

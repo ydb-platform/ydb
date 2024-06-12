@@ -161,7 +161,9 @@ public:
     };
 
     std::function<void()> GetWakeupCallback() const override {
-        return {};
+        return []() {
+            std::cerr << "MISHA my silly wakeup callback\n";
+        };
     }
 
 };

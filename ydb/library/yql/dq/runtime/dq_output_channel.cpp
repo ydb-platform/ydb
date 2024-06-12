@@ -139,6 +139,7 @@ public:
             data.Proto.SetTransportVersion(TransportVersion);
             data.Proto.SetRows(head.RowCount);
             data.SetPayload(std::move(head.Buffer));
+            std::cerr << "MISHA saving to spilling\n";
             Storage->Put(NextStoredId++, SaveForSpilling(std::move(data)));
 
             PackedDataSize -= bufSize;

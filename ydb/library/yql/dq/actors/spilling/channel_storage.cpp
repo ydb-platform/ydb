@@ -2,6 +2,7 @@
 
 #include "channel_storage_actor.h"
 
+#include <format>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -49,8 +50,9 @@ public:
 
     bool IsFull() override {
         UpdateWriteStatus();
+        // std::cerr << std::format("MISHA towrite: {}, totalsize: {}\n", WritingBlobs_.size(),  WritingBlobsTotalSize_);
 
-        return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
+        return false; WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
     void Put(ui64 blobId, TRope&& blob, ui64 cookie = 0) override {

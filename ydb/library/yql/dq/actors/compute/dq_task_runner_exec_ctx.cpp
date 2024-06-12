@@ -18,6 +18,7 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const {
     if (withSpilling) {
+        std::cerr << "MISHA dq channel storage created\n";
         return CreateDqChannelStorage(TxId_, channelId, WakeUp_, actorSystem);
     } else {
         return nullptr;

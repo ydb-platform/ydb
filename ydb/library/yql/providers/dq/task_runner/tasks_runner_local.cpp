@@ -115,6 +115,7 @@ public:
     }
 
     NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
+        std::cerr << "MISHA prepare LocalTaskRunner with default context\n";
         NYql::NDqProto::TPrepareResponse ret;
         TDqTaskRunnerExecutionContextDefault ctx;
         Runner->Prepare(Task, limits, ctx);

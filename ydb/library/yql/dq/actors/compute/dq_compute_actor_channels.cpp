@@ -527,6 +527,7 @@ void TDqComputeActorChannels::SetOutputChannelPeer(ui64 channelId, const TActorI
 }
 
 bool TDqComputeActorChannels::HasFreeMemoryInChannel(const ui64 channelId) const {
+    return true;
     const TOutputChannelState& outputChannel = OutCh(channelId);
     return outputChannel.PeerState.HasFreeMemory();
 }

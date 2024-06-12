@@ -3,6 +3,7 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
+#include <format>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -82,6 +83,7 @@ private:
     void HandleWork(TEvDqChannelSpilling::TEvGet::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvGet] blobId: " << msg.BlobId_);
+        std::cerr << std::format("MISHA [GET] {}\n", msg.BlobId_);
  
         LoadingBlobs_.emplace(msg.BlobId_, std::move(msg.Promise_));
 
@@ -91,6 +93,7 @@ private:
     void HandleWork(TEvDqChannelSpilling::TEvPut::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvPut] blobId: " << msg.BlobId_);
+        std::cerr << std::format("MISHA [PUT] {}\n", msg.BlobId_);
 
         WritingBlobs_.emplace(msg.BlobId_, std::move(msg.Promise_));
 
@@ -100,6 +103,7 @@ private:
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
+        std::cerr << std::format("MISHA [WRITE RESULT] {}\n", msg.BlobId);
 
         const auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
@@ -114,11 +118,13 @@ private:
         // Complete the future
         it->second.SetValue();
         WritingBlobs_.erase(it);
+        WakeUp_();
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+        std::cerr << std::format("MISHA [READ RESULT] {}\n", msg.BlobId);
 
         const auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
@@ -139,6 +145,7 @@ private:
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_D("[TEvError] " << msg.Message);
+        std::cerr << std::format("MISHA [ERROR]: {}\n", std::string(msg.Message));
 
         Error_.ConstructInPlace(msg.Message);
     }

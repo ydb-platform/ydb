@@ -867,6 +867,11 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
+    if (!CanWrite()) {
+        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition");
+        return EProcessResult::ContinueDrop;
+    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -894,6 +899,11 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
+    if (!CanWrite()) {
+        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition");
+        return EProcessResult::ContinueDrop;
+    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -913,6 +923,11 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
+    if (!CanWrite()) {
+        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition");
+        return EProcessResult::ContinueDrop;
+    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -953,6 +968,11 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
+    if (!CanWrite()) {
+        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition");
+        return EProcessResult::ContinueDrop;
+    }
     if (DiskIsFull) {
         ScheduleReplyError(p.Cookie,
                             NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -967,6 +987,11 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
+    if (!CanWrite()) {
+        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition");
+        return false;
+    }
     if (DiskIsFull) {
         ScheduleReplyError(p.Cookie,
                             NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,

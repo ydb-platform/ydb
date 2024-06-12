@@ -483,6 +483,15 @@ class ClusterDetailsProvider(object):
         return converted_host_configs
 
     @property
+    def raw_host_configs(self):
+        raw_host_configs = self.__cluster_description.get("host_configs", [])
+        for host_config in raw_host_configs:
+            if 'drives' in host_config:
+                # inside config.yaml we should use field drive in host_configs section
+                host_config['drive'] = host_config.pop('drives')
+        return raw_host_configs
+
+    @property
     def tablet_profiles(self):
         all_profiles = []
         storage_pool_kinds = []

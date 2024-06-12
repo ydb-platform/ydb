@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/threading/future/async.h>
-#include <util/generic/buffer.h>
+#include <ydb/library/actors/util/rope.h>
 
 namespace NYql {
 namespace NSpilling {
@@ -54,7 +54,7 @@ class ISession {
 public:
     // Saves buf with size bytes to temporary storage. buf content should not be changed until operation completes.
     // TOperationResults contains final results of buffer saving. buf is deleted after saving.
-    virtual NThreading::TFuture<TOperationResults> Save(const TString& objNamespace, const TString& name, TBuffer&& buf) = 0;
+    virtual NThreading::TFuture<TOperationResults> Save(const TString& objNamespace, const TString& name, TRope&& rope) = 0;
 
     // Loads data from temporary storage to Buf in TLoadOperationResults.
     virtual NThreading::TFuture<TLoadOperationResults> Load(const TString& objNamespace, const TString& name, EObjectsLifetime objLifetime = EObjectsLifetime::DeleteAfterLoad) = 0;
@@ -75,7 +75,7 @@ class IStream {
 public:
     // Saves buf to stream.  Buffer id in stream is returned in TOperationResults. Buffer id is a 0,1,2,3..(Size of stream - 1)  sequence.
     // Stream guarantees buffer id order the same as it was Save calls order.
-    virtual NThreading::TFuture<TOperationResults> Save(TBuffer&& buf) = 0;
+    virtual NThreading::TFuture<TOperationResults> Save(TRope&& rope) = 0;
 
     // Return current number of objects stored in stream.
     virtual ui64 Size() = 0;
@@ -184,7 +184,7 @@ struct TOperationResults {
 
 // Results of load operation
 struct TLoadOperationResults: public TOperationResults {
-   TAtomicSharedPtr<TBuffer> Buf; //  Buffer with data after load operation.
+   TAtomicSharedPtr<TRope> Rope; //  Rope with data after load operation.
 };
 
 struct TFileStorageConfig {

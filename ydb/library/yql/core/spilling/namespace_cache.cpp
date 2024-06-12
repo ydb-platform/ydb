@@ -1,8 +1,15 @@
 #include "namespaces_list.h"
 #include "interface/spilling.h"
 #include "storage/storage.h"
+#include "util/generic/buffer.h"
+#include "ydb/library/actors/util/rc_buf.h"
+#include "ydb/library/yql/utils/rope_over_buffer.h"
 
+#include <limits>
+#include <optional>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <map>
 
@@ -12,6 +19,86 @@
 
 namespace NYql {
 namespace NSpilling {
+
+namespace {
+
+std::optional<XXH32_hash_t> saveRopeToFile(TRope& rope, TAtomicSharedPtr<ISpillFile> spillDataFile, ui32 offset) {
+    XXH32_state_t* state = XXH32_createState();
+    if (state == nullptr) {
+        YQL_LOG(ERROR) << "Not enough memory" << Endl;
+        return std::nullopt;
+    }
+
+    XXH32_reset(state, 0);
+
+    ui32 blobSize;
+    for (const auto& blob: rope) {
+        YQL_ENSURE(blob.second <= std::numeric_limits<ui32>::max());
+        blobSize = blob.second;
+        XXH32_update(state, &blobSize, sizeof(blobSize));
+        XXH32_update(state, blob.first, blobSize);
+
+        spillDataFile->Write(offset, &blobSize, sizeof(blobSize));
+        offset += sizeof(blobSize);
+
+        spillDataFile->Write(offset, blob.first, blobSize);
+        offset += blobSize;
+    }
+    XXH32_hash_t hash = XXH32_digest(state);
+    XXH32_freeState(state);
+    return hash;
+}
+
+std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpillFile> spillDataFile, ui32 offset, ui32 size) {
+    XXH32_state_t* state = XXH32_createState();
+    if (state == nullptr) {
+        YQL_LOG(ERROR) << "Not enough memory" << Endl;
+        return std::nullopt;
+    }
+
+    XXH32_reset(state, 0);
+
+    ui32 bytesRead = 0;
+    
+    ui32 blobSize = 0;
+    i32 readRes;
+    bool isFailed = false;
+    while (bytesRead < size) {
+        readRes = spillDataFile->Read(offset, &blobSize, sizeof(blobSize));
+        if (readRes < 0) {
+            YQL_LOG(ERROR) << "Read failed" << Endl;
+            isFailed = true;
+            break;
+        }
+        bytesRead += sizeof(blobSize);
+
+        auto blobPtr = std::shared_ptr<char[]>(new char[blobSize]);
+        // https://a.yandex-team.ru/arcadia/contrib/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp?rev=r13156942#L89
+        readRes = spillDataFile->Read(offset, blobPtr.get(), blobSize);
+        if (readRes < 0) {
+            YQL_LOG(ERROR) << "Read failed" << Endl;
+            isFailed = true;
+            break;
+        }
+
+        XXH32_update(state, &blobSize, sizeof(blobSize));
+        XXH32_update(state, blobPtr.get(), blobSize);
+
+        rope.Insert(rope.End(), MakeReadOnlyRope(blobPtr, blobPtr.get(), blobSize));
+        bytesRead += blobSize;
+    }
+    
+    if (isFailed) {
+        XXH32_freeState(state);
+        return std::nullopt;
+    }
+
+    XXH32_hash_t hash = XXH32_digest(state);
+    XXH32_freeState(state);
+    return hash;
+}
+
+} // namespace
 
 // Finds approximate position of val in array of N increasing values. Values cycle after max(ui32)
 // Returns true if val can be between start and end taking into account cycling.
@@ -69,12 +156,12 @@ inline void TNamespaceCache::UpdateMinSessionId(ui32 sessionId, ui32 objId) {
 }
 
 
-NThreading::TFuture<TOperationResults> TNamespaceCache::Save(const TString & objName,  TBuffer && buf, ui32 sessionId, bool isStream ) {
+NThreading::TFuture<TOperationResults> TNamespaceCache::Save(const TString & objName,  TRope && rope, ui32 sessionId, bool isStream ) {
     NThreading::TFuture<TOperationResults> res;
     TSaveTask bt;
     bt.Name = objName;
     bt.SessionId = sessionId;
-    bt.Buf = MakeAtomicShared<TBuffer>(std::move(buf));
+    bt.Rope = MakeAtomicShared<TRope>(std::move(rope));
    
     bt.Promise = NThreading::NewPromise<TOperationResults>();
 
@@ -103,11 +190,11 @@ NThreading::TFuture<TOperationResults> TNamespaceCache::Save(const TString & obj
                 streamInd = 0;
                 LastStreamIds_[objName].push_back(bt.ObjId);
             }
-            bt.StreamBufId = streamInd;
-            bt.OpType = EOperationType::StreamBufAdd;
+            bt.StreamRopeId = streamInd;
+            bt.OpType = EOperationType::StreamRopeAdd;
         }
         UpdateMinSessionId(sessionId, bt.ObjId);
-        SessionDataProvided_[sessionId] += bt.Buf->Size();
+        SessionDataProvided_[sessionId] += bt.Rope->GetSize();
         res = bt.Promise.GetFuture();
         ToSave_.emplace_back(std::move(bt));
     } 
@@ -123,7 +210,7 @@ NThreading::TFuture<TLoadOperationResults> TNamespaceCache::Load(const TString& 
     lt.Promise = NThreading::NewPromise<TLoadOperationResults>(); 
     lt.Name = name;
     lt.SessionId = sessionId;
-    lt.StreamBufId = streamId;
+    lt.StreamRopeId = streamId;
     bool foundInLastObjs = false;
     bool foundInSaveQueue = false;
     with_lock(ToSaveLock_) {
@@ -149,19 +236,19 @@ NThreading::TFuture<TLoadOperationResults> TNamespaceCache::Load(const TString& 
                 if ( st.ProcessingStatus != EProcessingStatus::Deleted ) {
                     lr.Status = EOperationStatus::Success;
                     if ( st.ProcessingStatus == EProcessingStatus::Processing ) {
-                       lr.Buf = st.Buf; 
+                       lr.Rope = st.Rope; 
                     } else {
                         if (objLifetime == EObjectsLifetime::DeleteAfterLoad ) {
-                            lr.Buf = st.Buf;
-                            st.Buf = nullptr;
-                            SessionDataSpilled_[st.SessionId] += lr.Buf->Size(); 
+                            lr.Rope = st.Rope;
+                            st.Rope = nullptr;
+                            SessionDataSpilled_[st.SessionId] += lr.Rope->GetSize(); 
                             st.ProcessingStatus = EProcessingStatus::Deleted;
                         } else {
-                            lr.Buf = st.Buf; 
+                            lr.Rope = st.Rope; 
                         }
                         
                     }
-                    SessionDataLoadedFromMemory_[st.SessionId] += lr.Buf->Size();
+                    SessionDataLoadedFromMemory_[st.SessionId] += lr.Rope->GetSize();
                     lt.Promise.SetValue(std::move(lr));
                 } else {
                     lr.Status = EOperationStatus::NoObjectName;
@@ -457,8 +544,8 @@ ui32 TNamespaceCache::DeleteTaskFromSaveQueue(ui32 objId, EProcessingStatus reas
     bool found = FindObjInSaveQueue(objId, pos);
     if ( found && ToSave_[pos].ProcessingStatus != EProcessingStatus::Processing) {
         ToSave_[pos].ProcessingStatus = reason;
-        bytesDeleted = ToSave_[pos].Buf->Size();
-        ToSave_[pos].Buf = nullptr;
+        bytesDeleted = ToSave_[pos].Rope->GetSize();
+        ToSave_[pos].Rope = nullptr;
     }
     return bytesDeleted;
 
@@ -487,7 +574,7 @@ bool TNamespaceCache::FindNextTaskInSaveQueue(ui32& taskPos) {
                 }
             }
 
-            if (saveTask.OpType == EOperationType::StreamBufAdd ) {
+            if (saveTask.OpType == EOperationType::StreamRopeAdd ) {
                 saveTask.ProcessingStatus = EProcessingStatus::Processing;
                 res = true;
                 break;
@@ -551,10 +638,10 @@ void TNamespaceCache::ChangeLastObjId(TString& objName, ui32 prevObjId, ui32 nex
 }
 
 void TNamespaceCache::ProcessSaveQueue() {
+    
 
     ui32 taskPos = 0;
     bool saveTaskFound = false;
-    bool enoughSpaceToWrite = false;
 
     try {
         ToSaveLock_.lock();
@@ -569,11 +656,16 @@ void TNamespaceCache::ProcessSaveQueue() {
             TAtomicSharedPtr<ISpillFile> currSpillDataFile = CurrSpillDataFile_; 
 
             TSaveTask& saveTask = ToSave_[taskPos];
-            ui32 size = saveTask.Buf->Size();
+
+            // TODO: refactor
+            ui32 blocksCount = 0;
+            for (auto it = saveTask.Rope->Begin(); it != saveTask.Rope->End(); ++it) {
+                blocksCount++;
+            }
+            ui32 size = saveTask.Rope->GetSize() + sizeof(ui32) * blocksCount;
             ui64 offset = currSpillDataFile->Reserve(size);
             ui64 total = offset + size;
-            TAtomicSharedPtr<TBuffer> bufToSave = saveTask.Buf; 
-            char * data = bufToSave->Data();
+            TAtomicSharedPtr<TRope> ropeToSave = saveTask.Rope; 
             ui32 taskObjId = saveTask.ObjId;
             ui32 prevObjId = taskObjId;
             TSpillMetaRecord mr{EOperationType::Add, saveTask.Name, offset, taskObjId, size, 0 };
@@ -585,7 +677,6 @@ void TNamespaceCache::ProcessSaveQueue() {
                 NextNamespaceFile(false);
                 ToSaveLock_.unlock();
             } else {
-                enoughSpaceToWrite = true;
                 saveTask.ProcessingStatus = EProcessingStatus::Processing;
                 bool changeObjId = ( !(taskObjId > CurrSpillFileId_ * (1<<16) && (taskObjId < (CurrSpillFileId_ + 1) * (1<<16)) ));
                 if (changeObjId) {
@@ -593,14 +684,16 @@ void TNamespaceCache::ProcessSaveQueue() {
                     mr.SetObjId(taskObjId);
                 }
                 ToSaveLock_.unlock();
-                XXH32_hash_t hash = XXH32( data, size, 0);
-                mr.SetDataHash(hash);
 
+                const auto hash = saveRopeToFile(*ropeToSave, currSpillDataFile, offset);
+                if (!hash.has_value()) {
+                    saveTask.ProcessingStatus = EProcessingStatus::Failed;
+                    return;
+                }
+                mr.SetDataHash(hash.value());
 
                 TBuffer mrBuf;
                 mr.Pack(mrBuf);
-
-                currSpillDataFile->Write(offset, data, size);
                 currSpillMetaFile->Write(metaOffset, mrBuf.Data(), metaSize);
 
 
@@ -660,13 +753,16 @@ void TNamespaceCache::ProcessLoadQueue() {
     if (!found)
         return;
 
-    TBuffer buf(mr.DataSize());
-    fileMet->DataFile->Read(mr.Offset(), buf.Data(), mr.DataSize());
-    XXH32_hash_t hash = XXH32( buf.Data(), mr.DataSize(), 0);
-    lr.Buf = MakeAtomicShared<TBuffer>(std::move(buf));
-    lr.Status = EOperationStatus::Success;
+    TRope rope;
+    const auto hash = readRopeFromFile(rope, fileMet->DataFile, mr.Offset(), mr.Size());
+    if (!hash.has_value()) {
+        lr.Status = EOperationStatus::Failure;
+    } else {
+        lr.Rope = MakeAtomicShared<TRope>(std::move(rope));
+        lr.Status = EOperationStatus::Success;
+    }
 
-    if ( hash != mr.DataHash() ) {
+    if (hash != mr.DataHash()) {
         lr.Status = EOperationStatus::ChecksumInvalid;
         YQL_LOG(ERROR) << "Wrong hash!!!:  " << "Buf hash: " << hash << " Meta hash: " << mr.DataHash() << Endl;
     }
@@ -675,10 +771,7 @@ void TNamespaceCache::ProcessLoadQueue() {
         SessionDataLoadedFromStorage_[loadTask.SessionId] += mr.DataSize();
     }
 
-
     loadTask.Promise.SetValue(std::move(lr)); 
-
-
 }
 
 void TNamespaceCache::ProcessDeleteQueue() {
@@ -703,7 +796,7 @@ void TNamespaceCache::ProcessDeleteQueue() {
             for (auto& t : ToSave_ ) {
                 if ( t.SessionId == sessionId ) {
                     t.ProcessingStatus = EProcessingStatus::Deleted;
-                    t.Buf = nullptr;
+                    t.Rope = nullptr;
                 }
             }
         }
@@ -712,7 +805,7 @@ void TNamespaceCache::ProcessDeleteQueue() {
             for (auto& t : ToLoad_ ) {
                 if ( t.SessionId == sessionId ) {
                     t.ProcessingStatus = EProcessingStatus::Deleted;
-                    t.Buf = nullptr;
+                    t.Rope = nullptr;
                 }
             }
         }

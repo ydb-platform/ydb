@@ -37,7 +37,7 @@ ui32 TSpillMetaRecord::Size() {
         case EOperationType::TimeMark:
             res += 2 * sizeof(ui32);
             break;
-        case EOperationType::StreamBufAdd:
+        case EOperationType::StreamRopeAdd:
             res += 2 * sizeof(ui32);
             break;
     }

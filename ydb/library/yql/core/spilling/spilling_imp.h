@@ -50,7 +50,7 @@ class TSessionIds {
 
 class TSessionImp: public ISession {
 public: 
-    NThreading::TFuture<TOperationResults> Save(const TString & objNamespace, const TString & name,  TBuffer && buf);
+    NThreading::TFuture<TOperationResults> Save(const TString & objNamespace, const TString & name, TRope && rope);
     NThreading::TFuture<TLoadOperationResults> Load(const TString & objNamespace, const TString & name, EObjectsLifetime objLifetime = EObjectsLifetime::DeleteAfterLoad );
     TSessionDataStat GetSessionDataStat();
     TSessionExecutionPolicy ExecutionPolicy(); 
@@ -81,7 +81,7 @@ private:
 
 class TStreamImp: public IStream {
 public:
-    NThreading::TFuture<TOperationResults> Save(TBuffer&& buf);
+    NThreading::TFuture<TOperationResults> Save(TRope&& rope);
     ui64 Size();
     NThreading::TFuture<TLoadOperationResults> Load(ui64 bufferId = 0, EObjectsLifetime objLifetime = EObjectsLifetime::DeleteAfterLoad);
     NThreading::TFuture<TOperationResults> Close();

@@ -65,9 +65,9 @@ public:
     TString GetName() {return Name_;};
     bool IsLocked();
     ui64 Reserve(ui32 size);
-    void Write(ui32 offset, const char * data, ui32 bytes);
+    void Write(ui32 offset, const void * data, ui32 bytes);
     void Seek(ui32 offset);
-    i32 Read(ui32 offset, char* buf, ui32 len);
+    i32 Read(ui32 offset, void* buf, ui32 len);
     void Delete();
     FsSpillFile(const TString& name, EOpenMode oMode, ui32 reserveStep);
 private:
@@ -220,7 +220,7 @@ ui64 FsSpillFile::Reserve(ui32 size) {
     return offset;
 }
 
-void FsSpillFile::Write(ui32 offset, const char * data, ui32 bytes) {
+void FsSpillFile::Write(ui32 offset, const void * data, ui32 bytes) {
     File_.Pwrite(data, bytes, offset);
 }
 
@@ -228,7 +228,7 @@ void FsSpillFile::Seek(ui32 offset) {
     File_.Seek(offset, SeekDir::sSet);
 }
 
-i32 FsSpillFile::Read(ui32 offset, char* buf, ui32 len) {
+i32 FsSpillFile::Read(ui32 offset, void* buf, ui32 len) {
     return File_.Pread(buf, len, offset);
 }
 

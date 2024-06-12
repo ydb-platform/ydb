@@ -284,6 +284,7 @@ public:
                             .Name().Build(token)
                         .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
@@ -327,6 +328,7 @@ public:
                             .Name().Build(token)
                             .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)
@@ -605,6 +607,9 @@ public:
             } else {
                 properties["Name"] = "Raw read from external data source";
             }
+            if (TString path = settings.Path().StringValue()) {
+                properties["Path"] = path;
+            }
             properties["Format"] = "raw";
             if (TString limit = settings.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
@@ -617,7 +622,13 @@ public:
             } else {
                 properties["Name"] = "Parse from external data source";
             }
+            if (TString path = settings.Path().StringValue()) {
+                properties["Path"] = path;
+            }
             properties["Format"] = settings.Format().StringValue();
+            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
+                properties["Compression"] = TString{compression};
+            }
             if (TString limit = settings.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
             }

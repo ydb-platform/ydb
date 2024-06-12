@@ -100,5 +100,23 @@ public:
     operator bool() const;
 };
 
+
+class TMultiBucketCounter {
+private:
+    TVector<ui64> Buckets;
+    TVector<double> AvgValues;
+    TVector<ui64> ValuesCount;
+    ui64 TimeReference;
+
+ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
+
+public:
+    TMultiBucketCounter(TMultiBucketCounter&& other, ui64 newTimeReference);
+    TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
+    void Insert(ui64 value, ui64 count) noexcept;
+    TVector<std::pair<double, ui64>> GetValues() const noexcept;
+
+};
+
 }// NPQ
 }// NKikimr

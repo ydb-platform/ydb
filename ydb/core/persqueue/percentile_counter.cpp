@@ -198,5 +198,82 @@ TPartitionHistogramWrapper::operator bool() const {
     return Inited && (IsSupportivePartition || Histogram);
 }
 
+
+ui64 TMultiBucketCounter::InsertWithHint(double value, ui64 count, ui64 hint) noexcept {
+    while (hint < Buckets.size()) {
+        if (Buckets[hint] > value) {
+            break;
+        }
+        ++hint;
+    }
+    auto newAvg = (AvgValues[hint] * ValuesCount[hint] + count * value) / (ValuesCount[hint] + count);
+
+    ValuesCount[hint] += count;
+    AvgValues[hint] = newAvg;
+    return hint;
+}
+
+TMultiBucketCounter::TMultiBucketCounter(TMultiBucketCounter&& other, ui64 newTimeRef)
+    : TimeReference(newTimeRef)
+{
+    Buckets = std::move(other.Buckets);
+    ValuesCount.resize(Buckets.size(), 0);
+    AvgValues.resize(Buckets.size(), 0.0);
+
+    ui64 timeDiff = 0;
+    if (newTimeRef > other.TimeReference) {
+        timeDiff = newTimeRef - other.TimeReference;
+    }
+    ui64 hint = 0;
+    for (ui64 i = 0; i < Buckets.size(); ++i) {
+        if (other.ValuesCount[i])
+            hint = InsertWithHint(other.AvgValues[i] + timeDiff, other.ValuesCount[i], hint);
+    }
+
+}
+
+TMultiBucketCounter::TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef)
+    : TimeReference(timeRef)
+{
+
+    Buckets.resize(buckets.size() * multiplier + 1);
+    auto prev = 0u;
+    ui64 i = 0;
+    for (auto b : buckets) {
+        ui64 step = (b - prev) / multiplier;
+        for (auto j = 1u; j < multiplier; ++j) {
+            Buckets[i++] = prev + j * step;
+        }
+        Buckets[i++] = b;
+        prev = b;
+    }
+    Buckets[i++] = std::numeric_limits<ui64>::max();
+    AvgValues.resize(Buckets.size(), 0.0);
+    ValuesCount.resize(Buckets.size(), 0);
+
+}
+
+void TMultiBucketCounter::Insert(ui64 value, ui64 count) noexcept {
+    ui64 begin = 0, end = Buckets.size() - 1;
+    while (end - begin > 10) {
+        ui64 median = begin + (end - begin) / 2;
+        if (Buckets[median] >= value) {
+            end = median;
+        } else {
+            begin = median;
+        }
+    }
+    InsertWithHint(value, count, begin);
+}
+
+TVector<std::pair<double, ui64>> TMultiBucketCounter::GetValues() const noexcept {
+    TVector<std::pair<double, ui64>> result;
+    for (auto i = 0u; i < ValuesCount.size(); ++i) {
+        if (AvgValues[i] != 0)
+            result.push_back(std::make_pair(AvgValues[i], ValuesCount[i]));
+    }
+    return result;
+}
+
 } // NPQ
 } // NKikimr

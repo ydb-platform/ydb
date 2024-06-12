@@ -1,4 +1,10 @@
-## TABLESAMPLE и SAMPLE {#tablesample} {#sample}
+# TABLESAMPLE и SAMPLE
+
+{% note warning %}
+
+{% include [olap_warning](../../../../../_includes/not_allow_for_olap.md) %}
+
+{% endnote %}
 
 Построение случайной выборки из указанного во `FROM` источника данных.
 

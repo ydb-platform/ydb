@@ -5,7 +5,7 @@
 {% if feature_mapreduce %}
 * [USE](use.md)
 {% endif %}
-* [SELECT](select.md)
+* [SELECT](select/index.md)
 * [VALUES](values.md)
 {% if select_command == "SELECT STREAM" %}
 * [SELECT STREAM](select_stream.md)

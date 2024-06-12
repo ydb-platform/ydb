@@ -631,6 +631,7 @@ public:
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
+                         TMaybe<TPartitionLocation> location,
                          TCallbackContextPtr<UseMigrationProtocol> cbContext)
         : Key{.Topic = topicPath, .Cluster = "", .Partition = static_cast<ui64>(partitionId)}
         , AssignId(static_cast<ui64>(assignId))
@@ -641,6 +642,7 @@ public:
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
         TAPartitionStream<false>::PartitionId = static_cast<ui64>(partitionId);
+        TAPartitionStream<false>::Location = location;
         MaxCommittedOffset = static_cast<ui64>(readOffset);
     }
 
@@ -657,7 +659,7 @@ public:
     void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
     void RequestStatus() override;
 
-    void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation>);
+    void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
     void ConfirmDestroy();
     void ConfirmEnd(const std::vector<ui32>& childIds);
 
@@ -1108,7 +1110,7 @@ public:
     ~TSingleClusterReadSessionImpl();
 
     void Start();
-    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>*, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation>);
+    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>*, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);

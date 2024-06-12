@@ -38,6 +38,10 @@ public:
         return PartitionId;
     }
 
+    TMaybe<TPartitionLocation> GetLocation() const {
+        return Location;
+    }
+
 protected:
     // PartitionSessionId here and StreamReadMessage.PartitionSession.partition_session_id are not the same IDs!
     // This one is generated on the client side, and the other one on the server side.
@@ -46,6 +50,7 @@ protected:
 
     TString TopicPath;
     ui64 PartitionId;
+    TMaybe<TPartitionLocation> Location;
 };
 
 template<>
@@ -247,7 +252,7 @@ struct TReadSessionEvent {
     //! Server command for creating and starting partition session.
     struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
                                         public TPrintable<TStartPartitionSessionEvent> {
-        TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset, TMaybe<TPartitionLocation>);
+        TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
 
         //! Current committed offset in partition session.
         ui64 GetCommittedOffset() const {
@@ -267,7 +272,6 @@ struct TReadSessionEvent {
     private:
         ui64 CommittedOffset;
         ui64 EndOffset;
-        TMaybe<TPartitionLocation> Location;
     };
 
     //! Server command for stopping and destroying partition session.

@@ -95,9 +95,7 @@ public:
             return TStatus::Ok;
         }
 
-        TVector<TIssue> issues;
-
-        auto status = OptimizeExpr(input, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(input, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (auto maybeWrite = TMaybeNode<TSoWrite>(node)) {
                 if (!maybeWrite.DataSink()) {
                     return node;
@@ -129,6 +127,12 @@ public:
                 const auto& object = read.Arg(2).Ref();
                 YQL_ENSURE(object.IsCallable("MrTableConcat"));
 
+                auto cluster = read.DataSource().Cluster().StringValue();
+                if (!this->State_->Configuration->_EnableReading.Get().GetOrElse(false)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Reading is disabled for monitoring cluster " << cluster));
+                    return {};
+                }
+
                 auto settings = read.Ref().Child(4);
                 auto settingsList = read.Ref().Child(4)->ChildrenList();
                 auto userSchema = GetSchema(settingsList);
@@ -141,7 +145,7 @@ public:
                 TVector<TCoAtom> systemColumns;
                 auto* scheme = BuildScheme(settings->Pos(), userLabels, ctx, systemColumns);
                 if (!scheme) {
-                    return node;
+                    return {};
                 }
 
                 auto rowTypeNode = ExpandType(read.Pos(), *scheme, ctx);
@@ -175,13 +179,6 @@ public:
 
             return node;
         }, ctx, TOptimizeExprSettings {nullptr});
-
-        if (issues) {
-            for (const auto& issue: issues) {
-                ctx.AddError(issue);
-            }
-            status = status.Combine(TStatus::Error);
-        }
 
         return status;
     }

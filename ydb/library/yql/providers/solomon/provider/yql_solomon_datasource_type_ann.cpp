@@ -93,18 +93,14 @@ public:
             return TStatus::Error;
         }
 
+        if (program.Content().empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "program must be specified"));
+            return TStatus::Error;
+        }
+
         auto& downsamplingDisabled = *input->Child(TSoSourceSettings::idx_DownsamplingDisabled);
-        if (!EnsureAtom(downsamplingDisabled, ctx)) {
-            return TStatus::Error;
-        }
-
-        TStringBuf downsamplingDisabledAsString;
-        if (!ExtractSettingValue(downsamplingDisabled, "downsampling.disabled", ctx, downsamplingDisabledAsString)) {
-            return TStatus::Error;
-        }
-
-        if (!IsIn({ "true"sv, "false"sv }, downsamplingDisabledAsString)) {
-            ctx.AddError(TIssue(ctx.GetPosition(downsamplingDisabled.Pos()), TStringBuilder() << "downsampling.disabled must be either 'true' or 'false', but has " << downsamplingDisabledAsString));
+        if (!downsamplingDisabled.IsCallable("Bool")) {
+            ctx.AddError(TIssue(ctx.GetPosition(downsamplingDisabled.Pos()), "downsampling.disabled must be bool"));
             return TStatus::Error;
         }
 
@@ -119,7 +115,8 @@ public:
         }
 
         auto& downsamplingGridSec = *input->Child(TSoSourceSettings::idx_DownsamplingGridSec);
-        if (!EnsureAtom(downsamplingGridSec, ctx)) {
+        if (!downsamplingGridSec.IsCallable("Uint32")) {
+            ctx.AddError(TIssue(ctx.GetPosition(downsamplingGridSec.Pos()), "downsampling.grid_interval must be uint32 in seconds"));
             return TStatus::Error;
         }
 

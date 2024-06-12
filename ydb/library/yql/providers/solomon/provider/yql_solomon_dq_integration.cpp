@@ -203,12 +203,12 @@ public:
                 }
             }
 
-            const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
+                    .RowType(soReadObject.RowType())
                     .SystemColumns(soReadObject.SystemColumns())
                     .LabelNames(soReadObject.LabelNames())
                     .From<TCoAtom>().Build(from)
@@ -220,7 +220,7 @@ public:
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec)).Build()
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
-                .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
+                .RowType(soReadObject.RowType())
                 .Settings(settings)
                 .Done().Ptr();
         }

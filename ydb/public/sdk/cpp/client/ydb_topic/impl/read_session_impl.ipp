@@ -73,9 +73,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset, TMaybe<TPartitionLocation> location) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
-        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset, location);
+        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }
 
@@ -622,10 +622,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStrea
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(
-    const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
-    TMaybe<ui64> readOffset,
-    TMaybe<ui64> commitOffset,
-    TMaybe<TPartitionLocation> location
+    const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset
 ) {
     TStringBuilder commitOffsetLogStr;
     if (commitOffset) {
@@ -686,6 +683,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                 // we just give the control session a bit more time to process the Start response.
 
                 Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
+
+                auto location = partitionStream->GetLocation();
                 Y_ABORT_UNLESS(location.Defined());
                 DirectReadSessionManager->StartPartitionSession({
                     .PartitionSessionId = static_cast<TPartitionSessionId>(partitionSessionId),
@@ -1483,6 +1482,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         msg.partition_session().partition_id(),
         partitionSessionId,
         msg.committed_offset(),
+        msg.has_partition_location() ? TMaybe<TPartitionLocation>(msg.partition_location()) : Nothing(),
         SelfContext);
 
     NextPartitionStreamId += PartitionStreamIdStep;
@@ -1493,12 +1493,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
         partitionSession,
-        TReadSessionEvent::TStartPartitionSessionEvent(
-            partitionSession,
-            msg.committed_offset(),
-            msg.partition_offsets().end(),
-            msg.has_partition_location() ? TMaybe<TPartitionLocation>(msg.partition_location()) : Nothing()
-        ),
+        TReadSessionEvent::TStartPartitionSessionEvent(partitionSession, msg.committed_offset(), msg.partition_offsets().end()),
         deferred);
 
     if (!pushRes) {

@@ -871,6 +871,76 @@ Y_UNIT_TEST_SUITE(DirectReadWithClient) {
 
         }
     }
+
+    Y_UNIT_TEST(ManyMessages) {
+        /*
+        Write many messages and read them back.
+
+        Don't compress messages and set MaxMemoryUsageBytes for the reader to 1MB,
+        so the server sends multiple DirectReadResponses.
+        */
+
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
+
+        size_t N = 100;
+        TString message(950_KB, 'x');
+
+        {
+            // Write messages:
+
+            auto settings = TWriteSessionSettings()
+                .Path(TEST_TOPIC)
+                .Codec(ECodec::RAW)
+                .ProducerId(TEST_MESSAGE_GROUP_ID)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+            auto writer = client.CreateSimpleBlockingWriteSession(settings);
+
+            for (size_t i = 0; i < N; ++i) {
+                UNIT_ASSERT(writer->Write(message));
+            }
+            writer->Close();
+        }
+
+        {
+            // Read the message:
+
+            auto settings = TReadSessionSettings()
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(TEST_TOPIC)
+                .MaxMemoryUsageBytes(1_MB)
+                .DirectRead(true);
+            auto reader = client.CreateReadSession(settings);
+
+            {
+                // Start partition session:
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TStartPartitionSessionEvent);
+                std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event).Confirm();
+            }
+
+            {
+                // Receive messages and commit.
+                size_t gotMessages = 0;
+                size_t committedOffset = 0;
+                while (gotMessages < N || committedOffset < N-1) {
+                    auto event = reader->GetEvent(true);
+                    if (auto e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                        gotMessages += e->GetMessages().size();
+                        e->Commit();
+                    } else if (auto e = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+                        committedOffset = e->GetCommittedOffset();
+                    } else {
+                        Y_UNREACHABLE();
+                    }
+                }
+                UNIT_ASSERT_EQUAL(gotMessages, N);
+                UNIT_ASSERT_EQUAL(committedOffset, N-1);
+            }
+        }
+    }
 } // Y_UNIT_TEST_SUITE(DirectReadWithClient)
 
 
@@ -1561,7 +1631,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
       - test direct_read_ids
       - wrong generations
       - EndPartitionSession
-      - dieCallback
       - graceful/non-graceful StopPartitionSession (sdk should respond in either way)
       - tablet relocation to another/same node
       - schedule callback, recreate DirectReadSessionManager, the scheduled callback should do nothing (?)

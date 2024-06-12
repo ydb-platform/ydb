@@ -309,6 +309,8 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId parti
     auto sessionIt = NodeSessions.find(oldNodeId);
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
+    // If oldLoc == newLoc and sessionIt->Empty() after deleting the partition session,
+    // we have to reconnect back to the same node as before. Maybe it's worth to add a special case here.
     DeletePartitionSession(partitionSessionId, sessionIt);
 
     // TODO(qyryq) std::move an old RetryState?

@@ -211,11 +211,13 @@ public:
                     }
 
                     for (const auto& c : ReadParams.Source.GetLabelNames()) {
-                        // empty optional by default
                         auto& v = items[Index[c]];
                         auto it = labels.GetMap().find(c);
                         if (it != labels.GetMap().end()) {
                             v = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(it->second.GetString()));
+                        } else {
+                            // empty string
+                            v = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(""));
                         }
                     }
 

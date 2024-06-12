@@ -57,7 +57,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
         } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
             type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
         } else if (IsIn({ SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE }, systemColumn)) {
-            type = ctx.MakeType<TOptionalExprType>(stringType);
+            type = stringType;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown system column " << systemColumn));
             return nullptr;
@@ -73,8 +73,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "System column should not be used as label name: " << label.Value()));
             return nullptr;
         }
-        const TOptionalExprType* type = ctx.MakeType<TOptionalExprType>(stringType);
-        columnTypes.push_back(ctx.MakeType<TItemExprType>(label.Value(), type));
+        columnTypes.push_back(ctx.MakeType<TItemExprType>(label.Value(), stringType));
     }
 
     return ctx.MakeType<TStructExprType>(columnTypes);

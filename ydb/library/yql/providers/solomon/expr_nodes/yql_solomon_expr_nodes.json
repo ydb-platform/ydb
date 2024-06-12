@@ -57,7 +57,7 @@
                 {"Index": 6, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
                 {"Index": 7, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
                 {"Index": 8, "Name": "DownsamplingFill", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "DownsamplingGridSec", "Type": "TCoAtom"}
+                {"Index": 9, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
             ]
         },
         {

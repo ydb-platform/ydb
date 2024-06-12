@@ -118,77 +118,84 @@ public:
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
-            auto& settings = soReadObject.Object().Settings().Ref();
+            auto settings = soReadObject.Object().Settings();
+            auto& settingsRef = settings.Ref();
             TString from;
             TString to;
             TString program;
             bool downsamplingDisabled = false;
-            TString downsamplingAggregation;
-            TString downsamplingFill;
+            TString downsamplingAggregation = "AVG";
+            TString downsamplingFill = "PREVIOUS";
             ui32 downsamplingGridSec = 15;
 
-            for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-                if (settings.Child(i)->Head().IsAtom("from"sv)) {
+            for (auto i = 0U; i < settingsRef.ChildrenSize(); ++i) {
+                if (settingsRef.Child(i)->Head().IsAtom("from"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "from"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "from"sv, ctx, value)) {
                         return {};
                     }
 
                     from = value;
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("to"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "to"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "to"sv, ctx, value)) {
                         return {};
                     }
 
                     to = value;
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("program"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "program"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "program"sv, ctx, value)) {
                         return {};
                     }
 
                     program = value;
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.disabled"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.disabled"sv, ctx, value)) {
                         return {};
                     }
                     downsamplingDisabled = FromString<bool>(value);
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("downsampling.gridaggregation"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridaggregation"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.grid_aggregation"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridaggregation"sv, ctx, value)) {
                         return {};
                     }
-                    // todo: validate value
+                    if (!IsIn({ "AVG"sv, "COUNT"sv, "DEFAULT_AGGREGATION"sv, "LAST"sv, "MAX"sv, "MIN"sv, "SUM"sv }, value)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has " << value));
+                        return {};
+                    }
                     downsamplingAggregation = value;
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("downsampling.fill"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("downsampling.fill"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.fill"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.fill"sv, ctx, value)) {
                         return {};
                     }
-                    // todo: validate value
+                    if (!IsIn({ "NONE"sv, "NULL"sv, "PREVIOUS"sv }, value)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_fill must be one of NONE, NULL, PREVIOUS, but has " << value));
+                        return {};
+                    }
                     downsamplingFill = value;
                     continue;
                 }
-                if (settings.Child(i)->Head().IsAtom("downsampling.gridinterval"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridinterval"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.grid_interval"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridinterval"sv, ctx, value)) {
                         return {};
                     }
                     ui32 intValue = 0;
                     if (!TryFromString(value, intValue)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settings.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
                         return {};
                     }
                     downsamplingGridSec = intValue;
@@ -210,11 +217,11 @@ public:
                     .DownsamplingDisabled<TCoBool>().Literal().Build(downsamplingDisabled ? "true" : "false").Build()
                     .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation)
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill)
-                    .DownsamplingGridSec<TCoAtom>().Build(ToString(downsamplingGridSec))
+                    .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec)).Build()
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
-                .Settings(&settings)
+                .Settings(settings)
                 .Done().Ptr();
         }
         return read;
@@ -241,15 +248,17 @@ public:
 
         source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
         source.SetUseSsl(clusterDesc->GetUseSsl());
-        source.SetFrom(TInstant::ParseIso8601("2023-11-09T14:40:39Z").Seconds());
-        source.SetTo(TInstant::ParseIso8601("2023-11-10T14:45:39Z").Seconds());
-        source.SetProgram("{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}");
+        source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
+        source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
+        source.SetProgram(settings.Program().StringValue());
 
         auto& downsampling = *source.MutableDownsampling();
-        downsampling.SetDisabled(false);
-        downsampling.SetAggregation("MAX");
-        downsampling.SetFill("PREVIOUS");
-        downsampling.SetGridMs(15 * 1000);
+        const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
+        downsampling.SetDisabled(isDisabled);
+        downsampling.SetAggregation(settings.DownsamplingAggregation().StringValue());
+        downsampling.SetFill(settings.DownsamplingFill().StringValue());
+        const ui32 gridIntervalSec = FromString<ui32>(settings.DownsamplingGridSec().Literal().Value());
+        downsampling.SetGridMs(gridIntervalSec * 1000);
 
         source.MutableToken()->SetName(settings.Token().Name().StringValue());
 

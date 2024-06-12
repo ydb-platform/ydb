@@ -1,1 +1,1 @@
-{% include [x](_includes/select/functional_tables.md) %}
+{% include [x](../_includes/select/functional_tables.md) %}

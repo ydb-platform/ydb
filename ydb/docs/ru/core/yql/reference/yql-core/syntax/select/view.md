@@ -1,1 +1,1 @@
-{% include [x](_includes/select/view.md) %}
+{% include [x](../_includes/select/view.md) %}

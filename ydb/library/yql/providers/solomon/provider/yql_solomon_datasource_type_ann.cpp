@@ -1,7 +1,6 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
-#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
@@ -54,12 +53,17 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 10U, ctx)) {
+        if (!EnsureArgsCount(*input, 11U, ctx)) {
             return TStatus::Error;
         }
 
         if (!TCoSecureParam::Match(input->Child(TSoSourceSettings::idx_Token))) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TSoSourceSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
+            return TStatus::Error;
+        }
+
+        const auto& rowType = *input->Child(TSoSourceSettings::idx_RowType);
+        if (!EnsureType(rowType, ctx)) {
             return TStatus::Error;
         }
 
@@ -73,11 +77,6 @@ public:
             return TStatus::Error;
         }
         
-        auto* scheme = BuildScheme(systemColumns, labelNames, ctx);
-        if (!scheme) {
-            return TStatus::Error;
-        }
-
         auto& from = *input->Child(TSoSourceSettings::idx_From);
         if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat(from, "from"sv, ctx)) {
             return TStatus::Error;
@@ -120,53 +119,9 @@ public:
             return TStatus::Error;
         }
 
-        TVector<const TTypeAnnotationNode*> items;
-        items.reserve(scheme->GetSize());
-        for (auto& item : scheme->GetItems()) {
-            items.push_back(item->GetItemType());
-        }
-        const TTypeAnnotationNode* itemType = ctx.MakeType<TTupleExprType>(items);
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
+        const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
         return TStatus::Ok;
-    }
-
-    static const TStructExprType* BuildScheme(const TExprNode& systemColumns, const TExprNode& labelNames, TExprContext& ctx) {
-        TCoAtomList systemColumnsAsList(&systemColumns);
-        TCoAtomList labelNamesAsList(&labelNames);
-        TVector<const TItemExprType*> columnTypes;
-        columnTypes.reserve(systemColumnsAsList.Size() + labelNamesAsList.Size());
-        const TTypeAnnotationNode* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-        for (const auto& atom : systemColumnsAsList) {
-            const TTypeAnnotationNode* type = nullptr;
-            auto v = atom.Value();
-            if (v == SOLOMON_SCHEME_TS) {
-                type = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
-            } else if (v == SOLOMON_SCHEME_VALUE) {
-                type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
-            } else if (v == SOLOMON_SCHEME_LABELS) {
-                type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
-            } else if (IsIn({ SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE }, v)) {
-                type = ctx.MakeType<TOptionalExprType>(stringType);
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(systemColumns.Pos()), TStringBuilder() << "Unknown system column " << v));
-                return nullptr;
-            }
-
-            columnTypes.push_back(ctx.MakeType<TItemExprType>(v, type));
-        }
-
-        for (const auto& atom : labelNamesAsList) {
-            auto v = atom.Value();
-            if (IsIn({ SOLOMON_SCHEME_TS, SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE }, atom.Value())) {
-                // tmp constraint
-                ctx.AddError(TIssue(ctx.GetPosition(systemColumns.Pos()), TStringBuilder() << "System column should not be used as label name: " << v));
-                return nullptr;
-            }
-            const TOptionalExprType* type = ctx.MakeType<TOptionalExprType>(stringType);
-            columnTypes.push_back(ctx.MakeType<TItemExprType>(v, type));
-        }
-
-        return ctx.MakeType<TStructExprType>(columnTypes);
     }
 
     TStatus HandleSoObject(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -180,7 +135,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
 
@@ -199,6 +154,11 @@ public:
 
         auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& rowType = *input->Child(TSoReadObject::idx_RowType);
+        if (!EnsureType(rowType, ctx)) {
             return TStatus::Error;
         }
 
@@ -223,14 +183,10 @@ public:
             return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
         }
 
-        auto* scheme = BuildScheme(systemColumns, labelNames, ctx);
-        if (!scheme) {
-            return TStatus::Error;
-        }
-
+        const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
-            ctx.MakeType<TListExprType>(scheme)
+            ctx.MakeType<TListExprType>(type)
         }));
 
         return TStatus::Ok;

@@ -1,11 +1,8 @@
-select s.*, cast(c_timestamp as string) from solomon_prod.my_service
+select * from solomon_prod.yq
 with (
-  schema = (
-    a_kind string not null,
-    b_type string not null,
-    c_timestamp Datetime not null,
-    d_value double not null,
-    e_labels dict<string, string> not null
-  )
+  program = @@{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}@@,
+  labels = "label1, label2, label3",
+  from = "2023-12-08T14:40:39Z",
+  to = "2023-12-08T14:45:39Z",
 ) as s
 limit 10;

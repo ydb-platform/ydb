@@ -49,15 +49,16 @@
             "Match": {"Type": "Callable", "Name": "SoSourceSettings"},
             "Children": [
                 {"Index": 0, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 1, "Name": "SystemColumns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "From", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "To", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "Program", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
-                {"Index": 7, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
-                {"Index": 8, "Name": "DownsamplingFill", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
+                {"Index": 1, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "From", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "To", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 8, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
             ]
         },
         {
@@ -78,7 +79,8 @@
                 {"Index": 2, "Name": "Object", "Type": "TSoObject"},
                 {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 6, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

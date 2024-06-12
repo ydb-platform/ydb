@@ -2,28 +2,82 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
+#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
 
-/*
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <yql/library/statface_client/client.h>
-
-#include <util/generic/hash_set.h>
-*/
+#include <util/string/split.h>
+#include <util/string/strip.h>
 
 namespace NYql {
 
 namespace {
 using namespace NNodes;
 
-std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
+std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
-            settings.erase(it);
             return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
         }
     }
 
     return {};
+}
+
+TVector<TCoAtom> GetUserLabels(TPositionHandle pos, TExprContext& ctx, const TExprNode::TListType& settings) {
+    for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
+        if (const auto item = *it; item->Head().IsAtom("labels")) {
+            TVector<TCoAtom> result;
+            auto labels = StringSplitter(TString(item->Tail().Content())).Split(',').SkipEmpty().ToList<TString>();
+            result.reserve(labels.size());
+            for (TString& label : labels) {
+                auto v = Build<TCoAtom>(ctx, pos).Value(StripString(label)).Done();
+                result.emplace_back(std::move(v));
+            }
+            return result;
+        }
+    }
+
+    return {};
+}
+
+const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
+    auto allSystemColumns = {SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
+    TVector<const TItemExprType*> columnTypes;
+    columnTypes.reserve(systemColumns.size() + userLabels.size());
+    const TTypeAnnotationNode* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    for (auto systemColumn : allSystemColumns) {
+        const TTypeAnnotationNode* type = nullptr;
+        if (systemColumn == SOLOMON_SCHEME_LABELS && !userLabels.empty()) {
+            continue;
+        }
+
+        if (systemColumn == SOLOMON_SCHEME_TS) {
+            type = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
+        } else if (systemColumn == SOLOMON_SCHEME_VALUE) {
+            type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+        } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
+            type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
+        } else if (IsIn({ SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE }, systemColumn)) {
+            type = ctx.MakeType<TOptionalExprType>(stringType);
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown system column " << systemColumn));
+            return nullptr;
+        }
+
+        systemColumns.push_back(Build<TCoAtom>(ctx, pos).Value(systemColumn).Done());
+        columnTypes.push_back(ctx.MakeType<TItemExprType>(systemColumn, type));
+    }
+
+    for (const auto& label : userLabels) {
+        if (IsIn({ SOLOMON_SCHEME_TS, SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE }, label.Value())) {
+            // tmp constraint
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "System column should not be used as label name: " << label.Value()));
+            return nullptr;
+        }
+        const TOptionalExprType* type = ctx.MakeType<TOptionalExprType>(stringType);
+        columnTypes.push_back(ctx.MakeType<TItemExprType>(label.Value(), type));
+    }
+
+    return ctx.MakeType<TStructExprType>(columnTypes);
 }
 
 }
@@ -78,37 +132,45 @@ public:
 
                 auto settings = read.Ref().Child(4);
                 auto settingsList = read.Ref().Child(4)->ChildrenList();
-                auto userSchema = ExtractSchema(settingsList);
+                auto userSchema = GetSchema(settingsList);
+                TVector<TCoAtom> userLabels = GetUserLabels(settings->Pos(), ctx, settingsList);
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
                                   .Settings(settings)
                                 .Done();
-
-                auto systemColumns = Build<TCoAtomList>(ctx, read.Pos());
-                systemColumns.Add<TCoAtom>().Value("kind").Build();
-                //systemColumns.Add<TCoAtom>().Value("labels").Build();
-                systemColumns.Add<TCoAtom>().Value("value").Build();
-                systemColumns.Add<TCoAtom>().Value("ts").Build();
-                systemColumns.Add<TCoAtom>().Value("type").Build();
                 
-                auto labelNames = Build<TCoAtomList>(ctx, read.Pos());
-                labelNames.Add<TCoAtom>().Value("activity").Build();
+                TVector<TCoAtom> systemColumns;
+                auto* scheme = BuildScheme(settings->Pos(), userLabels, ctx, systemColumns);
+                if (!scheme) {
+                    return node;
+                }
+
+                auto rowTypeNode = ExpandType(read.Pos(), *scheme, ctx);
+                auto systemColumnsNode = Build<TCoAtomList>(ctx, read.Pos())
+                                            .Add(systemColumns)
+                                        .Done();
+
+                auto labelNamesNode = Build<TCoAtomList>(ctx, read.Pos())
+                                            .Add(userLabels)
+                                        .Done();
 
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
                         .Object(soObject)
-                        .SystemColumns(systemColumns.Done())
-                        .LabelNames(labelNames.Done())
+                        .SystemColumns(systemColumnsNode)
+                        .LabelNames(labelNamesNode)
+                        .RowType(rowTypeNode)
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
                     : Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
                         .Object(soObject)
-                        .SystemColumns(systemColumns.Done())
-                        .LabelNames(labelNames.Done())
+                        .SystemColumns(systemColumnsNode)
+                        .LabelNames(labelNamesNode)
+                        .RowType(rowTypeNode)
                       .Done().Ptr();
             }
 

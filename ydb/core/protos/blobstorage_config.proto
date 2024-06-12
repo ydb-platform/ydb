@@ -575,6 +575,9 @@ message TConfigRequest {
 
     // is this command originated by self-heal decommission?
     bool IsSelfHealReasonDecommit = 12;
+
+    // requesting user identifier
+    string UserSID = 13;
 }
 
 enum ETriStateBool {

@@ -313,7 +313,7 @@ private:
             TExprNode::TListType pathNodes;
 
             TStringBuilder path;
-            object.ForEachChild([&path](const TExprNode& child){ path << ToString(child.Head().Tail().Head().Content()) << " "; });
+            object.ForEachChild([&path](const TExprNode& child){ path << child.Head().Tail().Head().Content() << " "; });
 
             TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;

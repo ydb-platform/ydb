@@ -43,6 +43,14 @@ static constexpr i64 READ_TABLE_RETRIES = 100;
 //                               Util
 ////////////////////////////////////////////////////////////////////////////////
 
+void TYdbErrorException::LogToStderr() const {
+    LOG_ERR("Ydb error, status# " << Status.GetStatus());
+    if (what()) {
+        LOG_ERR("\t" << "What# " << what());
+    }
+    LOG_ERR("\t" << Status.GetIssues().ToString());
+}
+
 static void VerifyStatus(TStatus status, TString explain = "") {
     if (status.IsSuccess()) {
         if (status.GetIssues()) {

@@ -142,7 +142,7 @@ void TSchemeShard::InitializeTabletMigrations() {
         }
 
         if (EnableStatistics &&
-            !IsServerlessDomain(subdomain) &&
+            !IsServerlessDomainGlobal(pathId, subdomain) &&
             subdomain->GetTenantStatisticsAggregatorID() == InvalidTabletId)
         {
             createSA = true;

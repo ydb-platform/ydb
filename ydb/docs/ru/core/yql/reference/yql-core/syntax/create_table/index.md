@@ -61,15 +61,15 @@ WITH (
 
 - Создание строковой таблицы
 
-  ```sql
-  CREATE TABLE table_name (
-    a Uint64,
-    b Uint64,
-    c Float,
-    {% if feature_column_container_type %}    d "List<List<Int32>>" {% endif %}
-    PRIMARY KEY (a, b)
-  );
-  ```    
+
+    CREATE TABLE table_name (
+      a Uint64,
+      b Uint64,
+      c Float,
+      {% if feature_column_container_type %}    d "List<List<Int32>>" {% endif %}
+      PRIMARY KEY (a, b)
+    );
+   
 
   {% if feature_column_container_type == true %}
   Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.

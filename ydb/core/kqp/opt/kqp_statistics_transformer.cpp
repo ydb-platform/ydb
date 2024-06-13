@@ -4,7 +4,8 @@
 #include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <charconv>
 
@@ -164,6 +165,34 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
     }
 }
 
+void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext& kqpCtx) {
+    auto inputNode = TExprBase(input);
+    if (auto wrapBase = inputNode.Maybe<TDqSourceWrapBase>()) {
+        if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
+            auto s3DataSource = maybeS3DataSource.Cast();
+            if (s3DataSource.Name()) {
+                auto path = s3DataSource.Name().Cast().StringValue();
+                if (kqpCtx.Config->OverrideStatistics.Get() && path) {
+                    auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
+                    stats = OverrideStatistics(*stats, path, *kqpCtx.Config->OverrideStatistics.Get());
+                    if (stats->ByteSize == 0.0) {
+                        auto n = path.find_last_of('/');
+                        if (n != path.npos) {
+                            stats = OverrideStatistics(*stats, path.substr(n + 1), *kqpCtx.Config->OverrideStatistics.Get());
+                        }
+                    }
+                    if (stats->ByteSize != 0.0) {
+                        YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
+                        typeCtx->SetStats(input.Get(), stats);
+                        typeCtx->SetStats(s3DataSource.Raw(), stats);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * When encountering a KqpPhysicalTx, we save the results of the stage in a vector
  * where it can later be accessed via binding parameters
@@ -221,6 +250,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     // Match a result binding atom and connect it to a stage
     else if(TCoParameter::Match(input.Get())) {
         InferStatisticsForResultBinding(input, TypeCtx, TxStats);
+    }
+    else if(TDqSourceWrapBase::Match(input.Get())) {
+        InferStatisticsForDqSourceWrap(input, TypeCtx, KqpCtx);
     }
     else {
         matched = false;

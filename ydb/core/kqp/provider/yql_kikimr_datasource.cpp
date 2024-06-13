@@ -728,6 +728,7 @@ public:
                                                     .Category(ctx.NewAtom(node->Pos(), source->GetName()))
                                                     .FreeArgs()
                                                         .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                                                        .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->Name))
                                                     .Build()
                                                 .Done().Ptr()
                                             )

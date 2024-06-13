@@ -24,6 +24,11 @@ using namespace NNodes;
 
 namespace {
 
+TString GetLastName(const TString& fullName) {
+    auto n = fullName.find_last_of('/');
+    return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
+}
+
 TExprNode::TListType GetKeys(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
         if (const auto& child = *settings.Child(i); child.Head().IsAtom("partitionedby")) {
@@ -578,50 +583,49 @@ public:
             return false;
         }
 
-        const NJson::TJsonValue* clusterNameProp = properties.FindPtr("ExternalDataSource");
-        const TString clusterName = clusterNameProp && clusterNameProp->IsString() ? clusterNameProp->GetString() : TString();
-
         auto source = node.Cast<TDqSource>();
-        if (auto maybeSettings = source.Settings().Maybe<TS3SourceSettings>()) {
-            const TS3SourceSettings settings = maybeSettings.Cast();
-            if (clusterName) {
-                properties["Name"] = TStringBuilder() << "Raw read " << clusterName;
-            } else {
-                properties["Name"] = "Raw read from external data source";
-            }
-            if (TString path = settings.Path().StringValue()) {
-                properties["Path"] = path;
-            }
-            properties["Format"] = "raw";
-            if (TString limit = settings.RowsLimitHint().StringValue()) {
-                properties["RowsLimitHint"] = limit;
-            }
-            return true;
-        } else if (auto maybeSettings = source.Settings().Maybe<TS3ParseSettings>()) {
-            const TS3ParseSettings settings = maybeSettings.Cast();
-            if (clusterName) {
-                properties["Name"] = TStringBuilder() << "Parse " << clusterName;
-            } else {
-                properties["Name"] = "Parse from external data source";
-            }
-            if (TString path = settings.Path().StringValue()) {
-                properties["Path"] = path;
-            }
-            properties["Format"] = settings.Format().StringValue();
-            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
-                properties["Compression"] = TString{compression};
-            }
-            if (TString limit = settings.RowsLimitHint().StringValue()) {
+        if (auto maybeSettingsBase = source.Settings().Maybe<TS3SourceSettingsBase>()) {
+            const auto settingsBase = maybeSettingsBase.Cast();
+            auto path = settingsBase.Path().StringValue();
+            properties["Path"] = path;
+            if (auto limit = settingsBase.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
             }
 
-            const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            auto rowTypeItems = fullRowType->GetItems();
-            auto& columns = properties["ReadColumns"];
-            for (auto& item : rowTypeItems) {
-                columns.AppendValue(item->GetName());
+            auto s3DataSource = source.DataSource().Cast<TS3DataSource>();
+            auto cluster = GetLastName(s3DataSource.Cluster().StringValue());
+            TString name;
+            if (s3DataSource.Name()) {
+                name = GetLastName(s3DataSource.Name().Cast().StringValue());
             }
-            return true;
+            if (!name) {
+                name = cluster;
+                if (path) {
+                    name = name + '.' + path;
+                }
+            }
+            properties["ExternalDataSource"] = cluster;
+            properties["Name"] = name;
+
+            if (source.Settings().Maybe<TS3SourceSettings>()) {
+                properties["Format"] = "raw";
+                return true;
+            }
+
+            if (auto maybeSettings = source.Settings().Maybe<TS3ParseSettings>()) {
+                const TS3ParseSettings settings = maybeSettings.Cast();
+                properties["Format"] = settings.Format().StringValue();
+                if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
+                    properties["Compression"] = TString{compression};
+                }
+                const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                auto rowTypeItems = fullRowType->GetItems();
+                auto& columns = properties["ReadColumns"];
+                for (auto& item : rowTypeItems) {
+                    columns.AppendValue(item->GetName());
+                }
+                return true;
+            }
         }
         return false;
     }

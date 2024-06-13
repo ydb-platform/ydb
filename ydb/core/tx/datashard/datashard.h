@@ -830,12 +830,8 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvGetTableStats,
                                                         TEvDataShard::EvGetTableStats> {
         TEvGetTableStats() = default;
-        explicit TEvGetTableStats(ui64 tableId, ui64 dataSizeResolution = 0, ui64 rowCountResolution = 0, ui32 histogramBucketsCount = 0, bool collectKeySample = false) {
+        explicit TEvGetTableStats(ui64 tableId) {
             Record.SetTableId(tableId);
-            Record.SetDataSizeResolution(dataSizeResolution);
-            Record.SetRowCountResolution(rowCountResolution);
-            Record.SetHistogramBucketsCount(histogramBucketsCount);
-            Record.SetCollectKeySample(collectKeySample);
         }
     };
 

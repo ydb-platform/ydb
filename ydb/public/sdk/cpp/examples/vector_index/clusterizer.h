@@ -1,3 +1,4 @@
+#include "util/generic/fwd.h"
 #include "util/system/types.h"
 #include <vector>
 #include <span>
@@ -18,7 +19,7 @@
 // when go each 2^7
 
 using TId = uint64_t;
-using TRawEmbedding = std::string_view;
+using TRawEmbedding = const TString&;
 using TEmbedding = std::span<const float>;
 
 class TDatasetIterator {
@@ -30,10 +31,11 @@ public:
 };
 
 using TDistance = std::function<float(TEmbedding, TEmbedding)>;
+using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
 
 class TClusterizer {
 public:
-    TClusterizer(TDatasetIterator& it, TDistance distance);
+    TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create);
 
     struct TOptions {
         ui32 maxIterations = 10;
@@ -44,7 +46,7 @@ public:
     };
 
     struct TClusters {
-        std::vector<std::vector<TId>> Ids;
+        std::vector<std::optional<TId>> Ids;
         std::vector<std::vector<float>> Coords;
     };
 
@@ -61,6 +63,7 @@ private:
 
     TDatasetIterator& It;
     TDistance Distance;
+    TCreateParentChild Create;
 
     struct TAggregatedCluster {
         std::vector<float> Coords;

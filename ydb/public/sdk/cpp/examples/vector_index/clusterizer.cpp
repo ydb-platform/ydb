@@ -15,9 +15,10 @@ static std::span<const T> GetArray(std::string_view str) {
     return {reinterpret_cast<const T*>(buf), count};
 }
 
-TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance)
+TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create)
     : It{it}
     , Distance{std::move(distance)}
+    , Create{std::move(create)}
 {
 }
 
@@ -108,9 +109,6 @@ bool TClusterizer::Step(float neededDiff) {
 
 void TClusterizer::Finalize() {
     Cout << "Start finalize" << Endl;
-    for (size_t pos = 0; auto& cluster : NewClusters) {
-        Clusters.Ids[pos++].reserve(cluster.Count);
-    }
     Progress.Reset(It.Rows());
     It.Iterate([&](TId id, TRawEmbedding rawEmbedding) {
         Progress.Report();
@@ -126,7 +124,10 @@ void TClusterizer::Finalize() {
             }
             ++pos;
         }
-        Clusters.Ids[minPos].push_back(id);
+        auto& parentId = Clusters.Ids[minPos];
+        if (Y_UNLIKELY(!parentId))
+            parentId = id;
+        Create(*parentId, id, rawEmbedding);
     });
 }
 

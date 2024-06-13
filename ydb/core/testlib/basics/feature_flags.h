@@ -59,6 +59,7 @@ public:
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
     FEATURE_FLAG_SETTER(EnableTableDatetime64)
+    FEATURE_FLAG_SETTER(EnableDynamicResourcePools)
 
     #undef FEATURE_FLAG_SETTER
 };

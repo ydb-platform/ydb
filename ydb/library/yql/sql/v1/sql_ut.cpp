@@ -6840,3 +6840,101 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
         SqlToYql(query).IsOk();
     }
 }
+
+Y_UNIT_TEST_SUITE(ResourcePool) {
+    Y_UNIT_TEST(CreateResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20,
+                    QUERY_CANCEL_AFTER_SECONDS=86400,
+                    QUERY_COUNT_LIMIT=1000
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"concurrent_query_limit" (Int32 '"20")) '('"query_cancel_after_seconds" (Int32 '"86400")) '('"query_count_limit" (Int32 '"1000")))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool;
+            )sql" , "<main>:3:51: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    SOME_UNKNOWN_SETTING="value"
+                );
+            )sql" , "<main>:4:21: Error: Unknown resource pool setting: some_unknown_setting\n");
+
+        std::vector<TString> integerSettings = {
+            "CONCURRENT_QUERY_LIMIT",
+            "QUERY_CANCEL_AFTER_SECONDS",
+            "QUERY_COUNT_LIMIT"
+        };
+        for (const TString& setting : integerSettings) {
+            ExpectFailWithError(TStringBuilder() << R"sql(
+                    USE plato;
+                    CREATE RESOURCE POOL MyResourcePool WITH (
+                        )sql" << setting << R"sql(="20"
+                    );
+                )sql" , TStringBuilder() << "<main>:4:25: Error: " << setting << " value should be an integer\n");
+        }
+    }
+
+    Y_UNIT_TEST(AlterResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL MyResourcePool
+                    SET (CONCURRENT_QUERY_LIMIT = 30),
+                    SET QUERY_COUNT_LIMIT 100,
+                    RESET (Query_Cancel_After_Seconds);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"concurrent_query_limit" (Int32 '"30")) '('"query_count_limit" (Int32 '"100")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"query_cancel_after_seconds")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL MyResourcePool;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}

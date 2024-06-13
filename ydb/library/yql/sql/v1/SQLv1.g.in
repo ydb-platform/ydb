@@ -63,6 +63,9 @@ sql_stmt_core:
   | create_view_stmt
   | drop_view_stmt
   | alter_replication_stmt
+  | create_resource_pool_stmt
+  | alter_resource_pool_stmt
+  | drop_resource_pool_stmt
 ;
 
 expr:
@@ -798,6 +801,21 @@ permission_name: permission_id | STRING_VALUE;
 
 permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
 
+create_resource_pool_stmt: CREATE RESOURCE POOL object_ref
+  with_table_settings
+;
+
+alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
+  alter_resource_pool_action (COMMA alter_resource_pool_action)*
+;
+alter_resource_pool_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -1189,10 +1207,12 @@ keyword_as_compat:
   | PATTERN
   | PER
   | PERMUTE
+  | POOL
   | PRIVILEGES
   | QUEUE
 //  | READ
   | REMOVE
+  | RESOURCE
   | REPLICATION
   | REVOKE
   | SECONDS
@@ -1347,6 +1367,7 @@ keyword_compat: (
   | PER
   | PERMUTE
   | PLAN
+  | POOL
   | PRAGMA
   | PRECEDING
   | PRESORT
@@ -1695,6 +1716,7 @@ PATTERN: P A T T E R N;
 PER: P E R;
 PERMUTE: P E R M U T E;
 PLAN: P L A N;
+POOL: P O O L;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
 PRESORT: P R E S O R T;

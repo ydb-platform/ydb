@@ -5988,6 +5988,38 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(DisableDynamicResourcePool) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableDynamicResourcePools(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto checkDisabled = [&session](const TString& query) {
+            Cerr << "Check query:\n" << query << "\n";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Dynamic resource pools are disabled. Please contact your system administrator to enable it");
+        };
+
+        // CREATE RESOURCE POOL
+        checkDisabled(R"(
+            CREATE RESOURCE POOL `MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUERY_CANCEL_AFTER_SECONDS=86400,
+                QUERY_COUNT_LIMIT=1000
+            );)");
+
+        // ALTER RESOURCE POOL
+        checkDisabled(R"(
+            ALTER RESOURCE POOL `MyResourcePool`
+                SET (CONCURRENT_QUERY_LIMIT = 30),
+                SET QUERY_COUNT_LIMIT 100,
+                RESET (QUERY_CANCEL_AFTER_SECONDS);
+            )");
+
+        // DROP RESOURCE POOL
+        checkDisabled("DROP RESOURCE POOL `MyResourcePool`;");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {

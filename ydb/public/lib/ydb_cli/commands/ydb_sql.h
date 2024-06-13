@@ -6,12 +6,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
-#include <ydb/public/lib/ydb_cli/common/parameters.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandSql : public TYdbCommand, public TCommandWithParameters,
+class TCommandSql : public TYdbCommand, public TCommandWithFormat,
     public TInterruptibleCommand
 {
 public:

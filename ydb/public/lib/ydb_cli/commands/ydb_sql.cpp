@@ -30,7 +30,6 @@ TCommandSql::TCommandSql(TString query, TString collectStatsMode)
 
 void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    AddExamplesOption(config);
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with script (query) text").RequiredArgument("PATH")
@@ -59,28 +58,6 @@ void TCommandSql::Config(TConfig& config) {
         EOutputFormat::Parquet,
     });
 
-    AddParametersOption(config);
-
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
-
-    AddStdinFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::Raw,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv
-    }, {
-        EOutputFormat::NoFraming,
-        EOutputFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "query");
-
-    CheckExamples(config);
-
     config.SetFreeArgsNum(0);
 }
 
@@ -106,7 +83,6 @@ void TCommandSql::Parse(TConfig& config) {
     if (QueryFile) {
         Query = ReadFromFile(QueryFile, "query");
     }
-    ParseParameters(config);
 }
 
 int TCommandSql::Run(TConfig& config) {
@@ -129,36 +105,17 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        // Execute query with parameters
-        THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
-            auto asyncResult = client.StreamExecuteQuery(
-                    Query,
-                    // TODO: NoTx by default
-                    NQuery::TTxControl::BeginTx().CommitTx(),
-                    paramBuilder->Build(),
-                    settings
-                );
+    // Execute query without parameters
+    auto asyncResult = client.StreamExecuteQuery(
+        Query,
+        // TODO: NoTx by default
+        NQuery::TTxControl::BeginTx().CommitTx(),
+        settings
+    );
 
-            auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
-            return PrintResponse(result);
-        }
-    } else {
-        // Execute query without parameters
-        auto asyncResult = client.StreamExecuteQuery(
-            Query,
-            // TODO: NoTx by default
-            NQuery::TTxControl::BeginTx().CommitTx(),
-            settings
-        );
-
-        auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
-        return PrintResponse(result);
-    }
-    return EXIT_SUCCESS;
+    auto result = asyncResult.GetValueSync();
+    ThrowOnError(result);
+    return PrintResponse(result);
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {

@@ -499,6 +499,28 @@
         }
     ],
     "test.test[blocks-complex_scalars--Results]": [],
+    "test.test[blocks-interval_add_date_scalar--Analyze]": [
+        {
+            "checksum": "a7735abc118d08f4ff9334ba7d36d92c",
+            "size": 4973,
+            "uri": "https://{canondata_backend}/1937424/429ebddb706380aed5787d97b346ad9140cd795a/resource.tar.gz#test.test_blocks-interval_add_date_scalar--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[blocks-interval_add_date_scalar--Debug]": [
+        {
+            "checksum": "b9dfdf57df70edd4826dd7577b3518ac",
+            "size": 4566,
+            "uri": "https://{canondata_backend}/1899731/45fd5cd62a963db23c08ea9f3520b37637d759c5/resource.tar.gz#test.test_blocks-interval_add_date_scalar--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-interval_add_date_scalar--Plan]": [
+        {
+            "checksum": "a7735abc118d08f4ff9334ba7d36d92c",
+            "size": 4973,
+            "uri": "https://{canondata_backend}/1937424/429ebddb706380aed5787d97b346ad9140cd795a/resource.tar.gz#test.test_blocks-interval_add_date_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-interval_add_date_scalar--Results]": [],
     "test.test[blocks-interval_sub_interval--Analyze]": [
         {
             "checksum": "9c2458b2facc126f97eff00c30912d08",
@@ -508,9 +530,9 @@
     ],
     "test.test[blocks-interval_sub_interval--Debug]": [
         {
-            "checksum": "17f5e0251ee50fbb9c85f86bd8ae4892",
-            "size": 2252,
-            "uri": "https://{canondata_backend}/1775319/2c692d91178bcc9774270c84072137fd625262ae/resource.tar.gz#test.test_blocks-interval_sub_interval--Debug_/opt.yql_patched"
+            "checksum": "73713acba1fbc717883f74535e56646e",
+            "size": 2484,
+            "uri": "https://{canondata_backend}/1899731/45fd5cd62a963db23c08ea9f3520b37637d759c5/resource.tar.gz#test.test_blocks-interval_sub_interval--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-interval_sub_interval--Plan]": [

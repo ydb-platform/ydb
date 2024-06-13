@@ -195,6 +195,27 @@ inline TType OptionFromNode(const NYT::TNode& value) {
     }
 }
 
+void PopulatePathStatResult(IYtGateway::TPathStatResult& out, int index, NYT::TTableColumnarStatistics& extendedStat) {
+    for (const auto& entry : extendedStat.ColumnDataWeight) {
+        out.DataSize[index] += entry.second;
+    }
+    out.Extended[index] = IYtGateway::TPathStatResult::TExtendedResult{
+        .DataWeight = extendedStat.ColumnDataWeight,
+        .EstimatedUniqueCounts = extendedStat.ColumnEstimatedUniqueCounts
+    };
+}
+
+TString DebugPath(NYT::TRichYPath path) {
+    constexpr int maxDebugColumns = 20;
+    if (!path.Columns_ || std::ssize(path.Columns_->Parts_) <= maxDebugColumns) {
+        return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text);
+    }
+    int numColumns = std::ssize(path.Columns_->Parts_);
+    path.Columns_->Parts_.erase(path.Columns_->Parts_.begin() + maxDebugColumns, path.Columns_->Parts_.end());
+    path.Columns_->Parts_.push_back("...");
+    return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
+}
+
 } // unnamed
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -4495,6 +4516,7 @@ private:
         try {
             TPathStatResult res;
             res.DataSize.resize(execCtx->Options_.Paths().size(), 0);
+            res.Extended.resize(execCtx->Options_.Paths().size());
 
             auto entry = execCtx->GetOrCreateEntry();
             auto tx = entry->Tx;
@@ -4502,6 +4524,7 @@ private:
             const NYT::EOptimizeForAttr tmpOptimizeFor = execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR);
             TVector<NYT::TRichYPath> ytPaths(Reserve(execCtx->Options_.Paths().size()));
             TVector<size_t> pathMap;
+            bool extended = execCtx->Options_.Extended();
 
             auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
                 TVector<TString> res;
@@ -4545,16 +4568,19 @@ private:
                             YQL_CLOG(INFO, ProviderYt) << "Adding stat for " << col << ": " << size << " (virtual)";
                         }
                     }
-                    if (auto val = entry->GetColumnarStat(ytPath)) {
-                        res.DataSize[i] += *val;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << ": " << res.DataSize[i] << " (from cache)";
+                    TMaybe<ui64> cachedStat;
+                    TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
+                    if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
+                        res.DataSize[i] += *cachedStat;
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: false)";
+                    } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
+                        PopulatePathStatResult(res, i, *cachedExtendedStat);
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
                     } else if (onlyCached) {
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << " is missing in cache - sync path stat failed";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " is missing in cache - sync path stat failed (extended: " << extended << ")";
                         return res;
-                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR == tmpOptimizeFor) {
-                        pathMap.push_back(i);
-                        ytPaths.push_back(ytPath);
-                    } else {
+                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR != tmpOptimizeFor && !extended) {
+
                         // Use entire table size for lookup tables (YQL-7257)
                         if (attrs.IsUndefined()) {
                             attrs = tx->Get(ytPath.Path_ + "/@", NYT::TGetOptions().AttributeFilter(
@@ -4566,7 +4592,10 @@ private:
                         auto size = CalcDataSize(ytPath, attrs);
                         res.DataSize[i] += size;
                         entry->UpdateColumnarStat(ytPath, size);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << ": " << res.DataSize[i] << " (uncompressed_data_size for lookup)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (uncompressed_data_size for lookup, extended: false)";
+                    } else {
+                        ytPaths.push_back(ytPath);
+                        pathMap.push_back(i);
                     }
                 } else {
                     auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, req.Epoch()));
@@ -4597,11 +4626,19 @@ private:
                             YQL_CLOG(INFO, ProviderYt) << "Adding stat for " << col << ": " << size << " (virtual)";
                         }
                     }
-                    if (auto val = entry->GetColumnarStat(ytPath)) {
-                        res.DataSize[i] += *val;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache)";
+                    TMaybe<ui64> cachedStat;
+                    TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
+                    if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
+                        res.DataSize[i] += *cachedStat;
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: false)";
+                    } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
+                        PopulatePathStatResult(res, i, *cachedExtendedStat);
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
                     } else if (onlyCached) {
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << " (epoch=" << req.Epoch() << ") is missing in cache - sync path stat failed";
+                        YQL_CLOG(INFO, ProviderYt)
+                            << "Stat for " << DebugPath(req.Path())
+                            << " (epoch=" << req.Epoch() << ", extended: " << extended
+                            << ") is missing in cache - sync path stat failed";
                         return res;
                     } else {
                         if (attrs.IsUndefined()) {
@@ -4613,18 +4650,19 @@ private:
                                     .AddAttribute(TString("schema"))
                             ));
                         }
-                        if (attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan" &&
-                            AllPathColumnsAreInSchema(req.Path(), attrs))
+                        if (extended ||
+                            (attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan" &&
+                            AllPathColumnsAreInSchema(req.Path(), attrs)))
                         {
                             pathMap.push_back(i);
                             ytPaths.push_back(ytPath);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << " (epoch=" << req.Epoch() << ") add for request with path " << ytPath.Path_;
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << ") add for request with path " << ytPath.Path_ << " (extended: " << extended << ")";
                         } else {
                             // Use entire table size for lookup tables (YQL-7257)
                             auto size = CalcDataSize(ytPath, attrs);
                             res.DataSize[i] += size;
                             entry->UpdateColumnarStat(ytPath, size);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << req.Path().Path_ << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (uncompressed_data_size for lookup)";
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (uncompressed_data_size for lookup)";
                         }
                     }
                 }
@@ -4632,17 +4670,23 @@ private:
 
             if (ytPaths) {
                 YQL_ENSURE(!onlyCached);
-                auto fetchMode = execCtx->Options_.Config()->JoinColumnarStatisticsFetcherMode.Get().GetOrElse(NYT::EColumnarStatisticsFetcherMode::Fallback);
+                auto fetchMode = extended ?
+                    NYT::EColumnarStatisticsFetcherMode::FromNodes :
+                    execCtx->Options_.Config()->JoinColumnarStatisticsFetcherMode.Get().GetOrElse(NYT::EColumnarStatisticsFetcherMode::Fallback);
                 auto columnStats = tx->GetTableColumnarStatistics(ytPaths, NYT::TGetTableColumnarStatisticsOptions().FetcherMode(fetchMode));
                 YQL_ENSURE(pathMap.size() == columnStats.size());
-                    for (size_t i: xrange(columnStats.size())) {
+                for (size_t i: xrange(columnStats.size())) {
                     auto& columnStat = columnStats[i];
                     const ui64 weight = columnStat.LegacyChunksDataWeight +
                         Accumulate(columnStat.ColumnDataWeight.begin(), columnStat.ColumnDataWeight.end(), 0ull,
                             [](ui64 sum, decltype(*columnStat.ColumnDataWeight.begin())& v) { return sum + v.second; });
 
+                    if (extended) {
+                        PopulatePathStatResult(res, pathMap[i], columnStat);
+                    }
+
                     res.DataSize[pathMap[i]] += weight;
-                    entry->UpdateColumnarStat(ytPaths[i], columnStat);
+                    entry->UpdateColumnarStat(ytPaths[i], columnStat, extended);
                     YQL_CLOG(INFO, ProviderYt) << "Stat for " << execCtx->Options_.Paths()[pathMap[i]].Path().Path_ << ": " << weight << " (fetched)";
                 }
             }

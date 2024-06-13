@@ -201,12 +201,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , InitDone(false)
     , NewPartition(newPartition)
     , Subscriber(partition, TabletCounters, Tablet)
-    , WriteCycleSize(0)
-    , WriteNewSize(0)
-    , WriteNewSizeInternal(0)
-    , WriteNewSizeUncompressed(0)
-    , WriteNewMessages(0)
-    , WriteNewMessagesInternal(0)
     , DiskIsFull(false)
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
@@ -1013,6 +1007,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
+    response->InputLags = std::move(SupportivePartitionTimeLag);
 
     ctx.Send(ev->Sender, response);
 }
@@ -2039,7 +2034,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     return true;
 }
 
-void TPartition::CommitWriteOperations(const TTransaction& t)
+void TPartition::CommitWriteOperations(TTransaction& t)
 {
     if (!t.WriteInfo) {
         return;
@@ -2067,10 +2062,12 @@ void TPartition::CommitWriteOperations(const TTransaction& t)
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
         }, std::nullopt};
+        msg.Internal = true;
         TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
 
         UserActionAndTxPendingCommit.emplace_front(std::move(message));
     }
+    WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
 }
 
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
@@ -2195,6 +2192,34 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                                  ChangeConfig->TopicConverter,
                                  ctx);
     }
+
+    // Apply counters
+    for (const auto& writeInfo : WriteInfosApplied) {
+        // writeTimeLag
+        auto finalLag = TMultiBucketCounter(std::move(*writeInfo->InputLags), ctx.Now().MilliSeconds());
+        for (const auto& values : finalLag.GetValues()) {
+            if (InputTimeLag) {
+                InputTimeLag->IncFor(std::ceil(values.first), values.second);
+            }
+        }
+        //MessageSize
+        auto i = 0u;
+        for (auto range : MessageSize.GetRanges()) {
+            if (i >= writeInfo->MessagesSizes.size()) {
+                break;
+            }
+            MessageSize.IncFor(range, writeInfo->MessagesSizes[i++]);
+        }
+
+        // Bytes Written
+        BytesWrittenTotal.Inc(writeInfo->BytesWrittenTotal);
+        BytesWrittenGrpc.Inc(writeInfo->BytesWrittenGrpc);
+        BytesWrittenUncompressed.Inc(writeInfo->BytesWrittenUncompressed);
+        // Messages written
+        MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
+        MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
+    }
+    WriteInfosApplied.clear();
 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
@@ -2358,7 +2383,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
     return EProcessResult::Continue;
 }
 
-void TPartition::ExecImmediateTx(const TTransaction& t)
+void TPartition::ExecImmediateTx(TTransaction& t)
 {
     --ImmediateTxCount;
     auto& record = t.ProposeTransaction->Record;

@@ -97,6 +97,7 @@ public:
             iter++;
         }
     }
+    const TVector<ui64>& GetRanges() const;
     operator bool() const;
 };
 
@@ -108,12 +109,12 @@ private:
     TVector<ui64> ValuesCount;
     ui64 TimeReference;
 
-ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
+    ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
 
 public:
     TMultiBucketCounter(TMultiBucketCounter&& other, ui64 newTimeReference);
     TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
-    void Insert(ui64 value, ui64 count) noexcept;
+    void Insert(i64 value, ui64 count) noexcept;
     TVector<std::pair<double, ui64>> GetValues() const noexcept;
 
 };

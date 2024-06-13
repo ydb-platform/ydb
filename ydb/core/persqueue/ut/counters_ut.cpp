@@ -591,8 +591,36 @@ Y_UNIT_TEST(InsertAndUpdate) {
     auto counterNew2 = TMultiBucketCounter(std::move(counterNew), 1050);
 
     CheckBucketsValues(counterNew2.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
+}
+Y_UNIT_TEST(ManyCounters) {
+    TMultiBucketCounter counter({100, 200, 500, 1000, 2000, 5000}, 5, 0);
+    for (auto i = 1u; i <= 5000; i++) {
+        counter.Insert(i, 1);
+        counter = TMultiBucketCounter(std::move(counter), 1);
+    }
+    counter.Insert(1, 1);
 
-    //UNIT_ASSERT(data == expected);
+    for (const auto & v: counter.GetValues()) {
+        Cerr << "Counters value: " << v.first << " - " << v.second << Endl;
+    }
+    const auto& values = counter.GetValues();
+    for (auto i = 0u; i < 10; i++) { // 0 - 200, 2 buckets per 5 sub-buckets, size 20
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 20);
+    }
+    for (auto i = 10u; i < 15; i++) { // 200 - 500, 1 bucket, 5 sub-buckets, size 60
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 60);
+    }
+    for (auto i = 15u; i < 20; i++) { // 500 - 1000, 1 bucket, 5 sub-buckets, size 100
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 100);
+    }
+    for (auto i = 20u; i < 25; i++) { // 1000 - 2000, 1 bucket, 5 sub-buckets, size 200
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 200);
+    }
+    for (auto i = 25u; i < 30; i++) { // 2000 - 5000, 1 bucket, 5 sub-buckets, size 600
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 600);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(values[30].second, 1);
+
 }
 
 } // Y_UNIT_TEST_SUITE(TMultiBucketCounter)

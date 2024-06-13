@@ -429,7 +429,7 @@ private:
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
 
-    void CommitWriteOperations(const TTransaction& t);
+    void CommitWriteOperations(TTransaction& t);
 
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
@@ -704,7 +704,7 @@ private:
 
 
     [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
-    void ExecImmediateTx(const TTransaction& tx);
+    void ExecImmediateTx(TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
     EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
@@ -757,6 +757,7 @@ private:
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
+    TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
@@ -814,14 +815,17 @@ private:
     TSubscriber Subscriber;
 
     TInstant WriteCycleStartTime;
-    ui32 WriteCycleSize;
+    ui32 WriteCycleSize = 0;
     ui32 WriteCycleSizeEstimate = 0;
     ui32 WriteKeysSizeEstimate = 0;
-    ui32 WriteNewSize;
-    ui32 WriteNewSizeInternal;
-    ui64 WriteNewSizeUncompressed;
-    ui32 WriteNewMessages;
-    ui32 WriteNewMessagesInternal;
+    ui32 WriteNewSize = 0;
+    ui32 WriteNewSizeFull = 0;
+    ui32 WriteNewSizeInternal = 0;
+    ui64 WriteNewSizeUncompressed = 0;
+    ui64 WriteNewSizeUncompressedFull = 0;
+
+    ui32 WriteNewMessages = 0;
+    ui32 WriteNewMessagesInternal = 0;
 
     TInstant CurrentTimestamp;
 
@@ -860,6 +864,7 @@ private:
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
+    THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
     TPartitionHistogramWrapper MessageSize;
 
     TPercentileCounter WriteLatency;

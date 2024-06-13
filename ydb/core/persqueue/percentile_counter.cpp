@@ -193,6 +193,10 @@ TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
     }
     return res;
 }
+const TVector<ui64>& TPartitionHistogramWrapper::GetRanges() const {
+    Y_ABORT_UNLESS(!IsSupportivePartition);
+    return Histogram->Ranges;
+}
 
 TPartitionHistogramWrapper::operator bool() const {
     return Inited && (IsSupportivePartition || Histogram);
@@ -253,23 +257,28 @@ TMultiBucketCounter::TMultiBucketCounter(const TVector<ui64>& buckets, ui64 mult
 
 }
 
-void TMultiBucketCounter::Insert(ui64 value, ui64 count) noexcept {
+void TMultiBucketCounter::Insert(i64 value, ui64 count) noexcept {
+    if (value < 0) {
+        InsertWithHint(0, count, 0);
+        return;
+    }
+
     ui64 begin = 0, end = Buckets.size() - 1;
     while (end - begin > 10) {
         ui64 median = begin + (end - begin) / 2;
-        if (Buckets[median] >= value) {
+        if (Buckets[median] >= (ui64)value) {
             end = median;
         } else {
             begin = median;
         }
     }
-    InsertWithHint(value, count, begin);
+    InsertWithHint((ui64)value, count, begin);
 }
 
 TVector<std::pair<double, ui64>> TMultiBucketCounter::GetValues() const noexcept {
     TVector<std::pair<double, ui64>> result;
     for (auto i = 0u; i < ValuesCount.size(); ++i) {
-        if (AvgValues[i] != 0)
+        if (ValuesCount[i] != 0)
             result.push_back(std::make_pair(AvgValues[i], ValuesCount[i]));
     }
     return result;

@@ -195,6 +195,23 @@ inline TType OptionFromNode(const NYT::TNode& value) {
     }
 }
 
+NThreading::TFuture<TVector<TYtTableColumnarStats>>
+RequestColumnarStatistics(TBatchRequestPtr batchRequest, const TVector<TRichYPath>& paths)
+{
+    return batchRequest->GetTableColumnarStatistics(paths).Apply(
+        [](const TFuture<TVector<TTableColumnarStatistics>>& tableStatisticsFuture) {
+            auto tableStatistics = tableStatisticsFuture.GetValue();
+            TVector<TYtTableColumnarStats> result;
+            for (const auto& stats : tableStatistics) {
+                TYtTableColumnarStats tableStatistic;
+                tableStatistic.EstimatedUniqueCounts = stats.ColumnEstimatedUniqueCounts;
+                tableStatistic.DataWeight = stats.ColumnDataWeight;
+                result.push_back(std::move(tableStatistic));
+            }
+            return result;
+        });
+}
+
 } // unnamed
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2422,16 +2439,26 @@ private:
         TTableInfoResult& result)
     {
         TVector<NYT::TNode> attributes(tables.size());
+        THashMap<size_t, TYtTableColumnarStats> statsMap;
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
+            TVector<TRichYPath> paths;
             for (auto& idx: idxs) {
+                paths.push_back(idx.second);
                 batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
                     attributes[idx.first] = res.GetValue();
                 }));
             }
+            auto statsFuture = RequestColumnarStatistics(batchGet, paths);
+
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
+            auto idx = idxs.begin();
+            for (auto& stats : statsFuture.GetValue()) {
+                statsMap[idx->first] = std::move(stats);
+                ++idx;
+            }
         }
         {
             auto batchGet = tx->CreateBatchRequest();
@@ -2480,6 +2507,8 @@ private:
                 TYtTableMetaInfo::TPtr metaInfo = result.Data[idx.first].Meta;
                 TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
                 result.Data[idx.first].Stat = statInfo;
+
+                statInfo->ColumnarStats = std::move(statsMap[idx.first]);
 
                 auto type = GetTypeFromAttributes(attrs, false);
                 ui16 viewSyntaxVersion = 1;
@@ -2584,6 +2613,7 @@ private:
                 throw yexception() << "Error loading '" << tables[idx.first].Table() << "' table metadata: " << CurrentExceptionMessage();
             }
         }
+
         if (batchRes) {
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
@@ -4512,6 +4542,7 @@ private:
             for (size_t i: xrange(execCtx->Options_.Paths().size())) {
                 auto& req = execCtx->Options_.Paths()[i];
                 NYT::TRichYPath ytPath = req.Path();
+
                 auto tablePath = NYql::TransformPath(tmpFolder, ytPath.Path_, req.IsTemp(), execCtx->Session_->UserName_);
                 if (req.IsTemp() && !req.IsAnonymous()) {
                     ytPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
@@ -4626,8 +4657,9 @@ private:
                 YQL_ENSURE(!onlyCached);
                 auto fetchMode = execCtx->Options_.Config()->JoinColumnarStatisticsFetcherMode.Get().GetOrElse(NYT::EColumnarStatisticsFetcherMode::Fallback);
                 auto columnStats = tx->GetTableColumnarStatistics(ytPaths, NYT::TGetTableColumnarStatisticsOptions().FetcherMode(fetchMode));
+
                 YQL_ENSURE(pathMap.size() == columnStats.size());
-                    for (size_t i: xrange(columnStats.size())) {
+                for (size_t i: xrange(columnStats.size())) {
                     auto& columnStat = columnStats[i];
                     const ui64 weight = columnStat.LegacyChunksDataWeight +
                         Accumulate(columnStat.ColumnDataWeight.begin(), columnStat.ColumnDataWeight.end(), 0ull,
@@ -4656,6 +4688,7 @@ private:
 
         auto batchGet = entry->Tx->CreateBatchRequest();
         TVector<TFuture<TYtTableStatInfo::TPtr>> batchRes(Reserve(outTables.size()));
+
         for (auto& out: outTables) {
             batchRes.push_back(
                 batchGet->Get(out.Path + "/@", TGetOptions()
@@ -4700,12 +4733,23 @@ private:
             );
         }
 
+        TVector<TRichYPath> paths;
+        for (auto& out : outTables) {
+            paths.push_back(out.Path[0] == '/' ? out.Path : "//" + out.Path);
+        }
+
+        auto columnarFuture = RequestColumnarStatistics(batchGet, paths);
         batchGet->ExecuteBatch();
 
         for (size_t i: xrange(outTables.size())) {
             res.OutTableStats.emplace_back(outTables[i].Name, batchRes[i].GetValue());
         }
 
+        int index = 0;
+        for (auto& stats : columnarFuture.GetValue()) {
+            res.OutTableStats[index].second->ColumnarStats = std::move(stats);
+            ++index;
+        }
         return res;
     }
 

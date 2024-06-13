@@ -27,6 +27,11 @@ namespace NYql {
 
 class TYtKey;
 
+struct TYtTableColumnarStats {
+    THashMap<TString, i64> DataWeight;
+    THashMap<TString, ui64> EstimatedUniqueCounts;
+};
+
 struct TYtTableStatInfo: public TThrRefBase {
     using TPtr = TIntrusivePtr<TYtTableStatInfo>;
 
@@ -57,6 +62,7 @@ struct TYtTableStatInfo: public TThrRefBase {
     ui64 ModifyTime = 0;
     ui64 Revision = 0;
     ui64 TableRevision = 0; // Not serializable
+    TYtTableColumnarStats ColumnarStats;
 };
 
 struct TYtTableMetaInfo: public TThrRefBase {

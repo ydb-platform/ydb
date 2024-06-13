@@ -192,6 +192,52 @@ private:
     THashMap<TStringBuf, TConverter> Converters;
 };
 
+template <typename ItemType>
+TNodeBuilder<TBuildValueHolder<TCoNameValueTupleList>, TCoNameValueTupleList> BuildFromHashMap(
+    TExprContext& ctx,
+    const TPositionHandle& pos,
+    const THashMap<TString, ItemType>& data) {
+    auto result = Build<TCoNameValueTupleList>(ctx, pos);
+    for (auto& entry : data) {
+        result.Add()
+            .Name()
+                .Value(entry.first)
+            .Build()
+            .template Value<TCoAtom>()
+                .Value(entry.second)
+            .Build()
+        .Build();
+    }
+    return result;
+}
+
+template <typename ItemType>
+THashMap<TString, ItemType> ParseAtomMap(const TMaybeNode<TExprBase>& value) {
+    THashMap<TString, ItemType> result;
+    for (auto item : value.Cast<TCoNameValueTupleList>()) {
+        auto nameCount = item.Cast<TCoNameValueTuple>();
+        result[nameCount.Name().Value()] =
+            FromString(nameCount.Value().Cast<TCoAtom>().Value());
+    }
+    return result;
+}
+
+bool ValidateAtomMap(TExprContext& ctx, TExprNode* value)
+{
+    if (!EnsureTuple(*value, ctx)) {
+        return false;
+    }
+    for (auto& item: value->Children()) {
+        if (!EnsureTupleSize(*item, 2, ctx)) {
+            return false;
+        }
+        if (!EnsureAtom(*item->Child(0), ctx) || !EnsureAtom(*item->Child(1), ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Converts ExprNode representation to YT table format
 NYT::TNode ExprNodeToYtNode(const TExprNode& node) {
     return Default<TExprDataToYtNodeConverter>().Convert(node.IsCallable("Just") ? node.Head() : node);
@@ -256,7 +302,7 @@ bool TYtTableStatInfo::Validate(const TExprNode& node, TExprContext& ctx) {
             return false;
         }
         const TExprNode* name = child->Child(0);
-        const TExprNode* value = child->Child(1);
+        TExprNode* value = child->Child(1);
         if (!EnsureAtom(*name, ctx)) {
             return false;
         }
@@ -295,6 +341,12 @@ bool TYtTableStatInfo::Validate(const TExprNode& node, TExprContext& ctx) {
             VALIDATE_FIELD(ModifyTime)
         else
             VALIDATE_FIELD(Revision)
+        else if (name->Content() == TStringBuf("EstimatedUniqueCounts") ||
+                 name->Content() == TStringBuf("DataWeight")) {
+            if (!ValidateAtomMap(ctx, value)) {
+                return false;
+            }
+        }
         else {
             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported table stat option: " << name->Content()));
             return false;
@@ -328,7 +380,11 @@ void TYtTableStatInfo::Parse(TExprBase node) {
             HANDLE_FIELD(ModifyTime)
         else
             HANDLE_FIELD(Revision)
-        else {
+        else if (setting.Name().Value() == "EstimatedUniqueCounts") {
+            ColumnarStats.EstimatedUniqueCounts = ParseAtomMap<ui64>(setting.Value());
+        } else if (setting.Name().Value() == "DataWeight") {
+            ColumnarStats.DataWeight = ParseAtomMap<i64>(setting.Value());
+        } else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
         }
 #undef HANDLE_FIELD
@@ -358,6 +414,28 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ;
 
 #undef ADD_FIELD
+
+    if (!ColumnarStats.EstimatedUniqueCounts.empty()) {
+        auto subbuilder = BuildFromHashMap(ctx, pos, ColumnarStats.EstimatedUniqueCounts);
+        statBuilder
+            .Add()
+                .Name()
+                    .Value(TStringBuf("EstimatedUniqueCounts"), TNodeFlags::Default)
+                .Build()
+                .Value(subbuilder.Done())
+            .Build();
+    }
+
+    if (!ColumnarStats.DataWeight.empty()) {
+        auto subbuilder = BuildFromHashMap(ctx, pos, ColumnarStats.DataWeight);
+        statBuilder
+            .Add()
+                .Name()
+                    .Value(TStringBuf("DataWeight"), TNodeFlags::Default)
+                .Build()
+                .Value(subbuilder.Done())
+            .Build();
+    }
 
     return statBuilder.Done();
 }

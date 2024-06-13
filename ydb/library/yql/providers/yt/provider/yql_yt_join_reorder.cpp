@@ -1,10 +1,11 @@
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_provider_context.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
@@ -232,6 +233,11 @@ private:
 
         TYtSection section{leaf->Section};
         auto stat = std::make_shared<TOptimizerStatistics>();
+        stat->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(
+            new TOptimizerStatistics::TColumnStatMap());
+
+        auto providerStats = std::make_unique<TYtProviderStatistic>();
+
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
             for (const auto& setting : section.Settings()) {
                 if (setting.Name() == "Rows") {
@@ -243,10 +249,32 @@ private:
         } else {
             for (auto path: section.Paths()) {
                 auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
+
                 stat->Cost += tableStat->DataSize;
                 stat->Nrows += tableStat->RecordsCount;
+
+                for (const auto& entry : tableStat->ColumnarStats.EstimatedUniqueCounts) {
+                    stat->ColumnStatistics->Data[entry.first].NumUniqueVals = entry.second;
+                }
+                for (const auto& entry : tableStat->ColumnarStats.DataWeight) {
+                    providerStats->ColumnStatistics[entry.first] = {
+                        .DataWeight = entry.second
+                    };
+                }
+            }
+            auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
+            if (sorted) {
+                TVector<TString> key;
+                for (const auto& item : sorted->GetContent()) {
+                    for (const auto& path : item.first) {
+                        const auto& column = path.front();
+                        key.push_back(TString(column));
+                    }
+                }
+                providerStats->SortColumns = key;
             }
         }
+        stat->Specific = std::unique_ptr<const IProviderStatistics>(providerStats.release());
 
         return std::make_shared<TYtRelOptimizerNode>(
             std::move(label), std::move(stat), leaf

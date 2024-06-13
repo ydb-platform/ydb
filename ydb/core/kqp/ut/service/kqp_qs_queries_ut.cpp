@@ -3178,6 +3178,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
+        // {
+        //     auto setDefault = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN value SET DEFAULT 0;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(setDefault.IsSuccess(), setDefault.GetIssues().ToString());
+        // }
+
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3209,21 +3217,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"sql(
-            CREATE TABLE `/Root/test/alterNull` (
-                id Int32 NOT NULL,
-                value Int32,
-                PRIMARY KEY (id)
-            );
-        )sql";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        // auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto client = kikimr.GetQueryClient();
 
         {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNull` (
+                    id Int32 NOT NULL,
+                    val Int32 NOT NULL,
+                    PRIMARY KEY (id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
             auto initValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNull` (id, value)
+                REPLACE INTO `/Root/test/alterNull` (id, val)
                 VALUES
                 ( 1, 1 ),
                 ( 2, 10 ),
@@ -3237,23 +3247,32 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
-            auto setNull = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/alterNull`
-                ALTER COLUMN value SET NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            // change
-            UNIT_ASSERT_C(!setNull.IsSuccess(), setNull.GetIssues().ToString());
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNull` (id, val)
+                VALUES
+                ( 1, NULL ),
+                ( 2, NULL );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
         }
 
-        // {
-        //     auto initNullValues = client.ExecuteQuery(R"sql(
-        //         REPLACE INTO `/Root/test/alterNull` (id, value)
-        //         VALUES
-        //         ( 1, NULL ),
-        //         ( 2, NULL );
-        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-        // }
+        {
+            auto setNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNull`
+                ALTER COLUMN val SET NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+        }
+
+        {
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNull` (id, val)
+                VALUES
+                ( 1, NULL ),
+                ( 2, NULL );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
     }
 }
 

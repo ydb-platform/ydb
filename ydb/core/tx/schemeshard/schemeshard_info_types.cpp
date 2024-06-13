@@ -335,7 +335,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence()) {
+            bool isSetNullable = col.HasNotNull();
+
+            if (!isSetNullable && !columnFamily && !col.HasDefaultFromSequence()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -370,6 +372,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
+
+            if (isSetNullable) {
+                column.NotNull = col.GetNotNull();
+            }
+
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }

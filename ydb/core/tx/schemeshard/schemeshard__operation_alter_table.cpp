@@ -606,7 +606,8 @@ public:
 
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context
+        );
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

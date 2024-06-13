@@ -7,7 +7,7 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
             NYdb::NTopic::ECodec::ZSTD,
             NYdb::NTopic::ECodec::GZIP,
     };
-}
+} // comment
 
 int main(int argc, char **argv) {
     try {

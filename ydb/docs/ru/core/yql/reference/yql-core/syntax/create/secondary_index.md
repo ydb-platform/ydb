@@ -1,0 +1,1 @@
+{% include [secondary_index](../_includes/create/secondary_index.md) %}

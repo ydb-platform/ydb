@@ -51,11 +51,6 @@ struct TEventIds {
         EvSchemaDeleted,
         EvSchemaUpdated,
 
-        // Row dispatcher
-        EvCreateSemaphoreResult,
-        EvRowDispatcherRequest,
-        EvRowDispatcherResult,
-
         // Special events
         EvEnd
     };

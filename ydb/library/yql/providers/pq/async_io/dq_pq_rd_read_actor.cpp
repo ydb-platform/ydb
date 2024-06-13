@@ -1,4 +1,5 @@
 #include "dq_pq_rd_read_actor.h"
+#include "dq_pq_rd_session.h"
 #include "probes.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -111,6 +112,11 @@ private:
     TMaybe<TInstant> NextIdlenesCheckAt;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory2;
 
+    struct Session {
+        TActorId ActorId;
+    };
+    TMap<ui32, Session> Sessions;
+
 public:
     TDqPqRdReadActor(
         ui64 inputIndex,
@@ -125,17 +131,18 @@ public:
         const NActors::TActorId& computeActorId,
         NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2);
 
-    void Handle(NFq::TEvents::TEvRowDispatcherResult::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
 
 
     STRICT_STFUNC(
         StateFunc, {
-        hFunc(NFq::TEvents::TEvRowDispatcherResult, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherResult, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
         // hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         // hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         // hFunc(TEvents::TEvUndelivered, Handle);
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
-        // hFunc(NFq::TEvRowDispatcher::TEvCoordinatorInfo, Handle);
     })
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
@@ -191,7 +198,7 @@ void TDqPqRdReadActor::Bootstrap() {
     //NFq::NConfig::TRowDispatcherCoordinatorConfig config;
     //config.Set
 
-    Send(NFq::RowDispatcherServiceActorId(), new NFq::TEvents::TEvRowDispatcherRequest());
+    Send(NFq::RowDispatcherServiceActorId(), new NFq::TEvRowDispatcher::TEvRowDispatcherRequest());
   //  Register(NFq::NewLeaderDetector(SelfId(), config, CredentialsProviderFactory2, Driver).release());
 }
 
@@ -298,11 +305,30 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     return res;
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvents::TEvRowDispatcherResult::TPtr &ev) {
-        SRC_LOG_D("TEvRowDispatcherResult = " << ev->Get()->CoordinatorActorId);
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev) {
+    SRC_LOG_D("TEvRowDispatcherResult = " << ev->Get()->CoordinatorActorId);
+    if (!ev->Get()->CoordinatorActorId) {
+        return;     // TODO
+    }
 
+    Send(*ev->Get()->CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
 }
 
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
+    SRC_LOG_D("TEvCoordinatorResult:");
+    for (auto& p : ev->Get()->Record.GetPartitions()) {
+        TActorId actorId = ActorIdFromProto(p.GetActorId());
+        SRC_LOG_D("   actorId:" << actorId);
+
+        for (auto& partitionId : p.GetPartitionId()) {
+             SRC_LOG_D("   partitionId:" << partitionId);
+
+            auto actorId = Register(NewPqSession(SourceParams, partitionId).release());
+            Sessions.emplace(partitionId, actorId);
+             //TEvStartSession2
+        }
+    }
+}
 
 // void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
 //     SRC_LOG_D("TDqPqRdReadActor :: TEvCoordinatorChanged new leader " << ev->Get()->LeaderActorId);

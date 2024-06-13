@@ -38,6 +38,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TYqSharedResources::TPtr YqSharedResources;
     TActorId CoordinatorActorId;
     TMaybe<TActorId> LeaderActorId;
+    TSet<TActorId> CoordinatorChangedSubscribers;
 
 public:
     explicit TRowDispatcher(
@@ -57,7 +58,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) ;
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &ev);
-    void Handle(NFq::TEvents::TEvRowDispatcherRequest::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
 
 
     STRICT_STFUNC(
@@ -68,7 +69,7 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorInfo, Handle);
-        hFunc(NFq::TEvents::TEvRowDispatcherRequest, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
     })
 
 private:
@@ -102,6 +103,9 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
     LeaderActorId = ev->Get()->LeaderActorId;
     Send(*LeaderActorId, new NFq::TEvRowDispatcher::TEvStartSession(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    for (auto actorId : CoordinatorChangedSubscribers) {
+        Send(actorId, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(*LeaderActorId)); // TODO FlagTrackDelivery
+    }
 }
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
@@ -128,9 +132,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvCoordinatorInfo ");
 }
 
- void TRowDispatcher::Handle(NFq::TEvents::TEvRowDispatcherRequest::TPtr &ev) {
+ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvRowDispatcherRequest ");
-    Send(ev->Sender, new NFq::TEvents::TEvRowDispatcherResult(LeaderActorId));
+    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(LeaderActorId));
+    CoordinatorChangedSubscribers.insert(ev->Sender);
  }
 
 } // namespace

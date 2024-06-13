@@ -4,6 +4,7 @@ package NFq.NRowDispatcherProto;
 option cc_enable_arenas = true;
 
 import "ydb/library/actors/protos/actors.proto";
+import "ydb/library/yql/providers/pq/proto/dq_io.proto";
 
 message TEvStartSession {
     uint32 TransportMeta = 1;
@@ -14,13 +15,21 @@ message TEvCoordinatorInfo {
 }
 
 message TEvGetAddressRequest {
-    string Topic = 1;
-    uint32 PartitionId = 2;
+    NYql.NPq.NProto.TDqPqTopicSource source = 1;
+    repeated uint32 PartitionId = 2;
+}
+
+message TEvPartitionAddress {
+    repeated uint32 PartitionId = 1;
+    NActorsProto.TActorId ActorId = 2;
 }
 
 message TEvGetAddressResponse {
-    string topic = 1;
-    repeated uint32 partition_id = 2;
-    NActorsProto.TActorId ActorId = 3;
+    repeated TEvPartitionAddress Partitions = 1;
 }
 
+
+message TEvStartSession2 {
+    NYql.NPq.NProto.TDqPqTopicSource source = 1;
+    repeated uint32 PartitionId = 2;
+}

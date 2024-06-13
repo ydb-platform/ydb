@@ -32,7 +32,7 @@ struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult,
     {}
 };
 
-struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEventIds::EvCreateSemaphoreResult> {
+struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEvRowDispatcher::EvCreateSemaphoreResult> {
     NYdb::NCoordination::TSessionResult Result;
 
     explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
@@ -59,6 +59,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     struct NodeInfo {
         bool Connected = false;
+        TActorId ActorId;
     };
     std::map<ui32, NodeInfo> RowDispatchersByNode; 
     bool IsLeader = false;
@@ -79,6 +80,7 @@ public:
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -87,6 +89,7 @@ public:
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
     })
 
 private:
@@ -115,6 +118,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
     ui32 nodeId = ev->Sender.NodeId();
     auto& nodeInfo = RowDispatchersByNode[nodeId];
     nodeInfo.Connected = true;
+    nodeInfo.ActorId = ev->Sender;
 
     DebugPrint();
     Send(ev->Sender, new TEvRowDispatcher::TEvCoordinatorInfo(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
@@ -152,6 +156,32 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPt
     IsLeader = SelfId() == ev->Get()->LeaderActorId;
     LOG_YQ_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
 }
+
+void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
+    LOG_YQ_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest: ");
+    LOG_YQ_ROW_DISPATCHER_DEBUG("  TopicPath " << ev->Get()->Record.Getsource().GetTopicPath());
+    
+    for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
+        LOG_YQ_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
+    }
+
+    if (RowDispatchersByNode.empty()) {
+        LOG_YQ_ROW_DISPATCHER_DEBUG("empty  RowDispatchersByNode"); // TODO
+        return;
+    }
+
+    const auto& nodeInfo = RowDispatchersByNode.begin()->second;
+    auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
+    auto* partitions = response->Record.AddPartitions();
+    for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
+        partitions->AddPartitionId(partitionId);
+    }
+    
+    ActorIdToProto(nodeInfo.ActorId, partitions->MutableActorId());
+
+    Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+}
+
 
 } // namespace
 

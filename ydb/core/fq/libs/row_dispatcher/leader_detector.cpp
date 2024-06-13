@@ -30,7 +30,7 @@ struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, TEventIds::
 };
 
 
-struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEventIds::EvCreateSemaphoreResult> {
+struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEvRowDispatcher::EvCreateSemaphoreResult> {
     NYdb::NCoordination::TSessionResult Result;
 
     explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)

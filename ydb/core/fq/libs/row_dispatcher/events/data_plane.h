@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 namespace NFq {
 
@@ -13,15 +14,20 @@ NActors::TActorId RowDispatcherServiceActorId();
 struct TEvRowDispatcher {
     // Event ids.
     enum EEv : ui32 {
-        EvStartSession = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
+        EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
+        EvCoordinatorChanged,
+        EvStartSession,
         EvCoordinatorInfo,
-        EvGetAddressRequest,
-        EvGetAddressResponse,
-        EvCreateResource,
+
+        EvRowDispatcherRequest,
+        EvRowDispatcherResult,
+        EvCoordinatorRequest,
+        EvCoordinatorResult,
+
         EvEnd,
     };
 
-    struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCreateResource> {
+    struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCoordinatorChanged> {
         TEvCoordinatorChanged(NActors::TActorId leaderActorId)
             : LeaderActorId(leaderActorId) {
         }
@@ -38,14 +44,44 @@ struct TEvRowDispatcher {
         TEvCoordinatorInfo() = default;
     };
 
-    struct TEvGetAddressRequest : public NActors::TEventPB<TEvGetAddressRequest,
-        NFq::NRowDispatcherProto::TEvGetAddressRequest, EEv::EvGetAddressRequest> {
-        TEvGetAddressRequest() = default;
+
+    // Read actor <-> local row_dispatcher: get coordinator actor id.
+
+    struct TEvRowDispatcherRequest : public NActors::TEventLocal<TEvRowDispatcherRequest, EEv::EvRowDispatcherRequest> {};
+
+    struct TEvRowDispatcherResult : public NActors::TEventLocal<TEvRowDispatcherResult, EEv::EvRowDispatcherResult> {
+        TEvRowDispatcherResult(TMaybe<NActors::TActorId> coordinatorActorId)
+            : CoordinatorActorId(coordinatorActorId) {}
+
+        TMaybe<NActors::TActorId> CoordinatorActorId;
     };
 
-    struct TEvGetAddressResponse : public NActors::TEventPB<TEvGetAddressResponse,
-        NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvGetAddressResponse> {
-        TEvGetAddressResponse() = default;
+    // Read actor <-> coordinator : get row_dispatcher actorId (which is responsible for processing) by topic/partition.
+
+    struct TEvCoordinatorRequest : public NActors::TEventPB<TEvCoordinatorRequest,
+        NFq::NRowDispatcherProto::TEvGetAddressRequest, EEv::EvCoordinatorRequest> {
+        TEvCoordinatorRequest() = default;
+        TEvCoordinatorRequest(
+            const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, 
+            const std::vector<ui64>& partitionIds) {
+            Record.mutable_source()->CopyFrom(sourceParams);
+            for (const auto& id : partitionIds) {
+                Record.AddPartitionId(id);
+            }
+        }
+    };
+
+    struct TEvCoordinatorResult : public NActors::TEventPB<TEvCoordinatorResult,
+        NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvCoordinatorResult> {
+        TEvCoordinatorResult() = default;
+    };
+
+
+    //  Read actor <-> row_dispatcher : 
+
+    struct TEvStartSession2 : public NActors::TEventPB<TEvStartSession2,
+        NFq::NRowDispatcherProto::TEvStartSession2, EEv::EvCoordinatorResult> {
+        TEvStartSession2() = default;
     };
 
 };

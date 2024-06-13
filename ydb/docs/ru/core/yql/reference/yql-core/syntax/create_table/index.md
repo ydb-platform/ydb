@@ -7,7 +7,18 @@
 * [строковые](../../../../concepts/datamodel/table.md);
 * [колоночные](../../../../concepts/datamodel/table.md#column-tables).
 
-Тип таблицы при создании задается параметром `STORE`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
+Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица:
+
+```sql
+CREATE table_name (
+  columns 
+  ...
+)
+
+WITH (
+  STORE = COLUMN -- Default value ROW
+)
+```
 
 {%endif%}
 
@@ -51,11 +62,11 @@
 - Создание строковой таблицы
 
   ```sql
-  CREATE TABLE (
+  CREATE TABLE table_name (
     a Uint64,
     b Uint64,
     c Float,
-    {% if feature_column_container_type %}    d "List<List<Int32>>"{% endif %}
+    {% if feature_column_container_type %}    d "List<List<Int32>>" {% endif %}
     PRIMARY KEY (a, b)
   );
   ```    
@@ -81,7 +92,7 @@
 - Создание колоночной таблицы
 
   ```sql
-  CREATE TABLE (
+  CREATE TABLE table_name (
     a Uint64 NOT NULL,
     b Uint64 NOT NULL,
     c Float,

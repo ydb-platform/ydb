@@ -284,9 +284,6 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     ui32 someFailQueries = 0;
     ui32 withDiffCount = 0;
     THolder<TOFStream> plansReport;
-    if (PlansFileName) {
-        plansReport = MakeHolder<TOFStream>(PlansFileName);
-    }
     THolder<TOFStream> csvReport;
     if (CsvReportFileName) {
         csvReport = MakeHolder<TOFStream>(CsvReportFileName);

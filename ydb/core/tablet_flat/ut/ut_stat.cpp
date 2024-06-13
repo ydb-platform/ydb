@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         ui64 dataSizeResolution = totalBytes / histogramBucketsCount;
 
         TTouchEnv env;
-        env.Faulty = false; // uncomment for debug
+        // env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {

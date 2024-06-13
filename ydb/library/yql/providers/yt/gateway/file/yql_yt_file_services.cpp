@@ -32,7 +32,7 @@ TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool
     }
 
     auto tablePrefix = TString(YtProviderName).append('.').append(cluster);
-    auto fullTableName = TString(YtProviderName).append('.').append(cluster).append('.').append(table);
+    auto fullTableName = TString(tablePrefix).append('.').append(table);
     if (!noLocks) {
         auto guard = Guard(Mutex);
         if (auto p = Locks.FindPtr(fullTableName)) {

@@ -455,6 +455,8 @@ public:
             TSession* session = GetSession(options);
             
             TSet<TString> uniqueTables;
+            auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            auto fullSuffix = options.Suffix().Empty() ? "" : ('/' + options.Suffix());
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -464,10 +466,10 @@ public:
                 if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
                     continue;
                 }
-                if (!options.Prefix().Empty() && !parts[2].StartsWith(options.Prefix() + '/')) {
+                if (!parts[2].StartsWith(fullPrefix)) {
                     continue;
                 }
-                if (!options.Suffix().Empty() && !parts[2].EndsWith('/' + options.Suffix())) {
+                if (!parts[2].EndsWith(fullSuffix)) {
                     continue;
                 }
                 uniqueTables.insert(parts[2]);
@@ -491,7 +493,7 @@ public:
 
                     TVector<TRuntimeNode> strings;
                     for (auto& tableName: uniqueTables) {
-                        size_t beg = 0, end = 0;
+                        size_t beg = 0, end = tableName.Size();
                         if (!options.Prefix().Empty()) {
                             beg = options.Prefix().Size() + 1;
                         }
@@ -520,12 +522,12 @@ public:
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
                         TString tableName = TString(current.AsStringRef());
                         if (!options.Prefix().Empty()) {
-                            tableName = options.Prefix() + '/' + tableName;
+                            tableName = TString(options.Prefix()).append('/').append(tableName);
                         }
                         if (!options.Suffix().Empty()) {
-                            tableName = tableName + '/' + options.Suffix();
+                            tableName = TString(tableName).append('/').append(options.Suffix());
                         }
-                        res.Tables.push_back(TCanonizedPath{tableName, Nothing(), {}, Nothing()});
+                        res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
                 }
                 else {
@@ -548,6 +550,7 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
+            auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -557,7 +560,7 @@ public:
                 if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
                     continue;
                 }
-                if (!options.Prefix().Empty() && !parts[2].StartsWith(options.Prefix() + '/')) {
+                if (!parts[2].StartsWith(fullPrefix)) {
                     continue;
                 }
                 uniqueTables.insert(parts[2]);

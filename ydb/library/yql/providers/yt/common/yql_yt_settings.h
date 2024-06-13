@@ -64,6 +64,10 @@ enum class EInferSchemaMode {
     RPC        = 2ULL  /* "rpc" */,
 };
 
+enum class EColumnGroupMode {
+    Disable     /* "disable" */,
+    Single      /* "single" */
+};
 
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
@@ -198,6 +202,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<EColumnGroupMode, true> ColumnGroupMode;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;

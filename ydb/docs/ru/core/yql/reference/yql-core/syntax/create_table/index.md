@@ -4,10 +4,10 @@
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
-* [строковые](../../../../../concepts/datamodel/table.md);
-* [колоночные](../../../../../concepts/datamodel/table.md#column-tables).
+* [строковые](../../../../concepts/datamodel/table.md);
+* [колоночные](../../../../concepts/datamodel/table.md#column-tables).
 
-Тип таблицы при создании задается параметром `STORE`, где `ROW` означает [строковую таблицу](../../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
+Тип таблицы при создании задается параметром `STORE`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
 {%endif%}
 
@@ -19,7 +19,10 @@
 
 {% else %}
 
-Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.{% endif %}
+Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.
+
+{% endif %}
+{% endif %}
 
     CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,

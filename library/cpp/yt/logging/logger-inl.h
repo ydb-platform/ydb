@@ -181,26 +181,33 @@ struct TLogMessage
     TStringBuf Anchor;
 };
 
-template <size_t Length, class... TArgs>
+template <class T>
+concept CLiteralLogFormat =
+    requires (T& t) {
+        [] (const char*) { } (t);
+    };
+
+template <class... TArgs>
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
-    const char (&format)[Length],
+    TFormatString<TArgs...> format,
     TArgs&&... args)
 {
     TMessageStringBuilder builder;
-    AppendLogMessageWithFormat(&builder, loggingContext, logger, format, std::forward<TArgs>(args)...);
-    return {builder.Flush(), format};
+    AppendLogMessageWithFormat(&builder, loggingContext, logger, format.Get(), std::forward<TArgs>(args)...);
+    return {builder.Flush(), format.Get()};
 }
 
-template <class T>
+template <CFormattable T>
+    requires (!CLiteralLogFormat<std::remove_cvref_t<T>>)
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
     const T& obj)
 {
     TMessageStringBuilder builder;
-    FormatValue(&builder, obj, TStringBuf());
+    FormatValue(&builder, obj, TStringBuf("v"));
     if (HasMessageTags(loggingContext, logger)) {
         builder.AppendString(TStringBuf(" ("));
         AppendMessageTags(&builder, loggingContext, logger);
@@ -212,28 +219,23 @@ TLogMessage BuildLogMessage(
 inline TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,
-    TStringBuf message)
-{
-    TMessageStringBuilder builder;
-    builder.AppendString(message);
-    if (HasMessageTags(loggingContext, logger)) {
-        builder.AppendString(TStringBuf(" ("));
-        AppendMessageTags(&builder, loggingContext, logger);
-        builder.AppendChar(')');
-    }
-    return {builder.Flush(), message};
-}
-
-template <size_t Length>
-TLogMessage BuildLogMessage(
-    const TLoggingContext& loggingContext,
-    const TLogger& logger,
-    const char (&message)[Length])
+    TFormatString<> format)
 {
     return BuildLogMessage(
         loggingContext,
         logger,
-        TStringBuf(message));
+        format.Get());
+}
+
+inline TLogMessage BuildLogMessage(
+    const TLoggingContext& loggingContext,
+    const TLogger& logger,
+    TRuntimeFormat format)
+{
+    return BuildLogMessage(
+        loggingContext,
+        logger,
+        format.Get());
 }
 
 inline TLogMessage BuildLogMessage(

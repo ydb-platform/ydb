@@ -250,16 +250,16 @@ struct IServiceContext
     void SetResponseInfo();
 
     template <class... TArgs>
-    void SetRequestInfo(const char* format, TArgs&&... args);
+    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalRequestInfo(const char* format, TArgs&&... args);
+    void SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetResponseInfo(const char* format, TArgs&&... args);
+    void SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalResponseInfo(const char* format, TArgs&&... args);
+    void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);

@@ -3,6 +3,7 @@
 #include "dq_compute_actor_async_input_helper.h"
 #include "dq_task_runner_exec_ctx.h"
 
+#include <format>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -684,6 +685,7 @@ private:
             }
         }
         for (const auto& [inputIndex, freeSpace] : ev->Get()->SourcesFreeSpace) {
+            std::cerr << std::format("MISHA OnRunFinished free space. input: {}, space: {}\n", inputIndex, freeSpace);
             auto it = SourcesMap.find(inputIndex);
             if (it != SourcesMap.end()) {
                 it->second.FreeSpace = freeSpace;

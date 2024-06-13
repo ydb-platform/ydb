@@ -1,5 +1,6 @@
 #include "dq_compute_actor_channels.h"
 
+#include <format>
 #include <util/string/join.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -527,8 +528,10 @@ void TDqComputeActorChannels::SetOutputChannelPeer(ui64 channelId, const TActorI
 }
 
 bool TDqComputeActorChannels::HasFreeMemoryInChannel(const ui64 channelId) const {
-    return true;
     const TOutputChannelState& outputChannel = OutCh(channelId);
+    std::cerr << std::format("MISHA HasFreeMemoryinChannel: free mem: {}\n", outputChannel.PeerState.GetFreeMemory());
+    
+    // return true;
     return outputChannel.PeerState.HasFreeMemory();
 }
 

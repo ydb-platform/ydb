@@ -9,6 +9,7 @@
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
 
+#include <format>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/services/services.pb.h>
@@ -324,6 +325,7 @@ protected:
 
         for (auto& entry : OutputChannelsMap) {
             const ui64 channelId = entry.first;
+            std::cerr << std::format("MISHA ProcessOutputsImpl chanel: {}\n", channelId);
             TOutputChannelInfo& outputChannel = entry.second;
 
             if (!outputChannel.HasPeer) {
@@ -394,6 +396,7 @@ protected:
             // and sends us a new batch of data.
             bool pollSent = false;
             for (auto& [channelId, inputChannel] : InputChannelsMap) {
+                std::cerr << std::format("MISHA try to poll channel: {}\n", channelId);
                 pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
             }
             if (!pollSent) {

@@ -1,6 +1,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
+#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -689,6 +690,33 @@ private:
                 RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
             }
         }
+
+        std::string leftRes;
+        switch (resultLeft) {
+        case EFetchResult::Finish:
+            leftRes = "Finish";
+            break;
+        case EFetchResult::Yield:
+            leftRes = "Yield";
+            break;
+        case EFetchResult::One:
+            leftRes = "One";
+            break;
+        }
+        std::string rightRes;
+        switch (resultRight) {
+        case EFetchResult::Finish:
+            rightRes = "Finish";
+            break;
+        case EFetchResult::Yield:
+            rightRes = "Yield";
+            break;
+        case EFetchResult::One:
+            rightRes = "One";
+            break;
+        }
+
+        std::cerr << std::format("MISHA GJ LEFT: {}[{}], RIGHT: {}[{}]\n", leftRes, LeftPacker->TuplesPacked, rightRes, RightPacker->TuplesPacked);
 
         if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
             return true;

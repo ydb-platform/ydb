@@ -1,5 +1,6 @@
 #include "task_runner_actor.h"
 
+#include <format>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
@@ -172,10 +173,12 @@ private:
 
         for (auto& channelId : inputMap) {
             inputChannelFreeSpace[channelId] = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
+            std::cerr << std::format("[MISHA] task runner. channel {} has {} free space\n", channelId, inputChannelFreeSpace[channelId]);
         }
 
         for (auto& index : Sources) {
             sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
+            std::cerr << std::format("[MISHA] task runner. source {} has {} free space\n", index, sourcesFreeSpace[index]);
         }
 
         auto watermarkInjectedToOutputs = false;
@@ -264,6 +267,7 @@ private:
             inputChannel->Push(std::move(*ev->Get()->Data));
         }
         const ui64 freeSpace = inputChannel->GetFreeSpace();
+        std::cerr << std::format("MISHA OnInputChannelData free space: {}\n", freeSpace);
         if (finish) {
             inputChannel->Finish();
         }
@@ -291,9 +295,11 @@ private:
         if (finish) {
             source->Finish();
         }
+        int freeSpace = source->GetFreeSpace();
+        std::cerr << std::format("MISHA AsyncInputPush free space: {}\n", freeSpace);
         Send(
             ParentId,
-            new TEvSourceDataAck(index, source->GetFreeSpace()),
+            new TEvSourceDataAck(index, freeSpace),
             /*flags=*/0,
             cookie);
     }

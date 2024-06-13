@@ -219,7 +219,7 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki',
+                    'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
                     '{ "TODO" : "unicode" }',

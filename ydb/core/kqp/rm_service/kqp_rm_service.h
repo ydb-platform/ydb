@@ -51,6 +51,7 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
+    ui64 TotalAllocatedQueryMemory = 0;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;

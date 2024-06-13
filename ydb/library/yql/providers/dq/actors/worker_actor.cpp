@@ -81,6 +81,10 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
     ui64 GetMaxMemorySize() const override {
         return std::numeric_limits<ui64>::max();
     }
+
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
 };
 
 class TDqWorker: public TRichActor<TDqWorker>

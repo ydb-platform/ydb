@@ -726,7 +726,7 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx)
-    : NYql::NDq::TSpillingCounters(counters)
+    : NYql::NDq::TSpillingCounters(GetServiceCounters(counters, "kqp"))
     , AllocCounters(counters, "kqp")
 {
     Counters = counters;

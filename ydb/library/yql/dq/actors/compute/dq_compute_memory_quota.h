@@ -65,7 +65,7 @@ namespace NYql::NDq {
 
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
                 RequestExtraMemory(required - limit, alloc);
-                
+
                 ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
                 if (currentRSS > criticalRSSValue) {
                     alloc->SetMaximumLimitValueReached(true);
@@ -148,6 +148,12 @@ namespace NYql::NDq {
                 CAMQ_LOG_W("[Mem] memory " << memory << " NOT granted");
                 //            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit
                 //                << ", requested: " << memory << ", host: " << HostName();
+            }
+
+            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
+                alloc->SetMaximumLimitValueReached(true);
+            } else {
+                alloc->SetMaximumLimitValueReached(false);
             }
 
             if (Y_UNLIKELY(ProfileStats)) {

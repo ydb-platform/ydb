@@ -11,6 +11,7 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -108,6 +109,7 @@ protected:
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
     void RestartLongTxService();
     void RestartPQTablet(const TString& topicPath, ui32 partition);
+    void DumpPQTabletKeys(const TString& topicName, ui32 partition);
 
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
@@ -498,6 +500,7 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     options.ProducerId(messageGroupId);
     options.MessageGroupId(messageGroupId);
     options.PartitionId(partitionId);
+    options.Codec(ECodec::RAW);
     return client.CreateWriteSession(options);
 }
 
@@ -560,7 +563,7 @@ auto TFixture::GetTopicReadSession(const TString& topicPath,
     if (auto i = TopicReadSessions.find(topicPath); i == TopicReadSessions.end()) {
         session = CreateTopicReadSession(topicPath, consumerName, partitionId);
         auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(session);
-        event.Confirm();
+        event.Confirm(7);
         TopicReadSessions.emplace(topicPath, session);
     } else {
         session = i->second;
@@ -1309,6 +1312,16 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
     }
 }
 
+void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
+
+    Sleep(TDuration::Seconds(2));
+}
+
 void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partition)
 {
     auto& runtime = Setup->GetRuntime();
@@ -1368,6 +1381,19 @@ void TFixture::CheckTabletKeys(const TString& topicName)
         Cerr << "=============" << Endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
+    }
+}
+
+void TFixture::DumpPQTabletKeys(const TString& topicName, ui32 partition)
+{
+    DBGTRACE("DumpPQTabletKeys");
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    auto keys = GetTabletKeys(edge, tabletId);
+
+    for (auto& key : keys) {
+        DBGTRACE_LOG(key);
     }
 }
 
@@ -1512,6 +1538,41 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(22'000'000, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(200, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(300, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(10'000'000, 'x'));
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 6'000'000, 'x'), &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(20'000'000, 'x'), &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 7'000'000, 'x'), &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    //RestartPQTablet("topic_A", 0);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 8);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0].size(), 22'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[1].size(),        100);
+    UNIT_ASSERT_VALUES_EQUAL(messages[2].size(),        200);
+    UNIT_ASSERT_VALUES_EQUAL(messages[3].size(),        300);
+    UNIT_ASSERT_VALUES_EQUAL(messages[4].size(), 10'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[5].size(),  6'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[6].size(), 20'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[7].size(),  7'000'000);
 }
 
 void TFixture::CreateTable(const TString& tablePath)

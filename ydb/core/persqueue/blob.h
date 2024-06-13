@@ -8,6 +8,7 @@
 #include <util/generic/vector.h>
 
 #include <deque>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -84,6 +85,14 @@ struct TClientBlob {
         return PartData ? PartData->PartNo : 0;
     }
 
+    ui16 GetTotalParts() const {
+        return PartData ? PartData->TotalParts : 1;
+    }
+
+    ui16 GetTotalSize() const {
+        return PartData ? PartData->TotalSize : UncompressedSize;
+    }
+
     bool IsLastPart() const {
         return !PartData || PartData->PartNo + 1 == PartData->TotalParts;
     }
@@ -122,6 +131,8 @@ struct TBatch {
     TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs)
         : Packed(false)
     {
+        DBGTRACE("TBatch::TBatch");
+        DBGTRACE_LOG("offset=" << offset << ", partNo=" << partNo << ", blobs.size=" << blobs.size());
         PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
@@ -136,6 +147,8 @@ struct TBatch {
     TBatch(const ui64 offset, const ui16 partNo, const std::deque<TClientBlob>& blobs)
         : Packed(false)
     {
+        DBGTRACE("TBatch::TBatch");
+        DBGTRACE_LOG("offset=" << offset << ", partNo=" << partNo << ", blobs.size=" << blobs.size());
         PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
@@ -184,7 +197,10 @@ struct TBatch {
         : Packed(true)
         , Header(header)
         , PackedData(data, header.GetPayloadSize())
-    {}
+    {
+        DBGTRACE("TBatch::TBatch");
+        DBGTRACE_LOG("Header.Offset=" << Header.GetOffset());
+    }
 
     ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
     void Pack();
@@ -265,7 +281,8 @@ public:
     TPartitionedBlob(const TPartitionedBlob& x);
 
     TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
-                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize);
+                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
+                     ui16 nextPartNo = 0);
 
     std::optional<std::pair<TKey, TString>> Add(TClientBlob&& blob);
 

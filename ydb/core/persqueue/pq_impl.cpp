@@ -26,6 +26,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define PQ_LOG_ERROR_AND_DIE(expr) \
     PQ_LOG_ERROR(expr); \
@@ -182,6 +183,11 @@ private:
         Y_ABORT_UNLESS(readResult.ResultSize() > 0);
         bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
+            DBGTRACE_LOG("readResult.HasPartNo=" << readResult.GetResult(0).HasPartNo());
+            DBGTRACE_LOG("readResult.PartNo=" << readResult.GetResult(0).GetPartNo());
+            if (!(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0)) {
+                DBGTRACE_LOG("readResult=" << readResult.DebugString());
+            }
             Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
@@ -232,6 +238,7 @@ private:
                                     << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
                 }
+                DBGTRACE_LOG("rr->SeqNo=" << rr->GetSeqNo() << ", readResult.SeqNo=" << readResult.GetResult(i).GetSeqNo());
                 Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += readResult.GetResult(i).GetData();
                 rr->SetPartitionKey(readResult.GetResult(i).GetPartitionKey());
@@ -928,8 +935,12 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
 }
 
 void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
-                                                const TActorContext& ctx)
+                                                const TActorContext& ctx,
+                                                bool newPartition)
 {
+    DBGTRACE("TPersQueue::CreateSupportivePartitionActor");
+    DBGTRACE_LOG("partitionId=" << partitionId);
+    DBGTRACE_LOG("newPartition=" << newPartition);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
     TPartitionInfo& partition = Partitions.at(partitionId);
@@ -960,7 +971,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
         TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
         AddSupportivePartition(shadowPartitionId);
-        CreateSupportivePartitionActor(shadowPartitionId, ctx);
+        CreateSupportivePartitionActor(shadowPartitionId, ctx, false);
         SubscribeWriteId(writeId, ctx);
 
         NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
@@ -3434,7 +3445,7 @@ void TPersQueue::UnsubscribeWriteId(ui64 writeId,
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
     for (auto& partitionId : PendingSupportivePartitions) {
-        CreateSupportivePartitionActor(partitionId, ctx);
+        CreateSupportivePartitionActor(partitionId, ctx, true);
     }
 
     PendingSupportivePartitions.clear();

@@ -484,7 +484,7 @@ private:
     const TPartitionInfo& GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& request) const;
     void AddSupportivePartition(const TPartitionId& shadowPartitionId);
     void CreateSupportivePartitionActors(const TActorContext& ctx);
-    void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
+    void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx, bool newPartition);
     NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
     void UnsubscribeWriteId(ui64 writeId, const TActorContext& ctx);

@@ -20,6 +20,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
@@ -349,6 +350,7 @@ TReadAnswer TReadInfo::FormAnswer(
     const TActorId& tablet,
     const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
 ) {
+    DBGTRACE("TReadInfo::FormAnswer");
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination);
@@ -402,6 +404,7 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
+    DBGTRACE_LOG("blobs.size=" << blobs.size());
     for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
         Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
         Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
@@ -410,6 +413,11 @@ TReadAnswer TReadInfo::FormAnswer(
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
+        DBGTRACE_LOG("pos=" << pos);
+        DBGTRACE_LOG("offset=" << offset);
+        DBGTRACE_LOG("count=" << count);
+        DBGTRACE_LOG("partNo=" << partNo);
+        DBGTRACE_LOG("internalPartsCount=" << internalPartsCount);
         const TString& blobValue = blobs[pos].Value;
 
         if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
@@ -442,6 +450,9 @@ TReadAnswer TReadInfo::FormAnswer(
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
+            DBGTRACE_LOG("header.Offset=" << header.GetOffset());
+            DBGTRACE_LOG("header.PartNo=" << header.GetPartNo());
+            DBGTRACE_LOG("header.Count=" << header.GetCount());
 
             ui32 pos = 0;
             if (header.GetOffset() > Offset || header.GetOffset() == Offset && header.GetPartNo() >= PartNo) {
@@ -555,6 +566,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
 TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset
 ) {
+    DBGTRACE("TPartition::GetReadRequestFromBody");
     Y_ABORT_UNLESS(rcount && rsize);
     ui32& count = *rcount;
     ui32& size = *rsize;
@@ -672,7 +684,12 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 }
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvRead)");
     auto read = ev->Get();
+    DBGTRACE_LOG("read->Offset=" << read->Offset);
+    DBGTRACE_LOG("read->Count=" << read->Count);
+    DBGTRACE_LOG("read->ClientId=" << read->ClientId);
+    DBGTRACE_LOG("StartOffset=" << StartOffset);
 
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -731,11 +748,16 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 }
 
 void TPartition::Handle(TEvPQ::TEvApproveReadQuota::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvApproveReadQuota)");
     DoRead(std::move(ev->Get()->ReadRequest), ev->Get()->WaitTime, ctx);
 }
 
 void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTime, const TActorContext& ctx) {
+    DBGTRACE("TPartition::DoRead");
     auto* read = readEvent->Get();
+    DBGTRACE_LOG("read->Offset=" << read->Offset);
+    DBGTRACE_LOG("read->PartNo=" << read->PartNo);
+    DBGTRACE_LOG("read->ClientId=" << read->ClientId);
     const TString& user = read->ClientId;
     auto userInfo = UsersInfoStorage->GetIfExists(user);
     if(!userInfo) {
@@ -747,12 +769,14 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     userInfo->ReadsInQuotaQueue--;
     ui64 offset = read->Offset;
     if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo->ReadFromTimestamp > TInstant::MilliSeconds(1))) {
+        DBGTRACE_LOG("read offset rewind");
         TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
         timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
         timestamp = Max(timestamp, userInfo->ReadFromTimestamp);
         offset = Max(GetOffsetEstimate(DataKeysBody, timestamp, Min(Head.Offset, EndOffset - 1)), offset);
         userInfo->ReadOffsetRewindSum += offset - read->Offset;
     }
+    DBGTRACE_LOG("offset=" << offset);
 
     TReadInfo info(
             user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
@@ -768,7 +792,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                 << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << EndOffset
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
-
+    DBGTRACE_LOG("EndOffset=" << EndOffset);
     if (offset == EndOffset) {
         if (read->Timeout > 30000) {
             LOG_DEBUG_S(
@@ -955,6 +979,10 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 }
 
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
+    DBGTRACE("TPartition::ProcessRead");
+    DBGTRACE_LOG("info.Offset=" << info.Offset);
+    DBGTRACE_LOG("info.PartNo=" << info.PartNo);
+    DBGTRACE_LOG("info.Count=" << info.Count);
     ui32 count = 0;
     ui32 size = 0;
 
@@ -968,6 +996,10 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     TVector<TRequestedBlob> blobs = GetReadRequestFromBody(
             info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset
     );
+    DBGTRACE_LOG("blobs.size=" << blobs.size());
+    for (auto& b : blobs) {
+        DBGTRACE_LOG(b.Key.ToString());
+    }
     info.Blobs = blobs;
     ui64 lastOffset = info.Offset + Min(count, info.Count);
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "read cookie " << cookie << " added " << info.Blobs.size()
@@ -1015,7 +1047,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition,
                                                                      lastOffset, std::move(blobs)));
 
-
+    DBGTRACE_LOG("send TEvPQ::TEvBlobRequest");
     ctx.Send(BlobCache, request.Release());
 }
 

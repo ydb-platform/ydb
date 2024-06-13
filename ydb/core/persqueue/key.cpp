@@ -22,4 +22,18 @@ TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
                 t.IsHead());
 }
 
+bool TKeyPrefix::HasServiceType() const
+{
+    switch (*PtrType()) {
+    case ServiceTypeInfo:
+    case ServiceTypeData:
+    case ServiceTypeTmpData:
+    case ServiceTypeMeta:
+    case ServiceTypeTxMeta:
+        return true;
+    default:
+        return false;
+    }
+}
+
 }

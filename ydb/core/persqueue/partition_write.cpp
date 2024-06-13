@@ -373,7 +373,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
-    DBGTRACE("TPartition::SyncMemoryStateWithKVState");
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty())
@@ -433,7 +432,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     EndOffset = Head.GetNextOffset();
-    DBGTRACE_LOG("EndOffset=" << EndOffset);
     NewHead.Clear();
     NewHead.Offset = EndOffset;
 
@@ -482,7 +480,6 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
-    DBGTRACE("TPartition::HandleWriteResponse");
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     if (!HaveWriteMsg) {
         return;
@@ -1017,7 +1014,6 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
-    DBGTRACE("TPartition::ExecRequest(TWriteMsg)");
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -1156,7 +1152,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 TKey key(oldCmdWrite.Get(i).GetKey());
                 if (key.GetType() != TKeyPrefix::TypeTmpData) {
                     request->Record.AddCmdWrite()->CopyFrom(oldCmdWrite.Get(i));
-                    DBGTRACE_LOG("WRITE: " << key.ToString());
                 }
             }
         }
@@ -1175,7 +1170,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        DBGTRACE_LOG("send TEvPoisonPill to PQ");
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         return false;
     }
@@ -1222,7 +1216,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         auto write = request->Record.AddCmdWrite();
         write->SetKey(newWrite->first.Data(), newWrite->first.Size());
         write->SetValue(newWrite->second);
-        DBGTRACE_LOG("WRITE| " << newWrite->first.ToString());
         Y_ABORT_UNLESS(!newWrite->first.IsHead());
         auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
         write->SetStorageChannel(channel);
@@ -1250,18 +1243,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
             TKey key(request->Record.GetCmdWrite(i).GetKey());
             if (key.GetType() == TKeyPrefix::TypeTmpData) {
-                DBGTRACE_LOG("source key " << key.ToString());
                 key.SetType(TKeyPrefix::TypeData);
                 request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
                 ++curWrites;
-                DBGTRACE_LOG("change key to " << key.ToString());
             }
         }
-        DBGTRACE_LOG("curWrites=" << curWrites);
         Y_ABORT_UNLESS(curWrites <= PartitionedBlob.GetFormedBlobs().size());
         auto formedBlobs = PartitionedBlob.GetFormedBlobs();
         for (ui32 i = 0; i < formedBlobs.size(); ++i) {
-            DBGTRACE_LOG("i=" << i << ", curWrites=" << curWrites << ", formedBlobs.size=" << formedBlobs.size());
             const auto& x = formedBlobs[i];
             if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
                 auto rename = request->Record.AddCmdRename();
@@ -1269,8 +1258,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 rename->SetOldKey(TString(key.Data(), key.Size()));
                 key.SetType(TKeyPrefix::TypeData);
                 rename->SetNewKey(TString(key.Data(), key.Size()));
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                            "WRITE| rename key from " << x.first.ToString() << " to " << key.ToString());
             }
             if (!DataKeysBody.empty() && CompactedKeys.empty()) {
                 Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
@@ -1295,7 +1282,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ui32 countOfLastParts = 0;
         for (auto& x : PartitionedBlob.GetClientBlobs()) {
             if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
-                DBGTRACE_LOG("curOffset=" << curOffset);
                 NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
                 NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
             }
@@ -1374,7 +1360,6 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
-    DBGTRACE("TPartition::AddNewWriteBlob");
     PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
@@ -1427,7 +1412,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
-    DBGTRACE_LOG("WRITE| " << key.ToString());
 
     if (!key.IsHead())
         write->SetKeyToCache(key.Data(), key.Size());

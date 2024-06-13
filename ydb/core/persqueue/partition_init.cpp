@@ -22,8 +22,6 @@ TInitializer::TInitializer(TPartition* partition)
     : Partition(partition)
     , InProgress(false)
 {
-    DBGTRACE("TInitializer::TInitializer");
-
     Steps.push_back(MakeHolder<TInitConfigStep>(this));
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
     Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));
@@ -36,8 +34,6 @@ TInitializer::TInitializer(TPartition* partition)
 }
 
 void TInitializer::Execute(const TActorContext& ctx) {
-    DBGTRACE("TInitializer::Execute");
-    DBGTRACE_LOG("PartitionId=" << Partition->Partition);
     Y_ABORT_UNLESS(!InProgress, "Initialization already in progress");
     InProgress = true;
     DoNext(ctx);
@@ -148,8 +144,6 @@ TInitConfigStep::TInitConfigStep(TInitializer* initializer)
 }
 
 void TInitConfigStep::Execute(const TActorContext& ctx) {
-    DBGTRACE("TInitConfigStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     auto event = MakeHolder<TEvKeyValue::TEvRequest>();
     auto read = event->Record.AddCmdRead();
     read->SetKey(Partition()->GetKeyConfig());
@@ -210,8 +204,6 @@ TInitInternalFieldsStep::TInitInternalFieldsStep(TInitializer* initializer)
 }
 
 void TInitInternalFieldsStep::Execute(const TActorContext &ctx) {
-    DBGTRACE("TInitInternalFieldsStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     Partition()->Initialize(ctx);
 
     Done(ctx);
@@ -227,8 +219,6 @@ TInitDiskStatusStep::TInitDiskStatusStep(TInitializer* initializer)
 }
 
 void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
-    DBGTRACE("TInitDiskStatusStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
@@ -263,8 +253,6 @@ TInitMetaStep::TInitMetaStep(TInitializer* initializer)
 }
 
 void TInitMetaStep::Execute(const TActorContext& ctx) {
-    DBGTRACE("TInitMetaStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     auto addKey = [](NKikimrClient::TKeyValueRequest& request, TKeyPrefix::EType type, const TPartitionId& partition) {
         auto read = request.AddCmdRead();
         TKeyPrefix key{type, partition};
@@ -368,8 +356,6 @@ TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
-    DBGTRACE("TInitInfoRangeStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), "");
 }
 
@@ -459,8 +445,6 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
-    DBGTRACE("TInitDataRangeStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     RequestDataRange(ctx, Partition()->Tablet, PartitionId(), "");
 }
 
@@ -559,7 +543,6 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
 
 void TInitDataRangeStep::FormHeadAndProceed() {
-    DBGTRACE("TInitDataRangeStep::FormHeadAndProceed");
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
     auto& head = Partition()->Head;
@@ -580,10 +563,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         Y_ABORT_UNLESS(!p.Key.IsHead());
     }
 
-    DBGTRACE_LOG("startOffset=" << startOffset << ", endOffset=" << endOffset);
-    DBGTRACE_LOG("head.Offset=" << head.Offset);
-    DBGTRACE_LOG("head.PartNo=" << head.PartNo);
-
     Y_ABORT_UNLESS(headKeys.empty() || head.Offset == headKeys.front().Key.GetOffset() && head.PartNo == headKeys.front().Key.GetPartNo());
     Y_ABORT_UNLESS(head.Offset < endOffset || head.Offset == endOffset && headKeys.empty());
     Y_ABORT_UNLESS(head.Offset >= startOffset || head.Offset == startOffset - 1 && head.PartNo > 0);
@@ -599,13 +578,10 @@ TInitDataStep::TInitDataStep(TInitializer* initializer)
 }
 
 void TInitDataStep::Execute(const TActorContext &ctx) {
-    DBGTRACE("TInitDataStep::Execute");
-    DBGTRACE_LOG("Partition=" << PartitionId());
     TVector<TString> keys;
     //form head request
     for (auto& p : Partition()->HeadKeys) {
         keys.push_back({p.Key.Data(), p.Key.Size()});
-        DBGTRACE_LOG("p.Key=" << p.Key.ToString());
     }
     Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
@@ -618,7 +594,6 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
         auto read = request->Record.AddCmdRead();
         read->SetKey(key);
     }
-    DBGTRACE_LOG("request=" << request->Record.DebugString());
     ctx.Send(Partition()->Tablet, request.Release());
 }
 
@@ -713,8 +688,6 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
-    DBGTRACE("TPartition::Initialize");
-    DBGTRACE_LOG("Partition=" << Partition);
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
     } else {
@@ -1074,7 +1047,6 @@ void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, co
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
-    DBGTRACE("RequestRange");
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     auto keyPrefixes = MakeKeyPrefixRange(c, partition);
@@ -1100,20 +1072,14 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
-    DBGTRACE_LOG("request=" << request->Record.DebugString());
-
     ctx.Send(dst, request.Release());
 }
 
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
-    DBGTRACE("RequestInfoRange");
-    DBGTRACE_LOG("partition=" << partition);
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
 }
 
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
-    DBGTRACE("RequestDataRange");
-    DBGTRACE_LOG("partition=" << partition);
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
 }
 

@@ -238,7 +238,6 @@ private:
                                     << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
                 }
-                DBGTRACE_LOG("rr->SeqNo=" << rr->GetSeqNo() << ", readResult.SeqNo=" << readResult.GetResult(i).GetSeqNo());
                 Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += readResult.GetResult(i).GetData();
                 rr->SetPartitionKey(readResult.GetResult(i).GetPartitionKey());
@@ -938,9 +937,6 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
                                                 const TActorContext& ctx,
                                                 bool newPartition)
 {
-    DBGTRACE("TPersQueue::CreateSupportivePartitionActor");
-    DBGTRACE_LOG("partitionId=" << partitionId);
-    DBGTRACE_LOG("newPartition=" << newPartition);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
     TPartitionInfo& partition = Partitions.at(partitionId);

@@ -17,19 +17,14 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     , Count(0)
     , InternalPartsCount(0)
 {
-    DBGTRACE("TBlobIterator::TBlobIterator");
-    DBGTRACE_LOG("Key=" << key.ToString());
-    DBGTRACE_LOG("Offset=" << Offset);
     Y_ABORT_UNLESS(Data != End);
     ParseBatch();
     Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
 }
 
 void TBlobIterator::ParseBatch() {
-    DBGTRACE("TBlobIterator::ParseBatch");
     Y_ABORT_UNLESS(Data < End);
     Header = ExtractHeader(Data, End - Data);
-    DBGTRACE_LOG("Header.Offset=" << Header.GetOffset() << ", Offset=" << Offset);
     //Y_ABORT_UNLESS(Header.GetOffset() == Offset);
     Count += Header.GetCount();
     Offset += Header.GetCount();
@@ -45,7 +40,6 @@ bool TBlobIterator::IsValid()
 
 bool TBlobIterator::Next()
 {
-    DBGTRACE("TBlobIterator::Next");
     Y_ABORT_UNLESS(IsValid());
     Data += Header.GetPayloadSize() + sizeof(ui16) + Header.ByteSize();
     if (Data == End) { //this was last batch
@@ -66,7 +60,6 @@ TBatch TBlobIterator::GetBatch()
 
 void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
 {
-    DBGTRACE("TClientBlob::CheckBlob");
     for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
 }
 
@@ -184,8 +177,6 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 }
 
 void TBatch::SerializeTo(TString& res) const{
-    DBGTRACE("TBatch::SerializeTo");
-    DBGTRACE_LOG("Header.Offset=" << Header.GetOffset());
     Y_ABORT_UNLESS(Packed);
 
     ui16 sz = Header.ByteSize();
@@ -669,11 +660,9 @@ ui16 THead::GetInternalPartsCount() const
 
 ui32 THead::GetCount() const
 {
-    DBGTRACE("THead::GetCount");
     if (Batches.empty())
         return 0;
 
-    DBGTRACE_LOG("Batches.front.Offset=" << Batches.front().GetOffset() << ", Offset=" << Offset);
     //how much offsets before last batch and how much offsets in last batch
     Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset);
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
@@ -771,7 +760,6 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , NeedCompactHead(needCompactHead)
     , MaxBlobSize(maxBlobSize)
 {
-    DBGTRACE("TPartitionedBlob::TPartitionedBlob");
     Y_ABORT_UNLESS(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
@@ -789,9 +777,6 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
         NewHead.Offset = offset;
         //Y_ABORT_UNLESS(StartPartNo == 0);
     }
-    DBGTRACE_LOG("StartOffset=" << StartOffset);
-    DBGTRACE_LOG("StartPartNo=" << StartPartNo);
-    DBGTRACE_LOG("NextPartNo=" << NextPartNo);
 }
 
 TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize)
@@ -823,9 +808,6 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
 
 std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob)
 {
-    DBGTRACE("TPartitionedBlob::Add");
-    DBGTRACE_LOG("SourceId=" << blob.SourceId << ", SeqNo=" << blob.SeqNo << ", PartNo=" << blob.GetPartNo() << " (" << blob.GetTotalParts() << ")");
-    DBGTRACE_LOG("Offset=" << Offset);
     Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset);
     ui32 size = blob.GetBlobSize();
     Y_ABORT_UNLESS(InternalPartsCount < 1000); //just check for future packing
@@ -887,10 +869,6 @@ bool TPartitionedBlob::IsComplete() const
 
 bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const
 {
-    DBGTRACE("TPartitionedBlob::IsNextPart");
-    DBGTRACE_LOG("SourceId: " << sourceId << " <--> " << SourceId);
-    DBGTRACE_LOG("SeqNo: " << seqNo << " <--> " << SeqNo);
-    DBGTRACE_LOG("PartNo: " << partNo << " <--> " << NextPartNo);
     if (sourceId != SourceId || seqNo != SeqNo || partNo != NextPartNo) {
         TStringBuilder s;
         s << "waited sourceId '" << EscapeC(SourceId) << "' seqNo "

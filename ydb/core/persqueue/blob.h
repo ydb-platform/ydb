@@ -131,8 +131,6 @@ struct TBatch {
     TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs)
         : Packed(false)
     {
-        DBGTRACE("TBatch::TBatch");
-        DBGTRACE_LOG("offset=" << offset << ", partNo=" << partNo << ", blobs.size=" << blobs.size());
         PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
@@ -147,8 +145,6 @@ struct TBatch {
     TBatch(const ui64 offset, const ui16 partNo, const std::deque<TClientBlob>& blobs)
         : Packed(false)
     {
-        DBGTRACE("TBatch::TBatch");
-        DBGTRACE_LOG("offset=" << offset << ", partNo=" << partNo << ", blobs.size=" << blobs.size());
         PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
@@ -198,8 +194,6 @@ struct TBatch {
         , Header(header)
         , PackedData(data, header.GetPayloadSize())
     {
-        DBGTRACE("TBatch::TBatch");
-        DBGTRACE_LOG("Header.Offset=" << Header.GetOffset());
     }
 
     ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }

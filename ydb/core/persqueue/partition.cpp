@@ -218,8 +218,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
 {
-    DBGTRACE("TPartition::TPartition");
-    DBGTRACE_LOG("Partition=" << Partition);
     TabletCounters.Populate(Counters);
 
     if (!distrTxs.empty()) {
@@ -1156,7 +1154,6 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 }
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvBlobResponse)");
     const ui64 cookie = ev->Get()->GetCookie();
     Y_ABORT_UNLESS(ReadInfo.contains(cookie));
 
@@ -2079,10 +2076,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
-    DBGTRACE("TPartition::CommitWriteOperations");
-    DBGTRACE_LOG("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size());
-    DBGTRACE_LOG("t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    DBGTRACE_LOG("t.WriteInfo->SrcIdInfo.size=" << t.WriteInfo->SrcIdInfo.size());
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2113,29 +2106,20 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         auto cmd = PersistRequest->Record.AddCmdRename();
         cmd->SetOldKey(oldKey.ToString());
         cmd->SetNewKey(newKey.ToString());
-
-        DBGTRACE_LOG("oldKey.Offset=" << oldKey.GetOffset() << ", newKey.Offset=" << newKey.GetOffset());
     }
 
     if (!t.WriteInfo->BodyKeys.empty()) {
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
         auto& last = t.WriteInfo->BodyKeys.back();
-        DBGTRACE_LOG("last.Offset=" << last.Key.GetOffset());
 
         NewHead.Batches.clear();
         NewHead.PackedSize = 0;
         NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
 
         if (t.WriteInfo->BlobsFromHead.empty()) {
             NewHead.PartNo = 0;
         } else {
             auto& first = t.WriteInfo->BlobsFromHead.front();
             NewHead.PartNo = first.GetPartNo();
-//            if (NewHead.PartNo == 0) {
-//                ++NewHead.Offset;
-//                DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
-//            }
 
             PartitionedBlob = TPartitionedBlob(Partition,
                                                NewHead.Offset,
@@ -2150,9 +2134,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                                MaxBlobSize,
                                                NewHead.PartNo);
         }
-
-        DBGTRACE_LOG("NewHead.PartNo=" << NewHead.PartNo);
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset);
 
         Parameters->CurOffset = NewHead.Offset;
     }

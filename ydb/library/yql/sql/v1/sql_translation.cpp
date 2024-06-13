@@ -4640,21 +4640,16 @@ bool TSqlTranslation::StoreResourcePoolSettingsEntry(const TIdentifier& id, cons
         return false;
     }
 
-    if (key == "concurrent_query_limit") {
-        if (!StoreInt(*value, result[key], Ctx, to_upper(key))) {
+    switch (value->Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2:
+            return StoreString(*value, result[key], Ctx, to_upper(key));
+
+        case TRule_table_setting_value::kAltTableSettingValue3:
+            return StoreInt(*value, result[key], Ctx, to_upper(key));
+
+        default:
+            Ctx.Error() << to_upper(key) << " value should be a string literal or integer";
             return false;
-        }
-    } else if (key == "query_count_limit") {
-        if (!StoreInt(*value, result[key], Ctx, to_upper(key))) {
-            return false;
-        }
-    } else if (key == "query_cancel_after_seconds") {
-        if (!StoreInt(*value, result[key], Ctx, to_upper(key))) {
-            return false;
-        }
-    } else {
-        Ctx.Error() << "Unknown resource pool setting: " << key;
-        return false;
     }
 
     return true;

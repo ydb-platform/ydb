@@ -122,6 +122,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
+
+    if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+        mode = EHashJoinMode::Map;
+    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+        mode = EHashJoinMode::GraceAndSelf;
+    }
+
     bool leftAny = linkSettings.LeftHints.contains("any");
     bool rightAny = linkSettings.RightHints.contains("any");
 
@@ -1119,25 +1126,9 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
-
-    if (useCBO) {
-        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-        switch (joinAlgo) {
-            case EJoinAlgoType::LookupJoin:
-            case EJoinAlgoType::MapJoin:
-                mode = EHashJoinMode::Map;
-                break;
-            case EJoinAlgoType::GraceJoin:
-                mode = EHashJoinMode::GraceAndSelf;
-                break;
-            default:
-                break;
-        }
-
-    }
 
     const auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     const auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();

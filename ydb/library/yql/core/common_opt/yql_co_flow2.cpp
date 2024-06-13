@@ -1770,7 +1770,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
             auto subsetType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>()));
             YQL_CLOG(DEBUG, Core) << "FieldSubset for " << node->Content();
-            if (node->IsCallable("NTile")) {
+            if (node->IsCallable({"NTile","CumeDist"})) {
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
                         .Add(0, ExpandType(node->Pos(), *subsetType, ctx))

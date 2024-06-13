@@ -54,6 +54,10 @@ void PipeInputToOutput(
     IOutputStream* output,
     i64 bufferBlockSize);
 
+void PipeInputToOutput(
+    const NConcurrency::IAsyncZeroCopyInputStreamPtr& input,
+    IOutputStream* output);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

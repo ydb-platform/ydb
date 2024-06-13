@@ -813,7 +813,6 @@ public:
         return End();
     }
 
-
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 

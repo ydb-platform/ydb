@@ -198,6 +198,7 @@ public:
     TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) override;
+    TString GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) override;
 
     bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) override {
         if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
@@ -283,6 +284,49 @@ public:
         if (bscError.empty()) {
             bscError = response.GetErrorDescription();
         }
+    }
+
+    TString MakeForward(const NMon::TEvHttpInfo* request, const std::vector<ui32>& nodes) override {
+        if (nodes.empty()) {
+            return GetHTTPINTERNALERROR(request, "text/plain", "Couldn't resolve database nodes");
+        }
+        if (request->Request.GetUri().StartsWith("/node/")) {
+            return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
+        }
+        // we expect that nodes order is the same for all requests
+        ui64 hash = std::hash<TString>()(request->Request.GetRemoteAddr());
+        auto it = std::next(nodes.begin(), hash % nodes.size());
+
+        TStringBuilder redirect;
+        redirect << "/node/";
+        redirect << *it;
+        redirect << request->Request.GetUri();
+        return GetHTTPFORWARD(request, redirect);
+    }
+
+    std::unordered_map<TString, TActorId> RunningQueries;
+    std::mutex RunningQueriesMutex;
+
+    void AddRunningQuery(const TString& queryId, const TActorId& actorId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        RunningQueries[queryId] = actorId;
+    }
+
+    void EndRunningQuery(const TString& queryId, const TActorId& actorId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        auto it = RunningQueries.find(queryId);
+        if (it != RunningQueries.end() && it->second == actorId) {
+            RunningQueries.erase(it);
+        }
+    }
+
+    TActorId FindRunningQuery(const TString& queryId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        auto it = RunningQueries.find(queryId);
+        if (it != RunningQueries.end()) {
+            return it->second;
+        }
+        return {};
     }
 
     void RegisterVirtualHandler(
@@ -684,6 +728,15 @@ TString TViewer::GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString 
     if (response) {
         res << response;
     }
+    return res;
+}
+
+TString TViewer::GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) {
+    TStringBuilder res;
+    res << "HTTP/1.1 307 Temporary Redirect\r\n"
+        << "Location: " << location << "\r\n";
+    res << GetCORS(request);
+    res << "\r\n";
     return res;
 }
 

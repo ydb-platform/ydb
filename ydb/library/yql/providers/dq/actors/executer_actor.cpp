@@ -260,7 +260,15 @@ private:
         Y_UNUSED(ctx);
         auto response = MakeHolder<NYql::NDqs::TEvQueryStatusResponse>();
         auto* r = response->Record.MutableResponse();
-        // TODO: Add metrics here
+        for (auto& metric : LatestStats.GetMetric()) {
+            auto& responseMetric = *r->AddMetric();
+            responseMetric.SetName(metric.GetName());
+            responseMetric.SetSum(metric.GetSum());
+            responseMetric.SetMin(metric.GetMin());
+            responseMetric.SetMax(metric.GetMax());
+            responseMetric.SetAvg(metric.GetAvg());
+            responseMetric.SetCount(metric.GetCount());
+        }
         if (ExecutionStart) {
             r->SetStatus("Executing");
         } else {
@@ -335,6 +343,7 @@ private:
     void OnDqStats(TEvDqStats::TPtr& ev) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        LatestStats = ev->Get()->Record;
         Send(PrinterId, ev->Release().Release());
     }
 
@@ -526,6 +535,7 @@ private:
     bool CreateTaskSuspended;
     bool Finished = false;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+    NYql::NDqProto::TDqStats LatestStats;
 };
 
 NActors::IActor* MakeDqExecuter(

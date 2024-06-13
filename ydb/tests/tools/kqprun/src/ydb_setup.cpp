@@ -7,8 +7,8 @@
 
 #include <ydb/core/testlib/test_client.h>
 
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/utils/log/log.h>
-
 
 namespace NKqpRun {
 
@@ -131,6 +131,7 @@ private:
         serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings_.YqlToken));
         serverSettings.SetComputationFactory(Settings_.ComputationFactory);
         serverSettings.SetYtGateway(Settings_.YtGateway);
+        serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
 
         SetLoggerSettings(serverSettings);

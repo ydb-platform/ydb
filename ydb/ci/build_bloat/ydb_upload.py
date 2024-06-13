@@ -9,7 +9,8 @@ import ydb
 import uuid
 import subprocess
 
-DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf"
+DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"
+DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
 
 FROM_ENV_COLUMNS = [
     "GITHUB_HEAD_REF",
@@ -100,7 +101,7 @@ def main():
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
     with ydb.Driver(
-        endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
+        endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:

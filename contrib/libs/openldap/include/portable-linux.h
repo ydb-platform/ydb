@@ -5,7 +5,7 @@
 /* begin of portable.h.pre */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation
+ * Copyright 1998-2024 The OpenLDAP Foundation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -550,6 +550,9 @@
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
 
+/* Define to 1 if you have the <stdio.h> header file. */
+#define HAVE_STDIO_H 1
+
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
@@ -847,7 +850,7 @@
 #define LDAP_SYSLOG 1
 
 /* Version */
-#define LDAP_VENDOR_VERSION 20607
+#define LDAP_VENDOR_VERSION 20608
 
 /* Major */
 #define LDAP_VENDOR_VERSION_MAJOR 2
@@ -856,7 +859,7 @@
 #define LDAP_VENDOR_VERSION_MINOR 6
 
 /* Patch */
-#define LDAP_VENDOR_VERSION_PATCH 7
+#define LDAP_VENDOR_VERSION_PATCH 8
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
@@ -874,7 +877,7 @@
 #define OPENLDAP_PACKAGE "OpenLDAP"
 
 /* Version */
-#define OPENLDAP_VERSION "2.6.7"
+#define OPENLDAP_VERSION "2.6.8"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT ""
@@ -990,6 +993,9 @@
 /* define for Reverse Group Membership overlay */
 #define SLAPD_OVER_MEMBEROF SLAPD_MOD_STATIC
 
+/* define for Nested Group overlay */
+#define SLAPD_OVER_NESTGROUP SLAPD_MOD_STATIC
+
 /* define for OTP 2-factor Authentication overlay */
 #define SLAPD_OVER_OTP SLAPD_MOD_STATIC
 
@@ -1059,7 +1065,9 @@
 /* define to support run-time loadable ACL */
 /* #undef SLAP_DYNACL */
 
-/* Define to 1 if you have the ANSI C header files. */
+/* Define to 1 if all of the C90 standard headers exist (not just the ones
+   required in a freestanding environment). This macro is provided for
+   backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
 
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */

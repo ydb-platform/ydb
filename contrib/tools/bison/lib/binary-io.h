@@ -25,9 +25,14 @@
    so we include it here first.  */
 #include <stdio.h>
 
-#ifndef _GL_INLINE_HEADER_BEGIN
- #error "Please include config.h first."
+#ifndef O_BINARY
+	#define O_BINARY 0
 #endif
+
+#ifndef O_TEXT
+	#define O_TEXT 0
+#endif
+
 _GL_INLINE_HEADER_BEGIN
 #ifndef BINARY_IO_INLINE
 # define BINARY_IO_INLINE _GL_INLINE

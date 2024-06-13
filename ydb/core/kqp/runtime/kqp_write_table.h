@@ -90,6 +90,8 @@ public:
     virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
+    virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
+
     virtual i64 GetMemory() const = 0;
 
     virtual bool IsClosed() const = 0;

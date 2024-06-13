@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -217,7 +216,7 @@ public:
 
             rows = size / 1024; // magic estimate
             return primaryKey 
-                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, *primaryKey)
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(*primaryKey)))
                 : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();
@@ -284,6 +283,7 @@ public:
                             .Name().Build(token)
                         .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
@@ -327,6 +327,7 @@ public:
                             .Name().Build(token)
                             .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
+                        .Path(s3ReadObject.Path())
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)
@@ -605,6 +606,9 @@ public:
             } else {
                 properties["Name"] = "Raw read from external data source";
             }
+            if (TString path = settings.Path().StringValue()) {
+                properties["Path"] = path;
+            }
             properties["Format"] = "raw";
             if (TString limit = settings.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
@@ -617,7 +621,13 @@ public:
             } else {
                 properties["Name"] = "Parse from external data source";
             }
+            if (TString path = settings.Path().StringValue()) {
+                properties["Path"] = path;
+            }
             properties["Format"] = settings.Format().StringValue();
+            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
+                properties["Compression"] = TString{compression};
+            }
             if (TString limit = settings.RowsLimitHint().StringValue()) {
                 properties["RowsLimitHint"] = limit;
             }

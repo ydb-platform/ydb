@@ -1787,6 +1787,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OltpCreateAsSelect_Simple) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);

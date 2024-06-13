@@ -1,4 +1,5 @@
 #include "tpch.h"
+#include "data_generator.h"
 
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
@@ -97,10 +98,7 @@ void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
             .StoreResult(&ExternalQueriesDir);
         break;
-    case TWorkloadParams::ECommandType::Clean:
-    case TWorkloadParams::ECommandType::Root:
-        break;
-    case TWorkloadParams::ECommandType::Init:
+    default:
         break;
     }
 }
@@ -112,6 +110,10 @@ THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
 
 TString TTpchWorkloadParams::GetWorkloadName() const {
     return "TPC-H";
+}
+
+TWorkloadDataInitializer::TList TTpchWorkloadParams::CreateDataInitializers() const {
+    return {std::make_shared<TTpchWorkloadDataInitializerGenerator>(*this)};
 }
 
 }

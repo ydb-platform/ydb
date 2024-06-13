@@ -47,7 +47,7 @@ struct TPullQueueOptions
     bool UseNativeTabletNodeApi = true;
 };
 
-struct TPullConsumerOptions
+struct TPullQueueConsumerOptions
     : public TPullQueueOptions
 { };
 
@@ -117,13 +117,13 @@ struct IQueueClient
 
     //! Same as PullQueue, but requires user to have read-access to the consumer and the consumer being registered for the given queue.
     //! There is no guarantee that `rowBatchReadOptions.MaxRowCount` rows will be returned even if they are in the queue.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) = 0;
+        const TPullQueueConsumerOptions& options = {}) = 0;
 
     virtual TFuture<void> RegisterQueueConsumer(
         const NYPath::TRichYPath& queuePath,

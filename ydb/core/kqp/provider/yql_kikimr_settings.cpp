@@ -64,6 +64,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
+    REGISTER_SETTING(*this, OverrideStatistics);
+
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);

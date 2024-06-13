@@ -184,4 +184,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetFlowViewCommand
+    : public TTypedCommand<NApi::TGetFlowViewOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetFlowViewCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath ViewPath;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

@@ -7,32 +7,11 @@ class TTimeSliceLogic: public IOptimizationLogic {
 private:
     TDuration FreshnessCheckDuration = TDuration::Seconds(300);
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket,
-        std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const;
+    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const;
 
-    virtual TCalcWeightResult DoCalcWeight(const TInstant now, const TBucketInfo& bucket) const override {
-        TInstant nextInstant = TInstant::Max();
-        auto actualPortions = GetPortionsForMerge(now, Max<ui64>(), bucket, nullptr, &nextInstant);
-        ui64 size = 0;
-        for (auto&& i : actualPortions) {
-            size += i->GetTotalBlobBytes();
-        }
-        if (size < 8000000 && actualPortions.size() < 100) {
-            return TCalcWeightResult(0, nextInstant);
-        }
-        const ui64 marker = actualPortions.size() * 1000000000;
-        if (marker < size || actualPortions.size() <= 1) {
-            return TCalcWeightResult(0, nextInstant);
-        } else {
-            return TCalcWeightResult(marker - size, nextInstant);
-        }
-    }
+    virtual TCalcWeightResult DoCalcWeight(const TInstant now, const TBucketInfo& bucket) const override;
 
-    virtual TCompactionTaskResult DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const override {
-        std::vector<NArrow::TReplaceKey> stopPoints;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
-        return TCompactionTaskResult(std::move(portions), std::move(stopPoints));
-    }
+    virtual TCompactionTaskResult DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const override;
 public:
     TTimeSliceLogic(const TDuration freshnessCheckDuration)
         : FreshnessCheckDuration(freshnessCheckDuration)

@@ -20,12 +20,14 @@ using namespace NChunkClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TRetentionConfigPtr& obj)
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec)
 {
-    static const TString NullPtrName("<nullptr>");
-    return obj
-        ? NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text).ToString()
-        : NullPtrName;
+    static const TStringBuf NullPtrName("<nullptr>");
+    if (!obj) {
+        FormatValue(builder, NullPtrName, spec);
+        return;
+    }
+    FormatValue(builder, NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text), spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

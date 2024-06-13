@@ -66,6 +66,7 @@ public:
 class TBucketPortionInfo {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, PortionInfo);
+    YDB_READONLY(ui64, TotalBlobBytes, 0);
 public:
     const TPortionInfo* operator->() const {
         return PortionInfo.get();
@@ -76,7 +77,9 @@ public:
     }
 
     TBucketPortionInfo(const std::shared_ptr<TPortionInfo>& portion)
-        : PortionInfo(portion) {
+        : PortionInfo(portion)
+        , TotalBlobBytes(portion->GetTotalBlobBytes())
+    {
 
     }
 };
@@ -108,12 +111,12 @@ public:
 class TBucketInfo {
 protected:
     std::map<NArrow::TReplaceKey, TPKPortions> PKPortions;
-    std::map<TInstant, THashMap<ui64, std::shared_ptr<TPortionInfo>>> SnapshotPortions;
+    std::map<TInstant, THashMap<ui64, TBucketPortionInfo>> SnapshotPortions;
 public:
     const std::map<NArrow::TReplaceKey, TPKPortions>& GetPKPortions() const {
         return PKPortions;
     }
-    const std::map<TInstant, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GetSnapshotPortions() const {
+    const std::map<TInstant, THashMap<ui64, TBucketPortionInfo>>& GetSnapshotPortions() const {
         return SnapshotPortions;
     }
 };

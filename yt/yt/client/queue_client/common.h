@@ -25,7 +25,7 @@ struct TCrossClusterReference
     static TCrossClusterReference FromRichYPath(const NYPath::TRichYPath& path);
 };
 
-TString ToString(const TCrossClusterReference& queueRef);
+void FormatValue(TStringBuilderBase* builder, const TCrossClusterReference& queueRef, TStringBuf spec);
 
 void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* consumer);
 

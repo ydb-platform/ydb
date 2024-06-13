@@ -107,8 +107,6 @@
 #include <ydb/core/fq/libs/mock/yql_mock.h>
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/services/bg_tasks/ds_table/executor.h>
-#include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/common/service.h>
 #include <ydb/services/ext_index/service/executor.h>
@@ -760,11 +758,6 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
-        if (Settings->IsEnableBackgroundTasks()) {
-            auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-        }
         if (Settings->IsEnableExternalIndex()) {
             auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
@@ -898,11 +891,13 @@ namespace Tests {
                                                                   Settings->AppConfig->GetMetadataProviderConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
-                                                                  federatedQuerySetupFactory);
+                                                                  federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig->GetQueryServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory);
+            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
+                Settings->AppConfig->GetQueryServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory, Settings->S3ActorsFactory
+            );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }

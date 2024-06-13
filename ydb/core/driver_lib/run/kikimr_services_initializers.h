@@ -427,12 +427,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TBackgroundTasksInitializer: public IKikimrServicesInitializer {
-public:
-    TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
 class TMemoryLogInitializer : public IKikimrServicesInitializer {
     size_t LogBufferSize = 0;
     size_t LogGrainSize = 0;

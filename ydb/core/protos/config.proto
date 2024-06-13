@@ -1504,6 +1504,12 @@ message TColumnShardConfig {
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
     optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
+
+    message TRepairInfo {
+        optional string ClassName = 1;
+        optional string Description = 2;
+    }
+    repeated TRepairInfo Repairs = 15;
 }
 
 message TSchemeShardConfig {
@@ -1789,6 +1795,10 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TMetadataCacheConfig {
+    optional uint64 RefreshPeriodMs = 1 [default = 15000];
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1869,6 +1879,7 @@ message TAppConfig {
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
+    optional TMetadataCacheConfig MetadataCacheConfig = 80;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

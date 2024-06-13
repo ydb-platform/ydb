@@ -1268,8 +1268,7 @@ private:
             auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
                 flatbufBuilder,
                 flatbufBuilder.CreateString("TableId"),
-                flatbufBuilder.CreateString(std::to_string(tableIndex))
-            );
+                flatbufBuilder.CreateString(std::to_string(tableIndex)));
             customMetadata.push_back(keyValueOffsett);
         }
 

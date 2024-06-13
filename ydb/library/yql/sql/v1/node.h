@@ -556,6 +556,16 @@ namespace NSQLTranslationV1 {
         TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     };
 
+    class TWinCumeDist final: public TWinAggrEmulation {
+        TPtr DoClone() const final {
+            return CallNodeClone<TWinCumeDist>();
+        }
+
+        bool DoInit(TContext& ctx, ISource* src) override;
+    public:
+        TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
+    };    
+
     class TWinNTile final: public TWinAggrEmulation {
         TPtr DoClone() const final {
             return CallNodeClone<TWinNTile>();

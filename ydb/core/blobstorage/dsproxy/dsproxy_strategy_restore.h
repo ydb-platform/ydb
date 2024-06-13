@@ -125,16 +125,18 @@ public:
             return *res;
         }
 
-        // Find the slowest disk
-        TDiskDelayPredictions worstDisks;
-        state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                HandleClassToQueueId(blackboard.PutHandleClass), 1,
-                &worstDisks);
-
-        // Check if the slowest disk exceptionally slow, or just not very fast
         TStackVec<ui32, 2> slowDiskSubgroupIdxs;
-        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
-            slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
+        if (info.GetTotalVDisksNum() > 1) {
+            // Find the slowest disk, if there are more than 1
+            TDiskDelayPredictions worstDisks;
+            state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
+                    HandleClassToQueueId(blackboard.PutHandleClass), 1,
+                    &worstDisks);
+
+            // Check if the slowest disk exceptionally slow, or just not very fast
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+                slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
+            }
         }
 
         bool isDone = false;

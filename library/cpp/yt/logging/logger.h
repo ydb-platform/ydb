@@ -22,6 +22,10 @@
 
 #include <atomic>
 
+#if (!__clang__ || __clang_major__ < 16)
+    #define YT_DISABLE_FORMAT_STATIC_ANALYSIS
+#endif
+
 #if !defined(NDEBUG) && !defined(YT_DISABLE_FORMAT_STATIC_ANALYSIS)
     #include "static_analysis.h"
 #endif

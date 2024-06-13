@@ -18,6 +18,7 @@ namespace NViewer {
 
 using namespace NKikimr;
 using namespace NSchemeCache;
+using NNodeWhiteboard::TNodeId;
 
 template <typename TDerived>
 class TViewerPipeClient : public TActorBootstrapped<TDerived> {
@@ -241,13 +242,22 @@ protected:
     }
 
     void RequestStateStorageEndpointsLookup(const TString& path) {
-        if (!AppData()->DomainsInfo->Domain) {
-            return;
-        }
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                               TBase::SelfId(),
                                                               EBoardLookupMode::Second));
         ++Requests;
+    }
+
+    std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        std::vector<TNodeId> databaseNodes;
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
+                databaseNodes.emplace_back(actorId.NodeId());
+            }
+        }
+        std::sort(databaseNodes.begin(), databaseNodes.end());
+        databaseNodes.erase(std::unique(databaseNodes.begin(), databaseNodes.end()), databaseNodes.end());
+        return databaseNodes;
     }
 
     void InitConfig(const TCgiParameters& params) {

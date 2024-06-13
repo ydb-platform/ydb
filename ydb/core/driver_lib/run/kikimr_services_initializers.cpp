@@ -169,6 +169,8 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -185,8 +187,6 @@
 
 #include <ydb/core/backup/controller/tablet.h>
 
-#include <ydb/services/bg_tasks/ds_table/executor.h>
-#include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/service/executor.h>
 
@@ -2146,16 +2146,19 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto federatedQuerySetupFactory = NKqp::MakeKqpFederatedQuerySetupFactory(setup, appData, Config);
 
+        auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             Config.GetQueryServiceConfig(),  Config.GetMetadataProviderConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
-            federatedQuerySetupFactory
+            federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // Create finalize script service
-        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+        auto finalize = NKqp::CreateKqpFinalizeScriptService(
+            Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory, s3ActorsFactory
+        );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2286,24 +2289,6 @@ void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup
         auto service = NMetadata::NProvider::CreateService(serviceConfig);
         setup->LocalServices.push_back(std::make_pair(
             NMetadata::NProvider::MakeServiceId(NodeId),
-            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
-    }
-}
-
-TBackgroundTasksInitializer::TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TBackgroundTasksInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NBackgroundTasks::TConfig serviceConfig;
-    if (Config.HasBackgroundTasksConfig()) {
-        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
-    }
-
-    if (serviceConfig.IsEnabled()) {
-        auto service = NBackgroundTasks::CreateService(serviceConfig);
-        setup->LocalServices.push_back(std::make_pair(
-            NBackgroundTasks::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

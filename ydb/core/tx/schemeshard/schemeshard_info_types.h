@@ -44,6 +44,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -2740,6 +2742,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TVector<TItem> Items;
 
     TSet<TActorId> Subscribers;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     explicit TImportInfo(
             const ui64 id,

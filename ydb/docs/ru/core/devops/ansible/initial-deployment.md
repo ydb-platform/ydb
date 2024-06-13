@@ -93,6 +93,7 @@ static-node-3 static-node-3.ydb-cluster.com
   * `ansible_user` – укажите пользователь для подключения Ansible по SSH.
   * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1 IP>"` – опция для подключения Ansible к серверу по IP, с которого будет устанавливаться {{ ydb-short-name }} (включая ProxyJump сервер). Используется при установки {{ ydb-short-name }} с локальной машины, не входящей в приватную DNS-зону.
   * `ansible_ssh_private_key_file` – измените дефолтное название ssh-ключа, на актуальное: `"../<ssh-private-key-name>"`.
+  * `ydb_archive` — укажите путь к скачанному ранее архиву с дистрибутивом {{ ydb-short-name }}.
   * `ydb_tls_dir` – укажите актуальную часть пути (`/files/CA/certs/<date_time create certs>`) к сертификатам безопасности после их генерации скриптом `ydb-ca-update.sh`.
   * `ydb_brokers` – укажите список FQDN нод брокеров. Например:
     ```yaml

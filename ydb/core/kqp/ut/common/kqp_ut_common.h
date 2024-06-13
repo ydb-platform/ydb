@@ -335,5 +335,7 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
+
 } // namespace NKqp
 } // namespace NKikimr

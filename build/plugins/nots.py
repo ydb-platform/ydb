@@ -266,7 +266,7 @@ def on_setup_build_env(unit):  # type: (Unit) -> None
         options.append("--env")
         value = unit.get(f"TS_ENV_{name}")
         if value is None:
-            logger.warn(f"Env var '{name}' is provided in a list, but var value is not provided")
+            ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
             continue
         double_quote_escaped_value = value.replace('"', '\\"')
         options.append(f'"{name}={double_quote_escaped_value}"')

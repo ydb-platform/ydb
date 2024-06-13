@@ -1,5 +1,6 @@
 #include "blob_manager.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include "gc.h"
@@ -322,7 +323,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
-    if (AppData()->TimeProvider->Now() - PreviousGCTime < TDuration::Seconds(GC_INTERVAL_SECONDS)) {
+    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod(TDuration::Seconds(GC_INTERVAL_SECONDS))) {
         return nullptr;
     }
 

@@ -8,6 +8,7 @@ SRCS(
     browse_db.h
     browse_pq.h
     browse.h
+    check_access.h
     counters_hosts.h
     json_acl.h
     json_autocomplete.h

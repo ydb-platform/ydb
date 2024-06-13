@@ -39,6 +39,7 @@
 #include "json_graph.h"
 #include "json_render.h"
 #include "json_autocomplete.h"
+#include "check_access.h"
 
 namespace NKikimr::NViewer {
 
@@ -81,6 +82,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/graph", new TJsonHandler<TJsonGraph>);
     jsonHandlers.AddHandler("/viewer/render", new TJsonHandler<TJsonRender>);
     jsonHandlers.AddHandler("/viewer/autocomplete", new TJsonHandler<TJsonAutocomplete>);
+    jsonHandlers.AddHandler("/viewer/check_access", new TJsonHandler<TCheckAccess>);
 }
 
 }

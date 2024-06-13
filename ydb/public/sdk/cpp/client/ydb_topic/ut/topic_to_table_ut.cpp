@@ -100,6 +100,7 @@ protected:
 
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
     void RestartLongTxService();
+    void RestartPQTablet(const TString& topicPath, ui32 partition);
 
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
@@ -1311,6 +1312,16 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
     }
 }
 
+void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
+
+    Sleep(TDuration::Seconds(2));
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
 {
     for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {
@@ -1386,6 +1397,28 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_2);
 
     CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    RestartPQTablet("topic_A", 0);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
 }

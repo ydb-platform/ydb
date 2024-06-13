@@ -4,6 +4,21 @@
 
 #include <util/string/printf.h>
 
+namespace {
+
+TString tpch_1000_stats = R"({
+    "/Root/part":       {"n_rows":2.000e+08, "byte_size":3.231e+09},
+    "/Root/lineitem":   {"n_rows":5.625e+09, "byte_size":9.900e+10},
+    "/Root/orders":     {"n_rows":1.406e+09, "byte_size":2.942e+10},
+    "/Root/customer":   {"n_rows":18750673, "byte_size":1.730e+09},
+    "/Root/nation":     {"n_rows":25, "byte_size":1880},
+    "/Root/supplier":   {"n_rows":9688077, "byte_size":9.254e+08},
+    "/Root/region":     {"n_rows":5, "byte_size":853},
+    "/Root/partsupp":   {"n_rows":7.500e+08, "byte_size":2.850e+10}
+})";
+
+}
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -724,26 +739,29 @@ create table `/Root/test/ds/store_sales`
 
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false){
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
    
     setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("2");
+    setting.SetValue("3");
     settings.push_back(setting);
 
     setting.SetName("OptEnableConstantFolding");
     setting.SetValue("true");
     settings.push_back(setting);
 
-    //setting.SetName("HashJoinMode");
-    //setting.SetValue("grace");
-    //settings.push_back(setting);
+    if (stats!="") {
+        setting.SetName("OverrideStatistics");
+        setting.SetValue(stats);
+        settings.push_back(setting);
+    }
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    serverSettings.SetKqpSettings(settings);
     return TKikimrRunner(serverSettings);
 }
 
@@ -1220,7 +1238,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_TWIN(TPCH2, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin, tpch_1000_stats);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1229,8 +1247,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = Q_(R"(
-PRAGMA ydb.HashJoinMode='grace';
-
 -- TPC-H/TPC-R Minimum Cost Supplier Query (Q2)
 -- using 1680793381 as a seed to the RNG
 
@@ -1305,7 +1321,84 @@ limit 100;
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query, settings).ExtractValueSync();
             auto res = CollectStreamResult(it);
 
-            Cout << *res.PlanJson;
+            TString ref = R"---({
+                "op_name" : "InnerJoin (Grace)",
+                "args" : [
+                    {
+                        "op_name" : "InnerJoin (MapJoin)",
+                        "args" : [
+                            {
+                                "op_name" : "TableFullScan",
+                                "table" : "partsupp"
+                            },
+                            {
+                                "op_name": "InnerJoin (MapJoin)",
+                                "args": [
+                                    {
+                                        "op_name" : "TableFullScan",
+                                        "table" : "supplier"
+                                    },
+                                    {
+                                        "op_name" : "InnerJoin (MapJoin)",
+                                        "args" : [
+                                            {
+                                                "op_name" : "TableFullScan",
+                                                "table" : "nation"
+                                            },
+                                            {
+                                                "op_name" : "TableFullScan",
+                                                "table" : "region"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "op_name" : "InnerJoin (MapJoin)",
+                        "args" : [
+                            {
+                                "op_name" : "InnerJoin (MapJoin)",
+                                "args" : [
+                                    {
+                                        "op_name" : "TableFullScan",
+                                        "table" : "partsupp"
+                                    },
+                                    {
+                                        "op_name" : "InnerJoin (MapJoin)",
+                                        "args" : [
+                                            {
+                                                "op_name": "TableFullScan",
+                                                "table": "supplier"
+                                            },
+                                            {
+                                                "op_name": "InnerJoin (MapJoin)",
+                                                "args" : [
+                                                    {
+                                                        "op_name" : "TableFullScan",
+                                                        "table" : "nation"
+                                                    },
+                                                    {
+                                                        "op_name" : "TableFullScan",
+                                                        "table" : "region"                                                    
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "op_name" : "TableFullScan",
+                                "table" : "part"                                                    
+                            }
+                        ]
+                    }
+                ]
+            })---";
+
+            UNIT_ASSERT(JoinOrderAndAlgosMatch(*res.PlanJson, ref));
         }
     }
 
@@ -1320,8 +1413,6 @@ limit 100;
         /* join with parameters */
         {
             const TString query = Q_(R"(
-PRAGMA ydb.HashJoinMode='grace';
-
 $p = (select p_partkey, p_name
 from
     `/Root/part`
@@ -1526,6 +1617,7 @@ limit 100;)");
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+
             Cout << result.GetPlan();
         }
     }

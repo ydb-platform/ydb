@@ -304,6 +304,13 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     joinTree = opt.JoinSearch(joinTree);
 
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Optimizied join tree:\n";
+        joinTree->Print(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
+
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
     typesCtx.StatisticsMap[res.Raw()] = joinTree->Stats;

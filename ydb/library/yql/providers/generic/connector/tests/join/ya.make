@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/join/docker-compose.yml)

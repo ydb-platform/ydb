@@ -965,6 +965,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kStartDirectReadPartitionSessionResponse);
             UNIT_ASSERT_EQUAL(resp.start_direct_read_partition_session_response().partition_session_id(), static_cast<i64>(assignId));
+            UNIT_ASSERT_EQUAL(resp.start_direct_read_partition_session_response().generation(), 1);
         }
     };
 

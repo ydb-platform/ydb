@@ -638,7 +638,7 @@ struct Schema : NIceDb::Schema {
     static void FinishNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
         db.Table<Normalizers>().Key(className, description, normalizerId)
             .Update(
-                NIceDb::TUpdate<Normalizers::Start>(TInstant::Now().MicroSeconds())
+                NIceDb::TUpdate<Normalizers::Finish>(TInstant::Now().MicroSeconds())
             );
     }
 

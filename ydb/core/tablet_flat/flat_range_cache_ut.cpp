@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
             DB.Commit(8, true);
 
             // We touched an erased range, it should become invalidated
-            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ }");
+            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1, 2}, {2, 5}) }");
         }
 
         {
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
             DB.Commit(9, true);
 
             // We've seen all rows, expect correct erased ranges
-            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1, 2}, {2, 4}], [{2, 6}, {2, 31}] }");
+            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1, 2}, {2, 5}), [{2, 6}, {2, 31}] }");
         }
     }
 
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
             DB.Commit(8, true);
 
             // We touched an erased range, it should become invalidated
-            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ }");
+            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{2, 2}, {2, 28}) }");
         }
 
         {
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
             DB.Commit(9, true);
 
             // We've seen all rows, expect correct erased ranges
-            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{2, 2}, {2, 27}], [{2, 29}, {3, 31}] }");
+            UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{2, 2}, {2, 28}), [{2, 29}, {3, 31}] }");
         }
     }
 

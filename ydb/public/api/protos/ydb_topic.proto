@@ -608,11 +608,11 @@ message StreamDirectReadMessage {
         repeated Ydb.Issue.IssueMessage issues = 2;
 
         oneof server_message {
-            InitDirectReadResponse init_direct_read_response = 3;
-            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 4;
-            StopDirectReadPartitionSession stop_direct_read_partition_session = 5;
-            DirectReadResponse direct_read_response = 6;
-            UpdateTokenResponse update_token_response = 7;
+            InitDirectReadResponse init_direct_read_response = 6;
+            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 7;
+            StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
+            DirectReadResponse direct_read_response = 4;
+            UpdateTokenResponse update_token_response = 5;
         }
     }
 

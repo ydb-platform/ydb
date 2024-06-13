@@ -40,7 +40,7 @@ public:
             }
         }
         // Don`t require admin access for GetNodeConfigRequest
-        if (!Request.HasGetNodeConfigRequest()) {
+        if (Request.GetRequestCase() != NKikimrClient::TConsoleRequest::kGetNodeConfigRequest) {
             TBase::SetRequireAdminAccess(true);
         }
 

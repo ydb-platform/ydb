@@ -61,14 +61,26 @@ WITH (
 
 - Создание строковой таблицы
 
-
-    CREATE TABLE table_name (
-      a Uint64,
-      b Uint64,
-      c Float,
-      {% if feature_column_container_type %}    d "List<List<Int32>>" {% endif %}
-      PRIMARY KEY (a, b)
-    );
+{% if feature_column_container_type %}
+  ```sql
+  CREATE TABLE table_name (
+    a Uint64,
+    b Uint64,
+    c Float,
+    d "List<List<Int32>>" 
+    PRIMARY KEY (a, b)
+  );
+  ```
+{% else %}
+  ```sql
+  CREATE TABLE table_name (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  );
+  ```
+{% endif %}
    
 
   {% if feature_column_container_type == true %}

@@ -48,6 +48,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        vdisk.ShutdownPending = true;
 
         SendDiskMetrics(false);
     }
@@ -67,6 +68,12 @@ namespace NKikimr::NStorage {
         }
 
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
+            return;
+        }
+
+        if (vdisk.ShutdownPending) {
+            vdisk.RestartAfterShutdown = true;
+            vdisk.YardInitDelay = Max(vdisk.YardInitDelay, yardInitDelay);
             return;
         }
 
@@ -206,8 +213,10 @@ namespace NKikimr::NStorage {
 
         // create an actor
         auto *as = TActivationContext::ActorSystem();
-        as->RegisterLocalService(vdiskServiceId, as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
-            TMailboxType::Revolving, AppData()->SystemPoolId));
+        TActorId actorId = as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
+            TMailboxType::Revolving, AppData()->SystemPoolId);
+        as->RegisterLocalService(vdiskServiceId, actorId);
+        VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
             (PDiskGuid, pdiskGuid));
@@ -231,6 +240,22 @@ namespace NKikimr::NStorage {
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         vdisk.ReportedVDiskStatus.reset();
         vdisk.ScrubCookie = scrubCookie;
+    }
+
+    void TNodeWarden::HandleGone(STATEFN_SIG) {
+        if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
+            if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
+                TVDiskRecord& vdisk = jt->second;
+                Y_ABORT_UNLESS(vdisk.ShutdownPending);
+                vdisk.ShutdownPending = false;
+                if (vdisk.RestartAfterShutdown) {
+                    StartLocalVDiskActor(vdisk, vdisk.YardInitDelay);
+                    vdisk.RestartAfterShutdown = false;
+                    vdisk.YardInitDelay = TDuration::Zero();
+                }
+            }
+            VDiskIdByActor.erase(it);
+        }
     }
 
     void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {

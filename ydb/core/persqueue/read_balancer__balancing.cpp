@@ -680,6 +680,9 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     std::vector<TPartitionFamily*> newFamilies;
 
     if (!family->IsLonely()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "break up " << family->DebugStr() << " partition=" << partitionId);
+
         std::unordered_set<ui32> partitions;
         partitions.insert(family->Partitions.begin(), family->Partitions.end());
 
@@ -748,10 +751,10 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     }
                 }
             }
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    GetPrefix() << "can't break up " << family->DebugStr() << " because partition=" << partitionId << " is not root of family");
         }
-    } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "can't break up " << family->DebugStr() << " because partition is not root of family " << family->DebugStr());
     }
 
     family->WantedPartitions.clear();

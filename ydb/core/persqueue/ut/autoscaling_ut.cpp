@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SimpleTest(true);
     }
 
-    void ReadingAfterSplitTest(bool autoscaleAwareSDK) {
+    void ReadingAfterSplitTest(bool autoscaleAwareSDK, bool autoCommit) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic();
 
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        TTestReadSession readSession("Session-0", client, 3, !autoscaleAwareSDK, {}, autoscaleAwareSDK);
+        TTestReadSession readSession("Session-0", client, 3, autoCommit, {}, autoscaleAwareSDK);
         readSession.Run();
         readSession.WaitAllMessages();
 
@@ -120,11 +120,15 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(false);
+        ReadingAfterSplitTest(false, true);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(true);
+        ReadingAfterSplitTest(true, false);
+    }
+
+    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
+        ReadingAfterSplitTest(true, false);
     }
 
     void ReadingAfterSplitTest_PreferedPartition(bool autoscaleAwareSDK) {

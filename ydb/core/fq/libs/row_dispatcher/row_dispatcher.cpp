@@ -13,6 +13,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -39,13 +40,15 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TActorId CoordinatorActorId;
     TMaybe<TActorId> LeaderActorId;
     TSet<TActorId> CoordinatorChangedSubscribers;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
 
 public:
     explicit TRowDispatcher(
         const NConfig::TRowDispatcherConfig& config,
         const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        const TYqSharedResources::TPtr& yqSharedResources,
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
     void Bootstrap();
 
@@ -59,6 +62,7 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSession2::TPtr &ev);
 
 
     STRICT_STFUNC(
@@ -70,6 +74,8 @@ public:
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorInfo, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
+
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession2, Handle);
     })
 
 private:
@@ -80,11 +86,13 @@ TRowDispatcher::TRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
     : Config(config)
     , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources) {
+    , YqSharedResources(yqSharedResources)
+    , CredentialsFactory(credentialsFactory) {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -102,7 +110,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: Coordinator changed, new leader " << ev->Get()->LeaderActorId);
 
     LeaderActorId = ev->Get()->LeaderActorId;
-    Send(*LeaderActorId, new NFq::TEvRowDispatcher::TEvStartSession(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(*LeaderActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     for (auto actorId : CoordinatorChangedSubscribers) {
         Send(actorId, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(*LeaderActorId)); // TODO FlagTrackDelivery
     }
@@ -125,18 +133,31 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvWakeup, send start session to " << *LeaderActorId);
-    Send(*LeaderActorId, new NFq::TEvRowDispatcher::TEvStartSession(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(*LeaderActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorInfo::TPtr &) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvCoordinatorInfo ");
 }
 
- void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvRowDispatcherRequest ");
     Send(ev->Sender, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(LeaderActorId));
     CoordinatorChangedSubscribers.insert(ev->Sender);
- }
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession2::TPtr &ev) {
+    LOG_YQ_ROW_DISPATCHER_DEBUG("RD: TEvStartSession2 ");
+    
+    Register(NewTopicSession(
+        ev->Get()->Record.GetSource(),
+        ev->Get()->Record.GetPartitionId(),
+        YqSharedResources->UserSpaceYdbDriver,
+        CreateCredentialsProviderFactoryForStructuredToken(
+            CredentialsFactory,
+            ev->Get()->Record.GetToken(),
+            ev->Get()->Record.GetAddBearerToToken())).release());
+}
 
 } // namespace
 
@@ -146,9 +167,10 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
-    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources));
+    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory));
 }
 
 } // namespace NFq

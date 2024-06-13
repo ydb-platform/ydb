@@ -158,8 +158,22 @@ void Init(
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+
+    if (protoConfig.GetTokenAccessor().GetEnabled()) {
+        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
+
+        TString caContent;
+        if (const auto& path = tokenAccessorConfig.GetSslCaCert()) {
+            caContent = TUnbufferedFileInput(path).ReadAll();
+        }
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
+    }
+
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
-        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources);
+        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources, credentialsFactory);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -179,8 +193,6 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
@@ -188,17 +200,6 @@ void Init(
     NYql::NConnector::IClient::TPtr connectorClient = nullptr;
     if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
         connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
-    }
-
-    if (protoConfig.GetTokenAccessor().GetEnabled()) {
-        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
-
-        TString caContent;
-        if (const auto& path = tokenAccessorConfig.GetSslCaCert()) {
-            caContent = TUnbufferedFileInput(path).ReadAll();
-        }
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {

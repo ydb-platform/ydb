@@ -6,6 +6,7 @@ SRCS(
     coordinator.cpp
     leader_detector.cpp
     leader_election.cpp
+    topic_session.cpp
 )
 
 PEERDIR(

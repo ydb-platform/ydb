@@ -75,7 +75,7 @@ public:
 
     static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
 
-    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
@@ -84,7 +84,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
-        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -112,7 +112,7 @@ void TActorCoordinator::Bootstrap() {
     Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources).release());
 }
 
-void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: StartSession received, " << ev->Sender);
 
     ui32 nodeId = ev->Sender.NodeId();

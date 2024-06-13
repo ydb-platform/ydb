@@ -30,6 +30,8 @@ message TEvGetAddressResponse {
 
 
 message TEvStartSession2 {
-    NYql.NPq.NProto.TDqPqTopicSource source = 1;
-    repeated uint32 PartitionId = 2;
+    NYql.NPq.NProto.TDqPqTopicSource Source = 1;
+    uint32 PartitionId = 2;
+    string Token = 3;
+    bool AddBearerToToken = 4;
 }

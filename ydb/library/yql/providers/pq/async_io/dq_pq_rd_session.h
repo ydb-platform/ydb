@@ -19,6 +19,11 @@
 
 namespace NYql::NDq {
 
-std::unique_ptr<NActors::IActor> NewPqSession(const NPq::NProto::TDqPqTopicSource& settings, ui32 inputIndex);
+std::unique_ptr<NActors::IActor> NewPqSession(
+    const NPq::NProto::TDqPqTopicSource& settings,
+    ui32 inputIndex,
+    NActors::TActorId rowDispatcherActorId,
+    const TString& token,
+    bool addBearerToToken);
 
 } // namespace NYql::NDq

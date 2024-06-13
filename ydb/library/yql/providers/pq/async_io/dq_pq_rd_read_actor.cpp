@@ -111,6 +111,8 @@ private:
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory2;
+    const TString Token;
+    bool AddBearerToToken;
 
     struct Session {
         TActorId ActorId;
@@ -129,7 +131,9 @@ public:
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2);
+        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2,
+        const TString& token,
+        bool addBearerToToken);
 
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
@@ -168,7 +172,9 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2)
+        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2,
+        const TString& token,
+        bool addBearerToToken)
         : InputIndex(inputIndex)
         , TxId(txId)
         //, HolderFactory(holderFactory)
@@ -180,6 +186,8 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
         , CredentialsProviderFactory2(credentialsProviderFactory2)
+        , Token(token)
+        , AddBearerToToken(addBearerToToken)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
@@ -317,22 +325,18 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPt
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
     SRC_LOG_D("TEvCoordinatorResult:");
     for (auto& p : ev->Get()->Record.GetPartitions()) {
-        TActorId actorId = ActorIdFromProto(p.GetActorId());
-        SRC_LOG_D("   actorId:" << actorId);
+        TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
+        SRC_LOG_D("   rowDispatcherActorId:" << rowDispatcherActorId);
 
         for (auto& partitionId : p.GetPartitionId()) {
              SRC_LOG_D("   partitionId:" << partitionId);
 
-            auto actorId = Register(NewPqSession(SourceParams, partitionId).release());
+            auto actorId = Register(NewPqSession(SourceParams, partitionId, rowDispatcherActorId, Token, AddBearerToToken).release());
             Sessions.emplace(partitionId, actorId);
              //TEvStartSession2
         }
     }
 }
-
-// void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-//     SRC_LOG_D("TDqPqRdReadActor :: TEvCoordinatorChanged new leader " << ev->Get()->LeaderActorId);
-// }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -369,7 +373,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
-        credentialsProviderFactory
+        credentialsProviderFactory,
+        token,
+        addBearerToToken
     );
 
     return {actor, actor};
@@ -400,7 +406,6 @@ void RegisterDqPqRdReadActorFactory(
             args.HolderFactory,
             credentialsProviderFactory);
     });
-
 }
 
 } // namespace NYql::NDq

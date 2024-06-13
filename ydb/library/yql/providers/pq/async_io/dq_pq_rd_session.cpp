@@ -8,20 +8,12 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-//#include <ydb/core/fq/libs/row_dispatcher/leader_detector.h>
+
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -30,12 +22,11 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
 #include <util/generic/utility.h>
-#include <util/string/join.h>
+
+#include <ydb/library/actors/core/interconnect.h>
+
 
 #include <queue>
 #include <variant>
@@ -65,23 +56,32 @@ using namespace NKikimr::NMiniKQL;
 
 class PqSession : public NActors::TActorBootstrapped<PqSession>{
 
-private: 
+private:
+    const NPq::NProto::TDqPqTopicSource SourceParams;
     ui32 PartitionId;
+    TActorId RowDispatcherActorId;
     const TString LogPrefix;
+    const TString Token;
+    bool AddBearerToToken;
 
 public:
-    PqSession(const NPq::NProto::TDqPqTopicSource& /*settings*/, ui32 partitionId);
+    PqSession(
+        const NPq::NProto::TDqPqTopicSource& sourceParams,
+        ui32 partitionId,
+        TActorId rowDispatcherActorId,
+        const TString& token,
+        bool addBearerToToken);
 
-  //  void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev);
-   // void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
 
 
     STRICT_STFUNC(
         StateFunc, {
-      //  hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherResult, Handle);
-      //  hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
-        // hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
-        // hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
         // hFunc(TEvents::TEvUndelivered, Handle);
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
     })
@@ -90,22 +90,53 @@ public:
     void Bootstrap();
 };
 
-PqSession::PqSession(const NPq::NProto::TDqPqTopicSource& /*settings*/, ui32 partitionId)
-    : PartitionId(partitionId)
+PqSession::PqSession(
+    const NPq::NProto::TDqPqTopicSource& sourceParams,
+    ui32 partitionId,
+    TActorId rowDispatcherActorId,
+    const TString& token,
+    bool addBearerToToken)
+    : SourceParams(sourceParams)
+    , PartitionId(partitionId)
+    , RowDispatcherActorId(rowDispatcherActorId)
     , LogPrefix(TStringBuilder() << "PQ RD source [" << PartitionId << "]. ")
-
-{
-    
+    , Token(token)
+    , AddBearerToToken(addBearerToToken) {
 }
 
 void PqSession::Bootstrap() {
     Become(&PqSession::StateFunc);
     SRC_LOG_D("PqSession::Bootstrap partitionId " << PartitionId);
 
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession2>();
+
+    event->Record.mutable_source()->CopyFrom(SourceParams);
+    event->Record.SetPartitionId(PartitionId);
+    event->Record.SetToken(Token);
+    event->Record.SetAddBearerToToken(AddBearerToToken);
+
+    Send(RowDispatcherActorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
-std::unique_ptr<NActors::IActor> NewPqSession(const NPq::NProto::TDqPqTopicSource& settings, ui32 partitionId) {
-    return std::unique_ptr<NActors::IActor>(new PqSession(settings, partitionId));
+void PqSession::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+    SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
+}
+
+void PqSession::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    SRC_LOG_D("TEvNodeDisconnected " << ev->Get()->NodeId);
+}
+
+void PqSession::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+    SRC_LOG_D("TEvUndelivered, ev: " << ev->Get()->ToString());
+}
+
+std::unique_ptr<NActors::IActor> NewPqSession(
+    const NPq::NProto::TDqPqTopicSource& settings,
+    ui32 partitionId,
+    TActorId rowDispatcherActorId,
+    const TString& token,
+    bool addBearerToToken) {
+    return std::unique_ptr<NActors::IActor>(new PqSession(settings, partitionId, rowDispatcherActorId, token, addBearerToToken));
 }
 
 } // namespace NYql::NDq

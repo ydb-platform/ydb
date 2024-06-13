@@ -34,10 +34,10 @@ struct TEvRowDispatcher {
         NActors::TActorId LeaderActorId;
     };
 
-    struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
-        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
-        TEvStartSession() = default;
-    };
+    // struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
+    //     NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
+    //     TEvStartSession() = default;
+    // };
 
     struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
         NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {

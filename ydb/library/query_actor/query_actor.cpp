@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/query/service_query.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -119,6 +119,16 @@ TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransact
 {
 }
 
+TQueryBase::TEvQueryBasePrivate::TEvGenericQueryResultPart::TEvGenericQueryResultPart(const Ydb::Query::ExecuteQueryResponsePart& resp)
+    : Result(resp)
+{
+}
+
+TQueryBase::TEvQueryBasePrivate::TEvCancelGenericQueryResponse::TEvCancelGenericQueryResponse(const Ydb::Query::ExecuteQueryResponsePart& resp)
+    : Result(resp)
+{
+}
+
 TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database)
     : LogComponent(logComponent)
     , Database(std::move(database))
@@ -137,6 +147,8 @@ STRICT_STFUNC(TQueryBase::StateFunc,
     hFunc(TEvQueryBasePrivate::TEvDeleteSessionResult, Handle);
     hFunc(TEvQueryBasePrivate::TEvRollbackTransactionResponse, Handle);
     hFunc(TEvQueryBasePrivate::TEvCommitTransactionResponse, Handle);
+    hFunc(TEvQueryBasePrivate::TEvGenericQueryResultPart, Handle);
+    hFunc(TEvQueryBasePrivate::TEvCancelGenericQueryResponse, Handle);
 );
 
 void TQueryBase::Bootstrap() {
@@ -225,6 +237,45 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr&
     }
 }
 
+void TQueryBase::Handle(TEvQueryBasePrivate::TEvGenericQueryResultPart::TPtr& ev) {
+    Y_ABORT_UNLESS(RunningQuery);
+    Y_ABORT_UNLESS(StreamQueryProcessor);
+    
+    auto result = ev->Get()->Result;
+    auto status = result.status();
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(result.issues(), issues);
+    if (status != Ydb::StatusIds::SUCCESS) {
+        Finish(status, std::move(issues));
+        return;
+    }
+    
+    if (result.has_result_set()) {
+        OnQueryAsyncResult(result.result_set_index(), std::move(*result.mutable_result_set()));
+    }
+
+    if (!StreamQueryProcessor->HasData()) {
+        try {
+            (this->*QueryResultHandler)();
+        } catch (const std::exception& ex) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
+        }
+        Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
+    }
+}
+
+void TQueryBase::Handle(TEvQueryBasePrivate::TEvCancelGenericQueryResponse::TPtr&) {
+    // Continue finish
+    if (!CommitRequested && TxId) {
+        RollbackTransaction();
+    } else if (DeleteSession) {
+        RunDeleteSession();
+    } else {
+        PassAway();
+    }
+}
+
+
 void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, const TString& message, bool rollbackOnError) {
     NYql::TIssues issues;
     issues.AddIssue(message);
@@ -245,7 +296,9 @@ void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issue
     }
     Finished = true;
     OnFinish(status, std::move(issues));
-    if (rollbackOnError && !CommitRequested && TxId && status != Ydb::StatusIds::SUCCESS) {
+    if (!StreamQueryProcessor->IsFinished()) {
+        StreamQueryProcessor->Cancel(GetFutureCallback<Ydb::Query::ExecuteQueryResponsePart, TEvQueryBasePrivate::TEvGenericQueryResultPart>());
+    } else if (rollbackOnError && !CommitRequested && TxId && status != Ydb::StatusIds::SUCCESS) {
         RollbackTransaction();
     } else if (DeleteSession) {
         RunDeleteSession();
@@ -290,17 +343,7 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
         Ydb::Table::ExecuteDataQueryResponse>;
     Ydb::Table::ExecuteDataQueryRequest req;
     req.set_session_id(SessionId);
-    auto* txControlProto = req.mutable_tx_control();
-    if (txControl.Begin) {
-        txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
-    } else if (txControl.Continue) {
-        Y_ABORT_UNLESS(TxId);
-        txControlProto->set_tx_id(TxId);
-    }
-    if (txControl.Commit) {
-        CommitRequested = true;
-        txControlProto->set_commit_tx(true);
-    }
+    FillTxControl(req.mutable_tx_control(), txControl);
     req.mutable_query()->set_yql_text(sql);
     req.mutable_query_cache_policy()->set_keep_in_cache(true);
     if (params) {
@@ -308,6 +351,30 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
         *req.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(p);
     }
     Subscribe<Ydb::Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
+}
+
+void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params, TTxControl txControl, const TStreamQuerySettings& settings) {
+    Y_ABORT_UNLESS(!RunningQuery);
+    RequestStartTime = TInstant::Now();
+    RunningQuery = true;
+    StreamQuerySettings = settings;
+    LOG_D("RunStreamQuery: " << sql);
+    using TEvExecuteGenericQueryRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Query::ExecuteQueryRequest,
+        Ydb::Query::ExecuteQueryResponsePart>;
+    Ydb::Query::ExecuteQueryRequest req;
+    req.set_session_id(SessionId);
+    req.set_exec_mode(::Ydb::Query::EXEC_MODE_EXECUTE);
+    req.set_concurrent_result_sets(true);
+    req.set_response_part_limit_bytes(settings.ResponsePartSizeLimitBytes);
+    FillTxControl(req.mutable_tx_control(), txControl);
+    req.mutable_query_content()->set_text(sql);
+    if (params) {
+        auto p = params->Build();
+        *req.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(p);
+    }
+    auto facilityProvider = NRpcService::CreateFacilityProviderSameMailbox(ActorContext(), settings.ChannelBufferSize);
+    StreamQueryProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TEvExecuteGenericQueryRequest>(std::move(req), Database, Nothing(), facilityProvider, &NGRpcService::NQuery::DoExecuteQuery, true);
+    StreamQueryProcessor->Read(GetFutureCallback<Ydb::Query::ExecuteQueryResponsePart, TEvQueryBasePrivate::TEvGenericQueryResultPart>());
 }
 
 void TQueryBase::RollbackTransaction() {

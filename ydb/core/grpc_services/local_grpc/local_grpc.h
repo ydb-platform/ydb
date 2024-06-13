@@ -88,6 +88,10 @@ protected:
         return *BaseRequest_;
     }
 
+    IRequestCtx& GetBaseRequestMut() noexcept {
+        return *BaseRequest_;
+    }
+
 private:
     void RaiseIssue(const NYql::TIssue& issue) {
         IssueManager_.RaiseIssue(issue);

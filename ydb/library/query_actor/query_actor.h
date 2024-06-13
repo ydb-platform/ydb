@@ -1,10 +1,13 @@
 #pragma once
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
@@ -15,6 +18,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/retry/retry_policy.h>
 #include <library/cpp/threading/future/future.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr {
 
@@ -32,6 +37,16 @@ protected:
         bool Continue = false;
     };
 
+    struct TStreamQuerySettings {
+        TStreamQuerySettings() {}
+
+        TDuration CancelAfter = TDuration::Zero();
+        ui64 ResponsePartSizeLimitBytes = 1_MB;
+        ui64 ChannelBufferSize = 10_MB;
+        ui64 ResultSizeLimit = 0;
+        ui64 ResultRowsLimit = 0;
+    };
+
     using TQueryResultHandler = void (TQueryBase::*)();
 
 private:
@@ -43,6 +58,8 @@ private:
             EvDeleteSessionResult,
             EvRollbackTransactionResponse,
             EvCommitTransactionResponse,
+            EvGenericQueryResultPart,
+            EvCancelGenericQueryResponse,
 
             EvEnd
         };
@@ -93,6 +110,18 @@ private:
             Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
         };
+
+        struct TEvGenericQueryResultPart : public NActors::TEventLocal<TEvGenericQueryResultPart, EvGenericQueryResultPart> {
+            TEvGenericQueryResultPart(const Ydb::Query::ExecuteQueryResponsePart& resp);
+
+            Ydb::Query::ExecuteQueryResponsePart Result;
+        };
+
+        struct TEvCancelGenericQueryResponse : public NActors::TEventLocal<TEvCancelGenericQueryResponse, EvCancelGenericQueryResponse> {
+            TEvCancelGenericQueryResponse(const Ydb::Query::ExecuteQueryResponsePart& resp);
+
+            Ydb::Query::ExecuteQueryResponsePart Result;
+        };
     };
 
 public:
@@ -111,6 +140,7 @@ protected:
     void Finish();
 
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
+    void RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx(), const TStreamQuerySettings& settings = TStreamQuerySettings());
     void CommitTransaction();
 
     void SetOperationInfo(const TString& operationName, const TString& traceId, NMonitoring::TDynamicCounterPtr counters = nullptr);
@@ -127,6 +157,7 @@ private:
     // Methods for implementing in derived classes.
     virtual void OnRunQuery() = 0;
     virtual void OnQueryResult() {} // Must either run next query or finish
+    virtual void OnQueryAsyncResult(ui32 resultSetId, Ydb::ResultSet&& resultSet);
     virtual void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) = 0;
 
 private:
@@ -134,12 +165,28 @@ private:
 
     template <class TProto, class TEvent>
     void Subscribe(NThreading::TFuture<TProto>&& f) {
-        f.Subscribe(
-            [as = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const NThreading::TFuture<TProto>& res)
-            {
-                as->Send(selfId, new TEvent(res.GetValue()));
-            }
-        );
+        f.Subscribe(GetFutureCallback<TProto, TEvent>());
+    }
+
+    template <class TProto, class TEvent>
+    std::function<void(const TProto&)> GetFutureCallback() const {
+        return [as = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const NThreading::TFuture<TProto>& res) {
+            as->Send(selfId, new TEvent(res.GetValue()));
+        };
+    }
+
+    template <class TProtoTransactionControl>
+    void FillTxControl(TProtoTransactionControl* txControlProto, TTxControl txControl) {
+        if (txControl.Begin) {
+            txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
+        } else if (txControl.Continue) {
+            Y_ABORT_UNLESS(TxId);
+            txControlProto->set_tx_id(TxId);
+        }
+        if (txControl.Commit) {
+            CommitRequested = true;
+            txControlProto->set_commit_tx(true);
+        }
     }
 
     STFUNC(StateFunc);
@@ -148,6 +195,8 @@ private:
     void Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev);
     void Handle(TEvQueryBasePrivate::TEvRollbackTransactionResponse::TPtr& ev);
     void Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev);
+    void Handle(TEvQueryBasePrivate::TEvGenericQueryResultPart::TPtr& ev);
+    void Handle(TEvQueryBasePrivate::TEvCancelGenericQueryResponse::TPtr& ev);
 
     void RunQuery();
     void RunCreateSession();
@@ -168,6 +217,8 @@ protected:
     bool RunningCommit = false;
     bool Finished = false;
     bool CommitRequested = false;
+    TStreamQuerySettings StreamQuerySettings;
+    NRpcService::IStreamReadProcessor<Ydb::Query::ExecuteQueryResponsePart>::TPtr StreamQueryProcessor;
 
     TQueryResultHandler QueryResultHandler = &TQueryBase::CallOnQueryResult;
 

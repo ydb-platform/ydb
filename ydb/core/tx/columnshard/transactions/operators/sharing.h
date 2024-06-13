@@ -26,7 +26,8 @@ private:
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
     virtual bool DoIsAsync() const override {
-        return true;
+        AFL_VERIFY(SharingTask);
+        return !SharingTask->IsFinished();
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override {

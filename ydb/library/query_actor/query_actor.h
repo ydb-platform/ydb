@@ -113,7 +113,7 @@ protected:
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
     void CommitTransaction();
 
-    void SetLogInfo(const TString& operationName, const TString& traceId);
+    void SetOperationInfo(const TString& operationName, const TString& traceId, NMonitoring::TDynamicCounterPtr counters = nullptr);
     void ClearTimeInfo();
     TDuration GetAverageTime();
 
@@ -182,6 +182,9 @@ protected:
     TInstant RequestStartTime;
     TDuration AmountRequestsTime;
     ui32 NumberRequests = 0;
+
+    NMonitoring::TDynamicCounters::TCounterPtr FinishOk;
+    NMonitoring::TDynamicCounters::TCounterPtr FinishError;
 };
 
 template<typename TQueryActor, typename TResponse, typename ...TArgs>

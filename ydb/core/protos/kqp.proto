@@ -788,3 +788,8 @@ message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration OperationTtl = 1;
     optional google.protobuf.Duration ResultsTtl = 2;
 }
+
+/// KQP workload manager Events
+message TEvRefreshPoolState {
+    optional string PoolId = 1;
+}

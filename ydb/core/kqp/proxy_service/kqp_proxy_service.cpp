@@ -17,6 +17,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
@@ -269,6 +270,10 @@ public:
         KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, AsyncIoFactory, FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
+
+        auto kqpWorkloadService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
+        TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
+            MakeKqpWorkloadServiceId(SelfId().NodeId()), kqpWorkloadService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {

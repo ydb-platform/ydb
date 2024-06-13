@@ -12,7 +12,8 @@
             "Match": {"Type": "Callable", "Name": "DataSource"},
             "Children": [
                 {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Name", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

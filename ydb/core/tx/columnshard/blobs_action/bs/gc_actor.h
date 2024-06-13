@@ -28,7 +28,7 @@ public:
     }
 
     STFUNC(StateWork) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
             ("action_id", GCTask->GetActionGuid())("tablet_id", GCTask->GetTabletId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
@@ -38,7 +38,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);

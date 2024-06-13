@@ -582,21 +582,21 @@ message StreamReadMessage {
 message StreamDirectReadMessage {
 
     // Client-server message for direct read session.
-    //     InitDirectReadRequest - command from client to create and start a direct read session.
+    //     InitRequest - command from client to create and start a direct read session.
     //     StartDirectReadPartitionSessionRequest - command from client to create and start a direct read partition session.
     //         Client signals it is ready to get data from partition.
     //     UpdateTokenRequest - request to update auth token
     message FromClient {
         oneof client_message {
-            InitDirectReadRequest init_direct_read_request = 1;
+            InitRequest init_request = 1;
             StartDirectReadPartitionSessionRequest start_direct_read_partition_session_request = 2;
             UpdateTokenRequest update_token_request = 3;
         }
     }
 
     // Server-client message for direct read session.
-    //     InitDirectReadResponse - correct handshake response.
-    //     StartDirectReadPartitionSessionResponse - Response to StreamDirectReadMessage.StartDirectReadPartitionSessionRequest.
+    //     InitResponse - correct handshake response.
+    //     StartDirectReadPartitionSessionResponse - Response to StartDirectReadPartitionSessionRequest.
     //     DirectReadResponse - portion of message data.
     //     StopDirectReadPartitionSession - command from server to stop a direct read partition session.
     //     UpdateTokenResponse - acknowledgment of token update.
@@ -608,7 +608,7 @@ message StreamDirectReadMessage {
         repeated Ydb.Issue.IssueMessage issues = 2;
 
         oneof server_message {
-            InitDirectReadResponse init_direct_read_response = 6;
+            InitResponse init_response = 6;
             StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 7;
             StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
             DirectReadResponse direct_read_response = 4;
@@ -618,7 +618,7 @@ message StreamDirectReadMessage {
 
     // Command from client to create and start a direct read session.
     // Server should not send a response to the command.
-    message InitDirectReadRequest {
+    message InitRequest {
         // Read session identifier.
         string session_id = 1;
         // Topics that will be read by this session.
@@ -633,7 +633,7 @@ message StreamDirectReadMessage {
     }
 
     // Response to the handshake.
-    message InitDirectReadResponse {
+    message InitResponse {
     }
 
     // Command from client to create and start a direct read partition session.

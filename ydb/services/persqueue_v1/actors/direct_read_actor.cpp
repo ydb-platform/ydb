@@ -89,7 +89,7 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvReadFinished::TPtr& e
     }
 
     switch (request.client_message_case()) {
-        case TClientMessage::kInitDirectReadRequest: {
+        case TClientMessage::kInitRequest: {
             ctx.Send(ctx.SelfID, new TEvPQProxy::TEvInitDirectRead(request, Request->GetStreamCtx()->GetPeerName()));
             return;
         }
@@ -211,7 +211,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     }
     Initing = true;
 
-    const auto& init = ev->Get()->Request.init_direct_read_request();
+    const auto& init = ev->Get()->Request.init_request();
 
     if (!init.topics_read_settings_size()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
@@ -330,10 +330,10 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
 }
 
 void TDirectReadSessionActor::InitSession(const TActorContext& ctx) {
-    // Successfully authenticated, send InitDirectReadResponse, wait for StartDirectReadPartitionSession requests.
+    // Successfully authenticated, send InitResponse, wait for StartDirectReadPartitionSession requests.
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
-    result.mutable_init_direct_read_response();
+    result.mutable_init_response();
     if (!WriteToStreamOrDie(ctx, std::move(result))) {
         return;
     }

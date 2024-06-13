@@ -909,7 +909,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
             const TString& consumer = "user"
         ) {
-            // Send InitDirectReadRequest, get InitDirectReadResponse.
+            // Send InitRequest, get InitResponse.
             if (DirectStream) {
                 DirectStream->Finish();
                 DirectStream = nullptr;
@@ -919,9 +919,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(DirectStream);
 
             Topic::StreamDirectReadMessage::FromClient req;
-            req.mutable_init_direct_read_request()->add_topics_read_settings()->set_path(topic);
-            req.mutable_init_direct_read_request()->set_consumer(consumer);
-            req.mutable_init_direct_read_request()->set_session_id(SessionId);
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
+            req.mutable_init_request()->set_consumer(consumer);
+            req.mutable_init_request()->set_session_id(SessionId);
             if (!DirectStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
@@ -936,7 +936,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 return;
             }
 
-            UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kInitDirectReadResponse);
+            UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kInitResponse);
         }
 
         void SendReadSessionAssign(const ui64 assignId, const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {

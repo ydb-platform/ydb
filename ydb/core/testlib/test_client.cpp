@@ -51,6 +51,7 @@
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
@@ -802,11 +803,15 @@ namespace Tests {
                 TActorId ldapAuthProviderId = Runtime->Register(ldapAuthProvider, nodeIdx);
                 Runtime->RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId, nodeIdx);
             }
-            IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig, {
-                .ClientCertificateAuthorization = Settings->AppConfig->GetClientCertificateAuthorization(),
-                .ServerCertificateFilePath = Settings->ServerCertFilePath,
-                .Domain = Settings->AuthConfig.GetCertificateAuthenticationDomain()
-            });
+            TTicketParserSettings ticketParserSettings {
+                .AuthConfig = Settings->AuthConfig,
+                .CertificateAuthValues = {
+                    .ClientCertificateAuthorization = Settings->AppConfig->GetClientCertificateAuthorization(),
+                    .ServerCertificateFilePath = Settings->ServerCertFilePath,
+                    .Domain = Settings->AuthConfig.GetCertificateAuthenticationDomain()
+                }
+            };
+            IActor* ticketParser = Settings->CreateTicketParser(ticketParserSettings);
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
         }

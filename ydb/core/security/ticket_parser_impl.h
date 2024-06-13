@@ -1,6 +1,7 @@
 #pragma once
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+#include "ticket_parser_settings.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -2113,10 +2114,10 @@ public:
         return f.ReadAll();
     }
 
-    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig, const TCertificateAuthValues& certificateAuthValues)
-        : Config(authConfig)
-        , CertificateChecker(certificateAuthValues)
-        {}
+    TTicketParserImpl(const TTicketParserSettings& settings)
+        : Config(settings.AuthConfig)
+        , CertificateChecker(settings.CertificateAuthValues)
+    {}
 };
 
 }

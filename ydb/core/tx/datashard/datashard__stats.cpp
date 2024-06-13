@@ -99,6 +99,7 @@ public:
         }
 
         auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
+        PagesSize += info->PageCollection->Page(pageId).Size;
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId));
 
         Spent->Alter(false); // pause measurement
@@ -166,7 +167,7 @@ private:
         LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "BuildStats result at datashard " << TabletId << ", for tableId " << TableId
             << ": RowCount " << ev->Stats.RowCount << ", DataSize " << ev->Stats.DataSize.Size << ", IndexSize " << ev->Stats.IndexSize.Size << ", PartCount " << ev->PartCount
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
-            << ", " << NFmt::Do(*Spent));
+            << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
 
         Send(ReplyTo, ev.Release());
 
@@ -237,6 +238,7 @@ private:
     ui32 HistogramBucketsCount;
     ui64 SearchHeight;
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
+    ui64 PagesSize = 0;
     ui64 CoroutineDeadline;
     TAutoPtr<TSpent> Spent;
 };

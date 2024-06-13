@@ -433,8 +433,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    ui64 dataSizeResolution = 0; // Datashard will use default resolution
-    ui64 rowCountResolution = 0; // Datashard will use default resolution
+    const ui64 dataSizeResolution = 0; // Datashard will use default resolution
+    const ui64 rowCountResolution = 0; // Datashard will use default resolution
+    const ui64 histogramBucketsCount = 0; // Datashard will use default resolution
+
     bool collectKeySample = false;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         // We would like to split by size and do this no matter how many partitions there are
@@ -481,6 +483,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             pathId.LocalPathId,
             dataSizeResolution,
             rowCountResolution,
+            histogramBucketsCount,
             collectKeySample));
 
     return true;

@@ -40,8 +40,8 @@ public:
         return ret;
     }
 
-    TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr read, TExprContext& ctx) override {
-        const auto readTable = TYtReadTable(read);
+    TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr& reader, TExprContext& ctx) override {
+        const auto readTable = TYtReadTable(reader);
         //Presume that there is the only table for read
         const auto ytSections = readTable.Input();
         YQL_ENSURE(ytSections.Size() == 1);
@@ -50,11 +50,11 @@ public:
         const auto ytTable = ytPaths.Item(0).Table().Maybe<TYtTable>();
         YQL_ENSURE(ytTable);
         //read is of type: Tuple<World, InputSeq>
-        const auto inputSeqType = read->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().at(1);
-        return Build<TDqLookupSourceWrap>(ctx, read->Pos())
+        const auto inputSeqType = reader->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().at(1);
+        return Build<TDqLookupSourceWrap>(ctx, reader->Pos())
             .Input(ytTable.Cast())
             .DataSource(readTable.DataSource().Ptr())
-            .RowType(ExpandType(read->Pos(), *GetSeqItemType(inputSeqType), ctx))
+            .RowType(ExpandType(reader->Pos(), *GetSeqItemType(inputSeqType), ctx))
             .Settings(ytTable.Cast().Settings())
         .Done().Ptr();
     }

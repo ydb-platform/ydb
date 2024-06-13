@@ -284,7 +284,7 @@ namespace NYql {
 
                 Generic::TLookupSource source;
                 source.set_table(TString(dbTable));
-                source.mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
+                *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.

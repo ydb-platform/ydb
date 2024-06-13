@@ -96,7 +96,7 @@ private: //events
             NKikimr::NMiniKQL::TValueHasher,
             NKikimr::NMiniKQL::TValueEqual,
             NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
-        > Map(
+        > map(
             ev->Get()->Data.size(), 
             KeyTypeHelper.GetValueHash(), 
             KeyTypeHelper.GetValueEqual()
@@ -104,7 +104,7 @@ private: //events
         for (auto& r: ev->Get()->Data) {
             Y_ABORT_UNLESS(r.first.IsBoxed());
             Y_ABORT_UNLESS(!r.second || r.second.IsBoxed());
-            Map.emplace(std::move(r));
+            map.emplace(std::move(r));
         }
         while (!AwaitingQueue.empty()) {
             const auto wideInputRow = AwaitingQueue.Head();
@@ -113,7 +113,7 @@ private: //events
             for (size_t i = 0; i != InputJoinColumns.size(); ++i) {
                 keyItems[i] = wideInputRow[InputJoinColumns[i]];
             }
-            auto lookupPayload = Map.FindPtr(lookupKey);
+            auto lookupPayload = map.FindPtr(lookupKey);
 
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);

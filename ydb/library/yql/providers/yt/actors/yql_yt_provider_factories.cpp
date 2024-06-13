@@ -2,6 +2,7 @@
 #include "yql_yt_lookup_actor.h"
 #include <ydb/library/yql/providers/yt/proto/source.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 namespace NYql::NDq {
 
@@ -19,7 +20,7 @@ namespace NYql::NDq {
                 args.HolderFactory,
                 args.MaxKeysInRequest);
         };
-        factory.RegisterLookupSource<NYql::NYt::NSource::TLookupSource>("yt", lookupActorFactory);
+        factory.RegisterLookupSource<NYql::NYt::NSource::TLookupSource>(TString(YtProviderName), lookupActorFactory);
     }
 
 }

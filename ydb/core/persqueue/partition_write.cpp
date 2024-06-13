@@ -519,6 +519,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         avg.Update(WriteNewSize, now);
     }
 
+    LOG_DEBUG_S(
+        ctx, NKikimrServices::PERSQUEUE,
+        "TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize;
+    );
+
     if (SplitMergeEnabled(Config)) {
         SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
         auto needScaling = CheckScaleStatus(ctx);
@@ -551,7 +556,12 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
     auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
     LOG_DEBUG_S(
         ctx, NKikimrServices::PERSQUEUE,
-        "TPartition::CheckScaleStatus writeSpeedUsagePercent# " << writeSpeedUsagePercent << " Topic: \"" << TopicName() << "\"." <<
+        "TPartition::CheckScaleStatus"
+            << " splitMergeAvgWriteBytes# " << SplitMergeAvgWriteBytes->GetValue()
+            << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
+            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+            << " totalPartitionWriteSpeed# " << TotalPartitionWriteSpeed
+            << " Topic: \"" << TopicName() << "\"." <<
         " Partition: " << Partition
     );
     auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT

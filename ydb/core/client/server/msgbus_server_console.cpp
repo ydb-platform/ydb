@@ -354,8 +354,8 @@ public:
     bool CheckAccessGetNodeConfig() const {
         const auto serializedToken = TBase::GetSerializedToken();
         if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            NACLib::TUserToken token(serializedToken);
             for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {
                     return true;
                 }

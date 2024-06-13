@@ -447,18 +447,32 @@
             "uri": "https://{canondata_backend}/1937429/55b1826e8916057871ed62c50bfb88b54489cc6e/resource.tar.gz#test.test_blocks-combine_hashed_count--Plan_/plan.txt"
         }
     ],
+    "test.test[blocks-date_add_interval--Debug]": [
+        {
+            "checksum": "32aeb6d05bdc9ce8dd3bf81b07cbb3f9",
+            "size": 6071,
+            "uri": "https://{canondata_backend}/1936273/9c25c1aac526c657fc25cc1af9b214bf525c0659/resource.tar.gz#test.test_blocks-date_add_interval--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-date_add_interval--Plan]": [
+        {
+            "checksum": "aae45f9035acd48ed1e089d2e39f13f0",
+            "size": 7241,
+            "uri": "https://{canondata_backend}/1809005/88e20e4e1ed1d476aba8fc3c7d4644a530e1964c/resource.tar.gz#test.test_blocks-date_add_interval--Plan_/plan.txt"
+        }
+    ],
     "test.test[blocks-date_sub_interval_scalar--Debug]": [
         {
-            "checksum": "769c051ff3ff0571d25c9ccf25d0d0ff",
-            "size": 5747,
-            "uri": "https://{canondata_backend}/1031349/54265eccb2168d4e69844dc7d43b0c9adb5b09a5/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Debug_/opt.yql_patched"
+            "checksum": "e10e958ddbf2de2468b2fadb55bef0ab",
+            "size": 6058,
+            "uri": "https://{canondata_backend}/1936273/9c25c1aac526c657fc25cc1af9b214bf525c0659/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-date_sub_interval_scalar--Plan]": [
         {
-            "checksum": "abde8bbc01ab049101cb5673bad50a1c",
-            "size": 6872,
-            "uri": "https://{canondata_backend}/1031349/54265eccb2168d4e69844dc7d43b0c9adb5b09a5/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Plan_/plan.txt"
+            "checksum": "f79404042d811b0f6195ec3cf6c645be",
+            "size": 7176,
+            "uri": "https://{canondata_backend}/1936273/9c25c1aac526c657fc25cc1af9b214bf525c0659/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Plan_/plan.txt"
         }
     ],
     "test.test[blocks-distinct_pure_all--Debug]": [

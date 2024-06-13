@@ -237,6 +237,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
         auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
 
         TExecuteQuerySettings settings;
         settings.PoolId("sample_pool_id");

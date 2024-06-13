@@ -455,8 +455,8 @@ public:
             TSession* session = GetSession(options);
             
             TSet<TString> uniqueTables;
-            auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
-            auto fullSuffix = options.Suffix().Empty() ? "" : ('/' + options.Suffix());
+            const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
+            const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -493,15 +493,14 @@ public:
 
                     TVector<TRuntimeNode> strings;
                     for (auto& tableName: uniqueTables) {
-                        size_t beg = 0, end = tableName.Size();
+                        TStringBuf strippedTableName = tableName;
                         if (!options.Prefix().Empty()) {
-                            beg = options.Prefix().Size() + 1;
+                            strippedTableName.Skip(options.Prefix().Size() + 1);
                         }
                         if (!options.Suffix().Empty()) {
-                            end = tableName.Size() - (1 + options.Suffix().Size());
+                            strippedTableName.Chop(1 + options.Suffix().Size());
                         }
-                        auto strippedTableName = tableName.substr(beg, end - beg);
-                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(strippedTableName));
+                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TString(strippedTableName)));
                     }
 
                     auto inputNode = pgmBuilder.AsList(strings);
@@ -550,7 +549,7 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            const auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);

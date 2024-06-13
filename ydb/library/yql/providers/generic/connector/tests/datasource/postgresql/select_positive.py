@@ -139,6 +139,7 @@ class Factory:
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
                 Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
+                Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
                     name='col_23_date',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
@@ -154,6 +155,12 @@ class Factory:
                 #     ydb_type=?,
                 #     data_source_type=DataSourceType(pg=postgresql.time),
                 # ),
+                # maybe col_26_time?
+                Column(
+                    name='col_27_json',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
+                ),
                 # maybe col_26_time?
                 Column(
                     name='col_27_json',
@@ -195,6 +202,7 @@ class Factory:
                     datetime.date(2023, 8, 9),
                     datetime.datetime(2023, 8, 9, 13, 19, 11),
                     '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
+                    '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -219,9 +227,10 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki',
+                    'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
+                    '{ "TODO" : "unicode" }',
                     '{ "TODO" : "unicode" }',
                     # TODO: support time in YQ-2297
                 ],
@@ -240,6 +249,7 @@ class Factory:
                     None,
                     3,
                     3,
+                    None,
                     None,
                     None,
                     None,

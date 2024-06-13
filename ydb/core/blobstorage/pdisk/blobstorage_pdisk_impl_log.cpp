@@ -535,7 +535,7 @@ void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
 void TPDisk::ProcessLogReadQueue() {
     for (auto& req : JointLogReads) {
         req->SpanStack.PopOk();
-        req->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
+        req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
         case ERequestType::RequestLogRead:
         {
@@ -736,7 +736,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
         if (status == NKikimrProto::OK) {
-            logWrite->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
+            logWrite->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
             LogWrite(*logWrite, logChunksToCommit);
             logWrite->ScheduleTime = HPNow();
             if (auto logWriteTraceId = logWrite->SpanStack.GetTraceId()) {
@@ -1282,7 +1282,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     }
 
     if (req.IsChunksFromLogSplice) {
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDisk, "PDisk.ReleaseChunks"));
+        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.ReleaseChunks"));
 
         auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
 

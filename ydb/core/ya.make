@@ -60,6 +60,7 @@ RECURSE(
     ymq
     driver_lib
     yql_testlib
+    jaeger_tracing
 )
 
 RECURSE_FOR_TESTS(

@@ -167,6 +167,7 @@ class KqpRunner(Runner):
         settings: Settings,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         udf_dir: Path,
 =======
         udfs_dir: Path,
@@ -174,12 +175,16 @@ class KqpRunner(Runner):
 =======
         udf_dir: Path,
 >>>>>>> review fixes
+=======
+        udf_dir: Path,
+>>>>>>> a3e810aff148a36855a9cb78bae782780b40d419
     ):
         self.scheme_renderer = SchemeRenderer()
         self.app_conf_renderer = AppConfigRenderer()
         self.kqprun_path = kqprun_path
         self.settings = settings
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
         self.udf_dir = udf_dir
@@ -189,6 +194,9 @@ class KqpRunner(Runner):
 =======
         self.udf_dir = udf_dir
 >>>>>>> review fixes
+=======
+        self.udf_dir = udf_dir
+>>>>>>> a3e810aff148a36855a9cb78bae782780b40d419
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
@@ -212,6 +220,7 @@ class KqpRunner(Runner):
         # For debug add option --trace-opt to args
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
 =======
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={udfs_dir} '
@@ -219,6 +228,9 @@ class KqpRunner(Runner):
 =======
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
 >>>>>>> review fixes
+=======
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
+>>>>>>> a3e810aff148a36855a9cb78bae782780b40d419
 
         output = None
         data_out = None

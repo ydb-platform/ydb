@@ -18,6 +18,9 @@ def configure_runner(runner_type: str, settings: Settings) -> Runner:
         case "dqrun":
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a3e810aff148a36855a9cb78bae782780b40d419
             return DqRunner(
                 dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"),
                 settings=settings,
@@ -29,6 +32,7 @@ def configure_runner(runner_type: str, settings: Settings) -> Runner:
                 settings=settings,
                 udf_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
             )
+<<<<<<< HEAD
 =======
             return DqRunner(dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"), settings=settings, udfs_dir=yat.build_path("ydb/library/yql/udfs/common/json2"))
         case "kqprun":
@@ -47,5 +51,7 @@ def configure_runner(runner_type: str, settings: Settings) -> Runner:
                 udf_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
             )
 >>>>>>> style fixes
+=======
+>>>>>>> a3e810aff148a36855a9cb78bae782780b40d419
         case _:
             raise ValueError(runner_type)

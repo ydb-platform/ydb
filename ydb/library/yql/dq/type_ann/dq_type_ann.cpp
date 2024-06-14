@@ -1136,6 +1136,9 @@ bool IsTypeSupportedInMergeCn(EDataSlot type) {
         case EDataSlot::Datetime64:
         case EDataSlot::Timestamp64:
         case EDataSlot::Interval64:
+        case EDataSlot::TzDate32:
+        case EDataSlot::TzDatetime64:
+        case EDataSlot::TzTimestamp64:
             return false;
     }
     return false;

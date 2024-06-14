@@ -22,6 +22,8 @@ SRCS(
     json_content.h
     json_counters.h
     json_describe.h
+    json_describe_consumer.h
+    json_describe_topic.h
     json_local_rpc.h
     json_getblob.h
     json_graph.h

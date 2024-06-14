@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/library/actors/queues/mpmc_ring_queue.h>
+#include <ydb/library/actors/queues/observer/observer.h>
 
 
 namespace NActors::NQueueBench {
@@ -13,16 +14,16 @@ namespace NActors::NQueueBench {
         virtual std::optional<ui32> TryPop() = 0;
     };
 
-    template <ui32 SizeBits, typename TStats>
-    using TTryPush = bool (TMPMCRingQueue<SizeBits, TStats>::*)(ui32 value);
-    template <ui32 SizeBits, typename TStats>
-    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits, TStats>::*)();
+    template <ui32 SizeBits, typename TObserver>
+    using TTryPush = bool (TMPMCRingQueue<SizeBits, TObserver>::*)(ui32 value);
+    template <ui32 SizeBits, typename TObserver>
+    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits, TObserver>::*)();
 
-    template <ui32 SizeBits, typename TStats, TTryPush<SizeBits, TStats> TryPushMethod, TTryPop<SizeBits, TStats> TryPopMethod>
+    template <ui32 SizeBits, typename TObserver, TTryPush<SizeBits, TObserver> TryPushMethod, TTryPop<SizeBits, TObserver> TryPopMethod>
     struct TMPMCQueueBase : IQueue {
-        TMPMCRingQueue<SizeBits, TStats> *Queue;
+        TMPMCRingQueue<SizeBits, TObserver> *Queue;
 
-        TMPMCQueueBase(TMPMCRingQueue<SizeBits, TStats> *queue)
+        TMPMCQueueBase(TMPMCRingQueue<SizeBits, TObserver> *queue)
             : Queue(queue)
         {}
 
@@ -34,27 +35,27 @@ namespace NActors::NQueueBench {
         }
     };
 
-    template <ui32 SizeBits, typename TStats=void>
-    using TVerySlowQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPushSlow, &TMPMCRingQueue<SizeBits, TStats>::TryPopReallySlow>;
+    template <ui32 SizeBits, typename TObserver=void>
+    using TVerySlowQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPushSlow, &TMPMCRingQueue<SizeBits, TObserver>::TryPopReallySlow>;
 
-    template <ui32 SizeBits, typename TStats=void>
-    using TSlowQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPushSlow, &TMPMCRingQueue<SizeBits, TStats>::TryPopSlow>;
+    template <ui32 SizeBits, typename TObserver=void>
+    using TSlowQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPushSlow, &TMPMCRingQueue<SizeBits, TObserver>::TryPopSlow>;
 
-    template <ui32 SizeBits, typename TStats=void>
-    using TFastQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopFast>;
+    template <ui32 SizeBits, typename TObserver=void>
+    using TFastQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopFast>;
 
-    template <ui32 SizeBits, typename TStats=void>
-    using TVeryFastQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopReallyFast>;
+    template <ui32 SizeBits, typename TObserver=void>
+    using TVeryFastQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopReallyFast>;
 
-    template <ui32 SizeBits, typename TStats=void>
-    using TSingleQueue = TMPMCQueueBase<SizeBits, TStats, &TMPMCRingQueue<SizeBits, TStats>::TryPush, &TMPMCRingQueue<SizeBits, TStats>::TryPopSingleConsumer>;
+    template <ui32 SizeBits, typename TObserver=void>
+    using TSingleQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopSingleConsumer>;
 
-    template <ui32 SizeBits, typename TStats=void>
+    template <ui32 SizeBits, typename TObserver=void>
     struct TAdaptiveQueue : IQueue {
-        TMPMCRingQueue<SizeBits, TStats> *Queue;
-        typename TMPMCRingQueue<SizeBits, TStats>::EPopMode State = TMPMCRingQueue<SizeBits, TStats>::EPopMode::ReallySlow;
+        TMPMCRingQueue<SizeBits, TObserver> *Queue;
+        typename TMPMCRingQueue<SizeBits, TObserver>::EPopMode State = TMPMCRingQueue<SizeBits, TObserver>::EPopMode::ReallySlow;
 
-        TAdaptiveQueue(TMPMCRingQueue<SizeBits, TStats> *queue)
+        TAdaptiveQueue(TMPMCRingQueue<SizeBits, TObserver> *queue)
             : Queue(queue)
         {}
 
@@ -68,12 +69,12 @@ namespace NActors::NQueueBench {
 
 
     template <ui32 SizeBits>
-    using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TMPMCRingQueueStats>;
+    using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TStatsObserver>;
 
     template <template <ui32, typename> typename TAdaptor>
     struct TAdaptorWithStats {
         template <ui32 SizeBits>
-        using Type = TAdaptor<SizeBits, TMPMCRingQueueStats>;
+        using Type = TAdaptor<SizeBits, TStatsObserver>;
     };
 
 

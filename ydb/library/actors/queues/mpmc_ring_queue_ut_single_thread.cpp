@@ -20,7 +20,7 @@ namespace { // Tests
         static constexpr ui32 MaxSize = 1 << SizeBits;
 
         static auto GetHead(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
-            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TMPMCRingQueueStats>>) {
+            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                 return realQueue.LocalHead;
             } else {
                 return realQueue.Head.load();
@@ -28,7 +28,7 @@ namespace { // Tests
         }
 
         static auto GetHeadGeneration(const TMPMCRingQueueWithStats<SizeBits> &realQueue) {
-            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TMPMCRingQueueStats>>) {
+            if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                 return realQueue.LocalGeneration;
             } else {
                 return realQueue.Head.load() / MaxSize;
@@ -70,7 +70,7 @@ namespace { // Tests
                     UNIT_ASSERT_VALUES_EQUAL_C(realQueue.Buffer[realIdx].load(), idx, debugString);
                     std::optional<ui32> value = adaptor.TryPop();
                     UNIT_ASSERT_C(value, debugString);
-                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TMPMCRingQueueStats>>) {
+                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                         UNIT_ASSERT_VALUES_EQUAL_C((head + 1) % MaxSize, GetHead(realQueue), debugString);
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL_C(head + 1, GetHead(realQueue), debugString);
@@ -106,7 +106,7 @@ namespace { // Tests
                     UNIT_ASSERT_VALUES_EQUAL_C(realQueue.Buffer[idx].load(), idx, debugString);
                     std::optional<ui32> value = adaptor.TryPop();
                     UNIT_ASSERT_C(value, debugString);
-                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TMPMCRingQueueStats>>) {
+                    if constexpr (std::is_same_v<TQueueAdaptor<SizeBits>, TSingleQueue<SizeBits, TStatsObserver>>) {
                         UNIT_ASSERT_VALUES_EQUAL_C((head + 1) % MaxSize, GetHead(realQueue), debugString);
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL_C(head + 1, GetHead(realQueue), debugString);

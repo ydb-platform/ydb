@@ -479,6 +479,8 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
 
+void ValidateDynamicTableKeyColumnCount(int count);
+
 void ValidateColumnName(const TString& name);
 
 void ValidateColumnSchema(

@@ -53,8 +53,7 @@ struct IDirectReadSessionControlCallbacks {
     virtual void ScheduleCallback(TDuration, std::function<void()>) {}
     virtual void ScheduleCallback(TDuration, std::function<void()>, TDeferredActions<false>&) {}
 
-    virtual void StopPartitionSession(TPartitionSessionId, [[maybe_unused]] bool graceful) {}
-    virtual void DeleteNodeSessionIfEmpty(TNodeId) {}
+    virtual void StopPartitionSession(TPartitionSessionId) {}
 };
 
 class TDirectReadSessionControlCallbacks : public IDirectReadSessionControlCallbacks {
@@ -66,8 +65,7 @@ public:
     void ScheduleCallback(TDuration delay, std::function<void()> callback) override;
     void ScheduleCallback(TDuration delay, std::function<void()> callback, TDeferredActions<false>&) override;
 
-    void StopPartitionSession(TPartitionSessionId, bool graceful) override;
-    void DeleteNodeSessionIfEmpty(TNodeId) override;
+    void StopPartitionSession(TPartitionSessionId) override;
 
 private:
 
@@ -119,11 +117,13 @@ public:
 
     void Start();
     void Close();
+    bool Empty() const;
+    bool Closed() const;
+
     void AddPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSessionGeneration(TPartitionSessionId, TPartitionLocation);
     void SetLastDirectReadId(TPartitionSessionId, TDirectReadId);
     void DeletePartitionSession(TPartitionSessionId);
-    bool Empty() const;
 
 private:
 
@@ -133,6 +133,7 @@ private:
     );
 
     void InitImpl(TDeferredActions<false>&);
+    void CloseImpl();
 
     void WriteToProcessorImpl(TDirectReadClientMessage&& req);
     void ReadFromProcessorImpl(TDeferredActions<false>&);
@@ -226,9 +227,10 @@ public:
 
     void StartPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
+    void ErasePartitionSession(TPartitionSessionId);
     void StopPartitionSession(TPartitionSessionId);
     void StopPartitionSessionGracefully(TPartitionSessionId, TDirectReadId lastDirectReadId);
-    void DeleteNodeSessionIfEmpty(TNodeId);
+
     void Close();
 
 private:

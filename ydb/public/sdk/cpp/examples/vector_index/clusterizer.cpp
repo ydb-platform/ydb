@@ -2,7 +2,7 @@
 #include "util/stream/output.h"
 #include "util/system/yassert.h"
 
-static constexpr ui32 kBatchSize = 100;
+static constexpr ui32 kBatchSize = 500;
 static ui64 gId = 1;
 
 void TClusterizer::TProgress::Reset(ui64 rows) {

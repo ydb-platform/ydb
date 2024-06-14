@@ -14,7 +14,6 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/charset/ci_string.h>
-#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -613,8 +612,7 @@ public:
             ctx.Error(Pos) << "Version requires exactly 0 arguments";
             return false;
         }
-        const TString branch(GetBranch());
-        Node = Y("String", BuildQuotedAtom(Pos, branch.substr(branch.rfind("/") + 1)));
+        Node = Y("Version");
         return true;
     }
 

@@ -7,7 +7,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpDatashardTypes) {
+Y_UNIT_TEST_SUITE(KqpTypes) {
     Y_UNIT_TEST_TWIN(Time64Columns, EnableTableDatetime64) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(EnableTableDatetime64);

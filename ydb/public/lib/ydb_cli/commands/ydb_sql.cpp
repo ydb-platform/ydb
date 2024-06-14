@@ -108,8 +108,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     // Execute query without parameters
     auto asyncResult = client.StreamExecuteQuery(
         Query,
-        // TODO: NoTx by default
-        NQuery::TTxControl::BeginTx().CommitTx(),
+        NQuery::TTxControl::NoTx(),
         settings
     );
 

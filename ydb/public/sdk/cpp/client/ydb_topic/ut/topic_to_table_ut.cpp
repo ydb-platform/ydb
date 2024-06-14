@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/blob.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
@@ -155,6 +156,12 @@ private:
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                               ui64 tabletId,
                                               ui64 writeId);
+
+    void CheckTabletKeys(const TString& topicName);
+
+    TString GetPQTabletBlob(const TActorId& actorId,
+                            ui64 tabletId,
+                            const TString& key);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
@@ -563,7 +570,7 @@ auto TFixture::GetTopicReadSession(const TString& topicPath,
     if (auto i = TopicReadSessions.find(topicPath); i == TopicReadSessions.end()) {
         session = CreateTopicReadSession(topicPath, consumerName, partitionId);
         auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(session);
-        event.Confirm(7);
+        event.Confirm();
         TopicReadSessions.emplace(topicPath, session);
     } else {
         session = i->second;
@@ -1384,17 +1391,33 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     }
 }
 
-void TFixture::DumpPQTabletKeys(const TString& topicName, ui32 partition)
+TString TFixture::GetPQTabletBlob(const TActorId& actorId,
+                                  ui64 tabletId,
+                                  const TString& key)
 {
-    DBGTRACE("DumpPQTabletKeys");
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
-    auto keys = GetTabletKeys(edge, tabletId);
+    using TEvKeyValue = NKikimr::TEvKeyValue;
 
-    for (auto& key : keys) {
-        DBGTRACE_LOG(key);
-    }
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+
+    auto cmd = request->Record.AddCmdRead();
+    cmd->SetKey(key);
+
+    auto& runtime = Setup->GetRuntime();
+
+    runtime.SendToPipe(tabletId, actorId, request.release());
+    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+    UNIT_ASSERT(response->Record.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+
+    THashSet<TString> keys;
+
+    auto& result = response->Record.GetReadResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), 0);
+
+    return result.GetValue();
 }
 
 void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d)

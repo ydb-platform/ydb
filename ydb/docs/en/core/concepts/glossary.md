@@ -26,17 +26,25 @@ Given {{ ydb-short-name }} follows the approach of separated storage and compute
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **dynamic nodes** or **tenant nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](cluster/index.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
+**Database nodes** (also known as **tenant nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](cluster/index.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
 
 The main role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as accept incoming requests via various endpoints.
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (also known as **static nodes**) are stateful and responsible for long-term persisting pieces of data. All storage nodes of a given [{{ ydb-short-name }} cluster](#cluster) are called [Distributed Storage](#distributed-storage) and can be considered the cluster's storage layer. Thus, adding extra storage nodes and their disks are the main ways to increase the cluster's storage capacity and input/output throughput.
+**Storage nodes** are stateful and responsible for long-term persisting pieces of data. All storage nodes of a given [{{ ydb-short-name }} cluster](#cluster) are called [Distributed Storage](#distributed-storage) and can be considered the cluster's storage layer. Thus, adding extra storage nodes and their disks are the main ways to increase the cluster's storage capacity and input/output throughput.
 
 #### Hybrid node {#hybrid-mode}
 
 A **hybrid node** is a process that simultaneously serves both roles of a [database](#database-node) and [storage](#storage-node) node. They are rarely used in production environments.
+
+#### Static node {#static-node}
+
+**Static nodes** are manually configured during the initial cluster initialization or re-configuration. Typically, they play the role of [storage nodes](#storage-node), but technically, it is possible to configure them to be [database nodes](#database-node) as well.
+
+#### Dynamic node {#dynamic-node}
+
+**Dynamic nodes** are added and removed from the cluster on the fly. They can only play the role of [database nodes](#database-node).
 
 ### Distributed storage {#distributed-storage}
 
@@ -58,7 +66,7 @@ A static group might require special attention during major maintenance, such as
 
 #### Dynamic group {#dynamic-group}
 
-Regular storage groups that are not [static](#static-group) are called **dynamic groups**.
+Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and decommissioned on the fly during [cluster](#cluster) operation.
 
 ### Actor {#actor}
 

@@ -96,7 +96,8 @@ private:
         bool Empty() const;
     };
 
-    TBatch Batch;
+    TBatch ToCompute;
+    TBatch ToFill;
     std::vector<std::thread> Threads;
     std::mutex M;
     std::condition_variable WaitWork;

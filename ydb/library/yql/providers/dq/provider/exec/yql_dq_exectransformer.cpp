@@ -1621,18 +1621,25 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<TString>()](const TString& stage, const auto& stats) {
-        Y_UNUSED(stats);
-            if (*current != stage) {
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        {
+            if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {
-                    auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
+                    auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, state.Stage);
                     if (publicId.second) {
                         p.Counters.ConstructInPlace();
                         p.Counters->Running = p.Counters->Total = publicId.second;
+                        auto maybeStageId = publicIds->PublicId2Stage.find(publicId.first);
+                        if (maybeStageId != publicIds->PublicId2Stage.end()) {
+                            auto maybeStats = state.Stats.find(maybeStageId->second);
+                            if (maybeStats != state.Stats.end()) {
+                                p.Counters->Custom = maybeStats->second.ToMap();
+                            }
+                        }
                     }
                     progressWriter(p);
                 }
-                *current = stage;
+                *current = std::move(state);
             }
         };
         return dqProgressWriter;

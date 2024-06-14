@@ -87,6 +87,7 @@ public:
     // Queues
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
+    // COMPAT(nadya73): For compatability with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(PullConsumer, NRpcProxy::NProto::TReqPullQueueConsumer, NRpcProxy::NProto::TRspPullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);

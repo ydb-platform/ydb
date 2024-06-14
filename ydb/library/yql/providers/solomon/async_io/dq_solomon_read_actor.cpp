@@ -324,7 +324,7 @@ private:
         //     "to": "2023-12-08T14:45:39Z"
         //     })";
 
-        const TStringBuf body = w.Str();
+        // const TStringBuf body = w.Str();
         //Cerr << "EX: Sending request: " << body << Endl;
         const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(w.Str());
 

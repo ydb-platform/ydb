@@ -584,10 +584,8 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!leftInputType) {
         return TStatus::Error;
     }
-    auto leftRowType = GetSeqItemType(leftInputType);
-
-    const auto rightRowType = input->Child(TDqCnStreamLookup::idx_RightInputRowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-
+    const auto leftRowType = GetSeqItemType(leftInputType);
+    const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
         *leftRowType->Cast<TStructExprType>(),

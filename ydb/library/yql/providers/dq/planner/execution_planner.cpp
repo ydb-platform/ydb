@@ -26,7 +26,6 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
-
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -570,20 +569,27 @@ namespace NYql::NDqs {
         {TDqCnMerge::CallableName(), &BuildMergeChannels},
     };
 
-    NDqProto::TDqStreamLookupSource FillLookupSource(const NNodes::TExprBase& node) {
-        NDqProto::TDqStreamLookupSource result;
-        //TODO use provider to fill DataSource, see FillSourcePlanProperties
-        auto rowType = node.Raw()->GetTypeAnn();
-        result.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rowType));
-        return result;
-    }
-
     void TDqsExecutionPlanner::ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage, ui32 inputIndex) {
-        //TODO use provider, see FillSourcePlanProperties
-        auto rightSource = FillLookupSource(streamLookup.RightInputRowType());
+        auto rightInput = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
+        auto dataSourceName = rightInput.DataSource().Category().StringValue();
+        auto dataSource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(dataSource);
+        auto dqIntegration = (*dataSource)->GetDqIntegration();
+        YQL_ENSURE(dqIntegration);
+        
+        google::protobuf::Any providerSpecificLookupSourceSettings;
+        TString sourceType;
+        dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
+        YQL_ENSURE(!providerSpecificLookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
+        YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
+
+        NDqProto::TDqStreamLookupSource streamLookupSource;
+        streamLookupSource.SetProviderName(sourceType);
+        *streamLookupSource.MutableLookupSource() = providerSpecificLookupSourceSettings;
+        streamLookupSource.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rightInput.RowType().Raw()->GetTypeAnn()));
         NDqProto::TDqInputTransformLookupSettings settings;
         settings.SetLeftLabel(streamLookup.LeftLabel().Cast<NNodes::TCoAtom>().StringValue());
-        *settings.MutableRightSource() = rightSource;
+        *settings.MutableRightSource() = streamLookupSource;
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {

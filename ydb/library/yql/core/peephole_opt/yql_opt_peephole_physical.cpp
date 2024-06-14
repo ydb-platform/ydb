@@ -26,7 +26,6 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
 
-
 namespace NYql {
 
 namespace {

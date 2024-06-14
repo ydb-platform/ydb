@@ -1203,8 +1203,8 @@ private:
 
     // Direct Read
     void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
-    void StopPartitionSession(TPartitionSessionId, bool graceful);
-    void StopPartitionSessionImpl(TIntrusivePtr<TPartitionStreamImpl<false>>, bool graceful, TDeferredActions<false>&);
+    void StopPartitionSession(TPartitionSessionId);
+    void StopPartitionSessionImpl(TIntrusivePtr<TPartitionStreamImpl<false>>, bool graceful, bool fromControlSession, TDeferredActions<false>&);
 
     // Assumes that we're under lock.
     template<typename TMessage>

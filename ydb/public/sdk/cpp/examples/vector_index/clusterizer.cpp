@@ -71,10 +71,6 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
                 std::span batch{Batch.RawData.data() + start, len};
                 for (const auto& rawEmbedding : batch) {
                     auto embedding = GetArray<float>(rawEmbedding);
-                    if (embedding.size() != 768) {
-                        Cout << "kdsafl" << Endl;
-                        std::terminate();
-                    }
                     auto min = Compute(embedding);
                     Batch.Min[start++] = min;
                 }

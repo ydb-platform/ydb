@@ -7,7 +7,7 @@
 #include <thread>
 
 using TId = uint64_t;
-using TRawEmbedding = const TString&;
+using TRawEmbedding = TString&&;
 using TEmbedding = std::span<const float>;
 
 class TDatasetIterator {
@@ -35,7 +35,7 @@ public:
     };
 
     struct TClusters {
-        std::vector<std::optional<TId>> Ids;
+        std::vector<TId> Ids;
         std::vector<std::vector<float>> Coords;
     };
 
@@ -54,9 +54,10 @@ private:
     };
 
     TMin Compute(TEmbedding embedding);
-    void ComputeBatch();
     void Update(TMin min, TEmbedding embedding);
-    void UpdateBatch();
+
+    template <typename Func>
+    void ComputeBatch(Func&& func);
 
     TClusters Clusters;
 
@@ -69,6 +70,7 @@ private:
         float Distance = 0;
         ui64 Count = 0;
     };
+
     std::vector<TAggregatedCluster> NewClusters;
     float OldMean = std::numeric_limits<float>::max();
 
@@ -79,17 +81,21 @@ private:
     private:
         double Curr = 0;
         double Rows = 0;
-        ui64 Count = 0;
         std::chrono::steady_clock::time_point Last{};
     };
+
     TProgress Progress;
+
     struct TBatch {
         std::vector<TId> IdData;
         std::vector<TString> RawData;
-
-        std::vector<std::vector<float>> Data;
         std::vector<TMin> Min;
+
+        void Swap(TBatch& other);
+        void Clear();
+        bool Empty() const;
     };
+
     TBatch Batch;
     std::vector<std::thread> Threads;
     std::mutex M;

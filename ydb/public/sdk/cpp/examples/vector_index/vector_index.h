@@ -11,8 +11,10 @@
 #include <util/string/printf.h>
 
 enum class ECommand {
+    DropIndex,
     CreateIndex,
-    UpdateIndex, // Fill
+    UpdateIndex,   // fill/construct
+    RecreateIndex, // Drop, Create, Update
     TopK,
     None,
 };
@@ -30,6 +32,8 @@ struct TOptions {
     TString Data;
     ui64 TopK = 0;
 };
+
+int DropIndex(NYdb::TDriver& driver, const TOptions& options);
 
 int CreateIndex(NYdb::TDriver& driver, const TOptions& options);
 

@@ -44,9 +44,19 @@ int main(int argc, char** argv) {
 
     try {
         switch (cmd) {
+            case ECommand::DropIndex:
+                return DropIndex(driver, options);
             case ECommand::CreateIndex:
                 return CreateIndex(driver, options);
             case ECommand::UpdateIndex:
+                return UpdateIndex(driver, options);
+            case ECommand::RecreateIndex:
+                if (auto r = DropIndex(driver, options); r != 0) {
+                    return r;
+                }
+                if (auto r = CreateIndex(driver, options); r != 0) {
+                    return r;
+                }
                 return UpdateIndex(driver, options);
             case ECommand::TopK:
                 return TopK(driver, options);
@@ -55,6 +65,8 @@ int main(int argc, char** argv) {
         }
     } catch (const TVectorException& e) {
         Cerr << "Execution failed: " << e << Endl;
+    } catch (const std::exception& e) {
+        Cerr << "Execution failed: " << e.what() << Endl;
     }
     return 1;
 }

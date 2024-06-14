@@ -74,4 +74,4 @@ message IssueLog {
 * `Group has no redundancy`: A storage group lost its redundancy.
 * `Group failed`: A storage group lost its integrity.
 * `Group degraded`: The number of disks allowed in the group is not available.
-* `The nodes have a time difference of ... ms`: Potential issues with coordinating distributed transactions.
+* `The nodes have a time difference of ... ms`: Time drift on nodes might lead to potential issues with coordinating distributed transactions.

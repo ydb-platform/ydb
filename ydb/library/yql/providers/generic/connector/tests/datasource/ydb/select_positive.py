@@ -556,9 +556,8 @@ class Factory:
             itertools.chain(
                 self._primitive_types(),
                 self._optional_types(),
-                # FIXME: YQ-3314
-                # self._constant(),
-                # self._count(),
+                self._constant(),
+                self._count(),
                 self._pushdown(),
                 self._unsupported_types(),
                 self._json(),

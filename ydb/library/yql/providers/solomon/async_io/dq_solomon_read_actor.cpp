@@ -360,6 +360,7 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
+        Y_UNUSED(cookie);
         //SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
         //Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;

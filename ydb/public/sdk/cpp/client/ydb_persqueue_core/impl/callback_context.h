@@ -4,9 +4,11 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
+#include <map>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
-#include <vector>
+#include <thread>
 
 namespace NYdb::NPersQueue {
 
@@ -17,18 +19,62 @@ template <typename TGuardedObject>
 class TCallbackContext {
     friend class TContextOwner<TGuardedObject>;
 
+    // thread_id -> number of LockShared calls from this thread
+    using TSharedLockCounter = std::map<std::thread::id, size_t>;
+    using TSharedLockCounterPtr = std::shared_ptr<TSharedLockCounter>;
+    using TSpinLockPtr = std::shared_ptr<TSpinLock>;
+
 public:
     using TMutexPtr = std::shared_ptr<std::shared_mutex>;
 
     class TBorrowed {
     public:
-        explicit TBorrowed(const TCallbackContext& parent) : Mutex(parent.Mutex) {
-            Mutex->lock_shared();
+        explicit TBorrowed(const TCallbackContext& parent)
+            : Mutex(parent.Mutex)
+            , SharedLockCounterMutex(parent.SharedLockCounterMutex)
+            , SharedLockCounter(parent.SharedLockCounter)
+        {
+            // "Recursive shared lock".
+            //
+            // https://en.cppreference.com/w/cpp/thread/shared_mutex/lock_shared says:
+            //   If lock_shared is called by a thread that already owns the mutex
+            //   in any mode (exclusive or shared), the behavior is UNDEFINED.
+            //
+            // So if a thread calls LockShared more than once without releasing the lock,
+            // we should call lock_shared only on the first call.
+
+            bool takeLock = false;
+
+            with_lock(*SharedLockCounterMutex) {
+                auto& counter = SharedLockCounter->emplace(std::this_thread::get_id(), 0).first->second;
+                ++counter;
+                takeLock = counter == 1;
+            }
+
+            if (takeLock) {
+                Mutex->lock_shared();
+            }
+
             Ptr = parent.GuardedObjectPtr.get();
         }
 
         ~TBorrowed() {
-            Mutex->unlock_shared();
+            bool releaseLock = false;
+
+            with_lock(*SharedLockCounterMutex) {
+                auto it = SharedLockCounter->find(std::this_thread::get_id());
+                Y_ABORT_UNLESS(it != SharedLockCounter->end());
+                auto& counter = it->second;
+                --counter;
+                if (counter == 0) {
+                    releaseLock = true;
+                    SharedLockCounter->erase(it);
+                }
+            }
+
+            if (releaseLock) {
+                Mutex->unlock_shared();
+            }
         }
 
         TGuardedObject* operator->() {
@@ -46,12 +92,17 @@ public:
     private:
         TMutexPtr Mutex;
         TGuardedObject* Ptr = nullptr;
+
+        TSpinLockPtr SharedLockCounterMutex;
+        TSharedLockCounterPtr SharedLockCounter;
     };
 
 public:
     explicit TCallbackContext(std::shared_ptr<TGuardedObject> ptr)
         : Mutex(std::make_shared<std::shared_mutex>())
         , GuardedObjectPtr(std::move(ptr))
+        , SharedLockCounterMutex(std::make_shared<TSpinLock>())
+        , SharedLockCounter(std::make_shared<TSharedLockCounter>())
         {}
 
     TBorrowed LockShared() {
@@ -75,8 +126,12 @@ public:
     }
 
 private:
+
     TMutexPtr Mutex;
     std::shared_ptr<TGuardedObject> GuardedObjectPtr;
+
+    TSpinLockPtr SharedLockCounterMutex;
+    TSharedLockCounterPtr SharedLockCounter;
 };
 
 template<typename T>

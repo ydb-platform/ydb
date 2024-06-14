@@ -529,6 +529,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!Self->VolatileTxManager.Load(db)) {
             return false;
         }
+        Self->OutReadSets.HoldArbiterReadSets();
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::CdcStreamScans::TableId)) {

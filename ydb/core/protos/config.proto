@@ -1294,12 +1294,21 @@ message TImmediateControlsConfig {
         optional TKeyValue KeyValue = 1;
     }
 
+    message TTabletControls {
+        optional uint64 MaxCommitRedoMB = 1 [(ControlOptions) = {
+            Description: "Maximum redo size per commit in megabytes",
+            MinValue: 8,
+            MaxValue: 4096,
+            DefaultValue: 256 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
     optional TTracingControls TracingControls = 6;
+    optional TTabletControls TabletControls = 8;
 };
 
 message TMeteringConfig {
@@ -1709,6 +1718,7 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
+    optional bool MeteringV2Enabled = 10 [default = false];
 }
 
 message TAwsCompatibilityConfig {

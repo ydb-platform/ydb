@@ -15,10 +15,6 @@
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 
-
-#define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
-
-
 namespace NKikimr {
 namespace NTable {
 
@@ -269,6 +265,12 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
 {
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
+
+TSizeEnv TDatabase::CreateSizeEnv()
+{
+    return TSizeEnv(Env);
+}
+
 
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
@@ -664,18 +666,6 @@ size_t TDatabase::GetCommitRedoBytes() const
 {
     Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
     return Redo->Bytes();
-}
-
-bool TDatabase::ValidateCommit(TString &err)
-{
-    if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {
-        err = TStringBuilder()
-            << "Redo commit of " << Redo->Bytes()
-            << " bytes is more than the allowed limit";
-        return false;
-    }
-
-    return true;
 }
 
 bool TDatabase::HasChanges() const

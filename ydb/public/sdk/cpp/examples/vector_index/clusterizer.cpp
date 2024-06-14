@@ -20,6 +20,88 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
     , Distance{std::move(distance)}
     , Create{std::move(create)}
 {
+    ui64 n = std::clamp<ui64>(std::thread::hardware_concurrency(), 1, std::numeric_limits<ui64>::max());
+    Threads.reserve(n);
+    for (ui64 i = 0; i != n; ++i) {
+        Threads.emplace_back([this, i] {
+            std::unique_lock lock{M};
+            while (true) {
+                while ((Work & (1 << i)) == 0) {
+                    WaitIdle.wait(lock);
+                }
+                if (Stop) {
+                    return;
+                }
+                lock.unlock();
+                auto start = i * 100;
+                auto len = i * 100 >= Batch.Data.size() ? 0 : std::min<ui32>(Batch.Data.size() - i * 100, 100);
+                std::span batch{Batch.Data.data() + i * 100, len};
+                for (const auto& e : batch) {
+                    auto min = Compute(e);
+                    Batch.Min[start++] = min;
+                }
+                lock.lock();
+                Work &= ~(1 << i);
+                if (Work == 0) {
+                    WaitWork.notify_one();
+                }
+            }
+        });
+    }
+}
+
+TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
+    float minDistance = std::numeric_limits<float>::max();
+    ui32 minPos = 0;
+    Y_ASSERT(!Clusters.Coords.empty());
+    for (ui32 pos = 0; auto& cluster : Clusters.Coords) {
+        auto distance = Distance(cluster, embedding);
+        if (distance < minDistance) {
+            minDistance = distance;
+            minPos = pos;
+        }
+        ++pos;
+    }
+    return {minDistance, minPos};
+}
+
+void TClusterizer::ComputeBatch() {
+    std::unique_lock lock{M};
+    Y_ASSERT(Work == 0);
+    Work = (ui64{1} << Threads.size()) - 1;
+    WaitIdle.notify_all();
+    while (Work != 0) {
+        WaitWork.wait(lock);
+    }
+}
+
+void TClusterizer::Update(TMin min, TEmbedding embedding) {
+    Y_ASSERT(Clusters.Coords.size() == NewClusters.size());
+    NewClusters[min.Pos].Distance += min.Distance;
+    for (size_t pos = 0; auto& coord : NewClusters[min.Pos].Coords) {
+        coord += embedding[pos++];
+    }
+    NewClusters[min.Pos].Count++;
+}
+
+void TClusterizer::UpdateBatch() {
+    ComputeBatch();
+    for (size_t i = 0; i != Batch.Data.size(); ++i) {
+        Update(Batch.Min[i], Batch.Data[i]);
+    }
+    Batch.Data.clear();
+    Batch.Min.clear();
+}
+
+TClusterizer::~TClusterizer() {
+    std::unique_lock lock{M};
+    Work = (ui64{1} << Threads.size()) - 1;
+    Stop = true;
+    lock.unlock();
+    WaitIdle.notify_all();
+    for (auto& thread : Threads) {
+        thread.join();
+    }
 }
 
 TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
@@ -66,24 +148,15 @@ bool TClusterizer::Step(float neededDiff) {
     It.Iterate([&](TRawEmbedding rawEmbedding) {
         Progress.Report();
         auto embedding = GetArray<float>(rawEmbedding);
-        float minDistance = std::numeric_limits<float>::max();
-        size_t minPos = 0;
-        Y_ASSERT(!Clusters.Coords.empty());
-        for (size_t pos = 0; auto& cluster : Clusters.Coords) {
-            auto distance = Distance(cluster, embedding);
-            if (distance < minDistance) {
-                minDistance = distance;
-                minPos = pos;
-            }
-            ++pos;
+        Batch.Data.emplace_back(embedding.begin(), embedding.end());
+        Batch.Min.emplace_back();
+        if (Batch.Data.size() == Threads.size() * 100) {
+            UpdateBatch();
         }
-        Y_ASSERT(Clusters.Coords.size() == NewClusters.size());
-        NewClusters[minPos].Distance += minDistance;
-        for (size_t pos = 0; auto& coord : NewClusters[minPos].Coords) {
-            coord += embedding[pos++];
-        }
-        NewClusters[minPos].Count++;
     });
+    if (!Batch.Data.empty()) {
+        UpdateBatch();
+    }
     float newMean = 0;
     for (auto& cluster : NewClusters) {
         auto count = static_cast<float>(cluster.Count);
@@ -110,25 +183,34 @@ bool TClusterizer::Step(float neededDiff) {
 void TClusterizer::Finalize() {
     Cout << "Start finalize" << Endl;
     Progress.Reset(It.Rows());
+    auto update = [&] {
+        ComputeBatch();
+        for (size_t i = 0; i != Batch.Data.size(); ++i) {
+            auto& parentId = Clusters.Ids[Batch.Min[i].Pos];
+            auto id = Batch.IdData[i];
+            if (Y_UNLIKELY(!parentId))
+                parentId = id;
+            Create(*parentId, id, Batch.RawData[i]);
+        }
+        Batch.IdData.clear();
+        Batch.RawData.clear();
+        Batch.Data.clear();
+        Batch.Min.clear();
+    };
     It.Iterate([&](TId id, TRawEmbedding rawEmbedding) {
         Progress.Report();
         auto embedding = GetArray<float>(rawEmbedding);
-        float minDistance = std::numeric_limits<float>::max();
-        size_t minPos = 0;
-        Y_ASSERT(!Clusters.Coords.empty());
-        for (size_t pos = 0; auto& cluster : Clusters.Coords) {
-            auto distance = Distance(cluster, embedding);
-            if (distance < minDistance) {
-                minDistance = distance;
-                minPos = pos;
-            }
-            ++pos;
+        Batch.IdData.emplace_back(id);
+        Batch.RawData.emplace_back(rawEmbedding);
+        Batch.Data.emplace_back(embedding.begin(), embedding.end());
+        Batch.Min.emplace_back();
+        if (Batch.Data.size() == Threads.size() * 100) {
+            update();
         }
-        auto& parentId = Clusters.Ids[minPos];
-        if (Y_UNLIKELY(!parentId))
-            parentId = id;
-        Create(*parentId, id, rawEmbedding);
     });
+    if (!Batch.Data.empty()) {
+        update();
+    }
 }
 
 void TClusterizer::TProgress::Reset(ui64 rows) {

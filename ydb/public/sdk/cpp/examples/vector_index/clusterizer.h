@@ -4,19 +4,7 @@
 #include <span>
 #include <functional>
 #include <chrono>
-
-// It's prototype so it's not really optimized
-
-// ~~Idea of ​​how not to keep everything in memory is taken from here~~
-// https://github.com/google-research/google-research/blob/master/scann/scann/utils/gmm_utils.h
-
-// A = available memory
-// E = expected embedding size
-// X = A / E = available rows
-// Y = dataset rows
-// P = parts
-// X / P -- needed count of clusters in distributed case in each part
-// when go each 2^7
+#include <thread>
 
 using TId = uint64_t;
 using TRawEmbedding = const TString&;
@@ -36,6 +24,7 @@ using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
 class TClusterizer {
 public:
     TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create);
+    ~TClusterizer();
 
     struct TOptions {
         ui32 maxIterations = 10;
@@ -58,6 +47,16 @@ private:
     bool Step(float neededDiff);
 
     void Finalize();
+
+    struct TMin {
+        float Distance = 0;
+        ui32 Pos = 0;
+    };
+
+    TMin Compute(TEmbedding embedding);
+    void ComputeBatch();
+    void Update(TMin min, TEmbedding embedding);
+    void UpdateBatch();
 
     TClusters Clusters;
 
@@ -84,4 +83,18 @@ private:
         std::chrono::steady_clock::time_point Last{};
     };
     TProgress Progress;
+    struct TBatch {
+        std::vector<TId> IdData;
+        std::vector<TString> RawData;
+
+        std::vector<std::vector<float>> Data;
+        std::vector<TMin> Min;
+    };
+    TBatch Batch;
+    std::vector<std::thread> Threads;
+    std::mutex M;
+    std::condition_variable WaitWork;
+    std::condition_variable WaitIdle;
+    bool Stop = false;
+    ui64 Work = 0;
 };

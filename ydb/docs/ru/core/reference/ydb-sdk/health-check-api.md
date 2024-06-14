@@ -60,7 +60,7 @@ message IssueLog {
 * `Tablets are restarting too often` — таблетки слишком часто перезапускаются.
 * `Tablets/Followers are dead` — таблетки не запущены (или не могут быть запущены).
 * `Node is restarting too often` — узлы слишком часто перезапускаются.
-* `The number of node restarts has increased` — количетство рестартов ноды превысило порог.
+* `The number of node restarts has increased` — количество рестартов ноды превысило порог.
 * `LoadAverage above 100%` — физический хост перегружен.
 * `There are no compute nodes` — у базы нет нод для запуска таблеток.
 * `PDisk state is ...` — сообщает о проблемах с физическим диском.

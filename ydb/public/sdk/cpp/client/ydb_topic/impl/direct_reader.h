@@ -12,7 +12,7 @@ namespace Ydb::Topic {
     class StreamDirectReadMessage;
     class StreamDirectReadMessage_FromServer;
     class StreamDirectReadMessage_FromClient;
-    class StreamDirectReadMessage_InitDirectReadResponse;
+    class StreamDirectReadMessage_InitResponse;
     class StreamDirectReadMessage_StartDirectReadPartitionSessionResponse;
     class StreamDirectReadMessage_DirectReadResponse;
     class StreamDirectReadMessage_StopDirectReadPartitionSession;
@@ -139,7 +139,7 @@ private:
     void ReadFromProcessorImpl(TDeferredActions<false>&);
     void OnReadDone(NYdbGrpc::TGrpcStatus&&, size_t connectionGeneration);
 
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_InitDirectReadResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_InitResponse&&, TDeferredActions<false>&);
     void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StartDirectReadPartitionSessionResponse&&, TDeferredActions<false>&);
     void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_DirectReadResponse&&, TDeferredActions<false>&);
     void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StopDirectReadPartitionSession&&, TDeferredActions<false>&);

@@ -485,8 +485,8 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
                 errorStatus = MakeErrorFromProto(*ServerMessage);
             } else {
                 switch (ServerMessage->server_message_case()) {
-                case TDirectReadServerMessage::kInitDirectReadResponse:
-                    OnReadDoneImpl(std::move(*ServerMessage->mutable_init_direct_read_response()), deferred);
+                case TDirectReadServerMessage::kInitResponse:
+                    OnReadDoneImpl(std::move(*ServerMessage->mutable_init_response()), deferred);
                     break;
                 case TDirectReadServerMessage::kStartDirectReadPartitionSessionResponse:
                     OnReadDoneImpl(std::move(*ServerMessage->mutable_start_direct_read_partition_session_response()), deferred);
@@ -607,13 +607,13 @@ void TDirectReadSession::DelayStartRequestImpl(TDirectReadPartitionSession& part
     );
 }
 
-void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::InitDirectReadResponse&& response, TDeferredActions<false>&) {
+void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::InitResponse&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ABORT_UNLESS(State == EState::INITIALIZING);
     State = EState::WORKING;
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got InitDirectReadResponse " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got InitResponse " << response.ShortDebugString());
 
     RetryState = nullptr;
 
@@ -756,7 +756,7 @@ void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
 
     TDirectReadClientMessage req;
-    auto& init = *req.mutable_init_direct_read_request();
+    auto& init = *req.mutable_init_request();
     init.set_session_id(ServerSessionId);
     init.set_consumer(ReadSessionSettings.ConsumerName_);
 

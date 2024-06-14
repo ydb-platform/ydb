@@ -508,7 +508,7 @@ Fail realm
 
 Usually a fail domain is a server rack, while a fail realm is a data center.
 
-When creating a [storage group](../../concepts/databases.md#storage-groups), {{ ydb-short-name }} groups VDisks that are located on PDisks from different fail domains. For `block-4-2` mode, a PDisk should be distributed across at least 8 fail domains, and for `mirror-3-dc` mode, across 3 fail realms with at least 3 fail domains in each of them.
+When creating a [storage group](../../concepts/glossary.md#storage-groups), {{ ydb-short-name }} groups VDisks that are located on PDisks from different fail domains. For `block-4-2` mode, a PDisk should be distributed across at least 8 fail domains, and for `mirror-3-dc` mode, across 3 fail realms with at least 3 fail domains in each of them.
 
 ### Hardware configuration {#requirements}
 

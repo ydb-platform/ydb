@@ -729,8 +729,6 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-
-        std::cerr << "MISHA spiller factory: " << (bool)ctx.SpillerFactory << std::endl;
         // Collecting data for join and perform join (batch or full)
         while (!*JoinCompleted ) {
 

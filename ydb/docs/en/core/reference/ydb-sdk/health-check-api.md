@@ -58,8 +58,8 @@ message IssueLog {
 * `Pool usage over 90/95/99%`: One of the pools' CPUs is overloaded.
 * `System tablet is unresponsive / response time over 1000ms/5000ms`: The system tablet is not responding or it takes too long to respond.
 * `Tablets are restarting too often`: Tablets are restarting too often.
-* `Tablets/Followers are dead`: Tablets are not started (or cannot be started).
-* `Node is restarting too often`,
+* `Tablets/Followers are dead`: Tablets are not running (probably cannot be started).
+* `Node is restarting too often`.
 * `The number of node restarts has increased`: The number of node restarts has exceeded the threshold.
 * `LoadAverage above 100%`: A physical host is overloaded.
 * `There are no compute nodes`: The database has no nodes to start the tablets.

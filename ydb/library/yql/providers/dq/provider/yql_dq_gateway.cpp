@@ -329,10 +329,10 @@ public:
         return promise.GetFuture();
     }
 
-    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, TProgressWriterState state, bool ok, uint64_t querySeqNo) {
+    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, IDqGateway::TProgressWriterState state, bool ok, uint64_t querySeqNo) {
         if (ok) {
             ScheduleQueryStatusRequest(progressWriter, querySeqNo);
-            if (!status.empty()) {
+            if (!state.empty()) {
                 progressWriter(std::move(state));
             }
         }
@@ -382,7 +382,7 @@ public:
                 return;
             }
 
-            this_->OnRequestQueryStatus(progressWriter, std::move(TProgressWriterState{resp.GetStatus(), std::move(ExtractStats(resp))}), status.Ok(), querySeqNo);
+            this_->OnRequestQueryStatus(progressWriter, std::move(IDqGateway::TProgressWriterState{resp.GetStatus(), std::move(ExtractStats(resp))}), status.Ok(), querySeqNo);
         };
 
         Service.DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(

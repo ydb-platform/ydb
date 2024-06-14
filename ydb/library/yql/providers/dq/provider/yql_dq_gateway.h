@@ -48,10 +48,10 @@ public:
     struct TProgressWriterState {
         TString Stage;
         std::unordered_map<ui64, IDqGateway::TStageStats> Stats;
-        bool operator == (const TProgressWriterState& rhs) const {
-            return Stage == rhs.Stage &&
-                Stats == rhs.Stats;
+        bool empty() const {
+            return Stage.empty();
         }
+        bool operator == (const TProgressWriterState& rhs) const = default;
     };
 
     using TDqProgressWriter = std::function<void(TProgressWriterState state)>;

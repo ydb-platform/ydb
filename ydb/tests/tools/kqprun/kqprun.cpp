@@ -180,7 +180,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
 class TMain : public TMainClassArgs {
     inline static const TString YqlToken = GetEnv(NKqpRun::YQL_TOKEN_VARIABLE);
-    inline static TVector<std::unique_ptr<TFileOutput>> FileHolders;
+    inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
 
     TExecutionOptions ExecutionOptions;
     NKqpRun::TRunnerOptions RunnerOptions;
@@ -259,7 +259,7 @@ protected:
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
 
-        options.AddLongOption('t', "table", "File with table (can be used by YT with -E flag), table@file")
+        options.AddLongOption('t', "table", "File with input table (can be used by YT with -E flag), table@file")
             .RequiredArgument("table@file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TStringBuf tableName;
@@ -296,7 +296,7 @@ protected:
 
         // Outputs
 
-        options.AddLongOption("log-file", "File with execution logs (write in stderr if empty)")
+        options.AddLongOption("log-file", "File with execution logs (writes in stderr if empty)")
             .RequiredArgument("file")
             .StoreResult(&RunnerOptions.YdbSettings.LogOutputFile)
             .Handler1([](const NLastGetopt::TOptsParser* option) {

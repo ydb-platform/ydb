@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -559,5 +560,68 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
 }
 
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
+
+Y_UNIT_TEST_SUITE(TMultiBucketCounter) {
+void CheckBucketsValues(const TVector<std::pair<double, ui64>>& actual, const TVector<std::pair<double, ui64>>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (auto i = 0u; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(actual[i].second, expected[i].second);
+        UNIT_ASSERT_C(abs(actual[i].first - expected[i].first) < 0.0001, TStringBuilder() << actual[i].first << "-" << expected[i].first);
+    }
+}
+
+Y_UNIT_TEST(InsertAndUpdate) {
+    TMultiBucketCounter counter({100, 200, 500, 1000, 5000}, 5, 0);
+    counter.Insert(19, 3);
+    counter.Insert(15, 1);
+    counter.Insert(17, 1);
+
+    counter.Insert(100, 1);
+    counter.Insert(50001, 5);
+
+    CheckBucketsValues(counter.GetValues(), {{(19*3 + 15 + 17) / 5.0, 5}, {100, 1}, {50001, 5}});
+
+    auto counterNew = TMultiBucketCounter(std::move(counter), 50);
+
+    CheckBucketsValues(counterNew.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {150, 1}, {50051, 5}});
+    counterNew.Insert(190, 1);
+    counterNew.Insert(155, 1);
+
+    CheckBucketsValues(counterNew.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {152.5, 2}, {190, 1}, {50051, 5}});
+
+    auto counterNew2 = TMultiBucketCounter(std::move(counterNew), 1050);
+
+    CheckBucketsValues(counterNew2.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
+}
+
+Y_UNIT_TEST(ManyCounters) {
+    TMultiBucketCounter counter({100, 200, 500, 1000, 2000, 5000}, 5, 0);
+    for (auto i = 1u; i <= 5000; i++) {
+        counter.Insert(i, 1);
+        counter = TMultiBucketCounter(std::move(counter), 1);
+    }
+    counter.Insert(1, 1);
+
+    const auto& values = counter.GetValues();
+    for (auto i = 0u; i < 10; i++) { // 0 - 200, 2 buckets per 5 sub-buckets, size 20
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 20);
+    }
+    for (auto i = 10u; i < 15; i++) { // 200 - 500, 1 bucket, 5 sub-buckets, size 60
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 60);
+    }
+    for (auto i = 15u; i < 20; i++) { // 500 - 1000, 1 bucket, 5 sub-buckets, size 100
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 100);
+    }
+    for (auto i = 20u; i < 25; i++) { // 1000 - 2000, 1 bucket, 5 sub-buckets, size 200
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 200);
+    }
+    for (auto i = 25u; i < 30; i++) { // 2000 - 5000, 1 bucket, 5 sub-buckets, size 600
+        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 600);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(values[30].second, 1);
+
+}
+
+} // Y_UNIT_TEST_SUITE(TMultiBucketCounter)
 
 } // namespace NKikimr::NPQ

@@ -33,10 +33,10 @@ public:
         NDqProto::TDqInputTransformLookupSettings&& settings,
         TVector<size_t>&& inputJoinColumns,
         TVector<size_t>&& lookupJoinColumns,
-        const NMiniKQL::TMultiType* const inputRowType,
-        const NMiniKQL::TStructType* const lookupKeyType,
-        const NMiniKQL::TStructType* const lookupPayloadType,
-        const NMiniKQL::TMultiType* const outputRowType,
+        const NMiniKQL::TMultiType* inputRowType,
+        const NMiniKQL::TStructType* lookupKeyType,
+        const NMiniKQL::TStructType* lookupPayloadType,
+        const NMiniKQL::TMultiType* outputRowType,
         const TOutputRowColumnOrder& outputRowColumnOrder
     )
         : Alloc(alloc)

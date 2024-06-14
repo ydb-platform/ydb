@@ -4,8 +4,6 @@
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_reader.h>
 
-#include <util/system/condvar.h>
-
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 

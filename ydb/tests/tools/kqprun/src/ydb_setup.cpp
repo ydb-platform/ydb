@@ -261,24 +261,24 @@ public:
     }
 
     void QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) {
-        if (!AsyncQueryRunnerActorId) {
-            AsyncQueryRunnerActorId = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.InFlightLimit));
+        if (!AsyncQueryRunnerActorId_) {
+            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.InFlightLimit));
         }
 
         auto request = GetQueryRequest(query, action, traceId);
         auto startPromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
 
         return startPromise.GetFuture().GetValueSync();
     }
 
     void WaitAsyncQueries() const {
-        if (!AsyncQueryRunnerActorId) {
+        if (!AsyncQueryRunnerActorId_) {
             return;
         }
 
         auto finalizePromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
 
         return finalizePromise.GetFuture().GetValueSync();
     }
@@ -357,7 +357,7 @@ private:
     THolder<NKikimr::Tests::TClient> Client_;
     TPortManager PortManager_;
 
-    std::optional<NActors::TActorId> AsyncQueryRunnerActorId;
+    std::optional<NActors::TActorId> AsyncQueryRunnerActorId_;
 };
 
 

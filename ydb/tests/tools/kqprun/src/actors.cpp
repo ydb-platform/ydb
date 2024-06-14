@@ -106,7 +106,9 @@ public:
     TAsyncQueryRunnerActor(ui64 inFlightLimit)
         : TBase(&TAsyncQueryRunnerActor::StateFunc)
         , InFlightLimit_(inFlightLimit)
-    {}
+    {
+        RunningRequests_.reserve(InFlightLimit_);
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvStartAsyncQuery, Handle);

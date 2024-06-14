@@ -47,13 +47,6 @@ struct TRequestResult {
 };
 
 
-struct TQueryResult {
-    TRequestResult Response;
-    TQueryMeta Meta;
-    std::vector<Ydb::ResultSet> ResultSets;
-};
-
-
 class TYdbSetup {
 public:
     explicit TYdbSetup(const TYdbSetupSettings& settings);

@@ -42,7 +42,7 @@ struct TEvPrivate {
     struct TEvAsyncQueryFinished : public NActors::TEventLocal<TEvAsyncQueryFinished, EvAsyncQueryFinished> {
         TEvAsyncQueryFinished(ui64 requestId, TQueryResponse result)
             : RequestId(requestId)
-            , Result(result)
+            , Result(std::move(result))
         {}
 
         const ui64 RequestId;

@@ -678,14 +678,22 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
         auto& clientCertDefinitions = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
-        auto& certDef = *clientCertDefinitions.Add();
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *certDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
-        certDef.AddMemberGroups("test.Register.Node.Group@cert");
+        auto& firstCertDef = *clientCertDefinitions.Add();
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *firstCertDef.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        firstCertDef.AddMemberGroups("first.Register.Node.Group@cert");
+        firstCertDef.AddMemberGroups("second.Register.Node.Group@cert");
+
+        auto& secondCertDef = *clientCertDefinitions.Add();
+        *secondCertDef.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *secondCertDef.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *secondCertDef.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        secondCertDef.AddMemberGroups("first.Common.Group@cert");
+        secondCertDef.AddMemberGroups("second.Common.Group@cert");
 
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
@@ -712,7 +720,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
-        const std::vector<TString> expectedGroups(certDef.GetMemberGroups().cbegin(), certDef.GetMemberGroups().cend());
+        std::vector<TString> expectedGroups(firstCertDef.GetMemberGroups().cbegin(), firstCertDef.GetMemberGroups().cend());
+        expectedGroups.insert(expectedGroups.end(), secondCertDef.GetMemberGroups().cbegin(), secondCertDef.GetMemberGroups().cend());
         for (const auto& expectedGroup : expectedGroups) {
             UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
         }

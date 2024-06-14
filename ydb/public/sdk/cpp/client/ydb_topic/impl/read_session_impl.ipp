@@ -1379,22 +1379,31 @@ inline void TSingleClusterReadSessionImpl<false>::ScheduleCallback(TDuration tim
 
 template <>
 inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
-    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream, bool graceful, TDeferredActions<false>& deferred
+    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream, bool graceful, bool fromControlSession, TDeferredActions<false>& deferred
 ) {
     auto partitionSessionId = partitionStream->GetAssignId();
 
-    if (Settings.DirectRead_) {
+    if (Settings.DirectRead_ && graceful) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
-        DirectReadSessionManager->StopPartitionSession(partitionSessionId);
+
+        if (fromControlSession) {
+            DirectReadSessionManager->StopPartitionSession(partitionSessionId);
+            return;
+        }
+
+        // Call from a direct session, that closed itself, so we don't need to stop it,
+        // but only need to erase it from manager.
+        DirectReadSessionManager->ErasePartitionSession(partitionSessionId);
     }
 
     bool pushRes = true;
 
     if (graceful) {
+        auto committedOffset = partitionStream->GetMaxCommittedOffset();
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
-            TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), partitionStream->GetMaxCommittedOffset()),
+            TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), committedOffset),
             deferred);
     } else {
         PartitionStreams.erase(partitionSessionId);
@@ -1410,7 +1419,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 }
 
 template <>
-inline void TSingleClusterReadSessionImpl<false>::StopPartitionSession(TPartitionSessionId partitionSessionId, bool graceful) {
+inline void TSingleClusterReadSessionImpl<false>::StopPartitionSession(TPartitionSessionId partitionSessionId) {
     TDeferredActions<false> deferred;
     with_lock (Lock) {
         auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
@@ -1419,7 +1428,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSession(TPartitio
                                                      << ", but no such id was found");
             return;
         }
-        StopPartitionSessionImpl(partitionStreamIt->second, graceful, deferred);
+        StopPartitionSessionImpl(partitionStreamIt->second, /* graceful= */ true, /* fromControlSession= */ false, deferred);
     }
 }
 
@@ -1547,7 +1556,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         return;
     }
 
-    StopPartitionSessionImpl(partitionStreamIt->second, msg.graceful(), deferred);
+    StopPartitionSessionImpl(partitionStreamIt->second, msg.graceful(), /*fromControlSession=*/ true, deferred);
 }
 
 template <>

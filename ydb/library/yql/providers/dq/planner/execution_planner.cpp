@@ -436,6 +436,7 @@ namespace NYql::NDqs {
             if (task.Outputs.size() > 1) {
                 enableSpilling = Settings->IsSpillingEnabled();
             }
+            enableSpilling = true;
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
             }
@@ -449,7 +450,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
-            taskDesc.SetEnableSpilling(Settings->IsSpillingEnabled());
+            taskDesc.SetEnableSpilling(true);
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -531,7 +532,7 @@ namespace NYql::NDqs {
         auto datasource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
-        auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto tasksPerStage = 1;// Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
         const size_t maxPartitions = TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {

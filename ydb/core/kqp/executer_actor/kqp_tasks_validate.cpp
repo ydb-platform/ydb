@@ -17,8 +17,7 @@ class TTasksValidator {
 public:
     TTasksValidator(const TGraphType& tasksGraph, const EExecType& execType, bool enableSpilling)
         : TasksGraph(tasksGraph)
-        , ExecType(execType)
-        , EnableSpilling(enableSpilling) {}
+        , ExecType(execType) {}
 
     void Validate() {
         for (auto& task : TasksGraph.GetTasks()) {
@@ -47,10 +46,6 @@ private:
             }
         }
 
-        if (!EnableSpilling) {
-            YQL_ENSURE(channel.InMemory, "With spilling off, all channels should be stored in memory only. "
-                << "Not InMemory channelId: " << channelId);
-        }
     }
 
     void ValidateInput(const TInputType& input) {
@@ -86,7 +81,6 @@ private:
 private:
     const TGraphType& TasksGraph;
     EExecType ExecType;
-    bool EnableSpilling;
 };
 
 } // namespace

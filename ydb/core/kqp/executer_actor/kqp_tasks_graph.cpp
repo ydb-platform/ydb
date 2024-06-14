@@ -448,6 +448,8 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling)
 {
+
+    enableSpilling = true;
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
@@ -1141,7 +1143,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
     result->SetId(task.Id);
     result->SetStageId(stageInfo.Id.StageId);
     result->SetUseLlvm(task.GetUseLlvm());
-    result->SetEnableSpilling(false); // TODO: enable spilling
+    result->SetEnableSpilling(true); // TODO: enable spilling
     if (task.HasMetaId()) {
         result->SetMetaId(task.GetMetaIdUnsafe());
     }

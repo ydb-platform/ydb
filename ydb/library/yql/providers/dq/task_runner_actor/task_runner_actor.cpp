@@ -1,5 +1,6 @@
 #include "task_runner_actor.h"
 
+#include <format>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
@@ -597,6 +598,7 @@ private:
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
             auto& channels = outputs[outputId].GetChannels();
             for (auto& channel : channels) {
+                std::cerr << std::format("MISHA spilling in channel {} is enabled: {}\n", channel.GetId(), channel.GetEnableSpilling());
                 CreateSpillingStorage(channel.GetId(), actorSystem, channel.GetEnableSpilling());
             }
         }

@@ -1298,8 +1298,8 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ TInput::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
-    arrow::compute::ScalarKernel k({ 
-        GetPrimitiveInputArrowType<TInputLayout>(tz) 
+    arrow::compute::ScalarKernel k({
+        GetPrimitiveInputArrowType<TInputLayout>(tz)
     }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz), &TExecs::Exec);
 
     switch (TFuncInstance::NullMode) {
@@ -1335,9 +1335,9 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
-    arrow::compute::ScalarKernel k({ 
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1), 
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2) 
+    arrow::compute::ScalarKernel k({
+        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
+        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
     }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
 
     switch (TFuncInstance::NullMode) {
@@ -1373,9 +1373,9 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
-    arrow::compute::ScalarKernel k({ 
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1), 
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2) 
+    arrow::compute::ScalarKernel k({
+        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
+        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
     }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
 
     switch (TFuncInstance::NullMode) {
@@ -1598,22 +1598,36 @@ void AddNumericComparisonKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernel<NUdf::TDataType<bool>, NUdf::TDataType<bool>, TPred>(owner);
 }
 
+template<typename TLeft, template<typename, typename, typename> class TPred>
+void AddDateComparisonKernelsForDate(TKernelFamilyBase& owner) {
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDate>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDatetime>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzTimestamp>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDate32>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDatetime64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTimestamp64>, TPred>(owner);
+}
+
 template<template<typename, typename, typename> class TPred>
 void AddDateComparisonKernels(TKernelFamilyBase& owner) {
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
-
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
-
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
-    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDate, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDatetime, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTimestamp, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDate, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDatetime, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzTimestamp, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDate32, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDatetime64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTimestamp64, TPred>(owner);
 
     // Interval can only be compared with itself
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
 }
 
 }

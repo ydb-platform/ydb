@@ -13,7 +13,7 @@ namespace {
 class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMock> {
 public:
     TRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback)
-        : TargetNode(request.TargetNode)
+        : TargetNode_(request.TargetNode)
         , Request_(std::move(request.Event))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
@@ -30,7 +30,7 @@ public:
 
     void Bootstrap() {
         NActors::ActorIdToProto(SelfId(), Request_->Record.MutableRequestActorId());
-        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode), std::move(Request_));
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(Request_));
 
         Become(&TRunScriptActorMock::StateFunc);
     }
@@ -89,7 +89,7 @@ public:
     }
 
 private:
-    ui32 TargetNode = 0;
+    ui32 TargetNode_ = 0;
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<TQueryResponse> Promise_;
     ui64 ResultRowsLimit_;

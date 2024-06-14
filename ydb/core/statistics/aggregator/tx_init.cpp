@@ -76,14 +76,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << id);
                         break;
                     }
-                    case Schema::SysParam_ReplyToActorId: {
-                        TActorId actorId;
-                        if (actorId.Parse(value.Data(), value.Size())) {
-                            Self->ReplyToActorId = actorId;
-                        }
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading reply to actor id: " << actorId);
-                        break;
-                    }
 
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
@@ -195,14 +187,12 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 operationId = rowset.GetValue<Schema::ScanOperations::OperationId>();
                 ui64 ownerId = rowset.GetValue<Schema::ScanOperations::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ScanOperations::LocalPathId>();
-                TString strReplyToActorId = rowset.GetValue<Schema::ScanOperations::ReplyToActorId>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 
                 TScanOperation operation;
                 operation.OperationId = operationId;
                 operation.PathId = pathId;
-                operation.ReplyToActorId.Parse(strReplyToActorId.Data(), strReplyToActorId.Size());
 
                 Self->ScanOperations.push(operation);
                 Self->ScanOperationsPathIds.insert(pathId);

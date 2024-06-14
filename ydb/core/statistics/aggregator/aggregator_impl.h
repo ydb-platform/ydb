@@ -124,7 +124,6 @@ private:
     void PersistCurrentScan(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
     void PersistLastScanOperationId(NIceDb::TNiceDb& db);
-    void PersistReplyToActorId(NIceDb::TNiceDb& db);
 
     void ResetScanState(NIceDb::TNiceDb& db);
     void ScheduleNextScan(NIceDb::TNiceDb& db);
@@ -212,7 +211,7 @@ private:
     //
 
     TTableId ScanTableId; // stored in local db
-    TActorId ReplyToActorId; // stored in local db
+    TActorId ReplyToActorId;
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;

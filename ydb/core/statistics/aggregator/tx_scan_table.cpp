@@ -38,8 +38,7 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
 
         db.Table<Schema::ScanOperations>().Key(operation.OperationId).Update(
             NIceDb::TUpdate<Schema::ScanOperations::OwnerId>(pathId.OwnerId),
-            NIceDb::TUpdate<Schema::ScanOperations::LocalPathId>(pathId.LocalPathId),
-            NIceDb::TUpdate<Schema::ScanOperations::ReplyToActorId>(ReplyToActorId.ToString()));
+            NIceDb::TUpdate<Schema::ScanOperations::LocalPathId>(pathId.LocalPathId));
 
         Self->ScanOperations.push(operation);
         Self->ScanOperationsPathIds.insert(pathId);

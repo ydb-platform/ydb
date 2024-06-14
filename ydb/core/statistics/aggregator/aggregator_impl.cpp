@@ -523,7 +523,6 @@ void TStatisticsAggregator::ScheduleNextScan(NIceDb::TNiceDb& db) {
     if (!ScanOperations.empty()) {
         auto& operation = ScanOperations.front();
         ReplyToActorId = operation.ReplyToActorId;
-        PersistReplyToActorId(db);
 
         StartScan(db, operation.PathId);
         ScanOperationsPathIds.erase(operation.PathId);
@@ -590,10 +589,6 @@ void TStatisticsAggregator::PersistLastScanOperationId(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_LastScanOperationId, ToString(LastScanOperationId));
 }
 
-void TStatisticsAggregator::PersistReplyToActorId(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_ReplyToActorId, ToString(ReplyToActorId));
-}
-
 void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     ScanTableId.PathId = TPathId();
     ScanStartTime = TInstant::MicroSeconds(0);
@@ -603,7 +598,6 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     PersistStartKey(db);
 
     ReplyToActorId = TActorId();
-    PersistReplyToActorId(db);
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::Statistics>().Key(tag).Delete();

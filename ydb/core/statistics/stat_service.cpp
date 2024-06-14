@@ -21,9 +21,9 @@
 namespace NKikimr {
 namespace NStat {
 
-class TPathResolver : public TActorBootstrapped<TPathResolver> {
+class THttpRequest : public TActorBootstrapped<THttpRequest> {
 public:
-    using TBase = TActorBootstrapped<TPathResolver>;
+    using TBase = TActorBootstrapped<THttpRequest>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::STAT_SERVICE;
@@ -40,22 +40,31 @@ public:
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
 
-        Become(&TPathResolver::StateWork);
+        Become(&THttpRequest::StateWork);
     }
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvStatistics::TEvScanTableAccepted, Handle);
+            hFunc(TEvStatistics::TEvGetScanStatusResponse, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            IgnoreFunc(TEvStatistics::TEvScanTableResponse);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::TPathResolver: unexpected event# " << ev->GetTypeRewrite());
+                    "NStat::THttpRequest: unexpected event# " << ev->GetTypeRewrite());
         }
     }
 
-    TPathResolver(const TString& path, TActorId replyToActorId, ui64 reqId)
-        : Path(path)
+    enum EType {
+        ANALYZE,
+        STATUS
+    };
+
+    THttpRequest(EType type, const TString& path, TActorId replyToActorId)
+        : Type(type)
+        , Path(path)
         , ReplyToActorId(replyToActorId)
-        , ReqId(reqId)
     {}
 
 private:
@@ -67,30 +76,31 @@ private:
 
         if (navigate->Cookie == SecondRoundCookie) {
             if (entry.Status != TNavigate::EStatus::Ok) {
-                ReplyFailed(TEvStatistics::TEvResolvePathResponse::INTERNAL_ERROR);
-            } else if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
+                HttpReply("Internal error");
+                return;
+            }
+            if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
                 StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
             }
-            ReplySuccess();
+            ResolveSuccess();
             return;
         }
 
         if (entry.Status != TNavigate::EStatus::Ok) {
             switch (entry.Status) {
             case TNavigate::EStatus::PathErrorUnknown:
-                ReplyFailed(TEvStatistics::TEvResolvePathResponse::PATH_UNKNOWN);
-                break;
+                HttpReply("Path does not exist");
+                return;
             case TNavigate::EStatus::PathNotPath:
-                ReplyFailed(TEvStatistics::TEvResolvePathResponse::INVALID_PATH);
-                break;
+                HttpReply("Invalid path");
+                return;
             case TNavigate::EStatus::PathNotTable:
-                ReplyFailed(TEvStatistics::TEvResolvePathResponse::PATH_NOT_TABLE);
-                break;
+                HttpReply("Path is not a table");
+                return;
             default:
-                ReplyFailed(TEvStatistics::TEvResolvePathResponse::INTERNAL_ERROR);
-                break;
+                HttpReply("Internal error");
+                return;
             }
-            return;
         }
 
         PathId = entry.TableId.PathId;
@@ -120,7 +130,7 @@ private:
         if (!isServerless) {
             if (aggregatorId) {
                 StatisticsAggregatorId = aggregatorId;
-                ReplySuccess();
+                ResolveSuccess();
             } else {
                 navigateDomainKey(domainKey);
             }
@@ -129,26 +139,68 @@ private:
         }
     }
 
-    void ReplySuccess() {
-        auto response = std::make_unique<TEvStatistics::TEvResolvePathResponse>();
-        response->Status = TEvStatistics::TEvResolvePathResponse::EStatus::SUCCESS;
-        response->PathId = PathId;
-        response->StatisticsAggregatorId = StatisticsAggregatorId;
-        Send(ReplyToActorId, response.release(), 0, ReqId);
+    void Handle(TEvStatistics::TEvScanTableAccepted::TPtr&) {
+        HttpReply("Scan accepted");
+    }
+
+    void Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        switch (record.GetStatus()) {
+        case NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION:
+            HttpReply("No scan operation");
+            break;
+        case NKikimrStat::TEvGetScanStatusResponse::ENQUEUED:
+            HttpReply("Scan is enqueued");
+            break;
+        case NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS:
+            HttpReply("Scan is in progress");
+            break;
+        }
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        HttpReply("Delivery problem");
+    }
+
+    void ResolveSuccess() {
+        if (StatisticsAggregatorId == 0) {
+            HttpReply("No statistics aggregator");
+            return;
+        }
+
+        if (Type == ANALYZE) {
+            auto scanTable = std::make_unique<TEvStatistics::TEvScanTable>();
+            auto& record = scanTable->Record;
+            PathIdFromPathId(PathId, record.MutablePathId());
+
+            Send(MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, false),
+                IEventHandle::FlagTrackDelivery);
+        } else {
+            auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
+            auto& record = getStatus->Record;
+            PathIdFromPathId(PathId, record.MutablePathId());
+
+            Send(MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, false),
+                IEventHandle::FlagTrackDelivery);
+        }
+    }
+
+    void HttpReply(const TString& msg) {
+        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(msg));
         PassAway();
     }
 
-    void ReplyFailed(TEvStatistics::TEvResolvePathResponse::EStatus status) {
-        auto response = std::make_unique<TEvStatistics::TEvResolvePathResponse>();
-        response->Status = status;
-        Send(ReplyToActorId, response.release(), 0, ReqId);
-        PassAway();
+    void PassAway() {
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TBase::PassAway();
     }
 
 private:
+    const EType Type;
     const TString Path;
     const TActorId ReplyToActorId;
-    const ui64 ReqId;
 
     TPathId PathId;
     ui64 StatisticsAggregatorId = 0;
@@ -209,10 +261,6 @@ public:
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
             hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvRequestTimeout, Handle);
-            hFunc(TEvStatistics::TEvResolvePathResponse, Handle);
-            hFunc(TEvStatistics::TEvScanTableAccepted, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatusResponse, Handle);
-            IgnoreFunc(TEvStatistics::TEvScanTableResponse);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -720,113 +768,27 @@ private:
         TBase::PassAway();
     }
 
-    void Handle(TEvStatistics::TEvResolvePathResponse::TPtr& ev) {
-        auto reqId = ev->Cookie;
-        auto status = ev->Get()->Status;
-        switch (status) {
-        case TEvStatistics::TEvResolvePathResponse::PATH_UNKNOWN:
-            HttpReply(reqId, "Path does not exist");
-            return;
-        case TEvStatistics::TEvResolvePathResponse::INVALID_PATH:
-            HttpReply(reqId, "Invalid path");
-            return;
-        case TEvStatistics::TEvResolvePathResponse::PATH_NOT_TABLE:
-            HttpReply(reqId, "Path is not a table");
-            return;
-        case TEvStatistics::TEvResolvePathResponse::INTERNAL_ERROR:
-            HttpReply(reqId, "Internal error");
-            return;
-        default:
-            break;
-        }
-        auto tabletId = ev->Get()->StatisticsAggregatorId;
-        if (tabletId == 0) {
-            HttpReply(reqId, "No statistics aggregator");
-            return;
-        }
-        auto pathId = ev->Get()->PathId;
-
-        auto reqIt = HttpRequests.find(reqId);
-        Y_ABORT_UNLESS(reqIt != HttpRequests.end());
-        auto& req = reqIt->second;
-
-        if (req.Type == THttpRequest::EType::ANALYZE) {
-            auto scanTable = std::make_unique<TEvStatistics::TEvScanTable>();
-            auto& record = scanTable->Record;
-            PathIdFromPathId(pathId, record.MutablePathId());
-            Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(scanTable.release(), tabletId, false), 0, reqId);
-        } else {
-            auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
-            auto& record = getStatus->Record;
-            PathIdFromPathId(pathId, record.MutablePathId());
-            Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(getStatus.release(), tabletId, false), 0, reqId);
-        }
-    }
-
-    void Handle(TEvStatistics::TEvScanTableAccepted::TPtr& ev) {
-        auto reqId = ev->Cookie;
-        HttpReply(reqId, "Scan accepted");
-    }
-
-    void Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev) {
-        auto reqId = ev->Cookie;
-        auto& record = ev->Get()->Record;
-        switch (record.GetStatus()) {
-        case NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION:
-            HttpReply(reqId, "No scan operation");
-            break;
-        case NKikimrStat::TEvGetScanStatusResponse::ENQUEUED:
-            HttpReply(reqId, "Scan is enqueued");
-            break;
-        case NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS:
-            HttpReply(reqId, "Scan is in progress");
-            break;
-        }
-    }
-
-    void HttpReply(ui64 reqId, const TString& msg) {
-        auto reqIt = HttpRequests.find(reqId);
-        Y_ABORT_UNLESS(reqIt != HttpRequests.end());
-        auto& req = reqIt->second;
-        auto sender = req.Sender;
-        HttpRequests.erase(reqIt);
-
-        Send(sender, new NMon::TEvHttpInfoRes(msg));
-    }
-
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         auto& request = ev->Get()->Request;
         auto method = request.GetMethod();
-        TStringStream str;
 
         if (method == HTTP_METHOD_POST) {
             auto& params = request.GetPostParams();
             auto itPath = params.find("path");
             if (itPath != params.end()) {
-                ui64 reqId = ++LastHttpRequestId;
-                auto& req = HttpRequests[reqId];
-                req.Sender = ev->Sender;
-                req.Type = THttpRequest::EType::ANALYZE;
-                req.Path = itPath->second;
-                Register(new TPathResolver(req.Path, SelfId(), reqId));
+                Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
                 return;
             }
         } else if (method == HTTP_METHOD_GET) {
             auto& params = request.GetParams();
             auto itPath = params.find("path");
             if (itPath != params.end()) {
-                ui64 reqId = ++LastHttpRequestId;
-                auto& req = HttpRequests[reqId];
-                req.Sender = ev->Sender;
-                req.Type = THttpRequest::EType::STATUS;
-                req.Path = itPath->second;
-                Register(new TPathResolver(req.Path, SelfId(), reqId));
+                Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
                 return;
             }
         }
 
+        TStringStream str;
         HTML(str) {
             str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
             DIV() {
@@ -894,18 +856,6 @@ private:
     EResolveSAStage ResolveSAStage = RSA_INITIAL;
 
     static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
-
-    ui64 LastHttpRequestId = 0;
-    struct THttpRequest {
-        TActorId Sender;
-        enum EType {
-            ANALYZE,
-            STATUS
-        };
-        EType Type;
-        TString Path;
-    };
-    std::unordered_map<ui64, THttpRequest> HttpRequests;
 };
 
 THolder<IActor> CreateStatService() {

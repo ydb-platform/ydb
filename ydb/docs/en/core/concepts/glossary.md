@@ -129,17 +129,17 @@ There are two main approaches to representing tabular data in RAM or on disk dri
 
 #### Primary key {#primary-key}
 
-A **primary key** is an ordered list of columns used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table.md) and dramatically impacts the performance of workloads interacting with that table.
+A **primary key** is an ordered list of columns, the values of which uniquely identify rows. It is used to build the [table's primary index](#primary-index). It is provided by the {{ ydb-short-name }} user during [table creation](../yql/reference/syntax/create_table.md) and dramatically impacts the performance of workloads interacting with that table.
 
 The guidelines on choosing primary keys are provided in [{#T}](../dev/primary-key/index.md).
 
 #### Primary index {#primary-index}
 
-A **primary index** or **primary key index** is the main data structure used to locate rows in a table. It is built based on the chosen [primary key](#primary-key) and determines the physical order of rows in a table; thus, each table can have only one primary index.
+A **primary index** or **primary key index** is the main data structure used to locate rows in a table. It is built based on the chosen [primary key](#primary-key) and determines the physical order of rows in a table; thus, each table can have only one primary index. The primary index is unique.
 
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md).
+A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
 #### Column family {#column-family}
 
@@ -157,7 +157,7 @@ Several terms related to topics are listed below. How {{ ydb-short-name }} topic
 
 #### Partition {#partition}
 
-A **partition** is a unit of parallelism inside a topic.
+For horizontal scaling purposes, topics are divided into separate elements called **partitions**. Thus, a partition is a unit of parallelism within a topic. Messages inside each partition are ordered.
 
 However, subsets of data managed by a single [data shard](#data-shard) or [column shards](#column-shard) can also be called partitions.
 
@@ -318,7 +318,7 @@ The **Coordinator** is a system tablet that ensures the global ordering of trans
 
 #### Mediator {#mediator}
 
-The **Mediator** is a system tablet that distributes the transactions planned by [coordinators](#coordinator) to the transaction participants (usually, [DataShards](#data-shard)). Mediators ensure the advancement of global time. Each transaction participant is associated with exactly one mediator. Mediators avoid the need for a full mesh of connections between all coordinators and all participants in all transactions.
+The **Mediator** is a system tablet that distributes the transactions planned by [coordinators](#coordinator) to the transaction participants (usually, [DataShards](#data-shard)). Mediators ensure the advancement of global time. Each transaction participant is associated with exactly one mediator. Mediators allow to avoid the need for a full mesh of connections between all coordinators and all participants in all transactions.
 
 #### Hive {#hive}
 

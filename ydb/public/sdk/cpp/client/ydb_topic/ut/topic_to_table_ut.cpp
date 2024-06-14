@@ -12,7 +12,6 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -158,10 +157,6 @@ private:
                                               ui64 writeId);
 
     void CheckTabletKeys(const TString& topicName);
-
-    TString GetPQTabletBlob(const TActorId& actorId,
-                            ui64 tabletId,
-                            const TString& key);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
@@ -1389,35 +1384,6 @@ void TFixture::CheckTabletKeys(const TString& topicName)
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
     }
-}
-
-TString TFixture::GetPQTabletBlob(const TActorId& actorId,
-                                  ui64 tabletId,
-                                  const TString& key)
-{
-    using TEvKeyValue = NKikimr::TEvKeyValue;
-
-    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    request->Record.SetCookie(12345);
-
-    auto cmd = request->Record.AddCmdRead();
-    cmd->SetKey(key);
-
-    auto& runtime = Setup->GetRuntime();
-
-    runtime.SendToPipe(tabletId, actorId, request.release());
-    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
-
-    UNIT_ASSERT(response->Record.HasCookie());
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
-
-    THashSet<TString> keys;
-
-    auto& result = response->Record.GetReadResult(0);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), 0);
-
-    return result.GetValue();
 }
 
 void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d)

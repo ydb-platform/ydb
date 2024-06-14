@@ -26,7 +26,6 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define PQ_LOG_ERROR_AND_DIE(expr) \
     PQ_LOG_ERROR(expr); \
@@ -183,11 +182,6 @@ private:
         Y_ABORT_UNLESS(readResult.ResultSize() > 0);
         bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
-            DBGTRACE_LOG("readResult.HasPartNo=" << readResult.GetResult(0).HasPartNo());
-            DBGTRACE_LOG("readResult.PartNo=" << readResult.GetResult(0).GetPartNo());
-            if (!(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0)) {
-                DBGTRACE_LOG("readResult=" << readResult.DebugString());
-            }
             Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();

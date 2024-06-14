@@ -20,7 +20,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
@@ -357,7 +356,6 @@ TReadAnswer TReadInfo::FormAnswer(
     const TActorId& tablet,
     const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
 ) {
-    DBGTRACE("TReadInfo::FormAnswer");
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination);
@@ -411,7 +409,6 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
-    DBGTRACE_LOG("blobs.size=" << blobs.size());
     for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
         Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
         Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
@@ -420,7 +417,6 @@ TReadAnswer TReadInfo::FormAnswer(
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        DBGTRACE_LOG("blobs[" << pos << "]: offset=" << offset << ", partNo=" << partNo << ", count=" << count << ", key=" << blobs[pos].Key.ToString());
         const TString& blobValue = blobs[pos].Value;
 
         if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
@@ -454,9 +450,7 @@ TReadAnswer TReadInfo::FormAnswer(
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;
             batch.Unpack();
-            DBGTRACE_LOG("blob: offset=" << header.GetOffset() << ", partNo=" << header.GetPartNo() << ", count=" << header.GetCount());
             ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
-            DBGTRACE_LOG("trueOffset=" << trueOffset);
 
             ui32 pos = 0;
             if (trueOffset > Offset || trueOffset == Offset && header.GetPartNo() >= PartNo) {

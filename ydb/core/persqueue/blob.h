@@ -8,7 +8,6 @@
 #include <util/generic/vector.h>
 
 #include <deque>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {

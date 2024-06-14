@@ -2,7 +2,6 @@
 #include "partition.h"
 #include "partition_util.h"
 #include <memory>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 

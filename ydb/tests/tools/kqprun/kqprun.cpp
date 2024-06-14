@@ -81,7 +81,8 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             Sleep(executionOptions.LoopDelay);
         }
 
-        if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
+        const auto executionCase = executionOptions.GetExecutionCase(id);
+        if (executionCase != TExecutionOptions::EExecutionCase::AsyncQuery) {
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script";
             if (numberQueries > 1) {
                 Cout << " " << id;
@@ -92,7 +93,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             Cout << "..." << colors.Default() << Endl;
         }
 
-        switch (executionOptions.GetExecutionCase(id)) {
+        switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
             if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
@@ -381,8 +382,8 @@ protected:
             });
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
             .RequiredArgument("uint")
-            .DefaultValue(RunnerOptions.InFlightLimit)
-            .StoreResult(&RunnerOptions.InFlightLimit);
+            .DefaultValue(RunnerOptions.YdbSettings.InFlightLimit)
+            .StoreResult(&RunnerOptions.YdbSettings.InFlightLimit);
 
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},

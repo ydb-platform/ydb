@@ -28,6 +28,8 @@ struct TYdbSetupSettings {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
     NKikimrConfig::TAppConfig AppConfig;
+
+    ui64 InFlightLimit = 0;
 };
 
 
@@ -54,8 +56,6 @@ struct TRunnerOptions {
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
-
-    ui64 InFlightLimit = 0;
 
     TYdbSetupSettings YdbSettings;
 };

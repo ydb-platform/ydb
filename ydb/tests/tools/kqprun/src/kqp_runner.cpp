@@ -88,38 +88,11 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
 //// TKqpRunner::TImpl
 
 class TKqpRunner::TImpl {
-    struct TAsyncState {
-        ui64 OnStartRequest() {
-            InFlight++;
-            MaxInFlight = std::max(MaxInFlight, InFlight);
-            return RequestId++;
-        }
-
-        void OnRequestFinished(bool success) {
-            InFlight--;
-            if (success) {
-                Completed++;
-            } else {
-                Failed++;
-            }
-        }
-
-        TString GetInfoString() const {
-            return TStringBuilder() << "completed: " << Completed << ", failed: " << Failed << ", in flight: " << InFlight << ", max in flight: " << MaxInFlight << ", spend time: " << TInstant::Now() - Start;
-        }
-
-        const TInstant Start = TInstant::Now();
-        ui64 RequestId = 1;
-        ui64 MaxInFlight = 0;
-        ui64 InFlight = 0;
-        ui64 Completed = 0;
-        ui64 Failed = 0;
-    };
-
 public:
     enum class EQueryType {
         ScriptQuery,
-        YqlScriptQuery
+        YqlScriptQuery,
+        AsyncQuery
     };
 
     explicit TImpl(const TRunnerOptions& options)
@@ -173,6 +146,10 @@ public:
         case EQueryType::YqlScriptQuery:
             status = YdbSetup_.YqlScriptRequest(query, action, traceId, meta, ResultSets_);
             break;
+
+        case EQueryType::AsyncQuery:
+            YdbSetup_.QueryRequestAsync(query, action, traceId);
+            return true;
         }
 
         TYdbSetup::StopTraceOpt();
@@ -193,43 +170,8 @@ public:
         return true;
     }
 
-    void ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) {
-        TGuard<TMutex> lock(Mutex_);
-
-        if (Options_.InFlightLimit && AsyncState_.InFlight >= Options_.InFlightLimit) {
-            AwaitInFlight_.WaitI(Mutex_);
-        }
-        ui64 requestId = AsyncState_.OnStartRequest();
-        Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " started. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << "\n";
-
-        RunningQueries_[requestId] = YdbSetup_.QueryRequestAsync(query, action, traceId, nullptr).Subscribe([this, requestId](const NThreading::TFuture<NKqpRun::TQueryResult>& f) {
-            TGuard<TMutex> lock(Mutex_);
-
-            auto response = f.GetValue().Response;
-            AsyncState_.OnRequestFinished(response.IsSuccess());
-            if (response.IsSuccess()) {
-                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << CoutColors_.Default() << Endl;
-            } else {
-                Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.Status << ". " << CoutColors_.Yellow() << AsyncState_.GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.Issues.ToString() << CoutColors_.Default();
-            }
-
-            if (AsyncState_.InFlight < Options_.InFlightLimit) {
-                AwaitInFlight_.Signal();
-            }
-            if (!AsyncState_.InFlight) {
-                AwaitFinish_.Signal();
-            }
-            RunningQueries_.erase(requestId);
-        }).IgnoreResult();
-    }
-
-    void WaitAsyncQueries() {
-        TGuard<TMutex> lock(Mutex_);
-
-        if (AsyncState_.InFlight) {
-            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Waiting for async queries..." << CoutColors_.Default() << Endl;
-            AwaitFinish_.WaitI(Mutex_);
-        }
+    void WaitAsyncQueries() const {
+        YdbSetup_.WaitAsyncQueries();
     }
 
     bool FetchScriptResults() {
@@ -444,12 +386,6 @@ private:
     TString ExecutionOperation_;
     TExecutionMeta ExecutionMeta_;
     std::vector<Ydb::ResultSet> ResultSets_;
-
-    TMutex Mutex_;
-    TCondVar AwaitInFlight_;
-    TCondVar AwaitFinish_;
-    TAsyncState AsyncState_;
-    std::unordered_map<ui64, NThreading::TFuture<void>> RunningQueries_;
 };
 
 
@@ -471,15 +407,15 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
     return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::ScriptQuery);
 }
 
-void TKqpRunner::ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    Impl_->ExecuteQueryAsync(query, action, traceId);
-}
-
 bool TKqpRunner::ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
     return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::YqlScriptQuery);
 }
 
-void TKqpRunner::WaitAsyncQueries() {
+void TKqpRunner::ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::AsyncQuery);
+}
+
+void TKqpRunner::WaitAsyncQueries() const {
     Impl_->WaitAsyncQueries();
 }
 

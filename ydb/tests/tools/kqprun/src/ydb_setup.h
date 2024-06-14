@@ -64,8 +64,6 @@ public:
 
     TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
-    NThreading::TFuture<TQueryResult> QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TProgressCallback progressCallback) const;
-
     TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
@@ -73,6 +71,10 @@ public:
     TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
     TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
+
+    void QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+
+    void WaitAsyncQueries() const;
 
     void StartTraceOpt() const;
 

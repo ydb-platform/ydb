@@ -1,6 +1,6 @@
 LIBRARY()
 
-IF(LINUX)
+IF(LINUX OR OS_MACOS)
 
 CONLYFLAGS(
     -Wno-deprecated-non-prototype
@@ -12,6 +12,10 @@ CONLYFLAGS(
     -Wno-unused-parameter
     -Wno-unused-variable
 )
+
+IF (OS_MACOS)
+    CONLYFLAGS(-D_POSIX_SOURCE)
+ENDIF()
 
 CONLYFLAGS(GLOBAL -DVECTORWISE GLOBAL -DLINUX GLOBAL -DTPCH GLOBAL -DRNG_TEST)
 

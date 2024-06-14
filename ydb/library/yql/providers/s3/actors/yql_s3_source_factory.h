@@ -11,7 +11,7 @@ void RegisterS3ReadActorFactory(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& factoryConfig = {},
     ::NMonitoring::TDynamicCounterPtr counters = nullptr) {
-        CreateS3ActorsFactory().RegisterS3ReadActorFactory(
+        CreateS3ActorsFactory()->RegisterS3ReadActorFactory(
             factory, credentialsFactory, gateway, retryPolicy, factoryConfig, counters
         );
 }

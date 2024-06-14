@@ -460,9 +460,9 @@
     ],
     "test.test[blocks-combine_all_pg_filter--Peephole]": [
         {
-            "checksum": "901489d5a220e83ab241dc2e6aaf4289",
-            "size": 6563,
-            "uri": "https://{canondata_backend}/1937367/758d08b4ac15f0b6607eef7f65335f27ba78aa9c/resource.tar.gz#test.test_blocks-combine_all_pg_filter--Peephole_/opt.yql"
+            "checksum": "5b735556a755792bc79b4347d90c7cee",
+            "size": 6439,
+            "uri": "https://{canondata_backend}/1775319/332ffa137abc3e824ae9020e8b37875c568e01e9/resource.tar.gz#test.test_blocks-combine_all_pg_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_pg_filter--Plan]": [
@@ -516,9 +516,9 @@
     ],
     "test.test[blocks-date_greater_or_equal_scalar--Peephole]": [
         {
-            "checksum": "c2bb9379bb9e49e1fee775837026af14",
-            "size": 21299,
-            "uri": "https://{canondata_backend}/1773845/5efdd1a5abbe4242e4af1791fceed2917a59620b/resource.tar.gz#test.test_blocks-date_greater_or_equal_scalar--Peephole_/opt.yql"
+            "checksum": "113a6b1f6ee2fe2ba9a14d5dde802c77",
+            "size": 12734,
+            "uri": "https://{canondata_backend}/1775319/332ffa137abc3e824ae9020e8b37875c568e01e9/resource.tar.gz#test.test_blocks-date_greater_or_equal_scalar--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-date_greater_or_equal_scalar--Plan]": [
@@ -572,9 +572,9 @@
     ],
     "test.test[blocks-minmax_strings--Peephole]": [
         {
-            "checksum": "326589878bacbd86adc94b0d6d067869",
-            "size": 8257,
-            "uri": "https://{canondata_backend}/1937367/758d08b4ac15f0b6607eef7f65335f27ba78aa9c/resource.tar.gz#test.test_blocks-minmax_strings--Peephole_/opt.yql"
+            "checksum": "e24251cf43d6e021c673a59a5d975701",
+            "size": 7778,
+            "uri": "https://{canondata_backend}/1775319/332ffa137abc3e824ae9020e8b37875c568e01e9/resource.tar.gz#test.test_blocks-minmax_strings--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-minmax_strings--Plan]": [

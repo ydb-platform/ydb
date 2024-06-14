@@ -525,6 +525,17 @@ void RegisterAggrCompareTzDatetime(IBuiltinFunctionRegistry& registry, const std
 }
 
 template <
+    template<typename, typename, bool> class TFunc,
+    template<typename, typename, bool, bool, bool> class TArgs
+>
+void RegisterAggrCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
+}
+
+template <
     template<NUdf::EDataSlot> class TFunc,
     template<typename, typename, bool, bool, bool> class TArgs,
     bool WithSpecial = true

@@ -220,14 +220,14 @@ private:
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
 
-            BuildKqpStageChannels(TasksGraph, stageInfo, TxId, true);
+            BuildKqpStageChannels(TasksGraph, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
         ResponseEv->InitTxResult(tx.Body);
         BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, 0);
 
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Scan, true, validateIssue)) {
+        if (!ValidateTasks(TasksGraph, EExecType::Scan, AppData()->EnableKqpSpilling, validateIssue)) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
         }
@@ -326,7 +326,7 @@ private:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithSpilling = true,
+            .WithSpilling = AppData()->EnableKqpSpilling,
             .RlPath = Request.RlPath,
             .ExecuterSpan = ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),

@@ -151,11 +151,11 @@ private:
     TDqDataSerializer DataSerializer;
 };
 
-IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64,
+IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
     TCollectStatsLevel level, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion)
 {
-    return new TDqInputChannel(channelId, srcStageId, inputType, 1_MB, level, typeEnv, holderFactory,
+    return new TDqInputChannel(channelId, srcStageId, inputType, maxBufferBytes, level, typeEnv, holderFactory,
         transportVersion);
 }
 

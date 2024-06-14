@@ -89,7 +89,6 @@ private:
     }
 
     void HandleWork(TEvDqChannelSpilling::TEvPut::TPtr& ev) {
-        std::cerr << "MISHA PUT!\n";
         auto& msg = *ev->Get();
         LOG_T("[TEvPut] blobId: " << msg.BlobId_);
 

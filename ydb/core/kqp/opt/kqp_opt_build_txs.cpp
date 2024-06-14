@@ -568,14 +568,12 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
-        std::cerr << "MISHA is spilling enabled? " << config->SpillingEnabled() << std::endl;
-
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ true, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(

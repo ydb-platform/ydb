@@ -42,7 +42,7 @@ public:
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)
         , TransportVersion(transportVersion)
-        , MaxStoredBytes(1_MB)
+        , MaxStoredBytes(settings.MaxStoredBytes)
         , MaxChunkBytes(settings.MaxChunkBytes)
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , LogFunc(logFunc)
@@ -91,10 +91,8 @@ public:
     void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
         ui64 rowsInMemory = PackedRowCount + ChunkRowCount;
 
-        LOG(" MISHA Push request, rows in memory: " << rowsInMemory << ", bytesInMemory: " << (PackedDataSize + Packer.PackedSizeEstimate())
+        LOG("Push request, rows in memory: " << rowsInMemory << ", bytesInMemory: " << (PackedDataSize + Packer.PackedSizeEstimate())
             << ", finished: " << Finished);
-
-        LOG(" MISHA Storage: " << (bool)Storage);
         YQL_ENSURE(!IsFull());
 
         if (Finished) {
@@ -131,7 +129,6 @@ public:
             ChunkRowCount = 0;
             packerSize = 0;
         }
-        LOG("MISHA channel limit: "<< MaxStoredBytes);
 
         while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
             auto& head = Data.front();

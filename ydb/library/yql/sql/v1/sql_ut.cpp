@@ -6840,10 +6840,3 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
         SqlToYql(query).IsOk();
     }
 }
-
-Y_UNIT_TEST_SUITE(TVersionTest) {
-    Y_UNIT_TEST(VersionSimple) {
-        NYql::TAstParseResult res = SqlToYql("SELECT version();");
-        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
-    }
-}

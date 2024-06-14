@@ -595,45 +595,6 @@ public:
     }
 };
 
-class TVersion final : public INode {
-public:
-    TVersion(TPosition pos, const TVector<TNodePtr>& args)
-        : TVersion(pos, args.size())
-    {}
-
-    TVersion(TPosition pos, ui32 argsCount)
-        : INode(pos)
-        , ArgsCount(argsCount)
-    {}
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        if (ArgsCount > 0) {
-            ctx.Error(Pos) << "Version requires exactly 0 arguments";
-            return false;
-        }
-        Node = Y("Version");
-        return true;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
-    }
-
-    void DoUpdateState() const override {
-        State.Set(ENodeState::Const, false);
-    }
-
-    TNodePtr DoClone() const final {
-        return new TVersion(Pos, ArgsCount);
-    }
-
-private:
-    const size_t ArgsCount;
-    TNodePtr Node;
-};
-
 class TYqlPgType: public TCallNode {
 public:
     TYqlPgType(TPosition pos, const TVector<TNodePtr>& args)
@@ -3149,7 +3110,7 @@ struct TBuiltinFuncData {
             {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
-            {"version", BuildSimpleBuiltinFactoryCallback<TVersion>()},
+            {"version", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Version", 0, 0)},
 
             {"systemmetadata", BuildNamedArgcBuiltinFactoryCallback<TCallDirectRow>("SystemMetadata", 1, -1)},
 

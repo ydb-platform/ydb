@@ -2677,14 +2677,12 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
 }
 
 TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->IsCallable("Version")) {
-        const TString branch(GetBranch());
-        return ctx.Builder(node->Pos())
-            .Callable("String")
-                .Atom(0, branch.substr(branch.rfind("/") + 1))
-            .Seal().Build();
-    }
-    return node;
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand Version";
+    const TString branch(GetBranch());
+    return ctx.Builder(node->Pos())
+        .Callable("String")
+            .Atom(0, branch.substr(branch.rfind("/") + 1))
+        .Seal().Build();
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {

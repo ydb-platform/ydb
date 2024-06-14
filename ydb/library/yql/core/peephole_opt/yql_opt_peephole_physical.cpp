@@ -8370,10 +8370,7 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
-        {"NarrowFlatMap", &OptimizeWideMapBlocks},
-        {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
-        {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},

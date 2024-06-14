@@ -417,9 +417,9 @@
     ],
     "test.test[blocks-combine_all_some_filter--Peephole]": [
         {
-            "checksum": "1447c22a352830b0a8c7ab4b336e5866",
-            "size": 2617,
-            "uri": "https://{canondata_backend}/1942173/72e7ba3c44d98f26052e7ba89fd4536b95641ac1/resource.tar.gz#test.test_blocks-combine_all_some_filter--Peephole_/opt.yql"
+            "checksum": "c9d704e72343f4e90cea37c2789be556",
+            "size": 2526,
+            "uri": "https://{canondata_backend}/1900335/48c1045110f93be7271adb6caf109f9f9e32f3bc/resource.tar.gz#test.test_blocks-combine_all_some_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_some_filter--Plan]": [
@@ -473,9 +473,9 @@
     ],
     "test.test[blocks-distinct_opt_state_keys--Peephole]": [
         {
-            "checksum": "e0bb48e072b58d834b27b330583b76e2",
-            "size": 9123,
-            "uri": "https://{canondata_backend}/1942173/72e7ba3c44d98f26052e7ba89fd4536b95641ac1/resource.tar.gz#test.test_blocks-distinct_opt_state_keys--Peephole_/opt.yql"
+            "checksum": "19872b5003fd570975efecbb34cb27a7",
+            "size": 8532,
+            "uri": "https://{canondata_backend}/1900335/48c1045110f93be7271adb6caf109f9f9e32f3bc/resource.tar.gz#test.test_blocks-distinct_opt_state_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_opt_state_keys--Plan]": [
@@ -557,9 +557,9 @@
     ],
     "test.test[blocks-interval_mul_scalar--Peephole]": [
         {
-            "checksum": "a0f650dc0c8aba25f9ead8ae021e216c",
-            "size": 8574,
-            "uri": "https://{canondata_backend}/212715/4715da90add4a7ec5ae9883fb8d78579a9ac1380/resource.tar.gz#test.test_blocks-interval_mul_scalar--Peephole_/opt.yql"
+            "checksum": "99453427d86a45ff0e92c3091eea36dc",
+            "size": 5818,
+            "uri": "https://{canondata_backend}/1900335/48c1045110f93be7271adb6caf109f9f9e32f3bc/resource.tar.gz#test.test_blocks-interval_mul_scalar--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-interval_mul_scalar--Plan]": [

@@ -81,10 +81,13 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
 {
+    AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
+
     NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
     auto changes = Ev->Get()->IndexChanges;
-    AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
-    Y_ABORT_UNLESS(Ev && Ev->Get()->IndexChanges);
+    if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
+    }
 }
 
 void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {

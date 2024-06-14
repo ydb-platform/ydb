@@ -18,5 +18,6 @@ NKikimr::NUdf::TUnboxedValue FromPyCallable(
         PyObject* value);
 
 void SetupCallableSettings(const TPyCastContext::TPtr& castCtx, PyObject* value);
+PyObject* MakePyCallable(PyObject* value);
 
 } // namspace NPython

@@ -211,6 +211,8 @@ void TDqPqRdReadActor::Bootstrap() {
 }
 
 void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) {
+
+    SRC_LOG_D("TDqPqRdReadActor::SaveState");
     NPq::NProto::TDqPqTopicSourceState stateProto;
 
     NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -331,9 +333,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
         for (auto& partitionId : p.GetPartitionId()) {
              SRC_LOG_D("   partitionId:" << partitionId);
 
-            auto actorId = Register(NewPqSession(SourceParams, partitionId, rowDispatcherActorId, Token, AddBearerToToken).release());
+            TMaybe<ui64> readOffset;
+            TPartitionKey partitionKey{TString{}, partitionId};
+
+            const auto offsetIt = PartitionToOffset.find(partitionKey);
+            if (offsetIt != PartitionToOffset.end()) {
+                readOffset = offsetIt->second;
+            }
+
+            auto actorId = Register(NewPqSession(SourceParams, partitionId, rowDispatcherActorId, Token, AddBearerToToken, readOffset).release());
             Sessions.emplace(partitionId, actorId);
-             //TEvStartSession2
         }
     }
 }

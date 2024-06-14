@@ -56,7 +56,8 @@ class TLeaderDetector : public TActorBootstrapped<TLeaderDetector> {
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
     TMaybe<TActorId> LeaderActorId;
-    bool HasSubcription = false; 
+    bool HasSubcription = false;
+    const TString LogPrefix;
 
 public:
     TLeaderDetector(
@@ -98,12 +99,13 @@ TLeaderDetector::TLeaderDetector(
     : Config(config)
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, driver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
-    , ParentId(parentId) {
+    , ParentId(parentId)
+    , LogPrefix("LeaderDetector: ") {
 }
 
 void TLeaderDetector::Bootstrap() {
     Become(&TLeaderDetector::StateFunc);
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9 Successfully bootstrapped coordinator, id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("9 Successfully bootstrapped coordinator, id " << SelfId());
 
     StartSession();
 }
@@ -118,7 +120,7 @@ void TLeaderDetector::StartSession() {
 
 void TLeaderDetector::DescribeSemaphore() {
 
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9 DescribeSemaphore");
+    LOG_ROW_DISPATCHER_DEBUG("9 DescribeSemaphore");
 
     HasSubcription = true;
     Session->DescribeSemaphore(
@@ -138,36 +140,36 @@ void TLeaderDetector::DescribeSemaphore() {
 
 void TLeaderDetector::Handle(NFq::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("9 StartSession fail, " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("9 StartSession fail, " << ev->Get()->Result.GetIssues());
         Schedule(TDuration::Seconds(3), new NActors::TEvents::TEvWakeup());
         return;
     }
     Session =  ev->Get()->Result.GetResult();
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9 Session successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("9 Session successfully created");
     DescribeSemaphore(); 
 }
 
 void TLeaderDetector::Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("9 Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("9 Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
         HasSubcription = false;
         Schedule(TDuration::Seconds(3), new NActors::TEvents::TEvWakeup());
         return;
     }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9 Semaphore successfully described:");
+    LOG_ROW_DISPATCHER_DEBUG("9 Semaphore successfully described:");
 
     const NYdb::NCoordination::TSemaphoreDescription& description = ev->Get()->Result.GetResult();
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9     name " << description.GetName());
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9     data " << description.GetData());
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9     count " << description.GetCount());
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9     limit " << description.GetLimit());
+    LOG_ROW_DISPATCHER_DEBUG("9     name " << description.GetName());
+    LOG_ROW_DISPATCHER_DEBUG("9     data " << description.GetData());
+    LOG_ROW_DISPATCHER_DEBUG("9     count " << description.GetCount());
+    LOG_ROW_DISPATCHER_DEBUG("9     limit " << description.GetLimit());
 
     for (const auto& owner : description.GetOwners()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("9     owner info count " << owner.GetCount());
-        LOG_YQ_ROW_DISPATCHER_DEBUG("9     owner info data " << owner.GetData());
+        LOG_ROW_DISPATCHER_DEBUG("9     owner info count " << owner.GetCount());
+        LOG_ROW_DISPATCHER_DEBUG("9     owner info data " << owner.GetData());
     }
     if (description.GetOwners().empty()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("9 Empty owners !!! ");
+        LOG_ROW_DISPATCHER_DEBUG("9 Empty owners !!! ");
         return;
     }
     Y_ABORT_UNLESS(description.GetOwners().size() == 1, "To many owners");
@@ -187,7 +189,7 @@ void TLeaderDetector::Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev) {
 }
 
 void TLeaderDetector::Handle(NFq::TEvOnChangedResult::TPtr& ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("9 Semaphore changed,  " << ev->Get()->Result);
+    LOG_ROW_DISPATCHER_DEBUG("9 Semaphore changed,  " << ev->Get()->Result);
 
     // TODO: false?
     

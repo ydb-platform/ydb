@@ -39,10 +39,10 @@ struct TEvRowDispatcher {
     //     TEvStartSession() = default;
     // };
 
-    struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
-        NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
-        TEvCoordinatorInfo() = default;
-    };
+    // struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
+    //     NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
+    //     TEvCoordinatorInfo() = default;
+    // };
 
 
     // Read actor <-> local row_dispatcher: get coordinator actor id.
@@ -64,7 +64,7 @@ struct TEvRowDispatcher {
         TEvCoordinatorRequest(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, 
             const std::vector<ui64>& partitionIds) {
-            Record.mutable_source()->CopyFrom(sourceParams);
+            Record.MutableSource()->CopyFrom(sourceParams);
             for (const auto& id : partitionIds) {
                 Record.AddPartitionId(id);
             }
@@ -79,9 +79,9 @@ struct TEvRowDispatcher {
 
     //  Read actor <-> row_dispatcher : 
 
-    struct TEvStartSession2 : public NActors::TEventPB<TEvStartSession2,
-        NFq::NRowDispatcherProto::TEvStartSession2, EEv::EvCoordinatorResult> {
-        TEvStartSession2() = default;
+    struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
+        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvCoordinatorResult> {
+        TEvStartSession() = default;
     };
 
 };

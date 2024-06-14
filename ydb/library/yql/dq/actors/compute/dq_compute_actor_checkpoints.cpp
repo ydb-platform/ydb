@@ -577,7 +577,7 @@ void TDqComputeActorCheckpoints::PassAway() {
 }
 
 static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
+    return sourceType == "PqSource" || sourceType == "PqRdSource";
 }
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {

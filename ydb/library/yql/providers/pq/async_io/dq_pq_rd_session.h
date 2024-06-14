@@ -24,6 +24,7 @@ std::unique_ptr<NActors::IActor> NewPqSession(
     ui32 inputIndex,
     NActors::TActorId rowDispatcherActorId,
     const TString& token,
-    bool addBearerToToken);
+    bool addBearerToToken,
+    TMaybe<ui64> readOffset);
 
 } // namespace NYql::NDq

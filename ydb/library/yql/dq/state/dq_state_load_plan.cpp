@@ -71,7 +71,8 @@ void AddForceWarningOrError(const TString& message, TIssues& issues, bool force)
 }
 
 bool IsTopicInput(const NYql::NDqProto::TTaskInput& taskInput) {
-    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == "PqSource";
+    return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource 
+        && (taskInput.GetSource().GetType() == "PqSource"  || taskInput.GetSource().GetType() == "PqRdSource");
 }
 
 bool ParseTopicInput(

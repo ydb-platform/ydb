@@ -6,16 +6,8 @@ option cc_enable_arenas = true;
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/providers/pq/proto/dq_io.proto";
 
-message TEvStartSession {
-    uint32 TransportMeta = 1;
-}
-
-message TEvCoordinatorInfo {
-    uint32 TransportMeta = 1;
-}
-
 message TEvGetAddressRequest {
-    NYql.NPq.NProto.TDqPqTopicSource source = 1;
+    NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     repeated uint32 PartitionId = 2;
 }
 
@@ -29,9 +21,15 @@ message TEvGetAddressResponse {
 }
 
 
-message TEvStartSession2 {
+message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
     string Token = 3;
     bool AddBearerToToken = 4;
+    uint64 Offset = 5;
 }
+
+message TEvSessionData {
+
+}
+

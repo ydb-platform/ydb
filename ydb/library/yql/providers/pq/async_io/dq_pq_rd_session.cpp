@@ -59,6 +59,7 @@ class PqSession : public NActors::TActorBootstrapped<PqSession>{
 private:
     const NPq::NProto::TDqPqTopicSource SourceParams;
     ui32 PartitionId;
+    TMaybe<ui64> ReadOffset;
     TActorId RowDispatcherActorId;
     const TString LogPrefix;
     const TString Token;
@@ -70,7 +71,8 @@ public:
         ui32 partitionId,
         TActorId rowDispatcherActorId,
         const TString& token,
-        bool addBearerToToken);
+        bool addBearerToToken,
+        TMaybe<ui64> readOffset);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
@@ -95,9 +97,11 @@ PqSession::PqSession(
     ui32 partitionId,
     TActorId rowDispatcherActorId,
     const TString& token,
-    bool addBearerToToken)
+    bool addBearerToToken,
+    TMaybe<ui64> readOffset)
     : SourceParams(sourceParams)
     , PartitionId(partitionId)
+    , ReadOffset(readOffset)
     , RowDispatcherActorId(rowDispatcherActorId)
     , LogPrefix(TStringBuilder() << "PQ RD source [" << PartitionId << "]. ")
     , Token(token)
@@ -108,12 +112,15 @@ void PqSession::Bootstrap() {
     Become(&PqSession::StateFunc);
     SRC_LOG_D("PqSession::Bootstrap partitionId " << PartitionId);
 
-    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession2>();
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
 
-    event->Record.mutable_source()->CopyFrom(SourceParams);
+    event->Record.MutableSource()->CopyFrom(SourceParams);
     event->Record.SetPartitionId(PartitionId);
     event->Record.SetToken(Token);
     event->Record.SetAddBearerToToken(AddBearerToToken);
+    if (ReadOffset) {
+        event->Record.SetOffset(*ReadOffset);
+    }
 
     Send(RowDispatcherActorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
@@ -135,8 +142,9 @@ std::unique_ptr<NActors::IActor> NewPqSession(
     ui32 partitionId,
     TActorId rowDispatcherActorId,
     const TString& token,
-    bool addBearerToToken) {
-    return std::unique_ptr<NActors::IActor>(new PqSession(settings, partitionId, rowDispatcherActorId, token, addBearerToToken));
+    bool addBearerToToken,
+    TMaybe<ui64> readOffset) {
+    return std::unique_ptr<NActors::IActor>(new PqSession(settings, partitionId, rowDispatcherActorId, token, addBearerToToken, readOffset));
 }
 
 } // namespace NYql::NDq

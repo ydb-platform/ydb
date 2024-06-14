@@ -23,6 +23,7 @@ using NYql::TIssues;
 
 namespace {
 
+//#define LOG_D(s) LOG_ROW_DISPATCHER_DEBUG(LogPrefix << s)
 
 struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, TEventIds::EvDeleteRateLimiterResourceResponse> {
     NYdb::NCoordination::TResult<void> Result;
@@ -56,6 +57,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> LeaderActorId;
+    const TString LogPrefix;
 
     struct NodeInfo {
         bool Connected = false;
@@ -103,17 +105,18 @@ TActorCoordinator::TActorCoordinator(
     const TYqSharedResources::TPtr& yqSharedResources)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources) {
+    , YqSharedResources(yqSharedResources)
+    , LogPrefix("Coordinator: ") {
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Successfully bootstrapped coordinator, id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: Successfully bootstrapped coordinator, id " << SelfId());
     Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources).release());
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: StartSession received, " << ev->Sender);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: StartSession received, " << ev->Sender);
 
     ui32 nodeId = ev->Sender.NodeId();
     auto& nodeInfo = RowDispatchersByNode[nodeId];
@@ -121,52 +124,52 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     nodeInfo.ActorId = ev->Sender;
 
     DebugPrint();
-    Send(ev->Sender, new TEvRowDispatcher::TEvCoordinatorInfo(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
 void TActorCoordinator::DebugPrint() {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: RowDispatchers: ");
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: RowDispatchers: ");
 
     for (const auto& [nodeId, nodeInfo] : RowDispatchersByNode) {
-            LOG_YQ_ROW_DISPATCHER_DEBUG("   node " << nodeId << ", connected " << nodeInfo.Connected);
+            LOG_ROW_DISPATCHER_DEBUG("   node " << nodeId << ", connected " << nodeInfo.Connected);
     }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: EvNodeConnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: EvNodeConnected " << ev->Get()->NodeId);
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvNodeDisconnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: TEvNodeDisconnected " << ev->Get()->NodeId);
     auto& nodeInfo = RowDispatchersByNode[ev->Get()->NodeId];
     nodeInfo.Connected = false;
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, ev: " << ev->Get()->ToString());
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, Reason: " << ev->Get()->Reason);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, ev: " << ev->Get()->ToString());
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, Reason: " << ev->Get()->Reason);
     auto& nodeInfo = RowDispatchersByNode[ev->Sender.NodeId()];
     nodeInfo.Connected = false;
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: new leader " << ev->Get()->LeaderActorId);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: new leader " << ev->Get()->LeaderActorId);
 
     IsLeader = SelfId() == ev->Get()->LeaderActorId;
-    LOG_YQ_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
+    LOG_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest: ");
-    LOG_YQ_ROW_DISPATCHER_DEBUG("  TopicPath " << ev->Get()->Record.Getsource().GetTopicPath());
+    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorRequest: ");
+    LOG_ROW_DISPATCHER_DEBUG("  TopicPath " << ev->Get()->Record.GetSource().GetTopicPath());
     
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
+        LOG_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
     }
 
     if (RowDispatchersByNode.empty()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("empty  RowDispatchersByNode"); // TODO
+        LOG_ROW_DISPATCHER_DEBUG("empty  RowDispatchersByNode"); // TODO
         return;
     }
 

@@ -59,6 +59,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId CoordinatorId;
+    const TString LogPrefix;
 
     struct NodeInfo {
         bool Connected = false;
@@ -109,7 +110,8 @@ TLeaderElection::TLeaderElection(
     , YqSharedResources(yqSharedResources)
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
-    , CoordinatorId(coordinatorId) {
+    , CoordinatorId(coordinatorId)
+    , LogPrefix("TLeaderElection: ") {
 }
 
 ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -181,10 +183,10 @@ void TLeaderElection::AcquireSemaphore() {
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Schema created error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Schema created error " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Coordination node successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Coordination node successfully created");
     
     YdbConnection->CoordinationClient
         .StartSession(CoordinationNodePath)
@@ -195,33 +197,33 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
 
 void TLeaderElection::Handle(NFq::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: StartSession fail, " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: StartSession fail, " << ev->Get()->Result.GetIssues());
         return;
     }
     Session =  ev->Get()->Result.GetResult();
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Session successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Session successfully created");
     CreateSemaphore();
 }
 
 void TLeaderElection::Handle(NFq::TEvCreateSemaphoreResult::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore creating error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore creating error " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully created");
     AcquireSemaphore();
 }
 
 void TLeaderElection::Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Acquired fail " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Acquired fail " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully acquired");
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully acquired");
 }
 
 void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("TLeaderElection: TEvCoordinatorChanged ");
+    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: TEvCoordinatorChanged ");
     Send(CoordinatorId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->LeaderActorId));
 }
 

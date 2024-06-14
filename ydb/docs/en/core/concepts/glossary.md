@@ -312,6 +312,14 @@ A **PQ Tablet** or **persistent queue tablet** is a tablet that implements the c
 
 A **TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) within the cluster. Typically, a cluster has several such tablets, from which [transaction proxy](##transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
 
+#### Coordinator {#coordinator}
+
+The **Coordinator** is a system tablet that ensures the global ordering of transactions. The coordinator's task is to assign a logical [PlanStep](#planstep) time to each transaction planned through this coordinator. Each transaction is assigned exactly one coordinator, chosen by hashing its [TxId](#txid).
+
+#### Mediator {#mediator}
+
+The **Mediator** is a system tablet that distributes the transactions planned by [coordinators](#coordinator) to the transaction participants (usually, [DataShards](#data-shard)). Mediators ensure the advancement of global time. Each transaction participant is associated with exactly one mediator. Mediators avoid the need for a full mesh of connections between all coordinators and all participants in all transactions.
+
 #### Hive {#hive}
 
 A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.

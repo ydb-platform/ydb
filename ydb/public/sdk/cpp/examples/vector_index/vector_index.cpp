@@ -14,7 +14,7 @@ using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NTable;
 
-static constexpr size_t kBulkSize = 10'000;
+static constexpr size_t kBulkSize = 1000;
 
 static std::string_view FlatIndex = "flat";
 static std::string_view KMeansIndex = "kmeans";
@@ -69,7 +69,7 @@ static TString FullName(const TOptions& options, const TString& name) {
 }
 
 static TString IndexName(const TOptions& options) {
-    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer, "_v2");
+    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
 }
 
 static TString FullIndexName(const TOptions& options) {
@@ -254,11 +254,12 @@ static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
 }
 
 struct TBulkWriter {
-    TBulkWriter(TTableClient& client, const TOptions& options)
+    TBulkWriter(TTableClient& client, const TOptions& options, ui64 rows)
         : Client{client}
         , Options{options}
         , Table{FullIndexName(options)}
     {
+        Futures.reserve((rows + kBulkSize - 1) / kBulkSize);
         Rows.BeginList();
     }
 
@@ -290,16 +291,23 @@ struct TBulkWriter {
     }
 
     void Send() {
-        Cout << "Upsert: " << Count << " rows" << Endl;
         Y_ASSERT(Count != 0);
         auto value = Rows.EndList().Build();
-        ThrowOnError(Client.RetryOperationSync([&, value = std::move(value)](NYdb::NTable::TTableClient& tableClient) {
-            NYdb::TValue r = value;
-            auto status = tableClient.BulkUpsert(Table, std::move(r));
-            return status.GetValueSync();
-        }));
+        auto f = Client.RetryOperation([&, value = std::move(value)](TTableClient& client) {
+            auto r = value;
+            return client.BulkUpsert(Table, std::move(r)).Apply([](TAsyncBulkUpsertResult result) -> TStatus {
+                return result.ExtractValueSync();
+            });
+        });
+        Futures.emplace_back(std::move(f));
         Rows.BeginList();
         Count = 0;
+    }
+
+    void Wait() {
+        for (auto& f : Futures) {
+            ThrowOnError(f.ExtractValueSync());
+        }
     }
 
     size_t Count = 0;
@@ -309,20 +317,21 @@ private:
     const TOptions& Options;
     TString Table;
     NYdb::TValueBuilder Rows;
+    std::vector<TAsyncStatus> Futures;
 };
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
-    TBulkWriter writer{client, options};
     TClusterizer::TClusters clusters;
     ThrowOnError(client.RetryOperationSync([&](TSession session) {
         TTableIterator it{options, session};
+        TBulkWriter writer{client, options, it.Rows()};
         TClusterizer clusterizer{it, CosineDistance,
                                  [&](TId parentId, TId id, TRawEmbedding embedding) {
                                      writer(parentId, id, std::move(embedding));
                                  }};
         clusters = clusterizer.Run({
             .maxIterations = 5,
-            .maxK = 500,
+            .maxK = 1000,
         });
         for (size_t i = 0; auto id : clusters.Ids) {
             if (id) {
@@ -332,6 +341,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         if (writer.Count != 0) {
             writer.Send();
         }
+        writer.Wait();
         return TStatus{EStatus::SUCCESS, {}};
     }));
 }

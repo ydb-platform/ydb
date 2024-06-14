@@ -484,9 +484,9 @@
     ],
     "test.test[blocks-combine_hashed_pg--Peephole]": [
         {
-            "checksum": "da307f7f45b4504216eef81d7c1211e6",
-            "size": 6429,
-            "uri": "https://{canondata_backend}/1781765/ce2cd7478f22dc244a2c9304d09949084ebc813c/resource.tar.gz#test.test_blocks-combine_hashed_pg--Peephole_/opt.yql"
+            "checksum": "7aeece3b4d327a2ba2f7aa0debc47c58",
+            "size": 6167,
+            "uri": "https://{canondata_backend}/1889210/8fb1581e45c0d5fdd2176e6235cc92579ba918f7/resource.tar.gz#test.test_blocks-combine_hashed_pg--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_pg--Plan]": [
@@ -512,9 +512,9 @@
     ],
     "test.test[blocks-distinct_opt_state_all--Peephole]": [
         {
-            "checksum": "ec8a69f752a12e5f5ec480a02295f304",
-            "size": 10284,
-            "uri": "https://{canondata_backend}/1781765/ce2cd7478f22dc244a2c9304d09949084ebc813c/resource.tar.gz#test.test_blocks-distinct_opt_state_all--Peephole_/opt.yql"
+            "checksum": "2c278a4a9be26c522aec4d723bea703c",
+            "size": 9645,
+            "uri": "https://{canondata_backend}/1889210/8fb1581e45c0d5fdd2176e6235cc92579ba918f7/resource.tar.gz#test.test_blocks-distinct_opt_state_all--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_opt_state_all--Plan]": [
@@ -568,9 +568,9 @@
     ],
     "test.test[blocks-top_sort_one_desc--Peephole]": [
         {
-            "checksum": "20fa04523919198fe9e8e9f734398446",
-            "size": 2364,
-            "uri": "https://{canondata_backend}/1781765/ce2cd7478f22dc244a2c9304d09949084ebc813c/resource.tar.gz#test.test_blocks-top_sort_one_desc--Peephole_/opt.yql"
+            "checksum": "ee8304a96d8ae8cf66174c39fd3e85b7",
+            "size": 2171,
+            "uri": "https://{canondata_backend}/1889210/8fb1581e45c0d5fdd2176e6235cc92579ba918f7/resource.tar.gz#test.test_blocks-top_sort_one_desc--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-top_sort_one_desc--Plan]": [

@@ -5970,9 +5970,10 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 }
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_ENSURE(node->IsCallable("WideMap"));
     const auto lambda = node->TailPtr();
     // Swap trivial WideMap and WideFromBlocks.
-    if (node->IsCallable("WideMap") && node->Head().IsCallable("WideFromBlocks")) {
+    if (node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
@@ -8381,10 +8382,7 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
-        {"NarrowFlatMap", &OptimizeWideMapBlocks},
-        {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
-        {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},

@@ -59,7 +59,7 @@ message IssueLog {
 * `System tablet is unresponsive / response time over 1000ms/5000ms` — системная таблетка не отвечает или отвечает долго.
 * `Tablets are restarting too often` — таблетки слишком часто перезапускаются.
 * `Tablets/Followers are dead` — таблетки не запущены (или не могут быть запущены).
-* `Node is restarting too often`,
+* `Node is restarting too often` — узлы слишком часто перезапускаются.
 * `The number of node restarts has increased`: количетство рестартов ноды превысило порог.
 * `LoadAverage above 100%` — физический хост перегружен.
 * `There are no compute nodes` — у базы нет нод для запуска таблеток.

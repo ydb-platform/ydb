@@ -343,7 +343,7 @@ private:
         Client_ = std::make_unique<TClient>(serverSettings);
         Client_->InitRootScheme();
 
-        YdbDriver = std::make_unique<TDriver>(TDriverConfig()
+        YdbDriver_ = std::make_unique<TDriver>(TDriverConfig()
             .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
             .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
     }
@@ -353,6 +353,15 @@ public:
         : Settings_(settings)
     {
         InitializeServer();
+
+        QueryClient_ = std::make_unique<TQueryClient>(*YdbDriver_);
+    }
+
+    TExecuteQueryResult ExecuteQueryGrpc(const TString& query, const TString& poolId = "") const {
+        TExecuteQuerySettings settings;
+        settings.PoolId(poolId ? poolId : Settings_.PoolId_);
+
+        return QueryClient_->ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
     }
 
     TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const {
@@ -428,7 +437,8 @@ private:
     TPortManager PortManager_;
     std::unique_ptr<TServer> Server_;
     std::unique_ptr<TClient> Client_;
-    std::unique_ptr<TDriver> YdbDriver;
+    std::unique_ptr<TDriver> YdbDriver_;
+    std::unique_ptr<TQueryClient> QueryClient_;
 };
 
 
@@ -457,10 +467,7 @@ struct TSampleQueries {
 Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
         TWorkloadServiceYdbSetup ydb(TYdbSetupSettings().EnableWorkloadManager(false));
-        TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQuery(
-            TSampleQueries::TSelect42::Query,
-            TQueryRunnerSettings().PoolId("another_pool_id")
-        ));
+        TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, "another_pool_id"));
     }
 
     Y_UNIT_TEST(ValidationOfPoolACL) {
@@ -473,7 +480,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         };
 
         // Auth fail without token
-        checkFail(ydb.ExecuteQuery(TSampleQueries::TSelect42::Query));
+        checkFail(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
 
         // Successful auth
         TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQuery(

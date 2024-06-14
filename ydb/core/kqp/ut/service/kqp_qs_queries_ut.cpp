@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
@@ -236,15 +237,32 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
-        auto kikimr = DefaultKikimrRunner();
+        NWorkload::TWorkloadManagerConfig workloadManagerConfig;
+        workloadManagerConfig.Pools.insert({"sample_pool_id", NWorkload::TWorkloadManagerConfig::TPoolConfig()});
+        SetWorkloadManagerConfig(workloadManagerConfig);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetEnableWorkloadManager(true));
         auto db = kikimr.GetQueryClient();
 
         TExecuteQuerySettings settings;
-        settings.PoolId("sample_pool_id");
 
-        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
-        auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-        CheckQueryResult(result);
+        {  // Existing pool
+            settings.PoolId("sample_pool_id");
+
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CheckQueryResult(result);
+        }
+
+        {  // Not existing pool (check workload manager enabled)
+            settings.PoolId("another_pool_id");
+
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
+        }
     }
 
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {

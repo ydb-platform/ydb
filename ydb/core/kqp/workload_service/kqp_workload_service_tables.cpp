@@ -167,7 +167,7 @@ class TCleanupTablesActor : public TActorBootstrapped<TCleanupTablesActor> {
 
 public:
     TCleanupTablesActor()
-        : TablePathsToCheck(TTablesCreator::GetTablePahs())    
+        : TablePathsToCheck(TTablesCreator::GetTablePahs())
     {}
 
     void Bootstrap() {

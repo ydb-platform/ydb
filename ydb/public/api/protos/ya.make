@@ -40,6 +40,7 @@ SRCS(
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto
+    ydb_tablet.proto
     ydb_topic.proto
     ydb_value.proto
     ydb_keyvalue.proto

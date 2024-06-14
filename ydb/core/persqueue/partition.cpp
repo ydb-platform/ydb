@@ -1,5 +1,6 @@
 #include "event_helpers.h"
 #include "mirrorer.h"
+#include "offload_actor.h"
 #include "partition_util.h"
 #include "partition.h"
 
@@ -500,6 +501,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     if (!IsSupportive()) {
         Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
         Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    }
+
+    if (OffloadActor) {
+        Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
     Die(ctx);
@@ -2293,6 +2298,13 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (SendChangeConfigReply) {
         SchedulePartitionConfigChanged();
+    }
+
+    if (Config.HasOffloadConfig() && !OffloadActor) {
+        OffloadActor = Register(new TOffloadActor(Tablet, Partition.OriginalPartitionId, Config.GetOffloadConfig()));
+    } else if (!Config.HasOffloadConfig() && OffloadActor) {
+        Send(OffloadActor, new TEvents::TEvPoisonPill());
+        OffloadActor = {};
     }
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lightweight_schema.h"
+
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/change_exchange/change_sender_resolver.h>
@@ -19,33 +21,23 @@
 
 namespace NKikimr::NReplication::NService {
 
-struct TLightweightSchema: public TThrRefBase {
-    using TPtr = TIntrusivePtr<TLightweightSchema>;
-    using TCPtr = TIntrusiveConstPtr<TLightweightSchema>;
-
-    struct TColumn {
-        NTable::TTag Tag;
-        NScheme::TTypeInfo Type;
-    };
-
-    TVector<NScheme::TTypeInfo> KeyColumns;
-    THashMap<TString, TColumn> ValueColumns;
-    ui64 Version = 0;
-};
-
 class TChangeRecordBuilder;
 
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
+    const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatJson;
+
     ui64 GetGroup() const override;
     ui64 GetStep() const override;
     ui64 GetTxId() const override;
     EKind GetKind() const override;
     TString GetSourceId() const;
 
-    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TMemoryPool& pool) const;
+    void Serialize(
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record,
+        TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord>& ctx) const;
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
@@ -132,6 +124,20 @@ struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
     TString Out() override {
         return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
     }
+};
+
+template <>
+struct TChangeRecordBuilderTrait<NReplication::NService::TChangeRecord>
+    : public NReplication::NService::TChangeRecordBuilder
+{};
+
+template <>
+struct TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord> {
+    TMemoryPool MemoryPool;
+
+    TChangeRecordBuilderContextTrait()
+        : MemoryPool(256)
+    {}
 };
 
 }

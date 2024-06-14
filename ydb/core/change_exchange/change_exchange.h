@@ -18,6 +18,10 @@ namespace NReplication::NService {
     class TChangeRecord;
 }
 
+namespace NBackup::NImpl {
+    class TChangeRecord;
+}
+
 struct TBaseChangeRecordContainer {
     virtual ~TBaseChangeRecordContainer() = default;
     virtual TString Out() = 0;
@@ -32,7 +36,8 @@ namespace NKikimr::NChangeExchange {
 
 using TChangeRecordVector = std::variant<
     std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>
+    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
+    std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
 >;
 
 struct TEvChangeExchange {

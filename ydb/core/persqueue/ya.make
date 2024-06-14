@@ -51,6 +51,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
+    ydb/core/backup/impl
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/keyvalue

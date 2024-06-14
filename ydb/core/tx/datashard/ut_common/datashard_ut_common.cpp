@@ -1730,6 +1730,33 @@ ui64 AsyncAlterDropStream(
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
 
+ui64 AsyncCreateContinuousBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateContinuousBackup, workingDir);
+
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateContinuousBackup();
+    desc.SetTableName(tableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+ui64 AsyncAlterTakeIncrementalBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, workingDir);
+
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterContinuousBackup();
+    desc.SetTableName(tableName);
+    desc.MutableTakeIncrementalBackup();
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();

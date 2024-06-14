@@ -173,9 +173,10 @@ public:
 private:
     bool CheckAccess() {
         const auto serializedToken = TBase::GetSerializedToken();
+        // Empty serializedToken means token is not required. Checked in secure_request.h
         if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            NACLib::TUserToken token(serializedToken);
             for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {
                     IsNodeAuthorizedByCertificate = true;
                     return true;

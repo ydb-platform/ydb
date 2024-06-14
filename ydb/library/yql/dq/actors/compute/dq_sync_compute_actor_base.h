@@ -1,5 +1,6 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 
 namespace NYql::NDq {
 
@@ -210,6 +211,11 @@ protected:
 	}
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        if (this->Task.GetEnableSpilling()) {
+            auto wakeUpCallback = execCtx.GetWakeupCallback();
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+        }
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);

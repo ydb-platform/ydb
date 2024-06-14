@@ -219,7 +219,7 @@ protected:
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
             .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
-            .RightInputRowType(ExpandType(pos, *GetSeqItemType(join.RightInput().Raw()->GetTypeAnn()), ctx))
+            .RightInput(join.RightInput())
             .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
             .JoinKeys(join.JoinKeys())
             .JoinType(join.JoinType())

@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_optimization_impl.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -37,6 +38,25 @@ public:
             YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
         }
         return ret;
+    }
+
+    TExprNode::TPtr RewriteLookupRead(const TExprNode::TPtr& reader, TExprContext& ctx) override {
+        const auto readTable = TYtReadTable(reader);
+        //Presume that there is the only table for read
+        const auto ytSections = readTable.Input();
+        YQL_ENSURE(ytSections.Size() == 1);
+        const auto ytPaths =  ytSections.Item(0).Paths();
+        YQL_ENSURE(ytPaths.Size() == 1);
+        const auto ytTable = ytPaths.Item(0).Table().Maybe<TYtTable>();
+        YQL_ENSURE(ytTable);
+        //read is of type: Tuple<World, InputSeq>
+        const auto inputSeqType = reader->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().at(1);
+        return Build<TDqLookupSourceWrap>(ctx, reader->Pos())
+            .Input(ytTable.Cast())
+            .DataSource(readTable.DataSource().Ptr())
+            .RowType(ExpandType(reader->Pos(), *GetSeqItemType(inputSeqType), ctx))
+            .Settings(ytTable.Cast().Settings())
+        .Done().Ptr();
     }
 
     TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& reader, const TExprNode::TPtr& members, TExprContext& ctx) override {

@@ -25,6 +25,7 @@ public:
             TDqSourceWrap::CallableName(),
             TDqSourceWideWrap::CallableName(),
             TDqSourceWideBlockWrap::CallableName(),
+            TDqLookupSourceWrap::CallableName(),
             TDqPhyLength::CallableName()
         }, Hndl(&TDqDataSourceConstraintTransformer::HandleDefault));
     }

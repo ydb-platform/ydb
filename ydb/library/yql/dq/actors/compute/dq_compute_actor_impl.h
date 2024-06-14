@@ -1292,6 +1292,7 @@ protected:
             transform.ValueType = static_cast<NKikimr::NMiniKQL::TType*>(typeNode);
             CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
             try {
+                auto guard = BindAllocator();
                 std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                     IDqAsyncIoFactory::TInputTransformArguments {
                         .InputDesc = inputDesc,

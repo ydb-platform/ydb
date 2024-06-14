@@ -23,6 +23,7 @@
 
 #include <util/generic/xrange.h>
 
+#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NYql {
@@ -2672,6 +2673,15 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;
+}
+
+TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand Version";
+    const TString branch(GetBranch());
+    return ctx.Builder(node->Pos())
+        .Callable("String")
+            .Atom(0, branch.substr(branch.rfind("/") + 1))
+        .Seal().Build();
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -8268,6 +8278,7 @@ struct TPeepHoleRules {
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
+        {"Version", &ExpandVersion},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {

@@ -6,11 +6,46 @@
 namespace NKikimr {
 namespace NViewer {
 
-using TJsonDescribeTopic = TJsonLocalRpc<Ydb::Topic::DescribeTopicRequest,
+using TDescribeTopicRpc = TJsonLocalRpc<Ydb::Topic::DescribeTopicRequest,
                                          Ydb::Topic::DescribeTopicResponse,
                                          Ydb::Topic::DescribeTopicResult,
                                          Ydb::Topic::V1::TopicService,
                                          NKikimr::NGRpcService::TEvDescribeTopicRequest>;
+
+class TJsonDescribeTopic : public TDescribeTopicRpc {
+public:
+    using TBase = TDescribeTopicRpc;
+
+    TJsonDescribeTopic(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev)
+    {}
+
+    void Bootstrap() override {
+        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"));
+        }
+        const auto& params(Event->Get()->Request.GetParams());
+        if (params.Has("database")) {
+            Database = params.Get("database");
+        } else if (params.Has("database_path")) {
+            Database = params.Get("database_path");
+        } else {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
+        }
+
+        if (params.Has("path")) {
+            Request.set_path(params.Get("path"));
+        } else {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required"));
+        }
+
+        if (params.Has("include_stats")) {
+            Request.set_include_stats(FromStringWithDefault<bool>(params.Get("include_stats"), false));
+        }
+
+        TBase::Bootstrap();
+    }
+};
 
 template<>
 YAML::Node TJsonRequestSwagger<TJsonDescribeTopic>::GetSwagger() {

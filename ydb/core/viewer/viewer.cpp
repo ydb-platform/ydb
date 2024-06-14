@@ -42,6 +42,7 @@ using namespace NNodeWhiteboard;
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -107,7 +108,6 @@ public:
                 }
             }
             mon->RegisterActorPage({
-                .Title = "Viewer (classic)",
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -140,7 +140,6 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
-                .Title = "VDisk",
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -148,8 +147,14 @@ public:
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
-                .Title = "PDisk",
                 .RelPath = "pdisk",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "operation",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
@@ -164,6 +169,7 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
+            InitOperationJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths

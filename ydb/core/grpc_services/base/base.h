@@ -353,7 +353,7 @@ class TGRpcRequestProxySimple;
 class IRequestProxyCtx
     : public virtual IAuditCtx
 {
-    friend class TGRpcRequestProxyImpl; 
+    friend class TGRpcRequestProxyImpl;
     template <typename TEvent>
     friend class TGrpcRequestCheckActor;
     friend class TGRpcRequestProxySimple;

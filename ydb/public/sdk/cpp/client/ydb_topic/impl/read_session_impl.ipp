@@ -1033,6 +1033,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<true>>(std::move(partitionData),
                                                                                 SelfContext,
+                                                                                Connections,
                                                                                 Settings.Decompress_);
         Y_ABORT_UNLESS(decompressionInfo);
 
@@ -1279,6 +1280,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
                                                                                  SelfContext,
+                                                                                 Connections,
                                                                                  Settings.Decompress_,
                                                                                  serverBytesSize);
         // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
@@ -2344,11 +2346,13 @@ template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
     TPartitionData<UseMigrationProtocol>&& msg,
     TCallbackContextPtr<UseMigrationProtocol> cbContext,
+    std::shared_ptr<TGRpcConnectionsImpl> connections,
     bool doDecompress,
     i64 serverBytesSize
 )
     : ServerMessage(std::move(msg))
     , CbContext(std::move(cbContext))
+    , Connections(std::move(connections))
     , DoDecompress(doDecompress)
     , ServerBytesSize(serverBytesSize)
 {
@@ -2372,9 +2376,16 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
 template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 {
-    if (auto session = CbContext->LockShared()) {
-        session->OnDecompressionInfoDestroy(CompressedDataSize, DecompressedDataSize, MessagesInflight, ServerBytesSize);
-    }
+    auto cb = [cbCtx = CbContext,
+               compressedDataSize = (i64)CompressedDataSize,
+               decompressedDataSize = (i64)DecompressedDataSize,
+               messagesInflight = (i64)MessagesInflight,
+               serverBytesSize = ServerBytesSize](){
+        if (auto session = cbCtx->LockShared()) {
+            session->OnDecompressionInfoDestroy(compressedDataSize, decompressedDataSize, messagesInflight, serverBytesSize);
+        }
+    };
+    Connections->ScheduleOneTimeTask(std::move(cb), TDuration::Zero());
 }
 
 template<bool UseMigrationProtocol>

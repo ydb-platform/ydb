@@ -203,6 +203,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
             DbDriverState->Database,
             SessionId,
             clusterName,
+            Connections,
             Log,
             subclient->CreateReadSessionConnectionProcessorFactory(),
             EventsQueue,

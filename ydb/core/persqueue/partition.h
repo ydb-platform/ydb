@@ -742,6 +742,9 @@ private:
     NKikimr::NPQ::TMultiCounter MsgsWrittenTotal;
     NKikimr::NPQ::TMultiCounter MsgsWrittenGrpc;;
 
+    NKikimr::NPQ::TMultiCounter MsgsDiscarded;
+    NKikimr::NPQ::TMultiCounter BytesDiscarded;
+
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
 

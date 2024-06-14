@@ -556,11 +556,13 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
     }
 
     void ProcessReadImpl(NYdbGrpc::TGrpcStatus& status, TReadCallback& callback) {
-        *ActiveRead.Dst = ReadResponses.front().Response;
-        ActiveRead.Dst = nullptr;
-        status = std::move(ReadResponses.front().Status);
-        ReadResponses.pop();
-        callback = std::move(ActiveRead.Callback);
+        if (ActiveRead) {
+            *ActiveRead.Dst = ReadResponses.front().Response;
+            ActiveRead.Dst = nullptr;
+            status = std::move(ReadResponses.front().Status);
+            ReadResponses.pop();
+            callback = std::move(ActiveRead.Callback);
+        }
     }
 
     void StartProcessReadImpl() {
@@ -572,9 +574,7 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
         TReadCallback callback;
         with_lock (Lock) {
             ReadResponses.emplace(std::move(result));
-            if (ActiveRead) {
-                ProcessReadImpl(status, callback);
-            }
+            ProcessReadImpl(status, callback);
         }
         if (callback) {
             callback(std::move(status));

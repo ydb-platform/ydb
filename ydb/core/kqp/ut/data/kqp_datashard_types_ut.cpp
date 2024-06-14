@@ -8,9 +8,13 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpDatashardTypes) {
-    Y_UNIT_TEST(Time64Columns) {
+    Y_UNIT_TEST_TWIN(Time64Columns, EnableTableDatetime64) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(EnableTableDatetime64);
+
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -29,7 +33,15 @@ Y_UNIT_TEST_SUITE(KqpDatashardTypes) {
             )");
 
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            
+            if constexpr (EnableTableDatetime64) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("Type 'Datetime64' specified for column 'DatetimePK', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)"));
+                return;
+            }
         }
 
         {

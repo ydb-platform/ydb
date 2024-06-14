@@ -78,6 +78,7 @@ SRCS(
     mailbox_queue_simple.h
     mon.cpp
     mon.h
+    mon_stats.cpp
     mon_stats.h
     monotonic.cpp
     monotonic.h

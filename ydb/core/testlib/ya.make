@@ -108,8 +108,6 @@ PEERDIR(
     ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ydb
 
     ydb/core/http_proxy

@@ -35,7 +35,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
      err = db.Table().DoTx( // Do retry operation on errors with best effort
        ctx, // context manages exiting from Do
        func(ctx context.Context, tx table.TransactionActor) (err error) { // retry operation
-         res, err = tx.Execute(ctx, `
+         res, err := tx.Execute(ctx, `
              PRAGMA TablePathPrefix("/path/to/table");
              DECLARE $seriesID AS Uint64;
              DECLARE $seasonID AS Uint64;

@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 TString TCommonSession::DebugString() const {
-    return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";}";
+    return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";state=" << State << ";}";
 }
 
 bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {

@@ -102,6 +102,8 @@ struct TDateTimeAddT {
     static_assert(std::is_integral<typename TRight::TLayout>::value, "right must be integral");
     static_assert(std::is_integral<typename TOutput::TLayout>::value, "output must be integral");
 
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
@@ -113,7 +115,7 @@ struct TDateTimeAddT {
 
         auto data = NUdf::TUnboxedValuePod(FromScaledDate<TOutput>(ret));
         if constexpr (Tz) {
-            data.SetTimezoneId((std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() ? right : left).GetTimezoneId());
+            data.SetTimezoneId(((std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() || std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>()) ? right : left).GetTimezoneId());
         }
         return data;
     }
@@ -133,7 +135,7 @@ struct TDateTimeAddT {
         if constexpr (Tz) {
             const uint64_t init[] = {0ULL, 0xFFFFULL};
             const auto mask = ConstantInt::get(type, APInt(128, 2, init));
-            const auto tzid = BinaryOperator::CreateAnd(std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() ? right : left, mask, "tzid",  block);
+            const auto tzid = BinaryOperator::CreateAnd((std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() || std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>()) ? right : left, mask, "tzid",  block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full",  block);
             const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
             return sel;
@@ -148,9 +150,11 @@ struct TDateTimeAddT {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TBigIntervalAdd {
-    static_assert(std::is_same_v<TLeft, i64>, "Left must be i64");
-    static_assert(std::is_same_v<TRight, i64>, "Right must be i64");
-    static_assert(std::is_same_v<TOutput, i64>, "Output must be i64");
+    static_assert(std::is_same_v<typename TLeft::TLayout, i64>, "Left must be i64");
+    static_assert(std::is_same_v<typename TRight::TLayout, i64>, "Right must be i64");
+    static_assert(std::is_same_v<typename TOutput::TLayout, i64>, "Output must be i64");
+
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -258,18 +262,117 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>,
         NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>,
         NUdf::TDataType<NUdf::TInterval64>, TBigIntervalAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
+template <bool Tz, bool BigDate, bool BigInterval>
+void RegisterDateAddInterval(TKernelFamilyBase& owner) {
+    static_assert(!(Tz && BigDate), "Expect either Tz or Big date type");
+
+    using TDateLeft1 = std::conditional_t<BigDate,
+        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
+    using TDateLeft2 = std::conditional_t<BigDate,
+          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
+    using TDateLeft3 = std::conditional_t<BigDate,
+          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
+
+    using TIntervalRight = std::conditional_t<BigInterval,
+          NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
+
+    if constexpr (Tz) {
+        AddBinaryKernelPoly<TDateLeft1, TIntervalRight, TDateLeft1, TDateTimeAddTz>(owner);
+        AddBinaryKernelPoly<TDateLeft2, TIntervalRight, TDateLeft2, TDateTimeAddTz>(owner);
+        AddBinaryKernelPoly<TDateLeft3, TIntervalRight, TDateLeft3, TDateTimeAddTz>(owner);
+    } else {
+        AddBinaryKernelPoly<TDateLeft1, TIntervalRight, TDateLeft1, TDateTimeAdd>(owner);
+        AddBinaryKernelPoly<TDateLeft2, TIntervalRight, TDateLeft2, TDateTimeAdd>(owner);
+        AddBinaryKernelPoly<TDateLeft3, TIntervalRight, TDateLeft3, TDateTimeAdd>(owner);
+    }
+}
+
+template <bool Tz, bool BigDate, bool BigInterval>
+void RegisterIntervalAddDate(TKernelFamilyBase& owner) {
+    static_assert(!(Tz && BigDate), "Expect either Tz or Big date type");
+
+    using TIntervalLeft = std::conditional_t<BigInterval,
+          NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
+
+    using TDateRight1 = std::conditional_t<BigDate,
+        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
+    using TDateRight2 = std::conditional_t<BigDate,
+          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
+    using TDateRight3 = std::conditional_t<BigDate,
+          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
+
+    if constexpr (Tz) {
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight1, TDateRight1, TDateTimeAddTz>(owner);
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight2, TDateRight2, TDateTimeAddTz>(owner);
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight3, TDateRight3, TDateTimeAddTz>(owner);
+    } else {
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight1, TDateRight1, TDateTimeAdd>(owner);
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight2, TDateRight2, TDateTimeAdd>(owner);
+        AddBinaryKernelPoly<TIntervalLeft, TDateRight3, TDateRight3, TDateTimeAdd>(owner);
+    }
+}
+
+template <bool BigInterval1, bool BigInterval2>
+void RegisterIntervalAddInterval(TKernelFamilyBase& owner) {
+    using TLeft = std::conditional_t<BigInterval1,
+        NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
+    using TRight = std::conditional_t<BigInterval2,
+        NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
+
+    using TOutput = std::conditional_t<BigInterval1 || BigInterval2,
+          NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
+
+    if constexpr (BigInterval1 || BigInterval2) {
+        AddBinaryKernelPoly<TLeft, TRight, TOutput, TBigIntervalAdd>(owner);
+    } else {
+        AddBinaryKernelPoly<TLeft, TRight, TOutput, TDateTimeAdd>(owner);
+    }
+}
+
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd, TAdd>>();
+    auto family = std::make_unique<TKernelFamilyBase>();
+
+    AddBinaryIntegralKernels<TAdd>(*family);
+    AddBinaryRealKernels<TAdd>(*family);
+
+    RegisterDateAddInterval<false, false, false>(*family);
+    RegisterDateAddInterval<true, false, false>(*family);
+    RegisterDateAddInterval<false, true, false>(*family);
+
+    RegisterDateAddInterval<false, false, true>(*family);
+    RegisterDateAddInterval<true, false, true>(*family);
+    RegisterDateAddInterval<false, true, true>(*family);
+
+    RegisterIntervalAddDate<false, false, false>(*family);
+    RegisterIntervalAddDate<true, false, false>(*family);
+    RegisterIntervalAddDate<false, true, false>(*family);
+
+    RegisterIntervalAddDate<false, false, true>(*family);
+    RegisterIntervalAddDate<true, false, true>(*family);
+    RegisterIntervalAddDate<false, true, true>(*family);
+
+    RegisterIntervalAddInterval<false, false>(*family);
+    RegisterIntervalAddInterval<false, true>(*family);
+    RegisterIntervalAddInterval<true, false>(*family);
+    RegisterIntervalAddInterval<true, true>(*family);
+
+    kernelFamilyMap["Add"] = std::move(family);
 }
 
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {

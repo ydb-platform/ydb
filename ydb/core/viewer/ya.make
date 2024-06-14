@@ -8,6 +8,7 @@ SRCS(
     browse_db.h
     browse_pq.h
     browse.h
+    check_access.h
     counters_hosts.h
     json_acl.h
     json_autocomplete.h
@@ -21,6 +22,8 @@ SRCS(
     json_content.h
     json_counters.h
     json_describe.h
+    json_describe_consumer.h
+    json_describe_topic.h
     json_local_rpc.h
     json_getblob.h
     json_graph.h

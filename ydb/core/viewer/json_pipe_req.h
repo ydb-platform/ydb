@@ -6,6 +6,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -243,6 +244,16 @@ protected:
 
     void RequestStateStorageEndpointsLookup(const TString& path) {
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
+                                                              TBase::SelfId(),
+                                                              EBoardLookupMode::Second));
+        ++Requests;
+    }
+
+    void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
+        if (!AppData()->DomainsInfo->Domain) {
+            return;
+        }
+        TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
                                                               TBase::SelfId(),
                                                               EBoardLookupMode::Second));
         ++Requests;

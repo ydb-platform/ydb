@@ -61,7 +61,7 @@ public:
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Head().Content() == S3ProviderName) {
-                if (const auto& clusterName = node.Tail().Content(); NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
+                if (const auto& clusterName = node.Child(1)->Content(); NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Tail().Pos()), TStringBuilder() <<
                         "Unknown s3 cluster name: " << clusterName));
                     return false;

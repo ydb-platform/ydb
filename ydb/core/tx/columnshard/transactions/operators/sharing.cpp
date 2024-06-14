@@ -25,6 +25,7 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     if (currentSession) {
         SessionExistsFlag = true;
         SharingTask = currentSession;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_exists")("session_id", SharingTask->GetSessionId())("info", SharingTask->DebugString());
     } else {
         SharingTask->Confirm();
     }

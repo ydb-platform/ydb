@@ -213,7 +213,20 @@ TLogMessage BuildLogMessage(
         AppendMessageTags(&builder, loggingContext, logger);
         builder.AppendChar(')');
     }
-    return {builder.Flush(), TStringBuf()};
+
+    if constexpr (std::same_as<TStringBuf, std::remove_cvref_t<T>>) {
+        // NB(arkady-e1ppa): This is the overload where TStringBuf
+        // falls as well as zero-argument format strings.
+        // Formerly (before static analysis) there was a special overload
+        // which guaranteed that Anchor is set to the value of said TStringBuf
+        // object. Now we have overload for TFormatString<> which fordids
+        // us having overload for TStringBuf (both have implicit ctors from
+        // string literals) thus we have to accommodate TStringBuf specifics
+        // in this if constexpr part.
+        return {builder.Flush(), obj};
+    } else {
+        return {builder.Flush(), TStringBuf()};
+    }
 }
 
 inline TLogMessage BuildLogMessage(

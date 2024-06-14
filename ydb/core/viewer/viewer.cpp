@@ -989,6 +989,26 @@ NKikimrViewer::EFlag GetBSGroupOverallFlag(
     return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
 }
 
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag) {
+    switch (flag) {
+    case Ydb::Monitoring::StatusFlag::GREY:
+    case Ydb::Monitoring::StatusFlag::UNSPECIFIED:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MAX_SENTINEL_DO_NOT_USE_:
+        return NKikimrViewer::EFlag::Grey;
+    case Ydb::Monitoring::StatusFlag::GREEN:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::BLUE:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::YELLOW:
+        return NKikimrViewer::EFlag::Yellow;
+    case Ydb::Monitoring::StatusFlag::ORANGE:
+        return NKikimrViewer::EFlag::Orange;
+    case Ydb::Monitoring::StatusFlag::RED:
+        return NKikimrViewer::EFlag::Red;
+    }
+}
+
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag) {
     switch (flag) {
     case NKikimrViewer::EFlag::Grey:

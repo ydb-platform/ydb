@@ -22,6 +22,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    kqp_datashard_types_ut.cpp
     kqp_read_null_ut.cpp
 )
 

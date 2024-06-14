@@ -164,10 +164,7 @@ public:
     )
 
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
-        Y_UNUSED(buffer);
-        Y_UNUSED(finished);
         Y_UNUSED(freeSpace);
-        Y_UNUSED(HolderFactory);
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
 
         for (auto j : Batch) {
@@ -190,7 +187,7 @@ public:
                     NUdf::TUnboxedValue* items = nullptr;
                     auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
                     if (auto it = Index.find(SOLOMON_SCHEME_KIND); it != Index.end()) {
-                        items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
+                        items[it->second] = NKikimr::NMiniKQL::MakeString(kind.GetString());
                     }
 
                     if (auto it = Index.find(SOLOMON_SCHEME_LABELS); it != Index.end()) {
@@ -202,7 +199,7 @@ public:
                     }
 
                     if (auto it = Index.find(SOLOMON_SCHEME_TYPE); it != Index.end()) {
-                        items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
+                        items[it->second] = NKikimr::NMiniKQL::MakeString(type.GetString());
                     }
 
                     if (auto it = Index.find(SOLOMON_SCHEME_TS); it != Index.end()) {
@@ -214,10 +211,10 @@ public:
                         auto& v = items[Index[c]];
                         auto it = labels.GetMap().find(c);
                         if (it != labels.GetMap().end()) {
-                            v = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(it->second.GetString()));
+                            v = NKikimr::NMiniKQL::MakeString(it->second.GetString());
                         } else {
                             // empty string
-                            v = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(""));
+                            v = NKikimr::NMiniKQL::MakeString("");
                         }
                     }
 
@@ -226,8 +223,8 @@ public:
             }
         }
 
+        finished = !Batch.empty();
         Batch.clear();
-        //finished = true;
         return 0;
     }
 
@@ -328,23 +325,23 @@ private:
         //     })";
 
         const TStringBuf body = w.Str();
-        Cerr << "EX: Sending request: " << body << Endl;
+        //Cerr << "EX: Sending request: " << body << Endl;
         const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(w.Str());
 
-        const size_t bodySize = body.size();
+        //const size_t bodySize = body.size();
         const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
         ui8 cookie = 0;
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
-        SINK_LOG_T("Sent read to solomon, body size: " << bodySize);
-        Cerr << "EX: RequestMetrics" << Endl;
+        //SINK_LOG_T("Sent read to solomon, body size: " << bodySize);
+        //Cerr << "EX: RequestMetrics" << Endl;
     }
 
     void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) {
-        Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev)" << Endl;
+        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev)" << Endl;
         const auto* res = ev->Get();
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
 
-        Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev), error: " << error << Endl;
+        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev), error: " << error << Endl;
         if (!error.empty() || (res->HttpIncomingResponse->Get()->Response && res->HttpIncomingResponse->Get()->Response->Status != "200")) {
             TStringBuilder errorBuilder;
             errorBuilder << "Error while sending request to monitoring api: " << error;
@@ -355,7 +352,7 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Cerr << "Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString();
+            //Cerr << "Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString();
             return;
         }
 
@@ -363,9 +360,8 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
-        Cerr << "EX: HandleSuccessSolomonResponse" << Endl;
-        SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
-        Cerr << "EX:" << response.Response->Body << Endl;
+        //SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
+        //Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;
         if (!NJson::ReadJsonTree(response.Response->Body, &json, false)) {
             // todo: improve
@@ -374,7 +370,6 @@ private:
         }
 
         Batch.push_back(json);
-
         NotifyComputeActorWithData();
     }
 

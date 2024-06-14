@@ -18,6 +18,7 @@ namespace NViewer {
 struct TEvLocalRpcPrivate {
     enum EEv {
         EvGrpcRequestResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 100,
+        EvError,
         EvEnd
     };
 
@@ -25,8 +26,8 @@ struct TEvLocalRpcPrivate {
 
     template<class TProtoResult>
     struct TEvGrpcRequestResult : NActors::TEventLocal<TEvGrpcRequestResult<TProtoResult>, EvGrpcRequestResult> {
-        THolder<TProtoResult> Message;
-        THolder<NYdb::TStatus> Status;
+        TProtoResult Message;
+        std::optional<NYdb::TStatus> Status;
 
         TEvGrpcRequestResult()
         {}
@@ -39,14 +40,16 @@ using NSchemeShard::TEvSchemeShard;
 template <class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoService, class TRpcEv>
 class TJsonLocalRpc : public TActorBootstrapped<TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>> {
     using TThis = TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>;
-    using TBase = TActorBootstrapped<TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>>;
+    using TBase = TActorBootstrapped<TThis>;
 
     using TBase::Send;
     using TBase::PassAway;
     using TBase::Become;
 
+protected:
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
+    TProtoRequest Request;
     TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> Result;
 
     TJsonSettings JsonSettings;
@@ -96,7 +99,7 @@ public:
                 CASE(FLOAT, float, Float);
                 CASE(DOUBLE, double, Double);
                 CASE(BOOL, bool, Bool);
-                CASE(STRING, string, String);
+                CASE(STRING, TString, String);
 #undef CASE
                 case FieldDescriptor::CPPTYPE_ENUM: {
                     const EnumDescriptor* enumDescriptor = field->enum_type();
@@ -136,43 +139,52 @@ public:
         return request;
     }
 
-    void SendGrpcRequest() {
-        TProtoRequest request = Params2Proto();
+    bool PostToRequest() {
+        auto postData = Event->Get()->Request.GetPostContent();
+        if (!postData.empty()) {
+            try {
+                NProtobufJson::Json2Proto(postData, Request, {});
+                return true;
+            }
+            catch (const yexception& e) {
+                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", e.what()));
+                return false;
+            }
+        }
+        return true;
+    }
 
-        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database,
-                                        Event->Get()->UserToken, TlsActivationContext->ActorSystem());
+    void SendGrpcRequest() {
+        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), Database, Event->Get()->UserToken, TlsActivationContext->ActorSystem());
         RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TlsActivationContext->ActorSystem()]
                             (const NThreading::TFuture<TProtoResponse>& future) {
             auto& response = future.GetValueSync();
             auto result = MakeHolder<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>>();
-            Y_ABORT_UNLESS(response.operation().ready());
-            if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                TProtoResult rs;
-                response.operation().result().UnpackTo(&rs);
-                result->Message = MakeHolder<TProtoResult>(rs);
+            if constexpr (TRpcEv::IsOp) {
+                if (response.operation().ready() && response.operation().status() == Ydb::StatusIds::SUCCESS) {
+                    TProtoResult rs;
+                    response.operation().result().UnpackTo(&rs);
+                    result->Message = std::move(rs);
+                }
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.operation().issues(), issues);
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), std::move(issues));
+            } else {
+                result->Message = response;
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.issues(), issues);
+                result->Status = NYdb::TStatus(NYdb::EStatus(response.status()), std::move(issues));
             }
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(response.operation().issues(), issues);
-            result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
-                                                           std::move(issues));
 
             actorSystem->Send(actorId, result.Release());
         });
     }
 
-
-    void Bootstrap() {
+    virtual void Bootstrap() {
         const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
+        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), true);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        } else if (params.Has("database_path")) {
-            Database = params.Get("database_path");
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
-        }
 
         SendGrpcRequest();
 
@@ -192,22 +204,23 @@ public:
     }
 
     void ReplyAndPassAway() {
-        TStringStream json;
-        if (Result) {
+        if (Result && Result->Status) {
             if (!Result->Status->IsSuccess()) {
                 if (Result->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
                     return ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get()));
                 } else {
-                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get()));
+                    TStringStream error;
+                    Result->Status->Out(error);
+                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error.Str()));
                 }
             } else {
-                TProtoToJson::ProtoToJson(json, *(Result->Message), JsonSettings);
+                TStringStream json;
+                TProtoToJson::ProtoToJson(json, Result->Message, JsonSettings);
+                return ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()));
             }
         } else {
-            json << "null";
+            return ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get()));
         }
-
-        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()));
     }
 
 

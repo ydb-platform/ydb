@@ -155,5 +155,10 @@ void DoForgetOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilit
     f.RegisterActor(new TForgetOperationRPC(p.release()));
 }
 
+template<>
+IActor* TEvForgetOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TForgetOperationRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

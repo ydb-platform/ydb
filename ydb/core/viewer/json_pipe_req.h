@@ -6,6 +6,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

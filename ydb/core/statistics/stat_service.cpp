@@ -174,16 +174,14 @@ private:
             PathIdFromPathId(PathId, record.MutablePathId());
 
             Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, false),
-                IEventHandle::FlagTrackDelivery);
+                new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, true));
         } else {
             auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
             auto& record = getStatus->Record;
             PathIdFromPathId(PathId, record.MutablePathId());
 
             Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, false),
-                IEventHandle::FlagTrackDelivery);
+                new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, true));
         }
     }
 

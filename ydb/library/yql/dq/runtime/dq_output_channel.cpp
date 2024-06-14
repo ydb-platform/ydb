@@ -153,6 +153,7 @@ public:
             }
 
             Data.pop_front();
+            LOG("Data spilled. Total rows spilled: " << SpilledRowCount << ", bytesInMemory: " << (PackedDataSize + packerSize));
         }
 
         if (IsFull() || FirstStoredId < NextStoredId) {

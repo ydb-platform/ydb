@@ -1384,7 +1384,7 @@ def on_add_linter_check(unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def clang_tidy(unit, *args, from_other_type=False):
+def clang_tidy(unit, *args):
     keywords = {
         "DEPENDS": -1,
         "DATA": -1,
@@ -1396,34 +1396,6 @@ def clang_tidy(unit, *args, from_other_type=False):
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
-    # TODO see if we can get rid of 'from_other_type' parameter
-    if from_other_type:
-        if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
-            unit.ondata_files(_common.get_norm_unit_path(unit))
-
-        if flat_args[1] == "boost.test":
-            unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
-
-        flat_args[1] = "clang_tidy"
-        test_size = 'SMALL'
-        test_tags = ''
-        test_timeout = "60"
-        test_requirements = []
-        unit.set(["TEST_YT_SPEC_VALUE", ""])
-    else:
-        unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
-
-        test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
-        test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-        test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
-        test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-
-    test_data = sorted(
-        _common.filter_out_by_keyword(
-            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
-        )
-    )
-
     if unit.get("TIDY_CONFIG"):
         default_config_path = unit.get("TIDY_CONFIG")
         project_config_path = unit.get("TIDY_CONFIG")
@@ -1433,14 +1405,6 @@ def clang_tidy(unit, *args, from_other_type=False):
 
     unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
     unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
-
-    fork_mode = []
-    if 'FORK_SUBTESTS' in spec_args:
-        fork_mode.append('subtests')
-    if 'FORK_TESTS' in spec_args:
-        fork_mode.append('tests')
-    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
-    fork_mode = ' '.join(fork_mode) if fork_mode else ''
 
     unit_path = _common.get_norm_unit_path(unit)
 
@@ -1458,15 +1422,8 @@ def clang_tidy(unit, *args, from_other_type=False):
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(sorted(test_data)),
-        'TEST-TIMEOUT': test_timeout,
-        'FORK-MODE': fork_mode,
         'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
-        'SIZE': test_size,
-        'TAG': test_tags,
-        'REQUIREMENTS': serialize_list(test_requirements),
         'TEST-CWD': unit.get('TEST_CWD_VALUE'),
-        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
         'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
@@ -2178,23 +2135,13 @@ def onadd_ytest(unit, *args):
     flat_args, *_ = _common.sort_by_keywords(keywords, args)
     test_type = flat_args[1]
 
-    if unit.get("TIDY_ENABLED") == "yes" and test_type in (
-        "unittest.py",
-        "gunittest",
-        "g_benchmark",
-        "boost.test",
-    ):
-        clang_tidy(unit, *args, from_other_type=True)
-    elif unit.get("TIDY_ENABLED") == "yes" and test_type not in (
-        "clang_tidy",
-        "unittest.py",
-        "gunittest",
-        "g_benchmark",
-        "boost.test",
-    ):
+    # TIDY not supported for module
+    if unit.get("TIDY_ENABLED") == "yes" and test_type != "clang_tidy":
         return
+    # TIDY explicitly disabled for module in ymake.core.conf
     elif test_type == "clang_tidy" and unit.get("TIDY_ENABLED") != "yes":
         return
+    # TIDY disabled for module in ya.make
     elif unit.get("TIDY") == "yes" and unit.get("TIDY_ENABLED") != "yes":
         return
     elif test_type == "no.test":

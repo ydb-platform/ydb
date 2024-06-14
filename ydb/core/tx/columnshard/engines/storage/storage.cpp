@@ -3,21 +3,15 @@
 
 namespace NKikimr::NOlap {
 
-void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
-    if (PackModificationFlag) {
-        PackModifiedGranules[granule.GetPathId()] = &granule;
-        return;
-    }
-}
-
-std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
     ui32 countChecker = 0;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
-    for (auto&& i : granules) {
+    const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag(TDuration::Seconds(1));
+    for (auto&& i : Tables) {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
-        i.second->ActualizeOptimizer(now);
+        i.second->ActualizeOptimizer(now, actualizationLag);
         auto gPriority = i.second->GetCompactionPriority();
         if (gPriority.IsZero() || (priorityChecker && gPriority < *priorityChecker)) {
             continue;
@@ -45,7 +39,7 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
             Counters.OnGranuleOptimizerLocked();
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", it->first.DebugString());
         } else {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "granule_compaction_weight")("priority", it->first.DebugString());
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "granule_compaction_weight")("priority", it->first.DebugString());
             return it->second;
         }
     }

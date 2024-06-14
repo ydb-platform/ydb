@@ -3173,11 +3173,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 tabletId = helper.Tables["table-1"].TabletId;
         const ui64 nodeId = runtime->GetNodeId();
 
+        auto snapshot = AcquireReadSnapshot(*runtime, "/Root");
+
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
 
         // Read in a transaction.
         auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
         readRequest1->Record.SetLockTxId(lockTxId);
+        readRequest1->Record.MutableSnapshot()->SetStep(snapshot.Step);
+        readRequest1->Record.MutableSnapshot()->SetTxId(snapshot.TxId);
         AddKeyQuery(*readRequest1, {1, 1, 1});
 
         auto readResult1 = helper.SendRead(tableName, readRequest1.release());
@@ -3193,6 +3197,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
             writeRequest->Record.SetLockTxId(lockTxId);
             writeRequest->Record.SetLockNodeId(nodeId);
+            writeRequest->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+            writeRequest->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
 
             NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
@@ -3241,6 +3247,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 nodeId = runtime->GetNodeId();
         ui64 minStep1, maxStep1;
         ui64 minStep2, maxStep2;
+        ui64 coordinator;
 
         // Upsert 3 rows to table 2
         helper.UpsertMany(1, 3);
@@ -3291,6 +3298,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
             minStep1 = writeResult.GetMinStep();
             maxStep1 = writeResult.GetMaxStep();
+            coordinator = writeResult.GetDomainCoordinators(0);
         }
 
         Cerr << "===== Write and commit locks on table 2" << Endl;
@@ -3312,9 +3320,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
 
         Cerr << "========= Send propose to coordinator" << Endl;
-        {
-            SendProposeToCoordinator(helper.Server, {tabletId1, tabletId2}, Max(minStep1, minStep2), Min(maxStep1, maxStep2), helper.TxId);
-        }
+        SendProposeToCoordinator(
+            *runtime, helper.Sender, {tabletId1, tabletId2}, {
+                .TxId = helper.TxId,
+                .Coordinator = coordinator,
+                .MinStep = Max(minStep1, minStep2),
+                .MaxStep = Min(maxStep1, maxStep2),
+            });
 
         Cerr << "========= Wait for completed transactions" << Endl;
         for (ui8 i = 0; i < 1; ++i)
@@ -3364,12 +3376,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 tabletId = helper.Tables["table-1"].TabletId;
         const ui64 nodeId = runtime->GetNodeId();
 
+        auto snapshot = AcquireReadSnapshot(*runtime, "/Root");
+
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
 
         // Write in first transaction.
         auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
         writeRequest->Record.SetLockTxId(lockTxId);
         writeRequest->Record.SetLockNodeId(nodeId);
+        writeRequest->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+        writeRequest->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
 
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
@@ -3411,12 +3427,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 tabletId = helper.Tables["table-1"].TabletId;
         const ui64 nodeId = runtime->GetNodeId();
 
+        auto snapshot = AcquireReadSnapshot(*runtime, "/Root");
+
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
 
         // Write in transaction.
         auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
         writeRequest->Record.SetLockTxId(lockTxId);
         writeRequest->Record.SetLockNodeId(nodeId);
+        writeRequest->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+        writeRequest->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
 
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
@@ -3453,12 +3473,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 tabletId = helper.Tables["table-1"].TabletId;
         const ui64 nodeId = runtime->GetNodeId();
 
+        auto snapshot = AcquireReadSnapshot(*runtime, "/Root");
+
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
 
         // Write in first transaction.
         auto writeRequest = helper.MakeWriteRequest(tableName, ++helper.TxId, {1, 1, 1, 101});
         writeRequest->Record.SetLockTxId(lockTxId);
         writeRequest->Record.SetLockNodeId(nodeId);
+        writeRequest->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+        writeRequest->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
 
         NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
@@ -3514,8 +3538,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 writeCount = 55;
         const ui64 rowCount = 77;
 
-        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
-
         NKikimrDataEvents::TLock firstLock;
 
         Cerr << "========= Wait for table stats" << Endl;
@@ -3529,12 +3551,18 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
         }
 
+        auto snapshot = AcquireReadSnapshot(*runtime, "/Root");
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
+
         Cerr << "========= Write many rows" << Endl;
         for (ui64 i = 0; i < writeCount; ++i) {
             ui64 seed = 1000000 + i * rowCount * columns.size();
-            auto writeRequest = MakeWriteRequest(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columns, rowCount, seed);
+            auto writeRequest = MakeWriteRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columns, rowCount, seed);
             writeRequest->Record.SetLockTxId(lockTxId);
             writeRequest->Record.SetLockNodeId(nodeId);
+            writeRequest->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+            writeRequest->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
 
             NKikimrDataEvents::TEvWriteResult writeResult = helper.SendWrite(tabletId, std::move(writeRequest));
 
@@ -3560,7 +3588,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "========= " << (Commit ? "Commit" : "Rollback") << " locks" << Endl;
         {
-            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
             kqpLocks.MutableLocks()->Add()->CopyFrom(firstLock);
 

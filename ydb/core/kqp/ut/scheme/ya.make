@@ -22,8 +22,9 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
+    ydb/library/yql/sql/pg
+    ydb/library/yql/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

@@ -21,8 +21,8 @@ private:
     YDB_READONLY_DEF(TTabletsByBlob, DeclaredBlobs);
 protected:
     virtual void DoDeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId) = 0;
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) = 0;
 public:
     IBlobsDeclareRemovingAction(const TString& storageId, const TTabletId& selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
         : TBase(storageId)
@@ -32,13 +32,17 @@ public:
 
     }
 
+    TTabletId GetSelfTabletId() const {
+        return SelfTabletId;
+    }
+
     void DeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId);
     void DeclareSelfRemove(const TUnifiedBlobId& blobId);
-    void OnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
-        return DoOnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
+    void OnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        return DoOnExecuteTxAfterRemoving(dbBlobs, blobsWroteSuccessfully);
     }
-    void OnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
-        return DoOnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
+    void OnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) {
+        return DoOnCompleteTxAfterRemoving(blobsWroteSuccessfully);
     }
 };
 

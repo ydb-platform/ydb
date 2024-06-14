@@ -26,6 +26,7 @@ class TWriteMeta {
     YDB_ACCESSOR(ui64, WriteId, 0);
     YDB_READONLY(ui64, TableId, 0);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
+    YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
 
     // Long Tx logic
     YDB_OPT(NLongTxService::TLongTxId, LongTxId);
@@ -41,10 +42,11 @@ class TWriteMeta {
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
 public:
-    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source)
+    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion)
         : WriteId(writeId)
         , TableId(tableId)
         , Source(source)
+        , GranuleShardingVersion(granuleShardingVersion)
     {}
 };
 

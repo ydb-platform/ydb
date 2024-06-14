@@ -21,6 +21,7 @@ TClientWriter::TClientWriter(
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options)
     : BufferSize_(options.BufferSize_)
+    , AutoFinish_(options.AutoFinish_)
 {
     if (options.SingleHttpRequest_) {
         RawWriter_.Reset(new TRetrylessWriter(
@@ -59,6 +60,16 @@ TClientWriter::TClientWriter(
                 options));
         }
     }
+}
+
+TClientWriter::~TClientWriter()
+{
+    NDetail::FinishOrDie(this, AutoFinish_, "TClientWriter");
+}
+
+void TClientWriter::Finish()
+{
+    RawWriter_->Finish();
 }
 
 size_t TClientWriter::GetStreamCount() const

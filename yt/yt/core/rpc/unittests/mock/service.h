@@ -24,344 +24,307 @@ public:
         const NProto::TRequestHeader&,
         GetRequestHeader,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TSharedRefArray,
         GetRequestMessage,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TRequestId,
         GetRequestId,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         NBus::TBusNetworkStatistics,
         GetBusNetworkStatistics,
         (),
-        (const, override)
-    );
+        (const, override));
+
+    MOCK_METHOD(
+        i64,
+        GetTotalSize,
+        (),
+        (const, override));
 
     MOCK_METHOD(
         NYTree::IAttributeDictionary&,
         GetEndpointAttributes,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TInstant>,
         GetStartTime,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TDuration>,
         GetTimeout,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TInstant,
         GetArriveInstant,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TInstant>,
         GetRunInstant,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TInstant>,
         GetFinishInstant,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TDuration>,
         GetWaitDuration,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TDuration>,
         GetExecutionDuration,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         NTracing::TTraceContextPtr,
         GetTraceContext,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::optional<TDuration>,
         GetTraceContextTime,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         bool,
         IsRetry,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TMutationId,
         GetMutationId,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::string,
         GetService,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         std::string,
         GetMethod,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TRealmId,
         GetRealmId,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         const TAuthenticationIdentity&,
         GetAuthenticationIdentity,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         bool,
         IsReplied,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         void,
         Reply,
         (const TError& error),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         Reply,
         (const TSharedRefArray& message),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         SetComplete,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         bool,
         IsCanceled,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         void,
         SubscribeCanceled,
         (const TCallback<void(const TError&)>& callback),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         UnsubscribeCanceled,
         (const TCallback<void(const TError&)>& callback),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         SubscribeReplied,
         (const TCallback<void()>& callback),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         UnsubscribeReplied,
         (const TCallback<void()>& callback),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         Cancel,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         TFuture<NYT::TSharedRefArray>,
         GetAsyncResponseMessage,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         const TSharedRefArray&,
         GetResponseMessage,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         const TError&,
         GetError,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TSharedRef,
         GetRequestBody,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         TSharedRef,
         GetResponseBody,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         SetResponseBody,
         (const TSharedRef& responseBody),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         std::vector<TSharedRef>&,
         RequestAttachments,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         NConcurrency::IAsyncZeroCopyInputStreamPtr,
         GetRequestAttachmentsStream,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         std::vector<TSharedRef>&,
         ResponseAttachments,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         NConcurrency::IAsyncZeroCopyOutputStreamPtr,
         GetResponseAttachmentsStream,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         const NProto::TRequestHeader&,
         RequestHeader,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         NProto::TRequestHeader&,
         RequestHeader,
         (),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         SetRawRequestInfo,
         (TString info, bool incremental),
-        (override)
-    );
+        (override));
 
     MOCK_METHOD(
         void,
         SetRawResponseInfo,
         (TString info, bool incremental),
-        (override)
-    );
+        (override));
+
+    MOCK_METHOD(
+        const IMemoryUsageTrackerPtr&,
+        GetMemoryUsageTracker,
+        (),
+        (const, override));
 
     MOCK_METHOD(
         const NLogging::TLogger&,
         GetLogger,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         NLogging::ELogLevel,
         GetLogLevel,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         bool,
         IsPooled,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         NCompression::ECodec,
         GetResponseCodec,
         (),
-        (const, override)
-    );
+        (const, override));
 
     MOCK_METHOD(
         void,
         SetResponseCodec,
         (NCompression::ECodec codec),
-        (override)
-    );
+        (override));
 };
 
 ////////////////////////////////////////////////////////////////////////////////

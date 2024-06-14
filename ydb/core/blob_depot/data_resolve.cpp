@@ -132,7 +132,7 @@ namespace NKikimr::NBlobDepot {
                         break;
 
                     case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                        Y_DEBUG_ABORT_UNLESS(false, "incorrect query field");
+                        Y_DEBUG_ABORT("incorrect query field");
                         break;
                 }
                 if (status) {

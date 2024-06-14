@@ -2,12 +2,11 @@ import re
 import os
 import sys
 import logging
-import time
 
 from collections import defaultdict
 from kubernetes.client import Configuration
 
-from ydb.tools.ydbd_slice import nodes, handlers
+from ydb.tools.ydbd_slice import nodes
 from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
 
 
@@ -231,7 +230,9 @@ def slice_nodeclaim_format(api_client, project_path, manifests):
         logger.info('no nodes found, nothing to format.')
         return
     node_list = nodes.Nodes(node_list)
-    handlers.format_drivers(node_list)
+    cmd = r"sudo find /dev/disk/ -path '*/by-partlabel/kikimr_*' " \
+          r"-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"
+    node_list.execute_async(cmd)
 
 
 def slice_nodeclaim_delete(api_client, project_path, manifests):
@@ -263,7 +264,7 @@ def wait_for_storage(api_client, project_path, manifests):
         except TimeoutError as e:
             sys.exit(e.args[0])
 
-#
+
 # macro level ydb functions
 def slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type):
     # process storages first

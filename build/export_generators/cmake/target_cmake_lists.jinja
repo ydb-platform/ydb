@@ -1,0 +1,18 @@
+{%- set macro = current_target.macro -%}
+{%- set name = current_target.name -%}
+{%- set macro_args = current_target.macro_args -%}
+
+{{ macro }}({{ name }}
+{%- if current_target.is_fake_module %} INTERFACE{%- endif -%}
+{%- if macro_args|length > 0 %}
+{%-     for arg in macro_args %}
+  {{ arg }}
+{%      endfor -%}
+{%- endif -%}
+)
+{%  include "[generator]/target_properties.jinja" -%}
+{%- include "[generator]/target_options.jinja" -%}
+{%- include "[generator]/target_commands.jinja" -%}
+{%- include "[generator]/target_macroses.jinja" -%}
+{%- include "[generator]/target_requirements.jinja" -%}
+{%- include "[generator]/target_tools.jinja" -%}

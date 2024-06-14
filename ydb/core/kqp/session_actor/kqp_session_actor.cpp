@@ -1,13 +1,13 @@
 #include "kqp_session_actor.h"
-#include "kqp_tx.h"
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -174,6 +174,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
+        , GUCSettings(std::make_shared<TGUCSettings>())
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -185,6 +186,7 @@ public:
         FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
+        FillGUCSettings();
 
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
@@ -282,7 +284,7 @@ public:
         }
         QueryState->TxCtx = std::move(txCtx);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-        QueryState->TxId = txId;
+        QueryState->TxId.SetValue(txId);
         if (!CheckTransactionLocks(/*tx*/ nullptr)) {
             return;
         }
@@ -412,13 +414,16 @@ public:
                 const auto& txControl = QueryState->GetTxControl();
                 QueryState->Commit = txControl.commit_tx();
                 BeginTx(txControl.begin_tx());
+                QueryState->CommandTagName = "BEGIN";
                 ReplySuccess();
                 return;
             }
             case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX: {
+                QueryState->CommandTagName = "ROLLBACK";
                 return RollbackTx();
             }
             case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
+                QueryState->CommandTagName = "COMMIT";
                 return CommitTx();
 
             // not supported yet
@@ -675,7 +680,7 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
-        QueryState->TxId = UlidGen.Next();
+        QueryState->TxId.SetValue(UlidGen.Next());
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
 
@@ -687,11 +692,11 @@ public:
         ui64 mkqlMaxLimit = phaseLimitsProto.GetComputeNodeMemoryLimitBytes();
         mkqlMaxLimit = mkqlMaxLimit ? mkqlMaxLimit : ui64(Settings.MkqlMaxMemoryLimit);
 
-        alloc->Alloc.SetLimit(mkqlInitialLimit);
-        alloc->Alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
+        alloc->Alloc->SetLimit(mkqlInitialLimit);
+        alloc->Alloc->Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
             if (required < mkqlMaxLimit) {
                 LOG_D("Increase memory limit from " << currentLimit << " to " << required);
-                alloc->Alloc.SetLimit(required);
+                alloc->Alloc->SetLimit(required);
             }
         });
 
@@ -699,7 +704,7 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
-        if (!Transactions.CreateNew(QueryState->TxId, QueryState->TxCtx)) {
+        if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
             std::vector<TIssue> issues{
                 YqlIssue({}, TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS)};
             ythrow TRequestFail(Ydb::StatusIds::BAD_SESSION,
@@ -712,21 +717,23 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
-        auto create = []() -> Ydb::Table::TransactionControl {
-            Ydb::Table::TransactionControl control;
-            control.mutable_begin_tx()->mutable_serializable_read_write();
-            control.set_commit_tx(true);
-            return control;
-        };
-        static const Ydb::Table::TransactionControl control = create();
+    Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
+        if (!QueryState->ImplicitTxId) {
+            Ydb::Table::TransactionSettings settings;
+            settings.mutable_serializable_read_write();
+            BeginTx(settings);
+            QueryState->ImplicitTxId = QueryState->TxId;
+        }
+        Ydb::Table::TransactionControl control;
+        control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
+        control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
     }
 
     bool PrepareQueryTransaction() {
         const bool hasTxControl = QueryState->HasTxControl();
-        if (hasTxControl || QueryState->HasImpliedTx()) {
-            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
+        if (hasTxControl || QueryState->HasImplicitTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetTxControlWithImplicitTx();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
@@ -739,14 +746,16 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    QueryState->TxId = txId;
+                    if (hasTxControl) {
+                        QueryState->TxId.SetValue(txId);
+                    }
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
                     BeginTx(txControl.begin_tx());
                     break;
-               }
-               case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
+                }
+                case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
                     ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                         << "wrong TxControl: tx_selector must be set";
                     break;
@@ -856,6 +865,7 @@ public:
             request.StatsMode = queryState->GetStatsMode();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
+            request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
                 request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
@@ -1164,6 +1174,15 @@ public:
         return false;
     }
 
+    void FillGUCSettings() {
+        if (Settings.Database) {
+            GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.Size() - 1));
+        }
+        if (Settings.UserName) {
+            GUCSettings->Set("ydb_user", *Settings.UserName);
+        }
+    }
+
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
         YQL_ENSURE(QueryState);
 
@@ -1195,13 +1214,13 @@ public:
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        const bool useEvWrite = HasOlapTable && Settings.TableService.GetEnableOlapSink();
+        const bool useEvWrite = (HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink());
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink(), useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup);
+            Settings.TableService.GetEnableOlapSink(), useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1524,7 +1543,7 @@ public:
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
-        response->MutableTxMeta()->set_id(QueryState->TxId.GetHumanStr());
+        response->MutableTxMeta()->set_id(QueryState->TxId.GetValue().GetHumanStr());
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1585,14 +1604,20 @@ public:
 
         FillStats(record);
 
+        if (QueryState->CommandTagName) {
+            auto *extraInfo = response->MutableExtraInfo();
+            auto* pgExtraInfo = extraInfo->MutablePgInfo();
+            pgExtraInfo->SetCommandTag(*QueryState->CommandTagName);
+        }
+
         if (QueryState->TxCtx) {
             QueryState->TxCtx->OnEndQuery();
         }
 
         if (QueryState->Commit) {
             ResetTxState();
-            Transactions.ReleaseTransaction(QueryState->TxId);
-            QueryState->TxId = TTxId();
+            Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
+            QueryState->TxId.Reset();
         }
 
         FillTxInfo(response);
@@ -1937,7 +1962,7 @@ public:
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
-                Transactions.ReleaseTransaction(QueryState->TxId);
+                Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
@@ -2304,7 +2329,7 @@ private:
     TString BuildMemoryLimitExceptionMessage() const {
         if (QueryState && QueryState->TxCtx) {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
-                << ", current limit is " << QueryState->TxCtx->TxAlloc->Alloc.GetLimit() << " bytes.";
+                << ", current limit is " << QueryState->TxCtx->TxAlloc->Alloc->GetLimit() << " bytes.";
         } else {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
         }
@@ -2410,7 +2435,7 @@ private:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
 
-    TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
+    TGUCSettings::TPtr GUCSettings;
 };
 
 } // namespace
@@ -2426,8 +2451,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
 {
     return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor
-                                );
+                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor);
 }
 
 }

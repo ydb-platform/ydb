@@ -11,9 +11,16 @@ import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
+enum ECheckpointType {
+    CHECKPOINT_TYPE_UNSPECIFIED = 0;
+    CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT = 1; // create increment snapshot. If increment is not supported, then snapshot.
+    CHECKPOINT_TYPE_SNAPSHOT = 2;
+}
+
 message TCheckpoint {
     optional uint64 Id = 1;
     optional uint64 Generation = 2;
+    optional ECheckpointType Type = 3;
 };
 
 message TWatermark {
@@ -197,6 +204,7 @@ message TEvRestoreFromCheckpointResult {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 TaskId = 2;
     optional ERestoreStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
 
     optional TMessageTransportMeta TransportMeta = 100;
 }

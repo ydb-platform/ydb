@@ -1,6 +1,5 @@
 RECURSE(
     init
-    protos
     tools
     utils
     validation

@@ -1,6 +1,6 @@
 #include "federated_read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -49,6 +49,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStartPartitionSessionEvent, StartPartitionSessionHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStopPartitionSessionEvent, StopPartitionSessionHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TEndPartitionSessionEvent, EndPartitionSessionHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionStatusEvent, PartitionSessionStatusHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionClosedEvent, PartitionSessionClosedHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TEvent, CommonHandler);
@@ -116,7 +117,6 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
-        subclient->SetProvidedCodecs(ProvidedCodecs);
         auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator));
         SubSessions.emplace_back(subsession, db);
     }

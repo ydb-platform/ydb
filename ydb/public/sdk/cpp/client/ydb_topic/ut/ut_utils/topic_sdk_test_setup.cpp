@@ -27,9 +27,18 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
-    TPartitioningSettings partitions(partitionCount, maxPartitionCount.value_or(partitionCount));
+    topics
+        .BeginConfigurePartitioningSettings()
+        .MinActivePartitions(partitionCount)
+        .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
 
-    topics.PartitioningSettings(partitions);
+    if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
+        topics
+            .BeginConfigurePartitioningSettings()
+            .BeginConfigureAutoscalingSettings()
+            .Strategy(EAutoscalingStrategy::ScaleUp);
+    }
+
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
     topics.AppendConsumers(consumers);
 

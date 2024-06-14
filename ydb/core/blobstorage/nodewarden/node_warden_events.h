@@ -57,4 +57,18 @@ namespace NKikimr::NStorage {
         : TEventPB<TEvNodeConfigInvokeOnRootResult, NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult, TEvBlobStorage::EvNodeConfigInvokeOnRootResult>
     {};
 
+    struct TEvNodeWardenQueryBaseConfig
+        : TEventLocal<TEvNodeWardenQueryBaseConfig, TEvBlobStorage::EvNodeWardenQueryBaseConfig>
+    {};
+
+    struct TEvNodeWardenBaseConfig
+        : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
+    {
+        NKikimrBlobStorage::TBaseConfig BaseConfig;
+    };
+
+    struct TEvNodeWardenDynamicConfigPush
+        : TEventPB<TEvNodeWardenDynamicConfigPush, NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush, TEvBlobStorage::EvNodeWardenDynamicConfigPush>
+    {};
+
 } // NKikimr::NStorage

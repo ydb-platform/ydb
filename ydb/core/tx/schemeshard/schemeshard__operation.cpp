@@ -12,6 +12,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 #include <util/generic/algorithm.h>
 
 namespace NKikimr::NSchemeShard {
@@ -183,7 +185,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                     << ", already accepted parts: " << operation->Parts.size()
                                     << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                     << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
+                                    << ", tx message: " << SecureDebugString(record));
                 }
 
                 Y_VERIFY_S(context.IsUndoChangesSafe(),
@@ -194,7 +196,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                << ", already accepted parts: " << operation->Parts.size()
                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
+                               << ", tx message: " << SecureDebugString(record));
 
                 context.OnComplete = {}; // recreate
                 context.DbChanges = {};
@@ -237,7 +239,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationPropose Execute"
-                        << ", message: " << GetRecordForPrint(Request->Get()->Record).ShortDebugString()
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
                         << ", at schemeshard: " << selfId);
 
         txc.DB.NoMoreReadsForTx();
@@ -1030,7 +1032,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateSequence:
         return CreateNewSequence(NextPartId(), txState);
     case TTxState::ETxType::TxAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), txState);
     case TTxState::ETxType::TxDropSequence:
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
@@ -1048,9 +1050,11 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateReplication:
         return CreateNewReplication(NextPartId(), txState);
     case TTxState::ETxType::TxAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), txState);
     case TTxState::ETxType::TxDropReplication:
-        return CreateDropReplication(NextPartId(), txState);
+        return CreateDropReplication(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), txState, true);
 
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
@@ -1078,6 +1082,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropView:
         return CreateDropView(NextPartId(), txState);
     case TTxState::ETxType::TxAlterView:
+        Y_ABORT("TODO: implement");
+    // Continuous Backup
+    // Now these functions won't be called because we presist only cdc function internally
+    case TTxState::ETxType::TxCreateContinuousBackup:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxAlterContinuousBackup:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxDropContinuousBackup:
         Y_ABORT("TODO: implement");
 
     case TTxState::ETxType::TxInvalid:
@@ -1213,7 +1225,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateNewSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return CreateDropSequence(NextPartId(), tx);
 
@@ -1270,9 +1282,11 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return CreateNewReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
-        return CreateDropReplication(NextPartId(), tx);
+        return CreateDropReplication(NextPartId(), tx, false);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), tx, true);
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
@@ -1305,6 +1319,15 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateDropView(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
+
+    // CDC
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
     }
 
     Y_UNREACHABLE();
@@ -1357,6 +1380,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateNewExternalDataSource(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return CreateNewExternalTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+        return  CreateNewContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+        return  CreateAlterContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+        return  CreateDropContinuousBackup(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }

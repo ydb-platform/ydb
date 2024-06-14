@@ -19,7 +19,6 @@ namespace NSQLTranslationV1 {
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    Y_UNUSED(ctx);
     if (prefixPath.empty()) {
         return path.Build();
     }
@@ -35,7 +34,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
 
     TDeferredAtom result;
-    MakeTableFromExpression(ctx, buildPathNode, result);
+    MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
     return result.Build();
 }
 
@@ -45,6 +44,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
+    {"FilterPushdownOverJoinOptionalSide", &TContext::FilterPushdownOverJoinOptionalSide},
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
@@ -59,6 +59,9 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"UseBlocks", &TContext::UseBlocks},
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
     {"BlockEngineForce", &TContext::BlockEngineForce},
+    {"UnorderedResult", &TContext::UnorderedResult},
+    {"CompactNamedExprs", &TContext::CompactNamedExprs},
+    {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -324,14 +327,14 @@ bool TContext::IsAlreadyDeclared(const TString& varName) const {
     return Variables.find(varName) != Variables.end() && !WeakVariables.contains(varName);
 }
 
-void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode, bool isWeak) {
+void TContext::DeclareVariable(const TString& varName, const TPosition& pos, const TNodePtr& typeNode, bool isWeak) {
     if (isWeak) {
-        auto inserted = Variables.emplace(varName, typeNode);
+        auto inserted = Variables.emplace(varName, std::make_pair(pos, typeNode));
         YQL_ENSURE(inserted.second);
         WeakVariables.insert(varName);
     } else {
         WeakVariables.erase(WeakVariables.find(varName));
-        Variables[varName] = typeNode;
+        Variables[varName] = std::make_pair(pos, typeNode);
     }
 }
 
@@ -412,6 +415,9 @@ const TVector<std::pair<TString, TDeferredAtom>>& TScopedState::GetUsedClusters(
 TNodePtr TScopedState::WrapCluster(const TDeferredAtom& cluster, TContext& ctx) {
     auto node = cluster.Build();
     if (!cluster.GetLiteral()) {
+        if (ctx.CompactNamedExprs) {
+            return node->Y("EvaluateAtom", node);
+        }
         AddExprCluster(node, ctx);
         auto exprIt = Local.ExprClustersMap.find(node.Get());
         YQL_ENSURE(exprIt != Local.ExprClustersMap.end());
@@ -567,7 +573,7 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
     if (!res) {
         Ctx.Error() << "Unknown name: " << name;
     }
-    return res;
+    return SafeClone(res);
 }
 
 TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) {

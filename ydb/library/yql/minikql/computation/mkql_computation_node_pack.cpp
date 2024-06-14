@@ -4,8 +4,9 @@
 #include "mkql_computation_node_holders.h"
 #include "presort.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -342,12 +343,14 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             return UnpackString(buf, 16);
         }
         case NUdf::EDataSlot::Decimal: {
-            const auto des = NYql::NDecimal::Deserialize(buf.data(), buf.size());
-            MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
-            buf.Skip(des.second);
-            return NUdf::TUnboxedValuePod(des.first);
+            return NUdf::TUnboxedValuePod(UnpackDecimal(buf));
         }
-        default:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             ui32 size = 0;
             if constexpr (Fast) {
                 size = NDetails::GetRawData<ui32>(buf);
@@ -359,6 +362,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 }
             }
             return UnpackString(buf, size);
+        }
         }
         break;
     }
@@ -669,11 +673,15 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
             break;
         }
         case NUdf::EDataSlot::Decimal: {
-            char buff[0x10U];
-            PackBlob(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff), buffer);
+            PackDecimal(value.GetInt128(), buffer);
             break;
         }
-        default: {
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             auto stringRef = value.AsStringRef();
             if constexpr (Fast) {
                 static_assert(std::is_same_v<decltype(stringRef.Size()), ui32>);
@@ -1032,7 +1040,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
     InitBlocks();
@@ -1043,7 +1051,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::Mem
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     InitBlocks();
 }

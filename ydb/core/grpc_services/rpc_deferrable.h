@@ -202,7 +202,10 @@ protected:
     void Reply(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
     {
-        Request_->SendResult(status, message);
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
@@ -222,14 +225,6 @@ protected:
 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
-    {
-        Request_->SendResult(status, message);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }

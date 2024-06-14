@@ -156,6 +156,7 @@ namespace NKikimr {
         };
 
         std::shared_ptr<TReplCtx> ReplCtx;
+        ui32 NextMinREALHugeBlobInBytes;
         THistory History;
         EState State;
         TInstant LastReplStart;
@@ -252,6 +253,10 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvMinHugeBlobSizeUpdate::TPtr ev) {
+            NextMinREALHugeBlobInBytes = ev->Get()->MinREALHugeBlobInBytes;
+        }
+
         void StartReplication() {
             STLOG(PRI_DEBUG, BS_REPL, BSVR14, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"));
             STLOG(PRI_DEBUG, BS_REPL, BSVR15, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"));
@@ -262,6 +267,8 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
+            Y_ABORT_UNLESS(NextMinREALHugeBlobInBytes);
+            ReplCtx->MinREALHugeBlobInBytes = NextMinREALHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
@@ -609,6 +616,7 @@ namespace NKikimr {
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
         void PassAway() override {
@@ -652,6 +660,7 @@ namespace NKikimr {
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
     public:
@@ -662,6 +671,7 @@ namespace NKikimr {
         TReplScheduler(std::shared_ptr<TReplCtx> &replCtx)
             : TActorBootstrapped<TReplScheduler>()
             , ReplCtx(replCtx)
+            , NextMinREALHugeBlobInBytes(ReplCtx->MinREALHugeBlobInBytes)
             , History(HistorySize)
             , State(Relaxation)
             , ReplProgressWatchdog(

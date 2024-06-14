@@ -1,25 +1,13 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/generic/buffer.h>
 
 
 namespace NYdb::NTopic {
-
-inline const TString& GetCodecId(const ECodec codec) {
-    static THashMap<ECodec, TString> idByCodec{
-        {ECodec::RAW, TString(1, '\0')},
-        {ECodec::GZIP, "\1"},
-        {ECodec::LZOP, "\2"},
-        {ECodec::ZSTD, "\3"}
-    };
-    Y_ABORT_UNLESS(idByCodec.contains(codec));
-    return idByCodec[codec];
-}
 
 class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
@@ -415,6 +403,8 @@ private:
     void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext);
 
     TMaybe<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
+
+    bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
 private:
     TWriteSessionSettings Settings;

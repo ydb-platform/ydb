@@ -1544,7 +1544,7 @@ public:
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("yson_struct", &TThis::YsonStruct)
-            .DefaultCtor([] () { return CreateCustomDefault<TSimpleYsonStruct>(); });
+            .DefaultCtor([] { return CreateCustomDefault<TSimpleYsonStruct>(); });
     }
 };
 

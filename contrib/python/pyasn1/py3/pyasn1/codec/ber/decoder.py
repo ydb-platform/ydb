@@ -460,6 +460,56 @@ class ObjectIdentifierPayloadDecoder(AbstractSimplePayloadDecoder):
         yield self._createComponent(asn1Spec, tagSet, oid, **options)
 
 
+class RelativeOIDPayloadDecoder(AbstractSimplePayloadDecoder):
+    protoComponent = univ.RelativeOID(())
+
+    def valueDecoder(self, substrate, asn1Spec,
+                     tagSet=None, length=None, state=None,
+                     decodeFun=None, substrateFun=None,
+                     **options):
+        if tagSet[0].tagFormat != tag.tagFormatSimple:
+            raise error.PyAsn1Error('Simple tag format expected')
+
+        for chunk in readFromStream(substrate, length, options):
+            if isinstance(chunk, SubstrateUnderrunError):
+                yield chunk
+
+        if not chunk:
+            raise error.PyAsn1Error('Empty substrate')
+
+        chunk = octs2ints(chunk)
+
+        reloid = ()
+        index = 0
+        substrateLen = len(chunk)
+        while index < substrateLen:
+            subId = chunk[index]
+            index += 1
+            if subId < 128:
+                reloid += (subId,)
+            elif subId > 128:
+                # Construct subid from a number of octets
+                nextSubId = subId
+                subId = 0
+                while nextSubId >= 128:
+                    subId = (subId << 7) + (nextSubId & 0x7F)
+                    if index >= substrateLen:
+                        raise error.SubstrateUnderrunError(
+                            'Short substrate for sub-OID past %s' % (reloid,)
+                        )
+                    nextSubId = chunk[index]
+                    index += 1
+                reloid += ((subId << 7) + nextSubId,)
+            elif subId == 128:
+                # ASN.1 spec forbids leading zeros (0x80) in OID
+                # encoding, tolerating it opens a vulnerability. See
+                # https://www.esat.kuleuven.be/cosic/publications/article-1432.pdf
+                # page 7
+                raise error.PyAsn1Error('Invalid octet 0x80 in RELATIVE-OID encoding')
+
+        yield self._createComponent(asn1Spec, tagSet, reloid, **options)
+
+
 class RealPayloadDecoder(AbstractSimplePayloadDecoder):
     protoComponent = univ.Real()
 
@@ -1421,6 +1471,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: OctetStringPayloadDecoder(),
     univ.Null.tagSet: NullPayloadDecoder(),
     univ.ObjectIdentifier.tagSet: ObjectIdentifierPayloadDecoder(),
+    univ.RelativeOID.tagSet: RelativeOIDPayloadDecoder(),
     univ.Enumerated.tagSet: IntegerPayloadDecoder(),
     univ.Real.tagSet: RealPayloadDecoder(),
     univ.Sequence.tagSet: SequenceOrSequenceOfPayloadDecoder(),  # conflicts with SequenceOf

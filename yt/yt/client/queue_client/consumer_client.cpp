@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = QueueClientLogger;
+static constexpr auto& Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -537,12 +537,20 @@ private:
             tabletAndRowIndices.push_back({partitionIndex, offset - 1});
         }
 
-        auto partitionRowInfos = CollectPartitionRowInfos(
+        auto partitionRowInfosOrError = WaitFor(CollectPartitionRowInfos(
             QueueRef_->Path,
             QueueClusterClient_,
             std::move(tabletAndRowIndices),
             params,
-            Logger);
+            Logger()));
+
+        if (!partitionRowInfosOrError.IsOK()) {
+            YT_LOG_DEBUG(partitionRowInfosOrError, "Failed to get partition row infos (Path: %v)",
+                QueueRef_->Path);
+            return {};
+        }
+
+        auto partitionRowInfos = std::move(partitionRowInfosOrError).Value();
 
         auto partitionIt = partitionRowInfos.find(partitionIndex);
         if (partitionIt == partitionRowInfos.end()) {

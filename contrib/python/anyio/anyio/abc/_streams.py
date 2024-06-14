@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Callable, Generic, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar, Union
 
 from .._core._exceptions import EndOfStream
 from .._core._typedattr import TypedAttributeProvider
@@ -19,11 +20,11 @@ class UnreliableObjectReceiveStream(
     """
     An interface for receiving objects.
 
-    This interface makes no guarantees that the received messages arrive in the order in which they
-    were sent, or that no messages are missed.
+    This interface makes no guarantees that the received messages arrive in the order in
+    which they were sent, or that no messages are missed.
 
-    Asynchronously iterating over objects of this type will yield objects matching the given type
-    parameter.
+    Asynchronously iterating over objects of this type will yield objects matching the
+    given type parameter.
     """
 
     def __aiter__(self) -> UnreliableObjectReceiveStream[T_co]:
@@ -54,8 +55,8 @@ class UnreliableObjectSendStream(
     """
     An interface for sending objects.
 
-    This interface makes no guarantees that the messages sent will reach the recipient(s) in the
-    same order in which they were sent, or at all.
+    This interface makes no guarantees that the messages sent will reach the
+    recipient(s) in the same order in which they were sent, or at all.
     """
 
     @abstractmethod
@@ -75,22 +76,22 @@ class UnreliableObjectStream(
     UnreliableObjectReceiveStream[T_Item], UnreliableObjectSendStream[T_Item]
 ):
     """
-    A bidirectional message stream which does not guarantee the order or reliability of message
-    delivery.
+    A bidirectional message stream which does not guarantee the order or reliability of
+    message delivery.
     """
 
 
 class ObjectReceiveStream(UnreliableObjectReceiveStream[T_co]):
     """
-    A receive message stream which guarantees that messages are received in the same order in
-    which they were sent, and that no messages are missed.
+    A receive message stream which guarantees that messages are received in the same
+    order in which they were sent, and that no messages are missed.
     """
 
 
 class ObjectSendStream(UnreliableObjectSendStream[T_contra]):
     """
-    A send message stream which guarantees that messages are delivered in the same order in which
-    they were sent, without missing any messages in the middle.
+    A send message stream which guarantees that messages are delivered in the same order
+    in which they were sent, without missing any messages in the middle.
     """
 
 
@@ -100,7 +101,8 @@ class ObjectStream(
     UnreliableObjectStream[T_Item],
 ):
     """
-    A bidirectional message stream which guarantees the order and reliability of message delivery.
+    A bidirectional message stream which guarantees the order and reliability of message
+    delivery.
     """
 
     @abstractmethod
@@ -108,8 +110,8 @@ class ObjectStream(
         """
         Send an end-of-file indication to the peer.
 
-        You should not try to send any further data to this stream after calling this method.
-        This method is idempotent (does nothing on successive calls).
+        You should not try to send any further data to this stream after calling this
+        method. This method is idempotent (does nothing on successive calls).
         """
 
 
@@ -117,8 +119,8 @@ class ByteReceiveStream(AsyncResource, TypedAttributeProvider):
     """
     An interface for receiving bytes from a single peer.
 
-    Iterating this byte stream will yield a byte string of arbitrary length, but no more than
-    65536 bytes.
+    Iterating this byte stream will yield a byte string of arbitrary length, but no more
+    than 65536 bytes.
     """
 
     def __aiter__(self) -> ByteReceiveStream:
@@ -135,8 +137,8 @@ class ByteReceiveStream(AsyncResource, TypedAttributeProvider):
         """
         Receive at most ``max_bytes`` bytes from the peer.
 
-        .. note:: Implementors of this interface should not return an empty :class:`bytes` object,
-            and users should ignore them.
+        .. note:: Implementors of this interface should not return an empty
+            :class:`bytes` object, and users should ignore them.
 
         :param max_bytes: maximum number of bytes to receive
         :return: the received bytes
@@ -164,8 +166,8 @@ class ByteStream(ByteReceiveStream, ByteSendStream):
         """
         Send an end-of-file indication to the peer.
 
-        You should not try to send any further data to this stream after calling this method.
-        This method is idempotent (does nothing on successive calls).
+        You should not try to send any further data to this stream after calling this
+        method. This method is idempotent (does nothing on successive calls).
         """
 
 
@@ -190,14 +192,12 @@ class Listener(Generic[T_co], AsyncResource, TypedAttributeProvider):
 
     @abstractmethod
     async def serve(
-        self,
-        handler: Callable[[T_co], Any],
-        task_group: TaskGroup | None = None,
+        self, handler: Callable[[T_co], Any], task_group: TaskGroup | None = None
     ) -> None:
         """
         Accept incoming connections as they come in and start tasks to handle them.
 
         :param handler: a callable that will be used to handle each accepted connection
-        :param task_group: the task group that will be used to start tasks for handling each
-            accepted connection (if omitted, an ad-hoc task group will be created)
+        :param task_group: the task group that will be used to start tasks for handling
+            each accepted connection (if omitted, an ad-hoc task group will be created)
         """

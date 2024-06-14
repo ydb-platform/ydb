@@ -32,8 +32,9 @@ namespace {
             : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
         {}
 
-        void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
+        void Init(bool discard, const TString& label, TMaybe<TPosition> pos, bool unordered) override {
             Discard = discard;
+            Unordered = unordered;
             if (!Discard) {
                 Writer->OnBeginMap();
                 if (label) {
@@ -72,6 +73,10 @@ namespace {
                     Writer->OnKeyedItem("Truncated");
                     Writer->OnBooleanScalar(true);
                 }
+                if (Unordered) {
+                    Writer->OnKeyedItem("Unordered");
+                    Writer->OnBooleanScalar(true);
+                }
                 Writer->OnEndMap();
             }
         }
@@ -92,6 +97,7 @@ namespace {
         TStringStream PartialStream;
         TAutoPtr<NYson::TYsonWriter> Writer;
         bool Discard = false;
+        bool Unordered = false;
     };
 
     IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
@@ -536,6 +542,7 @@ namespace {
             auto rowsLimit = fillSettings.RowsLimitPerWrite;
             bool discard = false;
             TString label;
+            bool unordered = false;
             for (auto setting : options.Cast()) {
                 if (setting.Name().Value() == "take") {
                     auto value = FromString<ui64>(setting.Value().Cast<TCoAtom>().Value());
@@ -548,6 +555,8 @@ namespace {
                     discard = true;
                 } else if (setting.Name().Value() == "label") {
                     label = TString(setting.Value().Cast<TCoAtom>().Value());
+                } else if (setting.Name().Value() == "unordered") {
+                    unordered = true;
                 }
             }
 
@@ -560,7 +569,7 @@ namespace {
                 YQL_ENSURE(Config->WriterFactory);
                 ResultWriter = Config->WriterFactory();
                 ResultWriter->Init(discard, label, Config->SupportsResultPosition ?
-                    TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing());
+                    TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing(), unordered);
             }
 
             if (input.Maybe<TResIf>() || input.Maybe<TResFor>()) {
@@ -1074,8 +1083,12 @@ namespace {
                                 if (!EnsureAtom(*setting->Child(1), ctx)) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
+                            } else if (content == "unordered") {
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
                             } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected label,discard,ref,autoref,type,take or columns atom"));
+                                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected label,discard,ref,autoref,type,unordered,take or columns atom"));
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -1494,7 +1507,8 @@ namespace {
             return false;
         }
 
-        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
+            Y_UNUSED(withLimits);
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);

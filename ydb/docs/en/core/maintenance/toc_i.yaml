@@ -6,10 +6,12 @@ items:
 - name: Cluster maintenance
   items:
   - name: Embedded UI
-    include: { mode: link, path: embedded_monitoring/toc_p.yaml }
+    include: { mode: link, path: ../reference/embedded-ui/toc_p.yaml }
   - name: Managing a cluster's disk subsystem
     include: { mode: link, path: manual/toc_p.yaml }
   - name: Changing an actor system's configuration
     href: manual/change_actorsystem_configs.md
+  - name: Maintenance without downtime
+    href: manual/maintenance-without-downtime.md
   - name: Updating configurations via CMS
     href: manual/cms.md

@@ -84,6 +84,8 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
 
@@ -94,7 +96,7 @@ Y_UNIT_TEST(Partition) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -102,7 +104,7 @@ Y_UNIT_TEST(Partition) {
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        UNIT_ASSERT_EQUAL(countersStr.Str(), "<pre></pre>");
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
     }
 }
 
@@ -173,6 +175,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid0", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
     {
@@ -182,7 +185,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -420,8 +423,12 @@ Y_UNIT_TEST(PartitionFirstClass) {
             auto counters = tc.Runtime->GetAppData(0).Counters;
             auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
 
-            auto group = dbGroup->GetSubgroup("host", "")->GetSubgroup("database", "/Root")->GetSubgroup("cloud_id", "cloud_id")->GetSubgroup("folder_id", "folder_id")
-                                ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+            auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "cloud_id")
+                                ->GetSubgroup("folder_id", "folder_id")
+                                ->GetSubgroup("database_id", "database_id")
+                                ->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);

@@ -1,0 +1,54 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists accounts",
+        "parameters": [],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["locations", "installation", "public"],
+                        "properties": {
+                            "installation": {
+                                "type": "string"
+                            },
+                            "public": {
+                                "type": "boolean"
+                            },
+                            "locations": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "title" : "Location",
+                                    "required": ["account"],
+                                    "properties": {
+                                        "location": {
+                                            "type": "string",
+                                            "description": "location id"
+                                        },
+                                        "cluster": {
+                                            "type": "string",
+                                            "description": "Solomon cluster name"
+                                        },
+                                        "endpoint": {
+                                            "type": "string",
+                                            "description": "RTMR balancer address"
+                                        },
+                                        "environment": {
+                                            "type": "string",
+                                            "description": "location name to display in UI"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

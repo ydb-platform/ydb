@@ -127,8 +127,8 @@ following libraries are required:
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
   LibreSSL (does not support 0RTT); or aws-lc; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  8e6a26d128484b886e6dcbfa558b993d38950bb5)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.0.0
+  6ab7c1482bf4cdc91c87bc512aaf68ffb18975ec)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.4.0
 * `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.1.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
@@ -149,9 +149,9 @@ requires eBPF program for reloading its configuration and hot swapping
 its executable.
 
 Compiling libnghttp2 C source code requires a C99 compiler.  gcc 4.8
-is known to be adequate.  In order to compile the C++ source code, gcc
->= 6.0 or clang >= 6.0 is required.  C++ source code requires C++14
-language features.
+is known to be adequate.  In order to compile the C++ source code,
+C++20 compliant compiler is required.  At least g++ >= 1.12 and
+clang++ >= 1.15 are known to work.
 
 .. note::
 
@@ -341,7 +341,7 @@ Build aws-lc:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.21.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.26.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON --install-prefix=$PWD/opt
    $ make -j$(nproc) -C build
@@ -352,7 +352,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.2.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.3.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -365,7 +365,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.3.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.5.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ git submodule update --init --depth 1
    $ autoreconf -i

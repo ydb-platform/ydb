@@ -151,6 +151,27 @@ namespace NKikimr::NStorage {
                     }
                 }
 
+                auto outputConfig = [&](const char *name, auto *config) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            out << name;
+                        }
+                        DIV_CLASS("panel-body") {
+                            if (config) {
+                                TString s;
+                                NProtoBuf::TextFormat::PrintToString(*config, &s);
+                                out << "<pre>" << s << "</pre>";
+                            } else {
+                                out << "not defined";
+                            }
+                        }
+                    }
+                };
+                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
+                outputConfig("BaseConfig", &BaseConfig);
+                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
+
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         out << "Outgoing binding";
@@ -174,6 +195,18 @@ namespace NKikimr::NStorage {
                         }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null");
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Static <-> dynamic node interaction";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
+                        out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
+                        out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
                     }
                 }
 

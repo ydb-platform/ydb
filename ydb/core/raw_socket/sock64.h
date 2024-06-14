@@ -3,6 +3,7 @@
 #include <optional>
 #include <util/network/sock.h>
 #include <ydb/library/actors/interconnect/poller_actor.h>
+#include "sock_settings.h"
 #include "sock_ssl.h"
 
 namespace NKikimr::NRawSocket {
@@ -17,8 +18,8 @@ protected:
     }
 
 public:
-    TInet64StreamSocket(int af = {}) {
-        CreateSocket(af);
+    TInet64StreamSocket(const TSocketSettings& socketSettings = {}) {
+        CreateSocket(socketSettings);
     }
 
     TInet64StreamSocket(TInet64StreamSocket&& socket) = default;
@@ -114,16 +115,17 @@ public:
 protected:
     int AF = 0;
 
-    void CreateSocket(int af) {
+    void CreateSocket(const TSocketSettings& socketSettings) {
         SOCKET s;
-        if (af == 0) {
+        if (socketSettings.AF == 0) {
             s = socket(AF = AF_INET6, SOCK_STREAM, 0);
             if (s < 0) {
                 s = socket(AF = AF_INET, SOCK_STREAM, 0);
             }
         } else {
-            s = socket(AF = af, SOCK_STREAM, 0);
+            s = socket(AF = socketSettings.AF, SOCK_STREAM, 0);
         }
+        SetSockOpt(s, IPPROTO_TCP, TCP_NODELAY, (int)socketSettings.TcpNotDelay);
         if (AF == AF_INET6) {
             SetSockOpt(s, SOL_SOCKET, IPV6_V6ONLY, (int)false);
         }
@@ -140,8 +142,8 @@ class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamS
     TSslHolder<SSL> Ssl;
 
 public:
-    TInet64SecureStreamSocket(int af = {})
-        : TInet64StreamSocket(af)
+    TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
+        : TInet64StreamSocket(socketSettings)
     {}
 
     TInet64SecureStreamSocket(TInet64StreamSocket&& socket)

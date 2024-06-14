@@ -799,6 +799,12 @@ class InterfaceClass(_InterfaceClassBase):
                 '__qualname__',
                 # __annotations__: PEP 3107 (Python 3.0+)
                 '__annotations__',
+                # __static_attributes__: Python 3.13a6+
+                # https://github.com/python/cpython/pull/115913
+                '__static_attributes__',
+                # __firstlineno__: Python 3.13b1+
+                # https://github.com/python/cpython/pull/118475
+                '__firstlineno__',
             )
             and aval is not _decorator_non_return
         }

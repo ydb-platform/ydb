@@ -87,6 +87,7 @@ namespace NKikimr::NBsController {
             group->SeenOperational = true;
         }
 
+        GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
 
         NKikimrBlobDepot::TBlobDepotConfig config;
@@ -127,6 +128,7 @@ namespace NKikimr::NBsController {
             group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
             group->Database = cmd.HasDatabase() ? MakeMaybe(cmd.GetDatabase()) : Nothing();
             group->NeedAlter = true;
+            GroupFailureModelChanged.insert(group->ID);
             group->CalculateGroupStatus();
 
             NKikimrBlobDepot::TBlobDepotConfig config;
@@ -801,7 +803,7 @@ namespace NKikimr::NBsController {
                 hFunc(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
                 default:
-                    Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
+                    Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
             }
         }
 

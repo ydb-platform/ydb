@@ -303,6 +303,9 @@ public:
             case ETabletType::StatisticsAggregator:
                 context.SS->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
                 break;
+            case ETabletType::BackupController:
+                context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+                break;
             default:
                 break;
             }
@@ -533,8 +536,8 @@ public:
         // OlapStore tracks all tables that are under operation, make sure to unlink
         if (context.SS->ColumnTables.contains(pathId)) {
             auto tableInfo = context.SS->ColumnTables.at(pathId);
-            if (tableInfo->OlapStorePathId) {
-                auto& storePathId = *tableInfo->OlapStorePathId;
+            if (!tableInfo->IsStandalone()) {
+                const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
                 if (context.SS->OlapStores.contains(storePathId)) {
                     auto storeInfo = context.SS->OlapStores.at(storePathId);
                     storeInfo->ColumnTablesUnderOperation.erase(pathId);

@@ -579,18 +579,28 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
     }
 
     const auto queueIt = user->Queues_.find(queueName);
-    if (queueIt == user->Queues_.end()) {
-        if (RequestQueueListForUser(user, reqId)) {
-            LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
-            RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
-            user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
-        } else {
-            AnswerThrottled(ev);
-        }
+    if (queueIt != user->Queues_.end()) {
+        ProcessConfigurationRequestForQueue(ev, user, queueIt->second);
         return;
+    } else if (ev->Get()->FolderId) {
+        const auto byNameAndFolderIt = user->QueueByNameAndFolder_ .find(
+                std::make_pair(ev->Get()->QueueName, ev->Get()->FolderId)
+        );
+        if (byNameAndFolderIt != user->QueueByNameAndFolder_.end()) {
+            ProcessConfigurationRequestForQueue(ev, user, byNameAndFolderIt->second);
+            return;
+        }
     }
 
-    ProcessConfigurationRequestForQueue(ev, user, queueIt->second);
+    if (RequestQueueListForUser(user, reqId)) {
+        LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
+        RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
+        user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
+    } else if (ev->Get()->EnableThrottling) {
+        AnswerThrottled(ev);
+    } else {
+        AnswerNotExists(ev, user);
+    }
 }
 
 void TSqsService::AnswerNotExists(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo) {
@@ -685,6 +695,7 @@ void TSqsService::AnswerThrottled(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->QueueName << "] for user [" << ev->Get()->UserName << "] while getting configuration");
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->Throttled = true;
+    answer->SchemeCache = SchemeCache_;
     Send(ev->Sender, answer.Release());
 }
 

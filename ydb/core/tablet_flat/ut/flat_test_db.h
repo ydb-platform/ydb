@@ -50,10 +50,10 @@ public:
 };
 
 class TFlatDbIterator : public ITestIterator {
-    TAutoPtr<TTableIt> Iter;
+    TAutoPtr<TTableIter> Iter;
 
 public:
-    explicit TFlatDbIterator(TAutoPtr<TTableIt> iter)
+    explicit TFlatDbIterator(TAutoPtr<TTableIter> iter)
         : Iter(iter)
     {}
 

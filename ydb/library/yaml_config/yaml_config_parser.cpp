@@ -1,9 +1,12 @@
 #include "yaml_config_parser.h"
+#include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 #include "core_constants.h"
 
+#include <ydb/library/pdisk_io/device_type.h>
 #include <ydb/library/yaml_config/protos/config.pb.h>
 
+#include <ydb/core/base/blobstorage_pdisk_category.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -236,11 +239,11 @@ namespace NKikimr::NYaml {
         }
 
         if (data == "ROT") {
-            return 0;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw();
         } else if (data == "SSD") {
-            return 1;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_SSD, 0).GetRaw();
         } else if (data == "NVME") {
-            return 2;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_NVME, 0).GetRaw();
         }
 
         Y_ENSURE_BT(false, "unknown pdisk category " << data);
@@ -612,14 +615,18 @@ namespace NKikimr::NYaml {
 
     void ApplySingleNodeDefaults(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         const TString erasureName = "none";
-        const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
-        const TString& diskType = drive.GetType();
 
-        NKikimrBlobStorage::EPDiskType dtEnum;
-        Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType, dtEnum), "incorrect enum: " << diskType);
+        std::optional<TString> diskType;
+        std::optional<TString> diskTypeLower;
+        std::optional<TString> drivePath;
 
-        TString diskTypeLower(diskType);
-        diskTypeLower.to_lower();
+        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize()) {
+            const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
+            diskType = drive.GetType();
+            diskTypeLower = diskType;
+            diskTypeLower->to_lower();
+            drivePath = drive.GetPath();
+        }
 
         if (!ephemeralConfig.HasStaticErasure()) {
             ephemeralConfig.SetStaticErasure(erasureName);
@@ -628,10 +635,13 @@ namespace NKikimr::NYaml {
         auto& domainsConfig = *config.MutableDomainsConfig();
 
         if (!domainsConfig.DomainSize()) {
+            NKikimrBlobStorage::EPDiskType dtEnum;
+            Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType.value(), dtEnum), "incorrect enum: " << diskType.value());
+
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root"); // TODO: allow override
             auto& storagePoolType =  *domain.AddStoragePoolTypes();
-            storagePoolType.SetKind(diskTypeLower);
+            storagePoolType.SetKind(diskTypeLower.value());
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
             poolConfig.SetBoxId(1);
             poolConfig.SetErasureSpecies(erasureName);
@@ -660,8 +670,8 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            vdiskLoc.SetPath(drive.GetPath());
-            vdiskLoc.SetPDiskCategory(diskType);
+            vdiskLoc.SetPath(drivePath.value());
+            vdiskLoc.SetPDiskCategory(diskType.value());
         }
 
         if (!config.HasChannelProfileConfig()) {
@@ -671,7 +681,7 @@ namespace NKikimr::NYaml {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName);
                 channel.SetPDiskCategory(1);
-                channel.SetStoragePoolKind(diskTypeLower);
+                channel.SetStoragePoolKind(diskTypeLower.value());
             };
         }
     }

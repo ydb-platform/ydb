@@ -22,6 +22,8 @@
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
+#include <yt/yt_proto/yt/client/tablet_client/proto/lock_mask.pb.h>
+
 namespace NYT::NTableClient {
 
 using namespace NChunkClient;
@@ -110,6 +112,37 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs)
     }
 
     return lhs;
+}
+
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask)
+{
+    auto size = lockMask.GetSize();
+    YT_VERIFY(size <= TLockMask::MaxSize);
+
+    protoLockMask->set_size(size);
+
+    const auto& bitmap = lockMask.GetBitmap();
+    auto wordCount = DivCeil(size, TLockMask::LocksPerWord);
+    YT_VERIFY(std::ssize(bitmap) >= wordCount);
+
+    protoLockMask->clear_bitmap();
+    for (int index = 0; index < wordCount; ++index) {
+        protoLockMask->add_bitmap(bitmap[index]);
+    }
+}
+
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask)
+{
+    auto size = protoLockMask.size();
+    auto wordCount = DivCeil<int>(size, TLockMask::LocksPerWord);
+
+    TLockBitmap bitmap;
+    bitmap.reserve(wordCount);
+    for (int index = 0; index < wordCount; ++index) {
+        bitmap.push_back(protoLockMask.bitmap(index));
+    }
+
+    *lockMask = TLockMask(bitmap, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -716,6 +749,14 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
+bool TTableSchema::IsCGCompatarorApplicable() const
+{
+    auto keyTypes = GetKeyColumnTypes();
+    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+        return type == EValueType::Any;
+    });
+}
+
 std::optional<int> TTableSchema::GetTtlColumnIndex() const
 {
     auto* column = FindColumn(TtlColumnName);
@@ -883,19 +924,16 @@ TTableSchemaPtr TTableSchema::FromKeyColumns(const TKeyColumns& keyColumns)
 
 TTableSchemaPtr TTableSchema::FromSortColumns(const TSortColumns& sortColumns)
 {
-    TTableSchema schema;
     std::vector<TColumnSchema> columns;
     for (const auto& sortColumn : sortColumns) {
         columns.push_back(
             TColumnSchema(sortColumn.Name, ESimpleLogicalValueType::Any)
                 .SetSortOrder(sortColumn.SortOrder));
     }
-    schema.ColumnInfo_ = std::make_shared<const TColumnInfo>(
-        std::move(columns),
-        std::vector<TDeletedColumn>{});
-    schema.KeyColumnCount_ = sortColumns.size();
-    ValidateTableSchema(schema);
-    return New<TTableSchema>(std::move(schema));
+
+    auto schema = New<TTableSchema>(std::move(columns), /*strict*/ false);
+    ValidateTableSchema(*schema);
+    return schema;
 }
 
 TTableSchemaPtr TTableSchema::ToQuery() const
@@ -991,6 +1029,11 @@ TTableSchemaPtr TTableSchema::ToLookup() const
 }
 
 TTableSchemaPtr TTableSchema::ToDelete() const
+{
+    return ToLookup();
+}
+
+TTableSchemaPtr TTableSchema::ToLock() const
 {
     return ToLookup();
 }
@@ -1259,18 +1302,19 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
     }
 }
 
-TComparator TTableSchema::ToComparator() const
+TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> cgComparator) const
 {
-    if (!ColumnInfo_) {
-        return TComparator(std::vector<ESortOrder>());
+    std::vector<ESortOrder> sortOrders;
+    if (ColumnInfo_) {
+        const auto& info = *ColumnInfo_;
+        sortOrders.resize(KeyColumnCount_);
+        for (int index = 0; index < KeyColumnCount_; ++index) {
+            YT_VERIFY(info.Columns[index].SortOrder());
+            sortOrders[index] = *info.Columns[index].SortOrder();
+        }
     }
-    const auto& info = *ColumnInfo_;
-    std::vector<ESortOrder> sortOrders(KeyColumnCount_);
-    for (int index = 0; index < KeyColumnCount_; ++index) {
-        YT_VERIFY(info.Columns[index].SortOrder());
-        sortOrders[index] = *info.Columns[index].SortOrder();
-    }
-    return TComparator(std::move(sortOrders));
+
+    return TComparator(std::move(sortOrders), std::move(cgComparator));
 }
 
 void TTableSchema::Save(TStreamSaveContext& context) const
@@ -1332,11 +1376,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
     builder->AppendChar(']');
 }
 
-TString ToString(const TTableSchema& schema)
-{
-    return ToStringViaBuilder(schema);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec)
 {
     if (schema) {
@@ -1344,11 +1383,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     } else {
         builder->AppendString(TStringBuf("<null>"));
     }
-}
-
-TString ToString(const TTableSchemaPtr& schema)
-{
-    return ToStringViaBuilder(schema);
 }
 
 TString SerializeToWireProto(const TTableSchemaPtr& schema)
@@ -1595,6 +1629,7 @@ void ValidateColumnSchema(
         "xdelta",
         "_yt_stored_replica_set",
         "_yt_last_seen_replica_set",
+        "dict_sum",
     };
 
     try {
@@ -1714,13 +1749,13 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
 
     for (const auto& column : schema.Columns()) {
         try {
-            if (column.SortOrder() && (
-                    column.GetWireType() == EValueType::Any ||
-                    column.GetWireType() == EValueType::Composite ||
-                    !column.IsOfV1Type()))
+            auto logicalType = column.LogicalType();
+            if (column.SortOrder() && !column.IsOfV1Type() &&
+                logicalType->GetMetatype() != ELogicalMetatype::List &&
+                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *column.LogicalType());
+                    *logicalType);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",

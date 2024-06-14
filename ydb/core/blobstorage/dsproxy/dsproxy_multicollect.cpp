@@ -97,9 +97,9 @@ public:
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie,
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_MULTICOLLECT, false, {}, now, storagePoolCounters, 0,
-                "DSProxy.MultiCollect", std::move(ev->ExecutionRelay))
+                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiCollect"), std::move(ev->ExecutionRelay))
         , Iterations(ev->PerGenerationCounterStepSize())
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)

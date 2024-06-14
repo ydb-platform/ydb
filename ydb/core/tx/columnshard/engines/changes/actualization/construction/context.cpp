@@ -11,8 +11,8 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
     , SaverContext(saverContext)
     , Counters(counters)
     , Controller(controller)
+    , ActualInstant(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , DataLocksManager(dataLocksManager)
-    , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
 {
 
 }
@@ -33,7 +33,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
         std::vector<TTaskConstructor> tasks = {buildNewTask()};
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }
-    if (it->second.back().GetTxWriteVolume() + info.GetTxVolume() > TGlobalLimits::TxWriteLimitBytes && it->second.back().GetTxWriteVolume()) {
+    if (it->second.back().GetTxWriteVolume() + info.GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2 && it->second.back().GetTxWriteVolume()) {
         if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
             it->second.emplace_back(buildNewTask());
         } else {
@@ -56,7 +56,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
     if (features.GetTargetTierName() == NTiering::NCommon::DeleteTierName) {
         AFL_VERIFY(dWait);
         Counters.OnPortionToDrop(info.GetTotalBlobBytes(), *dWait);
-        it->second.back().GetTask()->PortionsToRemove.emplace(info.GetAddress(), info);
+        it->second.back().GetTask()->AddPortionToRemove(info);
         AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
         if (!dWait) {
@@ -65,7 +65,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
             Counters.OnPortionToEvict(info.GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(it->second.back().GetTask()->PortionsToRemove.empty())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->HasPortionsToRemove())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     }
     return true;
 }

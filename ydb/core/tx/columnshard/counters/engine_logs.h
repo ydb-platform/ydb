@@ -1,5 +1,6 @@
 #pragma once
 #include "common/owner.h"
+#include "common/histogram.h"
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>
@@ -17,6 +18,7 @@ protected:
     i64 TotalPortionsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
+    i64 MetadataMemoryPortionsSize = 0;
 public:
     i64 GetColumnPortionsSize() const {
         return ColumnPortionsSize;
@@ -30,9 +32,18 @@ public:
     i64 GetPortionsCount() const {
         return PortionsCount;
     }
+    i64 GetMetadataMemoryPortionsSize() const {
+        return MetadataMemoryPortionsSize;
+    }
 
     TString DebugString() const {
-        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount << ";";
+        return TStringBuilder() << 
+            "columns_size:" << ColumnPortionsSize << 
+            ";total_size:" << TotalPortionsSize << 
+            ";count:" << PortionsCount << 
+            ";metadata_portions_size:" << MetadataMemoryPortionsSize <<
+            ";records_count:" << RecordsCount <<
+            ";";
     }
 
     TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
@@ -111,124 +122,6 @@ public:
     }
 };
 
-class TIncrementalHistogram: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    std::map<i64, NMonitoring::TDynamicCounters::TCounterPtr> Counters;
-    NMonitoring::TDynamicCounters::TCounterPtr PlusInf;
-
-    NMonitoring::TDynamicCounters::TCounterPtr GetQuantile(const i64 value) const {
-        auto it = Counters.lower_bound(value);
-        if (it == Counters.end()) {
-            return PlusInf;
-        } else {
-            return it->second;
-        }
-    }
-public:
-
-    class TGuard {
-    private:
-        class TLineGuard {
-        private:
-            NMonitoring::TDynamicCounters::TCounterPtr Counter;
-            i64 Value = 0;
-        public:
-            TLineGuard(NMonitoring::TDynamicCounters::TCounterPtr counter)
-                : Counter(counter)
-            {
-
-            }
-
-            ~TLineGuard() {
-                Sub(Value);
-            }
-
-            void Add(const i64 value) {
-                Counter->Add(value);
-                Value += value;
-            }
-
-            void Sub(const i64 value) {
-                Counter->Sub(value);
-                Value -= value;
-                Y_ABORT_UNLESS(Value >= 0);
-            }
-        };
-
-        std::map<i64, TLineGuard> Counters;
-        TLineGuard PlusInf;
-
-        TLineGuard& GetLineGuard(const i64 value) {
-            auto it = Counters.lower_bound(value);
-            if (it == Counters.end()) {
-                return PlusInf;
-            } else {
-                return it->second;
-            }
-        }
-    public:
-        TGuard(const TIncrementalHistogram& owner)
-            : PlusInf(owner.PlusInf)
-        {
-            for (auto&& i : owner.Counters) {
-                Counters.emplace(i.first, TLineGuard(i.second));
-            }
-        }
-        void Add(const i64 value, const i64 count) {
-            GetLineGuard(value).Add(count);
-        }
-
-        void Sub(const i64 value, const i64 count) {
-            GetLineGuard(value).Sub(count);
-        }
-    };
-
-    std::shared_ptr<TGuard> BuildGuard() const {
-        return std::make_shared<TGuard>(*this);
-    }
-
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values)
-        : TBase(moduleId) {
-        DeepSubGroup("metric", metricId);
-        if (category) {
-            DeepSubGroup("category", category);
-        }
-        std::optional<TString> predName;
-        for (auto&& i : values) {
-            if (!predName) {
-                Counters.emplace(i, TBase::GetValue("(-Inf," + ::ToString(i) + "]"));
-            } else {
-                Counters.emplace(i, TBase::GetValue("(" + *predName + "," + ::ToString(i) + "]"));
-            }
-            predName = ::ToString(i);
-        }
-        Y_ABORT_UNLESS(predName);
-        PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
-    }
-
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values)
-        : TBase(moduleId)
-    {
-        DeepSubGroup("metric", metricId);
-        if (category) {
-            DeepSubGroup("category", category);
-        }
-        std::optional<TString> predName;
-        for (auto&& i : values) {
-            if (!predName) {
-                Counters.emplace(i.first, TBase::GetValue("(-Inf," + i.second + "]"));
-            } else {
-                Counters.emplace(i.first, TBase::GetValue("(" + *predName + "," + i.second + "]"));
-            }
-            predName = i.second;
-        }
-        Y_ABORT_UNLESS(predName);
-        PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
-    }
-
-};
-
 class TEngineLogsCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -260,6 +153,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
+
+    NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
@@ -357,6 +252,10 @@ public:
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnIndexMetadataUsageBytes(const ui64 size) const {
+        IndexMetadataUsageBytes->Set(size);
     }
 
     void OnGranuleOptimizerLocked() const {

@@ -78,6 +78,30 @@ public:
             }
         }
 
+        for (const auto& report : record.GetPDiskReports()) {
+            if (!report.HasPDiskId() || !report.HasPhase()) {
+                continue; // ignore incorrect report
+            }
+
+            TPDiskId pdiskId(record.GetNodeId(), report.GetPDiskId());
+
+            TPDiskInfo *pdisk = State->PDisks.FindForUpdate(pdiskId);
+            if (!pdisk) {
+                continue;
+            }
+
+            switch (report.GetPhase()) {
+                case NKikimrBlobStorage::TEvControllerNodeReport::PD_UNKNOWN:
+                    continue;
+
+                case NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED:
+                    if (pdisk->Mood == TPDiskMood::Restarting) {
+                        pdisk->Mood = TPDiskMood::Normal;
+                    }
+                    break;
+            }
+        }
+
         State->CheckConsistency();
         TString error;
         if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {

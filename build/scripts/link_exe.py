@@ -10,6 +10,8 @@ import process_command_files as pcf
 
 from process_whole_archive_option import ProcessWholeArchiveOption
 
+from fix_py2_protobuf import fix_py2
+
 
 def get_leaks_suppressions(cmd):
     supp, newcmd = [], []
@@ -44,6 +46,18 @@ CUDA_LIBRARIES = {
     '-lnvrtc_static': '-lnvrtc',
     '-lnvrtc-builtins_static': '-lnvrtc-builtins',
     '-lnvptxcompiler_static': '',
+    '-lnppc_static': '-lnppc',
+    '-lnppial_static': '-lnppial',
+    '-lnppicc_static': '-lnppicc',
+    '-lnppicom_static': '-lnppicom',
+    '-lnppidei_static': '-lnppidei',
+    '-lnppif_static': '-lnppif',
+    '-lnppig_static': '-lnppig',
+    '-lnppim_static': '-lnppim',
+    '-lnppist_static': '-lnppist',
+    '-lnppisu_static': '-lnppisu',
+    '-lnppitc_static': '-lnppitc',
+    '-lnpps_static': '-lnpps',
 }
 
 
@@ -68,7 +82,8 @@ class CUDAManager:
 
     def _known_fatbin_libs(self, libs):
         libs_wo_device_code = {
-            '-lcudart_static'
+            '-lcudart_static',
+            '-lnppc_static',
         }
         return set(libs) - libs_wo_device_code
 
@@ -307,6 +322,7 @@ if __name__ == '__main__':
     args = pcf.skip_markers(args)
 
     cmd = fix_blas_resolving(args)
+    cmd = fix_py2(cmd)
     cmd = remove_excessive_flags(cmd)
     if opts.musl:
         cmd = fix_cmd_for_musl(cmd)

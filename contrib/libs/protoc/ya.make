@@ -13,14 +13,26 @@ VERSION(3.19.0)
 
 ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.19.0.tar.gz)
 
+IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
+
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE Protobuf
+        CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
+        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_import \"bin, protoc* -> ./bin\" && conan-imports \"bin, protoc* -> ./bin\" && vanilla_protobuf"
+    )
+
+ELSE()
+
+    ADDINCL(
+        GLOBAL contrib/libs/protoc/src
+    )
+
+ENDIF()
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/libs/protobuf
-)
-
-ADDINCL(
-    GLOBAL contrib/libs/protoc/src
 )
 
 NO_COMPILER_WARNINGS()

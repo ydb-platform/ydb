@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                 auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *screen);
 
                 { /*_ Check that simple screen is really working */
-                    TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
+                    TCheckIter iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
                     iter.To(4 + (off << 2) + (joined << 1))
                         .Seek({}, ESeek::Lower);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                 }
 
                 { /* Check working partial screening on hole edge */
-                    TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
+                    TCheckIter iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
                     auto it = cu.Begin + (len >> 2);
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
             auto cu = cook.Make(Mass0().Saved, rnd, 8192);
             auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *cu.Screen);
 
-            TCheckIt iter(Eggs0(), { new TTestEnv, 0 }, slice);
+            TCheckIter iter(Eggs0(), { new TTestEnv, 0 }, slice);
 
             iter.To(4 + z);
 

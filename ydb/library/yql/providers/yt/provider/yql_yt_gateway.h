@@ -106,6 +106,7 @@ public:
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
+        OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
     };
 
     //////////////////////////////////////////////////////////////
@@ -174,6 +175,7 @@ public:
         TString Path;
         TMaybe<TVector<TString>> Columns;
         TMaybe<TVector<NYT::TReadRange>> Ranges;
+        TMaybe<TString> AdditionalAttributes;
     };
 
     struct TCanonizePathsResult: public NCommon::TOperationResult {

@@ -1,5 +1,5 @@
 RESOURCES_LIBRARY()
-OWNER(
+SUBSCRIBER(
     g:yatest
     heretic
 )

@@ -16,7 +16,11 @@ public:
 
     bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 
+    bool ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+
     bool FetchScriptResults();
+
+    bool ForgetExecutionOperation();
 
     void PrintScriptResults() const;
 

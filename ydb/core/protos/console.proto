@@ -26,10 +26,25 @@ message TSetConfigResponse {
     optional TStatus Status = 1;
 }
 
+message TVolatileConfig {
+    optional uint64 Id = 1;
+    optional string Config = 2;
+}
+
+message TYamlConfigChange {
+    optional string OldYamlConfig = 1;
+    optional string NewYamlConfig = 2;
+    repeated TVolatileConfig OldVolatileYamlConfigs = 3;
+    repeated TVolatileConfig NewVolatileYamlConfigs = 4;
+}
+
 message TLogRecordData {
+    // Old configs
     optional TConfigureRequest Action = 1;
     repeated TConfigureResponse.TAffectedConfig AffectedConfigs = 2;
     repeated uint32 AffectedKinds = 3;
+    // New configs
+    optional TYamlConfigChange YamlConfigChange = 4;
 }
 
 message TLogRecord {

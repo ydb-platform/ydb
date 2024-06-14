@@ -14,18 +14,11 @@ using NOlap::IBlobInUseTracker;
 class TInFlightReadsTracker {
 public:
     // Returns a unique cookie associated with this request
-    ui64 AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
         const ui64 cookie = NextCookie++;
-        AddToInFlightRequest(cookie, readMeta, index);
-        return cookie;
-    }
-
-    // Returns a unique cookie associated with this request
-    template <class TReadMetadataList>
-    ui64 AddInFlightRequest(const TReadMetadataList& readMetaList, const NOlap::TVersionedIndex* index) {
-        const ui64 cookie = NextCookie++;
-        for (const auto& readMetaPtr : readMetaList) {
-            AddToInFlightRequest(cookie, readMetaPtr, index);
+        auto status = AddToInFlightRequest(cookie, readMeta, index);
+        if (!status) {
+            return status;
         }
         return cookie;
     }
@@ -50,7 +43,7 @@ public:
     }
 
 private:
-    void AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
+    [[nodiscard]] TConclusionStatus AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 
 private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;

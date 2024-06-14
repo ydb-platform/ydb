@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         {
             TDataStats stats = { };
             TTestEnv env;
-            // TScreenedPartIndexIterator without screen previously was TPartIndexIterator
+            // TScreenedPartIndexIterator without screen previously was TPartGroupFlatIndexItererator
             TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env, scheme->Keys, nullptr, nullptr, 0, 0);
             sizes.clear();
 

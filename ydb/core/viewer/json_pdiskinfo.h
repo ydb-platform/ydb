@@ -44,14 +44,14 @@ using TJsonPDiskInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvPDiskStateReques
 template <>
 struct TJsonRequestSummary<TJsonPDiskInfo> {
     static TString GetSummary() {
-        return "\"PDisk information\"";
+        return "PDisk information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonPDiskInfo> {
     static TString GetDescription() {
-        return "\"Returns PDisk information\"";
+        return "Returns PDisk information";
     }
 };
 

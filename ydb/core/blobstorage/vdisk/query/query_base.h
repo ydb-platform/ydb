@@ -47,6 +47,9 @@ namespace NKikimr {
             , ReplSchedulerId(replSchedulerId)
             , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name)
         {
+            if (Span) {
+                Span.Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
+            }
             Y_DEBUG_ABORT_UNLESS(Result);
         }
 

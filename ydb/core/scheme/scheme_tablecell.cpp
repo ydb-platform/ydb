@@ -136,13 +136,15 @@ namespace {
         SerializeCellVecBody(cells, resultBufferData, resultCells);
     }
 
+    constexpr size_t CellMatrixHeaderSize = sizeof(ui32) + sizeof(ui16);
+
     Y_FORCE_INLINE void SerializeCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount, TString& resultBuffer, TVector<TCell>* resultCells) {
         Y_ABORT_UNLESS(cells.size() == (size_t)rowCount * (size_t)colCount);
 
         if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
             return;
 
-        size_t size = sizeof(ui32) + sizeof(ui16);
+        size_t size = CellMatrixHeaderSize;
         for (auto& cell : cells)
             size += sizeof(TCellHeader) + cell.Size();
 
@@ -303,6 +305,46 @@ TString TSerializedCellMatrix::Serialize(TConstArrayRef<TCell> cells, ui32 rowCo
 
 bool TSerializedCellMatrix::DoTryParse(const TString& data) {
     return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
+}
+
+TCellsBatcher::TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch)
+    : ColCount(colCount)
+    , MaxBytesPerBatch(maxBytesPerBatch) {
+}
+
+bool TCellsBatcher::IsEmpty() const {
+    return Batches.empty();
+}
+
+TCellsBatcher::TBatch TCellsBatcher::Flush(bool force) {
+    TBatch res;
+    if ((!Batches.empty() && force) || Batches.size() > 1) {
+        res = std::move(Batches.front());
+        Batches.pop_front();
+    }
+    return res;
+}
+
+ui64 TCellsBatcher::AddRow(TArrayRef<TCell> cells) {
+    Y_ABORT_UNLESS(cells.size() == ColCount);
+    ui64 newMemory = 0;
+    for (const auto& cell : cells) {
+        newMemory += cell.Size();
+    }
+    if (Batches.empty() || newMemory + sizeof(TCellHeader) * ColCount + Batches.back().MemorySerialized > MaxBytesPerBatch) {
+        Batches.emplace_back();
+        Batches.back().Memory = 0;
+        Batches.back().MemorySerialized = CellMatrixHeaderSize;
+    }
+
+    for (auto& cell : cells) {
+        Batches.back().Data.emplace_back(std::move(cell));
+    }
+
+    Batches.back().Memory += newMemory;
+    Batches.back().MemorySerialized += newMemory + sizeof(TCellHeader) * ColCount;
+
+    return newMemory;
 }
 
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)

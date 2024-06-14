@@ -127,7 +127,9 @@ vim dynconfig.yaml
 * `log_config`;
 * `immediate_controls_config`;
 * `table_service_config`;
-* `monitoring_config`.
+* `monitoring_config`;
+* `tracing_config.sampling`;
+* `tracing_config.external_throttling`.
 
 В будущем список может быть расширен.
 

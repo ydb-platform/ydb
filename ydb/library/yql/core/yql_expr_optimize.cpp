@@ -898,6 +898,11 @@ void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func) {
     VisitExprInternal(root, func, {}, visitedNodes);
 }
 
+void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& preFunc, const TExprVisitRefFunc& postFunc) {
+    TNodeSet visitedNodes;
+    VisitExprInternal(root, preFunc, postFunc, visitedNodes);
+}
+
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes) {
     VisitExprInternal(root, func, {}, visitedNodes);
 }

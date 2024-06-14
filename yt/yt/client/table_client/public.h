@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/cypress_client/public.h>
 
+#include <yt/yt/client/tablet_client/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/misc/range.h>
@@ -92,7 +94,7 @@ constexpr i64 MaxAnyValueLength = 16_MB;
 constexpr i64 MaxCompositeValueLength = 16_MB;
 constexpr i64 MaxServerVersionedRowDataWeight = 512_MB;
 constexpr i64 MaxClientVersionedRowDataWeight = 128_MB;
-constexpr int MaxKeyColumnCountInDynamicTable = 64;
+constexpr int MaxKeyColumnCountInDynamicTable = 128;
 constexpr int MaxTimestampCountPerRow = std::numeric_limits<ui16>::max();
 
 static_assert(
@@ -368,6 +370,8 @@ DECLARE_REFCOUNTED_CLASS(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
 
+DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
+
 class TSaveContext;
 class TLoadContext;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;
@@ -423,9 +427,12 @@ DEFINE_ENUM(ESchemaCompatibility,
 
 static constexpr TMasterTableSchemaId NullTableSchemaId = TMasterTableSchemaId();
 
-using TDynamicTableKeyMask = ui64;
+using TDynamicTableKeyMask = __uint128_t;
 
 static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTable);
+
+// Function that compares two TUnversionedValue values.
+using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
 
 ////////////////////////////////////////////////////////////////////////////////
 

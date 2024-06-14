@@ -1,5 +1,6 @@
 #include "stats.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NOlap::NReader {
 

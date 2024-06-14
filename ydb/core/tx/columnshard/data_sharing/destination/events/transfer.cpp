@@ -6,18 +6,21 @@
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
-    const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
+    const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        auto schema = index.GetSchema(i.GetMinSnapshot());
+        auto schema = i.GetSchema(index);
         i.FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
+
+    const std::shared_ptr<TSharedBlobsManager> sharedBlobs = storages->GetSharedBlobsManager();
 
     THashMap<TString, THashMap<TUnifiedBlobId, TBlobSharing>> blobsInfo;
 
     for (auto&& i : blobIds) {
-        auto storageManager = sharedBlobs->GetStorageManagerVerified(i.first);
-        auto storeCategories = storageManager->BuildStoreCategories(i.second);
+        auto sharingManager = sharedBlobs->GetStorageManagerVerified(i.first);
+        auto storageManager = storages->GetOperatorVerified(i.first);
+        auto storeCategories = sharingManager->BuildStoreCategories(i.second);
         auto& blobs = blobsInfo[i.first];
         for (auto it = storeCategories.GetDirect().GetIterator(); it.IsValid(); ++it) {
             auto itSharing = blobs.find(it.GetBlobId());
@@ -29,6 +32,9 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
             auto itSharing = blobs.find(it.GetBlobId());
             if (itSharing == blobs.end()) {
                 itSharing = blobs.emplace(it.GetBlobId(), TBlobSharing(i.first, it.GetBlobId())).first;
+            }
+            if (storageManager->HasToDelete(it.GetBlobId(), it.GetTabletId())) {
+                continue;
             }
             itSharing->second.AddShared(it.GetTabletId());
         }

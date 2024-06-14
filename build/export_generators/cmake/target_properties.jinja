@@ -1,0 +1,15 @@
+{%  for property in current_target.properties -%}
+set_property(TARGET {{ name }} PROPERTY {{ property.name }}
+{%-     for value in property.value %}
+  {{ value }}
+{%-     endfor %}
+)
+{%  endfor -%}
+
+{%- if (current_target.protoc_extra_outs is defined) and (current_target.protoc_extra_outs|length) -%}
+set_property(TARGET {{ name }} PROPERTY PROTOC_EXTRA_OUTS
+{%-     for protoc_extra_out in current_target.protoc_extra_outs %}
+  {{ protoc_extra_out }}
+{%-     endfor %}
+)
+{%  endif -%}

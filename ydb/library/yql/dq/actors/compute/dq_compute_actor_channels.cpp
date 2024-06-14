@@ -174,7 +174,12 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     YQL_ENSURE(record.GetSeqNo() <= outputChannel.LastSentSeqNo);
 
     if (record.GetFinish()) {
-        outputChannel.InFlight.clear();
+        auto it = outputChannel.InFlight.begin();
+        while (it != outputChannel.InFlight.end()) {
+            outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.RowCount());
+            it = outputChannel.InFlight.erase(it);
+        }
+        outputChannel.RetryState.reset();
         outputChannel.Finished = true;
         outputChannel.EarlyFinish = true;
         Cbs->PeerFinished(record.GetChannelId());
@@ -644,11 +649,11 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
     for (auto& inputChannel: InputChannelsMap) {
         if (!inputChannel.second.InFlight.empty()) {
             if (inputChannel.second.Finished) {
-                LOG_D(prefix << ", don't wait for ack delivery in channelId: "
+                LOG_D(prefix << ", don't wait for ack delivery in input channelId: "
                     << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
                 continue;
             }
-            LOG_D(prefix << ", waiting for ack delivery in channelId: "
+            LOG_D(prefix << ", waiting for ack delivery in input channelId: "
                 << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
             return false;
         }
@@ -656,7 +661,7 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
 
     for (auto& outputChannel : OutputChannelsMap) {
         if (!outputChannel.second.InFlight.empty()) {
-            LOG_D(prefix << ", waiting for chunk delivery in channelId: "
+            LOG_D(prefix << ", waiting for chunk delivery in output channelId: "
                 << outputChannel.first << ", seqNo: " << InFlightMessagesStr(outputChannel.second.InFlight));
             return false;
         }

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: zope.interface
-Version: 6.2
+Version: 6.4.post2
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -74,6 +74,44 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+6.4.post2 (unreleased)
+======================
+
+- Publish missing Windows wheels, second attempt.
+  (`#295 <https://github.com/zopefoundation/zope.interface/issues/295>`_)
+
+
+6.4.post1 (2024-05-23)
+======================
+
+- Publish missing Windows wheels.
+  (`#295 <https://github.com/zopefoundation/zope.interface/issues/295>`_)
+
+
+6.4.post0 (2024-05-22)
+======================
+
+- The sdist of version 6.4 was uploaded to PyPI as
+  ``zope_interface-6.4.tar.gz`` instead of ``zope.interface-6.4-py2.tar.gz``
+  which cannot be installed by ``zc.buildout``.  This release is a re-release
+  of version 6.4 with the correct sdist name.
+  (`#298 <https://github.com/zopefoundation/zope.interface/issues/298>`_)
+
+
+6.4 (2024-05-15)
+================
+
+- Adjust for incompatible changes in Python 3.13b1.
+  (`#292 <https://github.com/zopefoundation/zope.interface/issues/292>`_)
+
+- Build windows wheels on GHA.
+
+6.3 (2024-04-12)
+================
+
+- Add preliminary support for Python 3.13 as of 3.13a6.
+
 
 6.2 (2024-02-16)
 ================

@@ -763,13 +763,21 @@ private:
         TCounterPtr ScanBytes;
         TCounterPtr DatashardRowCount;
         TCounterPtr DatashardSizeBytes;
+        TCounterPtr DatashardCacheHitBytes;
+        TCounterPtr DatashardCacheMissBytes;
         TCounterPtr ColumnShardScanRows_;
         TCounterPtr ColumnShardScanBytes_;
         TCounterPtr ColumnShardBulkUpsertRows_;
         TCounterPtr ColumnShardBulkUpsertBytes_;
         TCounterPtr ResourcesStorageUsedBytes;
+        TCounterPtr ResourcesStorageUsedBytesOnSsd;
+        TCounterPtr ResourcesStorageUsedBytesOnHdd;
         TCounterPtr ResourcesStorageLimitBytes;
+        TCounterPtr ResourcesStorageLimitBytesOnSsd;
+        TCounterPtr ResourcesStorageLimitBytesOnHdd;
         TCounterPtr ResourcesStorageTableUsedBytes;
+        TCounterPtr ResourcesStorageTableUsedBytesOnSsd;
+        TCounterPtr ResourcesStorageTableUsedBytesOnHdd;
         TCounterPtr ResourcesStorageTopicUsedBytes;
         TCounterPtr ResourcesStreamUsedShards;
         TCounterPtr ResourcesStreamLimitShards;
@@ -795,6 +803,8 @@ private:
         TCounterPtr DbUniqueRowsTotal;
         TCounterPtr DbUniqueDataBytes;
         THistogramPtr ConsumedCpuHistogram;
+        TCounterPtr TxCachedBytes;
+        TCounterPtr TxReadBytes;
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
@@ -802,8 +812,12 @@ private:
         TCounterPtr ColumnShardUpsertBytesWritten_;
 
         TCounterPtr DiskSpaceTablesTotalBytes;
+        TCounterPtr DiskSpaceTablesTotalBytesOnSsd;
+        TCounterPtr DiskSpaceTablesTotalBytesOnHdd;
         TCounterPtr DiskSpaceTopicsTotalBytes;
         TCounterPtr DiskSpaceSoftQuotaBytes;
+        TCounterPtr DiskSpaceSoftQuotaBytesOnSsd;
+        TCounterPtr DiskSpaceSoftQuotaBytesOnHdd;
 
         TCounterPtr StreamShardsCount;
         TCounterPtr StreamShardsQuota;
@@ -840,6 +854,11 @@ private:
             DatashardSizeBytes = ydbGroup->GetNamedCounter("name",
                 "table.datashard.size_bytes", false);
 
+            DatashardCacheHitBytes = ydbGroup->GetNamedCounter("name",
+                "table.datashard.cache_hit.bytes", true);
+            DatashardCacheMissBytes = ydbGroup->GetNamedCounter("name",
+                "table.datashard.cache_miss.bytes", true);
+
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.rows", true);
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
@@ -851,10 +870,22 @@ private:
 
             ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.used_bytes", false);
+            ResourcesStorageUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.used_bytes.ssd", false);
+            ResourcesStorageUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.used_bytes.hdd", false);
             ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.limit_bytes", false);
+            ResourcesStorageLimitBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.limit_bytes.ssd", false);
+            ResourcesStorageLimitBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.limit_bytes.hdd", false);
             ResourcesStorageTableUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.table.used_bytes", false);
+            ResourcesStorageTableUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.ssd", false);
+            ResourcesStorageTableUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.hdd", false);
             ResourcesStorageTopicUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.topic.used_bytes", false);
 
@@ -902,6 +933,8 @@ private:
                 DbUniqueRowsTotal = execGroup->GetCounter("SUM(DbUniqueRowsTotal)");
                 DbUniqueDataBytes = execGroup->GetCounter("SUM(DbUniqueDataBytes)");
                 ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
+                TxCachedBytes = execGroup->GetCounter("TxCachedBytes");
+                TxReadBytes = execGroup->GetCounter("TxReadBytes");
             }
 
             if (hasColumnShard && !ColumnShardScannedBytes_) {
@@ -919,8 +952,12 @@ private:
                 auto appGroup = schemeshardGroup->GetSubgroup("category", "app");
 
                 DiskSpaceTablesTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytes)");
+                DiskSpaceTablesTotalBytesOnSsd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytesOnSsd)");
+                DiskSpaceTablesTotalBytesOnHdd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytesOnHdd)");
                 DiskSpaceTopicsTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTopicsTotalBytes)");
                 DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)");
+                DiskSpaceSoftQuotaBytesOnSsd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytesOnSsd)");
+                DiskSpaceSoftQuotaBytesOnHdd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytesOnHdd)");
 
                 StreamShardsCount = appGroup->GetCounter("SUM(SchemeShard/StreamShardsCount)");
                 StreamShardsQuota = appGroup->GetCounter("SUM(SchemeShard/StreamShardsQuota)");
@@ -944,6 +981,8 @@ private:
                 ScanBytes->Set(ScannedBytes->Val());
                 DatashardRowCount->Set(DbUniqueRowsTotal->Val());
                 DatashardSizeBytes->Set(DbUniqueDataBytes->Val());
+                DatashardCacheHitBytes->Set(TxCachedBytes->Val());
+                DatashardCacheMissBytes->Set(TxReadBytes->Val());
 
                 if (ConsumedCpuHistogram) {
                     TransferBuckets(ShardCpuUtilization, ConsumedCpuHistogram);
@@ -959,13 +998,21 @@ private:
 
             if (DiskSpaceTablesTotalBytes) {
                 ResourcesStorageLimitBytes->Set(DiskSpaceSoftQuotaBytes->Val());
+                ResourcesStorageLimitBytesOnSsd->Set(DiskSpaceSoftQuotaBytesOnSsd->Val());
+                ResourcesStorageLimitBytesOnHdd->Set(DiskSpaceSoftQuotaBytesOnHdd->Val());
                 ResourcesStorageTableUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
+                ResourcesStorageTableUsedBytesOnSsd->Set(DiskSpaceTablesTotalBytesOnSsd->Val());
+                ResourcesStorageTableUsedBytesOnHdd->Set(DiskSpaceTablesTotalBytesOnHdd->Val());
                 ResourcesStorageTopicUsedBytes->Set(DiskSpaceTopicsTotalBytes->Val());
 
                 if (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
                     ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val() + ResourcesStorageTopicUsedBytes->Val());
+                    ResourcesStorageUsedBytesOnSsd->Set(ResourcesStorageTableUsedBytesOnSsd->Val());
+                    ResourcesStorageUsedBytesOnHdd->Set(ResourcesStorageTableUsedBytesOnHdd->Val());
                 } else {
                     ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val());
+                    ResourcesStorageUsedBytesOnSsd->Set(ResourcesStorageTableUsedBytesOnSsd->Val());
+                    ResourcesStorageUsedBytesOnHdd->Set(ResourcesStorageTableUsedBytesOnHdd->Val());
                 }
 
                 auto quota = StreamShardsQuota->Val();

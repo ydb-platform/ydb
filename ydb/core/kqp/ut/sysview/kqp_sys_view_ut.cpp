@@ -16,8 +16,6 @@ using namespace NYdb::NScheme;
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
-        return; // nodes table is currently switched off
-
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
@@ -188,6 +186,24 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
             CompareYson(Sprintf(R"([
                 [["%s"]]
             ])", sessionsSet.back().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(--!syntax_v1
+$date_format = DateTime::Format("%s");
+select SessionId, QueryStartAt from `/Root/.sys/query_sessions`
+where
+SessionId LIKE Utf8("%s") and
+StartsWith($date_format(SessionStartAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8)) and
+StartsWith($date_format(StateChangeAt), cast(DateTime::GetYear(CurrentUtcTimestamp()) as utf8))
+order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                [["%s"];#]
+            ])", sessionsSet.front().GetId().data()), FormatResultSetYson(result.GetResultSet(0)));
         }
 
         {
@@ -400,8 +416,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
     }
 
     Y_UNIT_TEST(NodesSimple) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
         auto client = kikimr.GetTableClient();
 
@@ -424,8 +438,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
     }
 
     Y_UNIT_TEST(NodesRange1) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 
@@ -450,8 +462,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.back().GetId().data()
     }
 
     Y_UNIT_TEST(NodesRange2) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 

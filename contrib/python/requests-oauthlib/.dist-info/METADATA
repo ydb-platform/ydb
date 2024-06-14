@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: requests-oauthlib
-Version: 1.4.0
+Version: 2.0.0
 Summary: OAuthlib authentication support for Requests.
 Home-page: https://github.com/requests/requests-oauthlib
 Author: Kenneth Reitz
@@ -11,8 +11,6 @@ Classifier: Intended Audience :: Developers
 Classifier: Natural Language :: English
 Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.4
 Classifier: Programming Language :: Python :: 3.5
@@ -25,7 +23,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Requires-Python: >=3.4
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: oauthlib >=3.0.0
@@ -96,7 +94,7 @@ To install requests and requests_oauthlib you can use pip:
 History
 -------
 
-v1.4.0 (27 Feb 2024)
+v2.0.0 (22 March 2024)
 ++++++++++++++++++++++++
 
 Full set of changes are in [github](https://github.com/requests/requests-oauthlib/milestone/4?closed=1).
@@ -116,6 +114,11 @@ Additions & changes:
 - Migrated to Github Action
 - Updated dependencies
 - Cleanup some docs and examples
+
+v1.4.0 (27 Feb 2024)
+++++++++++++++++++++++++
+
+- Version 2.0.0 published initially as 1.4.0, it was yanked eventually.
 
 v1.3.1 (21 January 2022)
 ++++++++++++++++++++++++

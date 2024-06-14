@@ -385,6 +385,11 @@ bool ParseStreamingFeedbackHeader(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+i64 GetMessageHeaderSize(const TSharedRefArray& message)
+{
+    return message.Size() >= 1 ? static_cast<i64>(message[0].Size()) : 0;
+}
+
 i64 GetMessageBodySize(const TSharedRefArray& message)
 {
     return message.Size() >= 2 ? static_cast<i64>(message[1].Size()) : 0;

@@ -183,6 +183,7 @@ public:
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
         auto curNow = TInstant::Now();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
     }
 
@@ -278,7 +279,7 @@ public:
 
     TKqpSessionInfo* PickSessionToShutdown(bool force, ui32 minReasonableToKick) {
         auto& sessions = force ? ReadySessions.at(0) : ReadySessions.at(1);
-        if (sessions.size() >= minReasonableToKick) {
+        if (!sessions.empty() && sessions.size() >= minReasonableToKick) {
             ui64 idx = RandomProvider->GenRand() % sessions.size();
             return StartShutdownSession(sessions[idx]);
         }

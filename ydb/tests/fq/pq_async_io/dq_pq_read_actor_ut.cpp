@@ -100,20 +100,22 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         const TString topicName = "NonExistentTopic";
         InitSource(topicName);
 
-        while (true) {
-            try {
-                SourceRead<TString>(UVParser);
-            } catch (yexception& e) {
-                UNIT_ASSERT_STRING_CONTAINS(e.what(), "Read session to topic \"NonExistentTopic\" was closed");
+        TInstant deadline = Now() + TDuration::Seconds(5);
+        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        bool failured = false;
+        while (Now() < deadline) {
+            SourceRead<TString>(UVParser);
+            if (future.HasValue()) {
+                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Read session to topic \"NonExistentTopic\" was closed");
+                failured = true;
                 break;
             }
-
-            sleep(1);
         }
+        UNIT_ASSERT_C(failured, "Failure timeout");
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRead) {
-        NDqProto::TSourceState state;
+        TSourceState state;
         const TString topicName = "SaveLoadPqRead";
         PQCreateStream(topicName);
 
@@ -132,7 +134,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             Cerr << "State saved" << Endl;
         }
 
-        NDqProto::TSourceState state2;
+        TSourceState state2;
         {
             TPqIoTestFixture setup2;
             setup2.InitSource(topicName);
@@ -151,7 +153,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             PQWrite({"futherData"}, topicName);
         }
 
-        NDqProto::TSourceState state3;
+        TSourceState state3;
         {
             TPqIoTestFixture setup3;
             setup3.InitSource(topicName);
@@ -204,7 +206,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     }
 
     Y_UNIT_TEST(LoadCorruptedState) {
-        NDqProto::TSourceState state;
+        TSourceState state;
         const TString topicName = "Invalid"; // We wouldn't read from this topic.
         auto checkpoint = CreateCheckpoint();
 
@@ -215,9 +217,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         }
 
         // Corrupt state.
-        TString corruptedBlob = state.GetData(0).GetStateData().GetBlob();
+        TString corruptedBlob = state.Data.front().Blob;
         corruptedBlob.append('a');
-        state.MutableData(0)->MutableStateData()->SetBlob(corruptedBlob);
+        state.Data.front().Blob = corruptedBlob;
 
         {
             TPqIoTestFixture setup2;
@@ -230,7 +232,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         const TString topicName = "LoadFromSeveralStates";
         PQCreateStream(topicName);
 
-        NDqProto::TSourceState state2;
+        TSourceState state2;
         {
             TPqIoTestFixture setup;
             setup.InitSource(topicName);
@@ -241,7 +243,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             auto result1 = setup.SourceReadDataUntil<TString>(UVParser, 1);
             AssertDataWithWatermarks(result1, data, {});
 
-            NDqProto::TSourceState state1;
+            TSourceState state1;
             auto checkpoint1 = CreateCheckpoint();
             setup.SaveSourceState(checkpoint1, state1);
             Cerr << "State saved" << Endl;
@@ -257,7 +259,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             Cerr << "State 2 saved" << Endl;
 
             // Add state1 to state2
-            *state2.AddData() = state1.GetData(0);
+            state2.Data.push_back(state1.Data.front());
         }
 
         TPqIoTestFixture setup2;
@@ -311,7 +313,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST(WatermarkCheckpointWithItemsInReadyBuffer) {
         const TString topicName = "WatermarkCheckpointWithItemsInReadyBuffer";
         PQCreateStream(topicName);
-        NDqProto::TSourceState state;
+        TSourceState state;
 
         {
             TPqIoTestFixture setup;

@@ -107,7 +107,21 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         DIV() {
             TString s;
             NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
-            out << s;
+            out << "<pre>" << s << "</pre>";
+        }
+
+        TAG(TH3) { out << "Static service set"; }
+        DIV() {
+            TString s;
+            NProtoBuf::TextFormat::PrintToString(StaticServices, &s);
+            out << "<pre>" << s << "</pre>";
+        }
+
+        TAG(TH3) { out << "Dynamic service set"; }
+        DIV() {
+            TString s;
+            NProtoBuf::TextFormat::PrintToString(DynamicServices, &s);
+            out << "<pre>" << s << "</pre>";
         }
 
         RenderLocalDrives(out);

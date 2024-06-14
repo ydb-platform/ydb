@@ -452,6 +452,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"Just", &TProgramBuilder::NewOptional},
         {"Exists", &TProgramBuilder::Exists},
+        {"BlockExists", &TProgramBuilder::BlockExists},
 
         {"Pickle", &TProgramBuilder::Pickle},
         {"StablePickle", &TProgramBuilder::StablePickle},
@@ -753,10 +754,20 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildWideLambda(node.Tail(), ctx, keys);
         };
 
-        if (withLimit)
+        bool isStatePersistable = true;
+        // Traverse through childs skipping input and limit children
+        for (size_t i = 2U; i < node.ChildrenSize(); ++i) {
+            isStatePersistable = isStatePersistable && node.Child(i)->GetTypeAnn()->IsPersistable();
+        }
+
+        if (withLimit) {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
-        else
-            return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+        }
+
+        if (isStatePersistable) {
+            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
+        }
+        return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2724,10 +2735,24 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
     });
 
+    AddCallable("BlockMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto structObj = MkqlBuildExpr(node.Head(), ctx);
+        const auto name = node.Tail().Content();
+        return ctx.ProgramBuilder.BlockMember(structObj, name);
+    });
+
     AddCallable("BlockNth", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto tupleObj = MkqlBuildExpr(node.Head(), ctx);
         const auto index = FromString<ui32>(node.Tail().Content());
         return ctx.ProgramBuilder.BlockNth(tupleObj, index);
+    });
+
+    AddCallable("BlockAsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+        for (const auto& x : node.Children()) {
+            members.emplace_back(x->Head().Content(), MkqlBuildExpr(x->Tail(), ctx));
+        }
+        return ctx.ProgramBuilder.BlockAsStruct(members);
     });
 
     AddCallable("BlockAsTuple", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2922,6 +2947,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable(SkippableCallables, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return MkqlBuildExpr(node.Head(), ctx);
+    });
+
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

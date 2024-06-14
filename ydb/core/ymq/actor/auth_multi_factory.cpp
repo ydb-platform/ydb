@@ -5,13 +5,15 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-#include <ydb/public/sdk/cpp/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
 #include <library/cpp/logger/global/global.h>
+
+#include <ydb/core/protos/auth.pb.h>
 
 namespace NKikimr::NSQS {
 

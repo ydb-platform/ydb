@@ -83,6 +83,7 @@ NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     TAstParseResult res;
     TContext ctx(settings, hints, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
@@ -111,6 +112,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
         *warningRules = ctx.WarningPolicy.GetRules();
         ctx.WarningPolicy.Clear();
     }
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
@@ -161,6 +163,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore41: // upsert object
         case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
         case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: // alter replication
             return false;
     }
 }

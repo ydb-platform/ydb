@@ -167,7 +167,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNod
     }
 
     TStringStream err;
-    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[tableIndex].RowType, &err);
+    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[tableIndex].RowType, Specs.Outputs[tableIndex].NativeYtTypeFlags, &err);
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }

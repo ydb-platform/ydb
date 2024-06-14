@@ -47,7 +47,14 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                     newStrategy = TJoinLinkSettings::EStrategy::SortedMerge;
                 } else if (canonizedName == "streamlookup") {
                     newStrategy = TJoinLinkSettings::EStrategy::StreamLookup;
+                } else if (canonizedName == "map") {
+                    newStrategy = TJoinLinkSettings::EStrategy::ForceMap;
+                } else if (canonizedName == "grace") {
+                    newStrategy = TJoinLinkSettings::EStrategy::ForceGrace;
+                } else {
+                    Ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join strategy: " << hint.Name;
                 }
+
                 if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
                     linkSettings.Strategy = newStrategy;
                 } else if (newStrategy == linkSettings.Strategy) {
@@ -119,6 +126,10 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             joinOp = NormalizeJoinOp(joinOp);
             Ctx.IncrementMonCounter("sql_features", "Join");
             Ctx.IncrementMonCounter("sql_join_operations", joinOp);
+            if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
+                Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_UNUSED_HINT) << "Non-default join strategy will not be used for CROSS JOIN";
+                linkSettings.Strategy = TJoinLinkSettings::EStrategy::Default;
+            }
 
             TNodePtr joinKeyExpr;
             if (block.HasBlock4()) {

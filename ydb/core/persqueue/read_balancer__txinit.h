@@ -54,54 +54,37 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
 
                     Migrate(Self->TabletConfig);
                     Self->Consumers.clear();
-
                     for (auto& consumer : Self->TabletConfig.GetConsumers()) {
-                        Self->Consumers[consumer.GetName()].ScalingSupport = consumer.HasScalingSupport() ? consumer.GetScalingSupport() : DefaultScalingSupport();
+                        Self->Consumers[consumer.GetName()];
                     }
-
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
+
+                    if (SplitMergeEnabled(Self->TabletConfig)) {
+                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->DatabasePath, Self->PathId, Self->Version, Self->TabletConfig);
+                    }
+                    Self->UpdateConfigCounters();
                 }
                 Self->Inited = true;
                 if (!dataRowset.Next())
                     return false;
             }
 
+            std::map<ui32, TPersQueueReadBalancer::TPartitionInfo> partitionsInfo;
             while (!partsRowset.EndOfSet()) { //found out tablets for partitions
                 ++Self->NumActiveParts;
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
-                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(), 
+                partitionsInfo[part] = {tabletId};
+                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
                 if (!partsRowset.Next())
                     return false;
             }
+            Self->PartitionsInfo.insert(partitionsInfo.rbegin(), partitionsInfo.rend());
 
-            while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
-                ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();
-                ui32 partition = groupsRowset.GetValue<Schema::Groups::Partition>();
-                Y_ABORT_UNLESS(groupId > 0);
-                auto jt = Self->PartitionsInfo.find(partition);
-                Y_ABORT_UNLESS(jt != Self->PartitionsInfo.end());
-                jt->second.GroupId = groupId;
-
-                Self->NoGroupsInBase = false;
-
-                if (!groupsRowset.Next())
-                    return false;
-            }
-
-            Y_ABORT_UNLESS(Self->ClientsInfo.empty());
-
-            for (auto& p : Self->PartitionsInfo) {
-                ui32 groupId = p.second.GroupId;
-                Self->GroupsInfo[groupId].push_back(p.first);
-
-            }
-            Self->TotalGroups = Self->GroupsInfo.size();
-
+            Self->TotalGroups = Self->PartitionsInfo.size();
 
             while (!tabletsRowset.EndOfSet()) { //found out tablets for partitions
                 ui64 tabletId = tabletsRowset.GetValue<Schema::Tablets::TabletId>();

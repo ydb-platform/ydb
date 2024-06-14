@@ -38,6 +38,7 @@ void RegisterPlus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TPlus, TUnaryArgsOpt>(registry, "Plus");
     NDecimal::RegisterUnaryFunction<TDecimalPlus, TUnaryArgsOpt>(registry, "Plus");
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TPlus, TUnaryArgsOpt>(registry, "Plus");
+    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPlus, TUnaryArgsOpt>(registry, "Plus");
 }
 
 } // namespace NMiniKQL

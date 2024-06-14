@@ -64,6 +64,7 @@ message TTabletStateInfo {
     optional EFlag Overall = 15; // filled during merge
     optional NKikimrSubDomains.TDomainKey TenantId = 16;
     optional fixed64 HiveId = 17;
+    optional string EndOfRangeKeyPrefix = 18; // filled during merge
 }
 
 message TEvTabletStateRequest {
@@ -125,6 +126,11 @@ message TPDiskStateInfo {
     // overall state - to be filled
     optional EFlag Overall = 17;
     optional string SerialNumber = 18;
+    optional uint64 SystemSize = 19;
+    optional uint64 LogUsedSize = 20;
+    optional uint64 LogTotalSize = 21;
+    optional uint32 ExpectedSlotCount = 22;
+    optional uint64 EnforcedDynamicSlotSize = 23;
 }
 
 message TEvPDiskStateRequest {
@@ -247,6 +253,8 @@ message TBSGroupStateInfo {
     optional bool Encryption = 19;
     repeated uint32 VDiskNodeIds = 20;
     optional uint64 BlobDepotId = 21; // if set, then this is virtual group
+    optional bool NoVDisksInGroup = 22;
+    optional uint64 BlobDepotOnlineTime = 23;
 }
 
 message TEvBSGroupStateRequest {
@@ -321,6 +329,7 @@ message TSystemStateInfo {
     optional uint64 DisconnectTime = 34;
     optional TNodeSharedCache SharedCacheStats = 35;
     optional uint32 TotalSessions = 36;
+    optional string NodeName = 37;
 }
 
 message TEvSystemStateRequest {

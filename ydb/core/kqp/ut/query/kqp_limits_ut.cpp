@@ -940,8 +940,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         CreateManyShardsTable(kikimr, 1000, 100, 1000);
 
@@ -972,8 +971,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         CreateManyShardsTable(kikimr, 1100, 100, 1000);
 
@@ -1019,8 +1017,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         CreateManyShardsTable(kikimr, 5000, 100, 1000);
 

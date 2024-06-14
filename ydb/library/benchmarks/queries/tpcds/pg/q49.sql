@@ -124,7 +124,7 @@ select  channel, item, return_ratio, return_rank, currency_rank from
  store.currency_rank <= 10
  )
  ) a
- order by 1,4,5,2
+ order by 1,3,4,2
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query49.tpl

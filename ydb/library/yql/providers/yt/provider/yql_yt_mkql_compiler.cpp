@@ -349,6 +349,7 @@ TRuntimeNode BuildDqYtInputCall(
         }
 
         TVector<TRuntimeNode> tableTuples;
+        ui64 tableOffset = 0;
         for (auto p: section.Paths()) {
             TYtPathInfo pathInfo(p);
             // Table may have aux columns. Exclude them by specifying explicit columns from the type
@@ -385,7 +386,10 @@ TRuntimeNode BuildDqYtInputCall(
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(pathInfo.Table->IsTemp ? TString() : tableName),
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(pathNode)),
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(skiffNode)),
+                ctx.ProgramBuilder.NewDataLiteral(tableOffset)
             }));
+            YQL_ENSURE(pathInfo.Table->Stat);
+            tableOffset += pathInfo.Table->Stat->RecordsCount;
         }
         groups.push_back(ctx.ProgramBuilder.NewList(tableTuples.front().GetStaticType(), tableTuples));
         // All sections have the same sampling settings

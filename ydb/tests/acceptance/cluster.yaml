@@ -1,0 +1,158 @@
+cluster_uuid: "ydb:ydb-slice"
+static_erasure: block-4-2
+static_pdisk_type: SSD
+cms:
+  sentinel_config:
+    enable: True
+hosts:
+- name: slice-01
+  node_id: 1
+  rack: "1"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-02
+  node_id: 2
+  rack: "2"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-03
+  node_id: 3
+  rack: "3"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-04
+  node_id: 4
+  rack: "4"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-05
+  node_id: 5
+  rack: "5"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-06
+  node_id: 6
+  rack: "6"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-07
+  node_id: 7
+  rack: "7"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+- name: slice-08
+  node_id: 8
+  rack: "8"
+  drives:
+  - path: /tmp/pdisk_1.data
+    type: SSD
+  - path: /tmp/pdisk_2.data
+    type: SSD
+  - path: /tmp/pdisk_3.data
+    type: SSD
+domains:
+- domain_name: Root
+  domain_id: 1
+  plan_resolution: 10
+  dynamic_slots: 10
+  storage_pool_kinds:
+  - kind: ssd
+    geometry:
+      realm_level_begin: 10
+      realm_level_end: 20
+      domain_level_begin: 10
+      domain_level_end: 256
+    erasure: block-4-2
+    fail_domain_type: rack
+    filter_properties:
+      type: SSD
+  databases:
+  - name: db1
+    storage_units:
+      - count: 9
+        kind: ssd
+    compute_units:
+      - count: 9
+        kind: slot
+        zone: FAKE
+grpc:
+  services:
+  - yql
+  - scripting
+  - cms
+  - discovery
+  - legacy
+  - experimental
+  - pq
+  - clickhouse_internal
+  - locking 
+  - pqv1 
+  - pqcd 
+  - topic
+  - rate_limiter 
+  - monitoring 
+  - datastreams
+shared_cache:
+  memory_limit: 4000000000
+pq:
+  enabled: True
+log:
+  default: 5
+  syslog: True
+  entries:
+  - level: 7
+    name: HIVE
+  - level: 7
+    name: LOCAL
+  - level: 7
+    name: BS_CONTROLLER
+  - level: 5
+    name: TX_PROXY
+  - level: 5
+    name: TX_DATASHARD
+  - level: 7
+    name: FLAT_TX_SCHEMESHARD
+  - level: 7
+    name: TENANT_SLOT_BROKER
+  - level: 6
+    name: BS_REPL
+profiles:
+- channels:
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd

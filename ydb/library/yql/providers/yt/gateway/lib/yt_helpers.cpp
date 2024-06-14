@@ -131,6 +131,37 @@ THashSet<TStringBuf> SERVICE_YQL_ATTRS = {
     TStringBuf("_yql_query_name"),
 };
 
+THashSet<TString> SUPPORTED_RICH_YPATH_ATTRS = {
+    "timestamp"
+};
+
+}
+
+TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
+    NYT::TNode pathNode;
+    NYT::TNodeBuilder builder(&pathNode);
+    NYT::Serialize(richPath, &builder);
+    if (!pathNode.HasAttributes() || pathNode.GetAttributes().Empty()) {
+        return Nothing();
+    }
+    auto attrMap = pathNode.GetAttributes().AsMap();
+    attrMap.erase("columns");
+    attrMap.erase("ranges");
+    for (const auto& [attr, _] : attrMap) {
+        if (!SUPPORTED_RICH_YPATH_ATTRS.contains(attr)) {
+            throw yexception() << "Unsupported YPath attribute: '" << attr << "'";
+        }
+    }
+    pathNode.Attributes() = attrMap;
+    return NYT::NodeToYsonString(pathNode.GetAttributes());
+}
+
+void DeserializeRichYPathAttrs(const TString& serializedAttrs, NYT::TRichYPath& richPath) {
+    NYT::TNode pathNode;
+    NYT::TNodeBuilder pathNodeBuilder(&pathNode);
+    NYT::Serialize(richPath, &pathNodeBuilder);
+    NYT::MergeNodes(pathNode.Attributes(), NYT::NodeFromYsonString(serializedAttrs));
+    NYT::Deserialize(richPath, pathNode);
 }
 
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
@@ -138,6 +169,7 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
     if (path.StartsWith('<')) {
         NYT::Deserialize(richYPath, NYT::NodeFromYsonString(path));
     }
+    const auto additionalAttrs = SerializeRichYPathAttrs(richYPath);
     size_t pos = 0;
     if ((pos = richYPath.Path_.find('{')) != TString::npos) {
         size_t end = richYPath.Path_.find('}');
@@ -211,7 +243,8 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
     return {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),
-        richYPath.GetRanges()
+        richYPath.GetRanges(),
+        additionalAttrs
     };
 };
 

@@ -825,6 +825,10 @@ void ExportPrimitiveTypeToProto(ui32 schemeType, Ydb::Type& output) {
         case NYql::NProto::TypeIds::Uuid:
         case NYql::NProto::TypeIds::JsonDocument:
         case NYql::NProto::TypeIds::DyNumber:
+        case NYql::NProto::TypeIds::Date32:
+        case NYql::NProto::TypeIds::Datetime64:
+        case NYql::NProto::TypeIds::Timestamp64:
+        case NYql::NProto::TypeIds::Interval64:
             output.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(schemeType));
             break;
 

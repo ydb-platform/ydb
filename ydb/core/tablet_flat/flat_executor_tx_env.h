@@ -40,9 +40,9 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept
+        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
         {
-            return Cache.Lookup(id, info);
+            return Cache.Lookup(pageId, info);
         }
 
     public:

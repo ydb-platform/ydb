@@ -311,10 +311,20 @@ public:
             Y_ENSURE(endpoint);
 
             TVector<TString> split = StringSplitter(endpoint).Split(':');
-
             Y_ENSURE(split.size() == 2);
 
-            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
+            TString host = std::move(split[0]);
+            ui32 port = FromString(split[1]);
+
+            // There are two kinds of managed YDBs: serverless and dedicated.
+            // While working with dedicated databases, we have to use underlay network.
+            // That's why we add `u-` prefix to database fqdn.
+            if (databaseInfo.GetMap().contains("dedicatedDatabase")) {
+                endpoint = "u-" + endpoint;
+                host = "u-" + host;
+            }
+
+            return TDatabaseDescription{endpoint, std::move(host), port, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
@@ -323,17 +333,13 @@ public:
             bool useTls,
             NConnector::NApi::EProtocol protocol)
         {
-            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("dedicatedDatabase");
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
                 ret.Host[2] = 's';
-            }
-            if (isDedicatedDb) {
-                ret.Endpoint = "u-" + ret.Endpoint;
-                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };
@@ -407,6 +413,44 @@ public:
             NYql::IMdbEndpointGenerator::TParams params = {
                 .DatabaseType = NYql::EDatabaseType::PostgreSQL,
                 .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        };
+        Parsers[NYql::EDatabaseType::Greenplum] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
+            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
+            TString aliveHost;
+
+            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
+                const auto& hostMap = host.GetMap();
+
+                if (hostMap.at("health").GetString() != "ALIVE"){
+                    // Host is not alive, skip it
+                    continue;
+
+                }
+
+                // If the host is alive, add it to the list of alive hosts
+                aliveHost = hostMap.at("name").GetString();
+                break;
+            }
+    
+            if (aliveHost == "") {
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+            }
+
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::Greenplum,
+                .MdbHost = aliveHost,
                 .UseTls = useTls,
                 .Protocol = protocol,
             };
@@ -494,12 +538,19 @@ private:
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
-                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL }, databaseType)) {
+                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL}, databaseType)) {
                     YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(
                         ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
                             .AddPathComponent(databaseId)
                             .AddPathComponent("hosts")
+                            .Build();
+                } else if (NYql::EDatabaseType::Greenplum == databaseType) {
+                    YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
+                    url = TUrlBuilder(
+                        ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
+                            .AddPathComponent(databaseId)
+                            .AddPathComponent("master-hosts")
                             .Build();
                 }
 

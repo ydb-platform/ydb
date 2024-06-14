@@ -358,16 +358,22 @@ TType* TProgramBuilder::BuildArithmeticCommonType(TType* type1, TType* type2) {
     bool isOptional1, isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
+    const auto features1 = NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features;
+    const auto features2 = NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features;
     const bool isOptional = isOptional1 || isOptional2;
-    if (data1->GetSchemeType() == NUdf::TDataType<NUdf::TInterval>::Id) {
-        return NewOptionalType(NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType ? data1 : data2);
-    } else if (data2->GetSchemeType() == NUdf::TDataType<NUdf::TInterval>::Id) {
-        return NewOptionalType(NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType ? data2 : data1);
+    if (features1 & features2 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features1 & NUdf::EDataTypeFeatures::BigDateType ? data1 : data2);
+    } else if (features1 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features2 & NUdf::EDataTypeFeatures::IntegralType ? data1 : data2);
+    } else if (features2 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features1 & NUdf::EDataTypeFeatures::IntegralType ? data2 : data1);
     } else if (
-        NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) &&
-        NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
+        features1 & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) &&
+        features2 & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
     ) {
-        const auto used = NewDataType(NUdf::EDataSlot::Interval);
+        const auto used = ((features1 | features2) & NUdf::EDataTypeFeatures::BigDateType)
+            ? NewDataType(NUdf::EDataSlot::Interval64)
+            : NewDataType(NUdf::EDataSlot::Interval);
         return isOptional ? NewOptionalType(used) : used;
     } else if (data1->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
         MKQL_ENSURE(data1->IsSameType(*data2), "Must be same type.");
@@ -1605,6 +1611,33 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockExists(TRuntimeNode data) {
+    auto dataType = AS_TYPE(TBlockType, data.GetStaticType());
+    auto outputType = NewBlockType(NewDataType(NUdf::TDataType<bool>::Id), dataType->GetShape());
+
+    TCallableBuilder callableBuilder(Env, __func__, outputType);
+    callableBuilder.Add(data);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::string_view& memberName) {
+    auto blockType = AS_TYPE(TBlockType, structObj.GetStaticType());
+    bool isOptional;
+    const auto type = AS_TYPE(TStructType, UnpackOptional(blockType->GetItemType(), isOptional));
+
+    const auto memberIndex = type->GetMemberIndex(memberName);
+    auto memberType = type->GetMemberType(memberIndex);
+    if (isOptional && !memberType->IsOptional() && !memberType->IsNull() && !memberType->IsPg()) {
+        memberType = NewOptionalType(memberType);
+    }
+
+    auto returnType = NewBlockType(memberType, blockType->GetShape());
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(structObj);
+    callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     auto blockType = AS_TYPE(TBlockType, tuple.GetStaticType());
     bool isOptional;
@@ -1621,6 +1654,28 @@ TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(tuple);
     callableBuilder.Add(NewDataLiteral<ui32>(index));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args) {
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
+
+    TBlockType::EShape resultShape = TBlockType::EShape::Scalar;
+    TVector<std::pair<std::string_view, TType*>> members;
+    for (const auto& x : args) {
+        auto blockType = AS_TYPE(TBlockType, x.second.GetStaticType());
+        members.emplace_back(x.first, blockType->GetItemType());
+        if (blockType->GetShape() == TBlockType::EShape::Many) {
+            resultShape = TBlockType::EShape::Many;
+        }
+    }
+
+    auto returnType = NewBlockType(NewStructType(members), resultShape);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    for (const auto& x : args) {
+        callableBuilder.Add(x.second);
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -1832,13 +1887,20 @@ TRuntimeNode TProgramBuilder::BuildWideTopOrSort(const std::string_view& callabl
 
 TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
+        const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
+        const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
+        const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
+            return NewTuple({keyExtractor(item), item});
+        };
 
-        return FlatMap(Condense1(flow,
+        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
                 [&](TRuntimeNode item) { return AsList(item); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
-                [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, item, ascending, keyExtractor); }
+                [&](TRuntimeNode item, TRuntimeNode state) {
+                    return KeepTop(count, state, item, ascending, getKey);
+                }
             ),
-            [&](TRuntimeNode list) { return Top(list, count, ascending, keyExtractor); }
+            [&](TRuntimeNode list) { return Map(Top(list, count, ascending, getKey), getItem); }
         );
     }
 
@@ -1847,14 +1909,20 @@ TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntim
 
 TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        return FlatMap(Condense1(flow,
+        const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
+        const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
+        const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
+            return NewTuple({keyExtractor(item), item});
+        };
+
+        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
                 [&](TRuntimeNode item) { return AsList(item); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                 [&](TRuntimeNode item, TRuntimeNode state) {
-                    return KeepTop(count, state, item, ascending, keyExtractor);
+                    return KeepTop(count, state, item, ascending, getKey);
                 }
             ),
-            [&](TRuntimeNode list) { return TopSort(list, count, ascending, keyExtractor); }
+            [&](TRuntimeNode list) { return Map(TopSort(list, count, ascending, getKey), getItem); }
         );
     }
 
@@ -4700,11 +4768,7 @@ TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, cons
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 29U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
+TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4742,7 +4806,7 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     tupleItems.reserve(output.size());
     std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewMultiType(tupleItems)));
+    TCallableBuilder callableBuilder(Env, funcName, NewFlowType(NewMultiType(tupleItems)));
     callableBuilder.Add(flow);
     callableBuilder.Add(NewDataLiteral(ui32(keyArgs.size())));
     callableBuilder.Add(NewDataLiteral(ui32(stateArgs.size())));
@@ -4756,6 +4820,22 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     std::for_each(finishStateArgs.cbegin(), finishStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 29U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 49U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {

@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
@@ -86,10 +87,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TMaybe<NFake::TStorage> Storage = Nothing();
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
     TKikimrSettings()
     {
-        FeatureFlags.SetForceColumnTablesCompositeMarks(true);
         auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
         auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -111,6 +112,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
 };
 
 class TKikimrRunner {
@@ -329,8 +331,11 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
+
+bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
 } // namespace NKqp
 } // namespace NKikimr

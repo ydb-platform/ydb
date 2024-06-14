@@ -2,10 +2,10 @@
 #include "statistics/abstract/operator.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -24,7 +24,9 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
 TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
     , Name(name)
-{}
+{
+    CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+}
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(GetPrimaryKey())) {
@@ -74,7 +76,7 @@ bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
         || fieldId == (ui32)ESpecialColumn::TX_ID;
 }
 
-ui32 TIndexInfo::GetColumnId(const std::string& name) const {
+ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
     Y_ABORT_UNLESS(!!id, "undefined column %s", name.data());
     return *id;
@@ -106,7 +108,7 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
             return {};
         }
 
-        Y_ABORT_UNLESS(ci != Columns.end());
+        AFL_VERIFY(ci != Columns.end())("id", id);
         return ci->second.Name;
     }
 }
@@ -264,32 +266,6 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) 
     }
 }
 
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key);
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key, GetPrimaryKey());
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     AFL_VERIFY(it != ColumnFeatures.end());
@@ -347,6 +323,13 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
 
     {
         SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
+        ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
+        if (schema.GetOptions().HasCompactionPlannerConstructor()) {
+            auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(schema.GetOptions().GetCompactionPlannerConstructor());
+            CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+        } else {
+            AFL_VERIFY(!!CompactionPlannerConstructor);
+        }
     }
 
     if (schema.HasDefaultCompression()) {
@@ -424,7 +407,9 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType), !column.NotNull));
+        auto arrowType = NArrow::GetArrowType(column.PType);
+        AFL_VERIFY(arrowType.ok());
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !column.NotNull));
     }
 
     return std::make_shared<arrow::Schema>(std::move(fields));
@@ -493,6 +478,11 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
         group->AddEntity(i);
     }
     return groups;
+}
+
+std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+    AFL_VERIFY(!!CompactionPlannerConstructor);
+    return CompactionPlannerConstructor;
 }
 
 } // namespace NKikimr::NOlap

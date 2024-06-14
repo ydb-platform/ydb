@@ -25,7 +25,7 @@
 
 Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.{% endif %}
 
-    CREATE TABLE table_name (
+    CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
 {% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
@@ -86,7 +86,7 @@
 Конструкция INDEX используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} на таблице:
 
 ```sql
-CREATE TABLE table_name ( 
+CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
@@ -112,6 +112,17 @@ CREATE TABLE my_table (
     PRIMARY KEY (a)
 )
 ```
+{% endif %}
+
+{% if feature_temp_tables %}
+{% if feature_olap_tables %}#{%endif%}## Создание временных таблиц {#temporary_tables}
+```sql
+CREATE TEMPORARY TABLE table_name (
+    ...
+);
+```
+{% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
+
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
@@ -210,10 +221,10 @@ CREATE TABLE table_name (
     ...
 )
 PARTITION BY HASH(column1, column2, ...)
-WITH ( 
+WITH (
     STORE = COLUMN,
-    key = value, 
-    ... 
+    key = value,
+    ...
 )
 ```
 

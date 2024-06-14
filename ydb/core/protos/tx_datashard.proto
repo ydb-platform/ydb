@@ -7,7 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
-import "ydb/core/protos/ssa.proto";
+import "ydb/core/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -101,6 +101,7 @@ message TReadTableTransaction {
         optional string Name = 2;
         optional uint32 TypeId = 3;
         optional NKikimrProto.TTypeInfo TypeInfo = 4;
+        optional bool NotNull = 5 [default = false]; //If not set datashard will treat not null type as nullable (for compatibility)
     }
 
     optional NKikimrDataEvents.TTableId TableId = 1;
@@ -524,11 +525,6 @@ enum ETransactionKind {
     // kinds. See NKikimr::NDataShard::EOperationKind.
 }
 
-message TMvccSnapshot {
-    optional uint64 Step = 10;
-    optional uint64 TxId = 11;
-}
-
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
     optional NActorsProto.TActorId SourceDeprecated = 2 [deprecated = true]; // for compatibility with old tx engine
@@ -539,7 +535,8 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
-    optional TMvccSnapshot MvccSnapshot = 10;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
+    optional bool MvccSnapshotRepeatable = 11 [default = true];
 }
 
 message TEvCancelTransactionProposal {
@@ -808,6 +805,48 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 
     repeated TEvPeriodicTableStats Tables = 14;
+}
+
+message TObjectStorageListingFilter {
+    enum EMatchType {
+        EQUAL = 0;
+        NOT_EQUAL = 1;
+    }
+    optional bytes Values = 1;
+    repeated uint32 Columns = 2;
+    repeated EMatchType MatchTypes = 3; 
+}
+
+message TEvObjectStorageListingRequest {
+    optional uint64 TableId = 1;
+    optional bytes SerializedKeyPrefix = 2;
+
+    optional string PathColumnPrefix = 3;
+    optional string PathColumnDelimiter = 4;
+
+    optional bytes SerializedStartAfterKeySuffix = 5;
+
+    repeated uint32 ColumnsToReturn = 6;
+    optional uint32 MaxKeys = 7;
+
+    optional string LastCommonPrefix = 8;
+    optional string LastPath = 9;
+
+    optional TObjectStorageListingFilter Filter = 10;
+}
+
+message TEvObjectStorageListingResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;
+    optional string ErrorDescription = 3;
+    repeated string CommonPrefixesRows = 4;
+    repeated bytes ContentsRows = 5;        // TSerializedCellVec
+    optional bool MoreRows = 6;
+}
+
+message TObjectStorageListingContinuationToken {
+    optional string last_path = 1;
+    optional bool is_folder = 2;
 }
 
 message TSerializedRowColumnsScheme {
@@ -1454,6 +1493,7 @@ message TEvCdcStreamScanResponse {
 
 message TEvStatisticsScanRequest {
     optional NKikimrDataEvents.TTableId TableId = 1;
+    optional bytes StartKey = 2;
 }
 
 message TEvStatisticsScanResponse {
@@ -1907,6 +1947,10 @@ message TTxVolatileDetails {
 
     // When true all preceding transactions are dependencies
     optional bool CommitOrdered = 8;
+
+    // When true marks an arbiter for other participants
+    // Arbiters hold outgoing readsets until the transaction is decided
+    optional bool IsArbiter = 9;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

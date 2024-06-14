@@ -66,6 +66,7 @@ namespace NYql::NDqs {
 
     private:
         bool BuildReadStage(const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
+        void ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage , ui32 inputIndex);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         void BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel, bool enableSpilling);

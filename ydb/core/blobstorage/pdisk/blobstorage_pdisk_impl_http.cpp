@@ -100,11 +100,15 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
         DIV() {
             str << R"___(
                 <script>
-                    function reloadPage() {
-                        window.location.replace(window.location.href);
+                    function reloadPage(data) {
+                        if (data.result) {
+                            window.location.replace(window.location.href);
+                        } else {
+                            alert(data.error);
+                        }
                     }
 
-                    function sendReloadRequest() {
+                    function sendRestartRequest() {
                         $.ajax({
                             url: "",
                             data: "restartPDisk=",
@@ -123,19 +127,14 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     }
                 </script>
             )___";
-            str << "<button onClick='sendReloadRequest()' name='restartPDisk' class='btn btn-default' ";
-            if (Cfg->SectorMap || Mon.PDiskBriefState->Val() == TPDiskMon::TPDisk::Error) {
-                str << "style='background:Tomato; margin:5px' ";
-            } else {
-                str << "disabled ";
-                str << "style='background:LightGray; margin:5px' ";
-            }
+            str << "<button onclick='sendRestartRequest()' name='restartPDisk' class='btn btn-default' ";
+            str << "style='background:LightGray; margin:5px' ";
             str << ">";
             str << "Restart";
             str << "</button>";
 
             if (Cfg->SectorMap) {
-                str << "<button onClick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";
+                str << "<button onclick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";
                 str << "style='background:Tomato; margin:5px'>";
                 str << "Stop";
                 str << "</button>";
@@ -215,7 +214,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                     if (data.VDiskId != TVDiskID::InvalidId) {
                         TABLER() {
                             TABLED() { str << (ui32) owner;}
-                            TABLED() { str << data.VDiskId.ToStringWOGeneration(); }
+                            TABLED() { str << data.VDiskId.ToStringWOGeneration() << "<br/>(" << data.VDiskId.GroupID << ")"; }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
                             TABLED() { str << data.WhiteboardProxyId; }
@@ -276,7 +275,7 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
                         if (id == TVDiskID::InvalidId) {
                             TABLEH() {str << "o" << owner << "v--"; }
                         } else {
-                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration(); }
+                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration() << "<br/>(" << id.GroupID << ")"; }
                         }
                     }
                 }

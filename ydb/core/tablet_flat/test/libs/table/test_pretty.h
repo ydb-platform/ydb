@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NTable {
 
     TString PrintRow(const TDbTupleRef& row);
-    TString PrintRow(const TMemIt&);
+    TString PrintRow(const TMemIter&);
 
 }
 }

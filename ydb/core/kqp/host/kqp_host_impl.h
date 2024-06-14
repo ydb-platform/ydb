@@ -12,19 +12,19 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 template<typename TResult, bool copyIssues = true>
 class TKqpAsyncResultBase : public NYql::IKikimrAsyncResult<TResult> {
 public:
-    using TTransformStatusCallback = std::function<void(const NYql::IGraphTransformer::TStatus&)>;
+    using TAsyncTransformStatusCallback = std::function<NThreading::TFuture<void>(const NYql::IGraphTransformer::TStatus&)>;
 
 public:
     TKqpAsyncResultBase(const NYql::TExprNode::TPtr& exprRoot, NYql::TExprContext& exprCtx,
-        NYql::IGraphTransformer& transformer, TTransformStatusCallback transformCallback = {})
+        NYql::IGraphTransformer& transformer, TAsyncTransformStatusCallback asyncTransformCallback)
         : ExprRoot(exprRoot)
         , ExprCtx(exprCtx)
         , Transformer(transformer)
-        , TransformCallback(transformCallback) {}
+        , AsyncTransformCallback(asyncTransformCallback) {}
 
     bool HasResult() const override {
         if (TransformFinished()) {
-            return TransformCallbackDone || !TransformCallback;
+            return AsyncTransformCallbackDone || !AsyncTransformCallback;
         }
 
         return false;
@@ -55,9 +55,8 @@ public:
 
     NThreading::TFuture<bool> Continue() override {
         if (TransformFinished()) {
-            if (TransformCallback && !TransformCallbackDone) {
-                TransformCallback(Status.GetValue());
-                TransformCallbackDone = true;
+            if (AsyncTransformCallback && !AsyncTransformCallbackDone) {
+                return DoAsyncTransformCallback();
             }
 
             return NThreading::MakeFuture<bool>(true);
@@ -67,7 +66,7 @@ public:
 
         auto resultPromise = NThreading::NewPromise<bool>();
         auto statusPromise = Status;
-        bool hasCallback = !!TransformCallback;
+        bool hasCallback = !!AsyncTransformCallback;
 
         AsyncTransform(Transformer, ExprRoot, ExprCtx, Started,
             [resultPromise, statusPromise, hasCallback](const NYql::IGraphTransformer::TStatus& status) mutable {
@@ -80,6 +79,25 @@ public:
 
         Started = true;
         return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<bool> DoAsyncTransformCallback() {
+        AsyncTransformCallbackDone = true;
+
+        auto statusValue = Status.GetValue();
+        Status = NThreading::NewPromise<NYql::IGraphTransformer::TStatus>();
+
+        return AsyncTransformCallback(statusValue).Apply(
+            [this, statusValue](const NThreading::TFuture<void>& f) mutable {
+                try {
+                    f.TryRethrow();
+                } catch (...) {
+                    statusValue = NYql::IGraphTransformer::TStatus::Error;
+                    ExprCtx.IssueManager.AddIssues(NYql::TIssues{ NYql::TIssue(CurrentExceptionMessage()) });
+                }
+                Status.SetValue(statusValue);
+                return true;
+            });
     }
 
 protected:
@@ -99,8 +117,8 @@ private:
     NYql::TExprContext& ExprCtx;
     NYql::IGraphTransformer& Transformer;
     bool Started = false;
-    TTransformStatusCallback TransformCallback;
-    bool TransformCallbackDone = false;
+    TAsyncTransformStatusCallback AsyncTransformCallback;
+    bool AsyncTransformCallbackDone = false;
     NThreading::TPromise<NYql::IGraphTransformer::TStatus> Status;
 };
 

@@ -95,8 +95,7 @@ void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
                     .Item("cell_id").Value(pair.first)
                     .Item("snapshot_id").Value(pair.second)
                 .EndMap();
-        })
-    );
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -106,15 +105,16 @@ void TGetMasterConsistentStateCommand::Register(TRegistrar /*registrar*/)
 
 void TGetMasterConsistentStateCommand::DoExecute(ICommandContextPtr context)
 {
-    auto cellIdToSequenceNumber = WaitFor(context->GetClient()->GetMasterConsistentState(Options))
+    auto cellIdToConsistentState = WaitFor(context->GetClient()->GetMasterConsistentState(Options))
         .ValueOrThrow();
 
     context->ProduceOutputValue(BuildYsonStringFluently()
-        .DoListFor(cellIdToSequenceNumber, [=] (TFluentList fluent, const auto& pair) {
+        .DoListFor(cellIdToConsistentState, [=] (TFluentList fluent, const auto& pair) {
             fluent
                 .Item().BeginMap()
                     .Item("cell_id").Value(pair.first)
-                    .Item("sequence_number").Value(pair.second)
+                    .Item("sequence_number").Value(pair.second.SequenceNumber)
+                    .Item("segment_id").Value(pair.second.SegmentId)
                 .EndMap();
         }));
 }

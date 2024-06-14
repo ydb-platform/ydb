@@ -62,13 +62,13 @@ DEFINE_REFCOUNTED_TYPE(TYPathServiceContextWrapper)
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DECLARE_YPATH_SERVICE_METHOD(ns, method) \
-    using TCtx##method = ::NYT::NYTree::TTypedYPathServiceContext<ns::TReq##method, ns::TRsp##method>; \
+    using TCtx##method = TYPathTypedServiceContextImpl<ns::TReq##method, ns::TRsp##method>; \
     using TCtx##method##Ptr = ::NYT::TIntrusivePtr<TCtx##method>; \
     using TReq##method = TCtx##method::TTypedRequest; \
     using TRsp##method = TCtx##method::TTypedResponse; \
     \
     void method##Thunk( \
-        const ::NYT::NYTree::IYPathServiceContextPtr& context, \
+        const ::NYT::TIntrusivePtr<IYPathServiceContextImpl>& context, \
         const ::NYT::NRpc::THandlerInvocationOptions& options) \
     { \
         auto typedContext = ::NYT::New<TCtx##method>(context, options); \
@@ -102,6 +102,16 @@ DEFINE_REFCOUNTED_TYPE(TYPathServiceContextWrapper)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! These aliases provide an option to replace default typed service context class
+//! with a custom one which may be richer in some way.
+#define DEFINE_YPATH_CONTEXT_IMPL(serviceContext, typedServiceContext) \
+    using IYPathServiceContextImpl = serviceContext; \
+    \
+    template <class RequestMessage, class ResponseMessage> \
+    using TYPathTypedServiceContextImpl = typedServiceContext<RequestMessage, ResponseMessage>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TYPathServiceBase
     : public virtual IYPathService
 {
@@ -115,6 +125,8 @@ public:
     bool ShouldHideAttributes() override;
 
 protected:
+    DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
+
     virtual void BeforeInvoke(const IYPathServiceContextPtr& context);
     virtual bool DoInvoke(const IYPathServiceContextPtr& context);
     virtual void AfterInvoke(const IYPathServiceContextPtr& context);
@@ -131,11 +143,57 @@ protected:
         : public base \
     { \
     protected: \
-        DECLARE_YPATH_SERVICE_METHOD(NProto, method); \
+        DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
         virtual void method##Self(TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Recursive(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Attribute(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Recursive(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Attribute(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
     }
+
+#define IMPLEMENT_SUPPORTS_METHOD_RESOLVE(method, onPathError) \
+    DEFINE_RPC_SERVICE_METHOD(TSupports##method, method) \
+    { \
+        NYPath::TTokenizer tokenizer(GetRequestTargetYPath(context->RequestHeader())); \
+        if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) { \
+            method##Self(request, response, context); \
+            return; \
+        } \
+        tokenizer.Skip(NYPath::ETokenType::Ampersand); \
+        if (tokenizer.GetType() != NYPath::ETokenType::Slash) { \
+            onPathError \
+            return; \
+        } \
+        if (tokenizer.Advance() == NYPath::ETokenType::At) { \
+            method##Attribute(NYPath::TYPath(tokenizer.GetSuffix()), request, response, context); \
+        } else { \
+            method##Recursive(NYPath::TYPath(tokenizer.GetInput()), request, response, context); \
+        } \
+    }
+
+#define IMPLEMENT_SUPPORTS_METHOD(method) \
+    IMPLEMENT_SUPPORTS_METHOD_RESOLVE( \
+        method, \
+        { \
+            tokenizer.ThrowUnexpected(); \
+        }) \
+    \
+    void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
+    } \
+    \
+    void TSupports##method::method##Self(TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
+    } \
+    \
+    void TSupports##method::method##Recursive(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    { \
+        ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
+    }
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
 
 class TSupportsExistsBase
     : public virtual TRefCounted
@@ -173,8 +231,6 @@ DECLARE_SUPPORTS_METHOD(Set, virtual TRefCounted);
 DECLARE_SUPPORTS_METHOD(List, virtual TRefCounted);
 DECLARE_SUPPORTS_METHOD(Remove, virtual TRefCounted);
 DECLARE_SUPPORTS_METHOD(Exists, TSupportsExistsBase);
-
-#undef DECLARE_SUPPORTS_METHOD
 
 ////////////////////////////////////////////////////////////////////////////////
 

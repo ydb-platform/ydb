@@ -10,6 +10,12 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TLockMask;
+
+} // namespace NProto
+
 DEFINE_ENUM(ETabletState,
     // Individual states
     ((Mounting)        (0))
@@ -218,8 +224,11 @@ DEFINE_ENUM(ESecondaryIndexKind,
 );
 
 DEFINE_ENUM(ERowMergerType,
-    (Legacy)
+    ((Legacy)               (0))
+    ((Watermark)            (1))
 );
+
+struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////
 

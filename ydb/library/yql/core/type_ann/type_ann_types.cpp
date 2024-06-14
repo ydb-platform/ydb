@@ -942,8 +942,9 @@ namespace NTypeAnnImpl {
         }
 
         // TODO: Collect type annotation directly from AST.
-        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(ctx.Types);
-        auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, ctx.Types);
+        NYql::TTypeAnnotationContext cleanTypes;
+        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(cleanTypes);
+        auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, cleanTypes);
         if (InstantTransform(*typeTransformer, exprRoot, ctx.Expr) != IGraphTransformer::TStatus::Ok) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1159,17 +1160,10 @@ namespace NTypeAnnImpl {
             }
 
             auto type = child->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            if (!EnsureStructOrOptionalStructType(child->Child(1)->Pos(), *type, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            const TStructExprType* structType;
+            const TStructExprType* structType = nullptr;
             bool optional = false;
-            if (type->GetKind() == ETypeAnnotationKind::Optional) {
-                optional = true;
-                structType = type->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>();
-            } else {
-                structType = type->Cast<TStructExprType>();
+            if (!EnsureStructOrOptionalStructType(child->Child(1)->Pos(), *type, optional, structType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
             }
 
             for (auto& field : structType->GetItems()) {

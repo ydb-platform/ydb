@@ -187,7 +187,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
     YDB_ACCESSOR_DEF(bool, IsWriteTx);
-    YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
+    YDB_ACCESSOR_DEF(bool, UsesMvccSnapshot);
 
     YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);
     YDB_ACCESSOR_DEF(TRowVersion, WriteVersion);
@@ -202,6 +202,8 @@ private:
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
+
+    YDB_ACCESSOR_DEF(bool, PerformedUserReads);
 
     NMiniKQL::TEngineHostCounters& Counters;
 };

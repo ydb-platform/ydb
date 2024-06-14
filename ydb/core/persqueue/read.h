@@ -48,7 +48,7 @@ namespace NPQ {
         void SaveInProgress(const TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.insert(blob);
             }
         }
@@ -56,7 +56,7 @@ namespace NPQ {
         bool CheckInProgress(const TActorContext& ctx, TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read request is blocked. Partition "
@@ -73,7 +73,7 @@ namespace NPQ {
         {
             TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
-                TBlobId blob(blocker.Partition.InternalPartitionId, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.erase(blob);
 
                 auto it = BlockedReads.find(blob);
@@ -105,7 +105,7 @@ namespace NPQ {
         void Handle(TEvPQ::TEvBlobRequest::TPtr& ev, const TActorContext& ctx)
         {
             const TPartitionId& partition = ev->Get()->Partition;
-            Cache.SetUserOffset(ctx, ev->Get()->User, partition.InternalPartitionId, ev->Get()->ReadOffset);
+            Cache.SetUserOffset(ctx, ev->Get()->User, partition, ev->Get()->ReadOffset);
 
             TKvRequest kvReq(TKvRequest::TypeRead, ev->Sender, ev->Get()->Cookie, partition);
             kvReq.Blobs = std::move(ev->Get()->Blobs);

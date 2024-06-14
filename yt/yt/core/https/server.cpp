@@ -17,7 +17,7 @@
 
 namespace NYT::NHttps {
 
-static const auto& Logger = NHttp::HttpLogger;
+static constexpr auto& Logger = NHttp::HttpLogger;
 
 using namespace NNet;
 using namespace NHttp;
@@ -30,7 +30,7 @@ class TServer
     : public IServer
 {
 public:
-    explicit TServer(IServerPtr underlying, TPeriodicExecutorPtr certificateUpdater)
+    TServer(IServerPtr underlying, TPeriodicExecutorPtr certificateUpdater)
         : Underlying_(std::move(underlying))
         , CertificateUpdater_(certificateUpdater)
     { }
@@ -101,7 +101,8 @@ static void ApplySslConfig(const TSslContextPtr&  sslContext, const TServerCrede
 IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
-    const IPollerPtr& acceptor)
+    const IPollerPtr& acceptor,
+    const IInvokerPtr& controlInvoker)
 {
     auto sslContext =  New<TSslContext>();
     ApplySslConfig(sslContext, config->Credentials);
@@ -113,9 +114,10 @@ IServerPtr CreateServer(
         sslConfig->CertChain->FileName &&
         sslConfig->PrivateKey->FileName)
     {
+        YT_VERIFY(controlInvoker);
         certificateUpdater = New<TPeriodicExecutor>(
-            poller->GetInvoker(),
-            BIND([=, serverName = config->ServerName] {
+            controlInvoker,
+            BIND([=] {
                 try {
                     auto modificationTime = Max(
                         NFS::GetPathStatistics(*sslConfig->CertChain->FileName).ModificationTime,
@@ -125,14 +127,19 @@ IServerPtr CreateServer(
                     if (modificationTime > sslContext->GetCommitTime() &&
                         modificationTime + sslConfig->UpdatePeriod <= TInstant::Now())
                     {
-                        YT_LOG_INFO("Updating TLS certificates (ServerName: %v, ModificationTime: %v)", serverName, modificationTime);
+                        YT_LOG_INFO("Updating TLS certificates (ServerName: %v, ModificationTime: %v)",
+                            config->ServerName,
+                            modificationTime);
                         sslContext->Reset();
                         ApplySslConfig(sslContext, sslConfig);
                         sslContext->Commit(modificationTime);
-                        YT_LOG_INFO("TLS certificates updated (ServerName: %v)", serverName);
+                        YT_LOG_INFO("TLS certificates updated (ServerName: %v)",
+                            config->ServerName);
                     }
                 } catch (const std::exception& ex) {
-                    YT_LOG_WARNING(ex, "Unexpected exception while updating TLS certificates (ServerName: %v)", serverName);
+                    YT_LOG_WARNING(ex,
+                        "Unexpected exception while updating TLS certificates (ServerName: %v)",
+                        config->ServerName);
                 }
             }),
             sslConfig->UpdatePeriod);
@@ -150,7 +157,7 @@ IServerPtr CreateServer(
 
 IServerPtr CreateServer(const TServerConfigPtr& config, const IPollerPtr& poller)
 {
-    return CreateServer(config, poller, poller);
+    return CreateServer(config, poller, poller, /*controlInvoker*/ nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

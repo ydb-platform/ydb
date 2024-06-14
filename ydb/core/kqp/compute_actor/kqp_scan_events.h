@@ -39,7 +39,7 @@ struct TEvScanExchange {
 
     class TEvSendData: public NActors::TEventLocal<TEvSendData, EvSendData> {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, ArrowBatch);
         YDB_ACCESSOR_DEF(TVector<TOwnedCellVec>, Rows);
         YDB_READONLY(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
@@ -48,7 +48,7 @@ struct TEvScanExchange {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
         {
@@ -56,7 +56,7 @@ struct TEvScanExchange {
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , DataIndexes(std::move(dataIndexes))

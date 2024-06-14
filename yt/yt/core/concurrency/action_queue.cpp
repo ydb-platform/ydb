@@ -54,16 +54,14 @@ public:
 
     void Shutdown(bool graceful)
     {
-        if (Stopped_.exchange(true)) {
+        // Proper synchronization done via Queue_->Shutdown().
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }
 
-        Queue_->Shutdown();
-
-        ShutdownInvoker_->Invoke(BIND_NO_PROPAGATE([graceful, thread = Thread_, queue = Queue_] {
-            thread->Stop(graceful);
-            queue->DrainConsumer();
-        }));
+        Queue_->Shutdown(graceful);
+        Thread_->Stop(graceful);
+        Queue_->OnConsumerFinished();
     }
 
     const IInvokerPtr& GetInvoker()
@@ -79,20 +77,14 @@ private:
     const TMpscSingleQueueSchedulerThreadPtr Thread_;
 
     const TShutdownCookie ShutdownCookie_;
-    const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
 
-    std::atomic<bool> Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
 
     void EnsureStarted()
     {
-        if (Started_.load(std::memory_order::relaxed)) {
-            return;
-        }
-        if (Started_.exchange(true)) {
-            return;
-        }
+        // Thread::Start already has
+        // its own short-circ mechanism.
         Thread_->Start();
     }
 };
@@ -398,6 +390,10 @@ IInvokerPtr CreateFixedPriorityInvoker(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TBoundedConcurrencyInvoker;
+
+YT_DEFINE_THREAD_LOCAL(TBoundedConcurrencyInvoker*, CurrentBoundedConcurrencyInvoker);
+
 class TBoundedConcurrencyInvoker
     : public TInvokerWrapper
 {
@@ -428,8 +424,6 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TRingQueue<TClosure> Queue_;
     int Semaphore_ = 0;
-
-    static YT_THREAD_LOCAL(TBoundedConcurrencyInvoker*) CurrentSchedulingInvoker_;
 
 private:
     class TInvocationGuard
@@ -463,7 +457,7 @@ private:
     {
         // If UnderlyingInvoker_ is already terminated, Invoke may drop the guard right away.
         // Protect by setting CurrentSchedulingInvoker_ and checking it on entering ScheduleMore.
-        CurrentSchedulingInvoker_ = this;
+        CurrentBoundedConcurrencyInvoker() = this;
 
         UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
             &TBoundedConcurrencyInvoker::DoRunCallback,
@@ -472,7 +466,7 @@ private:
             Passed(TInvocationGuard(this))));
 
         // Don't leave a dangling pointer behind.
-        CurrentSchedulingInvoker_ = nullptr;
+        CurrentBoundedConcurrencyInvoker() = nullptr;
     }
 
     void DoRunCallback(const TClosure& callback, TInvocationGuard /*invocationGuard*/)
@@ -485,7 +479,7 @@ private:
     {
         auto guard = Guard(SpinLock_);
         // See RunCallback.
-        if (Queue_.empty() || CurrentSchedulingInvoker_ == this) {
+        if (Queue_.empty() || CurrentBoundedConcurrencyInvoker() == this) {
             IncrementSemaphore(-1);
         } else {
             auto callback = std::move(Queue_.front());
@@ -495,8 +489,6 @@ private:
         }
     }
 };
-
-YT_THREAD_LOCAL(TBoundedConcurrencyInvoker*) TBoundedConcurrencyInvoker::CurrentSchedulingInvoker_;
 
 IInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,

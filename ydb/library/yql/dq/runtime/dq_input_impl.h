@@ -144,14 +144,15 @@ public:
 
         StoredBytes += space;
         StoredRows += batch.RowCount();
+        auto& pushStats = static_cast<TDerived*>(this)->PushStats;
 
-        if (static_cast<TDerived*>(this)->PushStats.CollectBasic()) {
-            static_cast<TDerived*>(this)->PushStats.Bytes += space;
-            static_cast<TDerived*>(this)->PushStats.Rows += GetRowsCount(batch);
-            static_cast<TDerived*>(this)->PushStats.Chunks++;
-            static_cast<TDerived*>(this)->PushStats.Resume();
-            if (static_cast<TDerived*>(this)->PushStats.CollectFull()) {
-                static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage = std::max(static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage, StoredBytes);
+        if (pushStats.CollectBasic()) {
+            pushStats.Bytes += space;
+            pushStats.Rows += GetRowsCount(batch);
+            pushStats.Chunks++;
+            pushStats.Resume();
+            if (pushStats.CollectFull()) {
+                pushStats.MaxMemoryUsage = std::max(pushStats.MaxMemoryUsage, StoredBytes);
             }
         }
 
@@ -172,7 +173,9 @@ public:
 
         batch.clear();
 
-        static_cast<TDerived*>(this)->PopStats.Resume(); //save timing before processing
+        auto& popStats = static_cast<TDerived*>(this)->PopStats;
+
+        popStats.Resume(); //save timing before processing
         ui64 popBytes = 0;
 
         if (IsPaused()) {
@@ -228,10 +231,10 @@ public:
             Batches.clear();
         }
 
-        if (static_cast<TDerived*>(this)->PopStats.CollectBasic()) {
-            static_cast<TDerived*>(this)->PopStats.Bytes += popBytes;
-            static_cast<TDerived*>(this)->PopStats.Rows += GetRowsCount(batch);
-            static_cast<TDerived*>(this)->PopStats.Chunks++;
+        if (popStats.CollectBasic()) {
+            popStats.Bytes += popBytes;
+            popStats.Rows += GetRowsCount(batch);
+            popStats.Chunks++;
         }
 
         Y_ABORT_UNLESS(!batch.empty());
@@ -252,11 +255,9 @@ public:
 
     void Pause() override {
         Y_ABORT_UNLESS(!IsPaused());
-        if (!Finished) {
-            BatchesBeforePause = Batches.size() | PauseMask;
-            StoredRowsBeforePause = StoredRows;
-            StoredBytesBeforePause = StoredBytes;
-        }
+        BatchesBeforePause = Batches.size() | PauseMask;
+        StoredRowsBeforePause = StoredRows;
+        StoredBytesBeforePause = StoredBytes;
     }
 
     void Resume() override {

@@ -1,5 +1,8 @@
 #include "arrow_filter.h"
 #include "switch_type.h"
+#include "common/container.h"
+#include "common/adapter.h"
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
@@ -307,7 +310,7 @@ NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(const arrow::D
     return NArrow::TColumnFilter(std::move(bits));
 }
 
-template <arrow::Datum::Kind kindExpected, class TData>
+template <class TData>
 bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) {
     if (!batch || !batch->num_rows()) {
         return false;
@@ -322,33 +325,26 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
         }
     }
     if (filter.IsTotalDenyFilter()) {
-        batch = batch->Slice(0, 0);
+        batch = NAdapter::TDataBuilderPolicy<TData>::GetEmptySame(batch);
         return true;
     }
     if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows(), startPos, count));
-    Y_VERIFY_S(res.ok(), res.status().message());
-    Y_ABORT_UNLESS((*res).kind() == kindExpected);
-    if constexpr (kindExpected == arrow::Datum::TABLE) {
-        batch = (*res).table();
-        return batch->num_rows();
-    }
-    if constexpr (kindExpected == arrow::Datum::RECORD_BATCH) {
-        batch = (*res).record_batch();
-        return batch->num_rows();
-    }
-    AFL_VERIFY(false);
-    return false;
+    batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter.BuildArrowFilter(batch->num_rows(), startPos, count));
+    return batch->num_rows();
+}
+
+bool TColumnFilter::Apply(std::shared_ptr<TGeneralContainer>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
+    return ApplyImpl(*this, batch, startPos, count);
 }
 
 bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
-    return ApplyImpl<arrow::Datum::TABLE>(*this, batch, startPos, count);
+    return ApplyImpl(*this, batch, startPos, count);
 }
 
 bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
-    return ApplyImpl<arrow::Datum::RECORD_BATCH>(*this, batch, startPos, count);
+    return ApplyImpl(*this, batch, startPos, count);
 }
 
 void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const {

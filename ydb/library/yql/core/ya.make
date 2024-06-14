@@ -108,6 +108,7 @@ RECURSE(
     file_storage
     issue
     peephole_opt
+    qplayer
     services
     spilling
     sql_types

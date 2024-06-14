@@ -42,7 +42,6 @@ PEERDIR(
     yt/cpp/mapreduce/http
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
-    yt/cpp/mapreduce/library/table_schema
     yt/cpp/mapreduce/raw_client
 )
 

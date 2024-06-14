@@ -196,8 +196,7 @@ private:
             THttpOutputPtr request,
             THttpInputPtr response,
             TIntrusivePtr<TClient> client,
-            TString url
-        )
+            TString url)
             : Request_(std::move(request))
             , Response_(std::move(response))
             , Client_(std::move(client))
@@ -324,7 +323,7 @@ IClientPtr CreateClient(
 {
     return CreateClient(
         config,
-        CreateDialer(New<TDialerConfig>(), poller, HttpLogger),
+        CreateDialer(New<TDialerConfig>(), poller, HttpLogger()),
         poller->GetInvoker());
 }
 

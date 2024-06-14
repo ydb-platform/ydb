@@ -115,6 +115,7 @@ ELSEIF (ARCH_I386 AND OS_WINDOWS)
         contrib/restricted/libffi/configs/i386-microsoft-windows
         GLOBAL contrib/restricted/libffi/configs/i386-microsoft-windows/include
     )
+    LDFLAGS(/safeseh:no)
     SRCS(
         configs/i386-microsoft-windows/sysv_intel.masm
         src/x86/ffi.c

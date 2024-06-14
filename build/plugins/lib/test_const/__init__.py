@@ -54,6 +54,10 @@ CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
 MANDATORY_ENV_VAR_NAME = 'YA_MANDATORY_ENV_VARS'
 
+STYLE_CPP_SOURCE_EXTS = [".cpp", ".cxx", ".cc", ".c", ".C"]
+STYLE_CPP_HEADER_EXTS = [".h", ".H", ".hh", ".hpp", ".hxx", ".ipp"]
+STYLE_CPP_ALL_EXTS = STYLE_CPP_SOURCE_EXTS + STYLE_CPP_HEADER_EXTS
+
 BUILD_FLAGS_ALLOWED_IN_CONTEXT = {
     'AUTOCHECK',
     # Required for local test runs
@@ -380,6 +384,19 @@ class TestSize(Enum):
         raise Exception("Unknown test size '{}'".format(size))
 
 
+class ModuleLang(Enum):
+    ABSENT = "absent"
+    NUMEROUS = "numerous"
+    UNKNOWN = "unknown"
+    CPP = "cpp"
+    DOCS = "docs"
+    GO = "go"
+    JAVA = "java"
+    KOTLIN = "kotlin"
+    PY = "py"
+    TS = "ts"
+
+
 class TestRunExitCode(Enum):
     Skipped = 2
     Failed = 3
@@ -402,7 +419,6 @@ class YaTestTags(Enum):
     HugeLogs = "ya:huge_logs"
     Manual = "ya:manual"
     MapRootUser = "ya:map_root_user"
-    NoFuse = "ya:nofuse"
     NoGracefulShutdown = "ya:no_graceful_shutdown"
     Norestart = "ya:norestart"
     Noretries = "ya:noretries"

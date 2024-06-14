@@ -461,6 +461,12 @@ public:
             if (Tenant->IsExternalStatisticsAggregator) {
                 subdomain.SetExternalStatisticsAggregator(true);
             }
+            if (Tenant->IsExternalBackupController) {
+                subdomain.SetExternalBackupController(true);
+            }
+            if (Tenant->IsGraphShardEnabled) {
+                subdomain.SetGraphShard(true);
+            }
         }
 
         if (SharedTenant) {
@@ -485,6 +491,12 @@ public:
             }
             if (Tenant->IsExternalStatisticsAggregator) {
                 subdomain.SetExternalStatisticsAggregator(true);
+            }
+            if (Tenant->IsExternalBackupController) {
+                subdomain.SetExternalBackupController(true);
+            }
+            if (Tenant->IsGraphShardEnabled) {
+                subdomain.SetGraphShard(true);
             }
         }
         if (tablets) {
@@ -1196,6 +1208,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
     , IsExternalStatisticsAggregator(false)
+    , IsExternalBackupController(false)
     , AreResourcesShared(false)
 {
 }

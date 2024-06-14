@@ -46,7 +46,7 @@ TString PrintRow(const TDbTupleRef& row)
     return DbgPrintTuple(row, *NTest::DbgRegistry());
 }
 
-TString PrintRow(const TMemIt& it)
+TString PrintRow(const TMemIter& it)
 {
     return PrintRowImpl(*it.Remap, it);
 }

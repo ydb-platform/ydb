@@ -12,7 +12,8 @@ public:
         Not,
         Size,
         Minus,
-        Abs
+        Abs,
+        Just
     };
 
     enum class EBinaryOp {
@@ -45,7 +46,9 @@ public:
 
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);
     ui32 AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
+    ui32 AddIf(const TTypeAnnotationNode* conditionType, const TTypeAnnotationNode* thenType, const TTypeAnnotationNode* elseType);
     ui32 Udf(const TString& name, bool isPolymorphic, const TTypeAnnotationNode::TListType& argTypes, const TTypeAnnotationNode* retType);
+    ui32 AddScalarApply(const TExprNode& lambda, const TTypeAnnotationNode::TListType& argTypes, TExprContext& ctx);
     // (json/json?,utf8)->bool/bool?
     ui32 JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     ui32 JsonValue(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);

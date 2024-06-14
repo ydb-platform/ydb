@@ -31,8 +31,7 @@ public:
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "YdbOverFq::ListDirectories actorId: " << SelfId().ToString() << ", listing bindings");
+        SRC_LOG_T("listing bindings");
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -59,6 +58,10 @@ public:
         self.set_type(Ydb::Scheme::Entry::DIRECTORY);
 
         for (const auto& binding : Bindings_) {
+            if (binding.type() == FederatedQuery::BindingSetting::DATA_STREAMS) {
+                continue;
+            }
+
             auto& destEntry = *result.add_children();
             destEntry.set_name(binding.name());
             destEntry.set_owner(binding.meta().created_by());

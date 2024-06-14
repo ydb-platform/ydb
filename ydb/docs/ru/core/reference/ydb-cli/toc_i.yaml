@@ -44,10 +44,9 @@ items:
     - name: Скан запросы
       href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
-    include: { mode: link, path: export-import/toc_p.yaml }
-  - name: Выгрузка и загрузка данных
-    include: { mode: link, path: export_import/toc_p.yaml }
-    hidden: true
+    include:
+      mode: link
+      path: export-import/toc_p.yaml
   - name: Работа с топиками
     items:
     - name: Команды для работы с топиком

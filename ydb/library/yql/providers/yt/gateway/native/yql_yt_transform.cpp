@@ -244,7 +244,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                                     out->Finish();
                                 } catch (const yexception& e) {
                                     YQL_CLOG(ERROR, ProviderYt) << "Error transferring " << richYPathDesc << " to " << remotePath << ": " << e.what();
-                                    if (reader->Retry(Nothing(), Nothing())) {
+                                    if (reader->Retry(Nothing(), Nothing(), std::make_exception_ptr(e))) {
                                         continue;
                                     }
                                     throw;
@@ -279,7 +279,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                                     throw;
                                 } catch (const yexception& e) {
                                     YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
-                                    if (reader->Retry(Nothing(), Nothing())) {
+                                    if (reader->Retry(Nothing(), Nothing(), std::make_exception_ptr(e))) {
                                         continue;
                                     }
                                     throw;

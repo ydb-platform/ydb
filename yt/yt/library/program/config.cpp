@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
+
 namespace NYT {
 
 using namespace NYTree;
@@ -10,7 +12,7 @@ void THeapSizeLimit::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();
-    registrar.Parameter("is_hard", &TThis::IsHard)
+    registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
 }
 
@@ -84,7 +86,7 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
-        .DefaultCtor([] () { return NLogging::TLogManagerConfig::CreateDefault(); });
+        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); });
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)
@@ -117,6 +119,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_lock_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Optional();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default(NConcurrency::DefaultMaxIdleFibers);
     registrar.Parameter("yt_alloc", &TThis::YTAlloc)
         .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)

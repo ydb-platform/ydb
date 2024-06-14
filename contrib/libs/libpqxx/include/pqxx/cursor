@@ -1,6 +1,0 @@
-/** Definition of the iterator/container-style cursor classes.
- *
- * C++-style wrappers for SQL cursors
- */
-// Actual definitions in .hxx file so editors and such recognize file type.
-#include "pqxx/cursor.hxx"

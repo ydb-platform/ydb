@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import json
+import os
+import pytest
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -10,19 +12,16 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestKillPqBill(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_do_not_bill_pq(self, kikimr, client):
         self.init_topics("no_pq_bill")
 
-        sql = R'''
+        sql = f'''
             PRAGMA dq.MaxTasksPerStage="2";
 
-            INSERT INTO yds.`{output_topic}`
+            INSERT INTO yds.`{self.output_topic}`
             SELECT Data AS Data
-            FROM yds.`{input_topic}`;''' \
-            .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
+            FROM yds.`{self.input_topic}`;'''
 
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING,
@@ -45,4 +44,4 @@ class TestKillPqBill(TestYdsBase):
         ingress_bytes = stat[graph_name]["IngressBytes"]["sum"]
 
         assert ingress_bytes >= 15 * 1024 * 1024, "Ingress must be >= 15MB"
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10

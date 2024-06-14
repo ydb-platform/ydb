@@ -113,9 +113,14 @@ protected:
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
     void CommitTransaction();
 
+    void SetLogInfo(const TString& operationName, const TString& traceId);
+    void ClearTimeInfo();
+    TDuration GetAverageTime();
+
     template <class THandlerFunc>
-    void SetQueryResultHandler(THandlerFunc handler) {
+    void SetQueryResultHandler(THandlerFunc handler, const TString& stateDescrption = "") {
         QueryResultHandler = static_cast<TQueryResultHandler>(handler);
+        StateDescription = stateDescrption;
     }
 
 private:
@@ -151,6 +156,8 @@ private:
 
     void CallOnQueryResult();
 
+    TString LogPrefix() const;
+
 protected:
     const ui64 LogComponent;
     TString Database;
@@ -167,6 +174,14 @@ protected:
     NActors::TActorId Owner;
 
     std::vector<NYdb::TResultSet> ResultSets;
+
+    TString OperationName;
+    TString StateDescription;
+    TString TraceId;
+
+    TInstant RequestStartTime;
+    TDuration AmountRequestsTime;
+    ui32 NumberRequests = 0;
 };
 
 template<typename TQueryActor, typename TResponse, typename ...TArgs>
@@ -247,7 +262,6 @@ public:
             || status == Ydb::StatusIds::BAD_SESSION
             || status == Ydb::StatusIds::SESSION_EXPIRED
             || status == Ydb::StatusIds::SESSION_BUSY
-            || status == Ydb::StatusIds::TIMEOUT
             || status == Ydb::StatusIds::ABORTED) {
             return ERetryErrorClass::ShortRetry;
         }

@@ -16,6 +16,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -684,6 +685,110 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         });
     }
 
+    Y_UNIT_TEST(ShouldNotReorderChangesOnRace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataColumnForIndexTable(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
+        SimulateSleep(server, TDuration::Seconds(1));
+        SetSplitMergePartCountLimit(&runtime, -1);
+
+        // find main change sender
+        TActorId changeSenderMain;
+        auto findChangeSenderMain = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRequestRecords>(
+            [&](NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
+                changeSenderMain = ev->Sender;
+            }
+        );
+
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);)");
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
+            "ikey = 10, pkey = 1");
+        UNIT_ASSERT(changeSenderMain);
+        findChangeSenderMain.Remove();
+
+        // block outgoing records
+        TVector<THolder<IEventHandle>> blockedOutRecords;
+        auto blockOutRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>(
+            [&](NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
+                if (changeSenderMain == ev->Sender) {
+                    blockedOutRecords.emplace_back(ev.Release());
+                }
+            }
+        );
+
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);)");
+        WaitFor(runtime, [&]{ return blockedOutRecords.size() == 1; }, "records");
+        blockOutRecords.Remove();
+
+        // block incoming records
+        TDeque<THolder<IEventHandle>> blockedInRecords;
+        auto blockInRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>(
+            [&](NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
+                if (changeSenderMain == ev->Recipient) {
+                    blockedInRecords.emplace_back(ev.Release());
+                }
+            }
+        );
+
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (3, 30);)");
+        WaitFor(runtime, [&]{ return blockedInRecords.size() == 1; }, "records");
+
+        // start split
+        THashMap<ui64, ui32> splitAcks;
+        auto countSplitAcks = runtime.AddObserver<TEvDataShard::TEvSplitAck>(
+            [&](TEvDataShard::TEvSplitAck::TPtr& ev) {
+                ++splitAcks[ev->Get()->Record.GetOperationCookie()];
+            }
+        );
+
+        auto tabletIds = GetTableShards(server, sender, "/Root/Table/by_ikey/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        auto txId = AsyncSplitTable(server, sender, "/Root/Table/by_ikey/indexImplTable", tabletIds.at(0), 10);
+        WaitFor(runtime, [&]{ return splitAcks[txId] == 1; }, "split acks");
+        countSplitAcks.Remove();
+
+        // send outgoing records
+        for (auto& ev : std::exchange(blockedOutRecords, TVector<THolder<IEventHandle>>())) {
+            server->GetRuntime()->Send(ev.Release(), 0, true);
+        }
+
+        // finish split
+        WaitTxNotification(server, sender, txId);
+        WaitFor(runtime, [&]{ return blockedInRecords.size() == 2; }, "records");
+
+        // send first incoming record (key = 3)
+        blockInRecords.Remove();
+        {
+            auto& ev = blockedInRecords.front();
+            server->GetRuntime()->Send(ev.Release(), 0, true);
+            blockedInRecords.pop_front();
+        }
+
+        // give some time & send second (re-enqueued) incoming record (key = 2)
+        SimulateSleep(server, TDuration::Seconds(1));
+        {
+            auto& ev = blockedInRecords.front();
+            server->GetRuntime()->Send(ev.Release(), 0, true);
+            blockedInRecords.pop_front();
+        }
+
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
+            "ikey = 10, pkey = 1\nikey = 20, pkey = 2\nikey = 30, pkey = 3");
+    }
+
 } // AsyncIndexChangeExchange
 
 Y_UNIT_TEST_SUITE(Cdc) {
@@ -730,7 +835,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
-                .SetEnableChangefeedInitialScan(true);
+                .SetEnableChangefeedInitialScan(true)
+                .SetEnableUuidAsPrimaryKey(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -803,6 +909,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions();
+    }
+
+    TShardedTableOptions UuidTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uuid", true, false},
+                {"value", "Uint32", false, false},
+            });
     }
 
     TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
@@ -1346,6 +1460,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
+        });
+    }
+
+    Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(UuidTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), 10),
+            (Uuid("65df1ec2-a97d-47b2-ae56-3c023da6ee8c"), 20),
+            (Uuid("65df1ec3-a97d-47b2-ae56-3c023da6ee8c"), 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c");
+        )"}, {
+            R"({"update":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec2-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec3-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"erase":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
         });
     }
 
@@ -3099,6 +3229,45 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });
+    }
+
+    Y_UNIT_TEST(ResolvedTimestampsMultiplePartitions) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        TVector<TVector<std::pair<TString, TString>>> records(2); // partition to records
+        while (true) {
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(*server->GetRuntime(), edgeActor, "/Root/Table/Stream", i);
+            }
+
+            if (AllOf(records, [](const auto& x) { return !x.empty(); })) {
+                break;
+            }
+
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT(records.size() > 1);
+        UNIT_ASSERT(!records[0].empty());
+        AssertJsonsEqual(records[0][0].second, R"({"resolved":"***"})");
+
+        for (ui32 i = 1; i < records.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(records[i][0].second, records[0][0].second);
+        }
     }
 
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {

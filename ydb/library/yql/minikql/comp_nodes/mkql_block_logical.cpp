@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
+#include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -38,18 +39,6 @@ std::shared_ptr<arrow::Buffer> CopySparseBitmap(arrow::MemoryPool* pool, const s
         std::memcpy(result->mutable_data(), bitmap->data() + offset, len);
     }
     return result;
-}
-
-arrow::Datum MakeFalseArray(arrow::MemoryPool* pool, int64_t len) {
-    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
-    std::memset(data->mutable_data(), 0, len);
-    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
-}
-
-arrow::Datum MakeTrueArray(arrow::MemoryPool* pool, int64_t len) {
-    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
-    std::memset(data->mutable_data(), 1, len);
-    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
 }
 
 arrow::Datum MakeNullArray(arrow::MemoryPool* pool, int64_t len) {

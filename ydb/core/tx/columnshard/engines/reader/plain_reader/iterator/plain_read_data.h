@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TPlainReadData: public IDataReader, TNonCopyable {
+class TPlainReadData: public IDataReader, TNonCopyable, NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
@@ -18,6 +18,10 @@ private:
     ui32 ReadyResultsCount = 0;
     bool AbortedFlag = false;
 protected:
+    virtual TConclusionStatus DoStart() override {
+        return Scanner->Start();
+    }
+
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";
@@ -28,7 +32,7 @@ protected:
     }
 
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
-    virtual bool DoReadNextInterval() override;
+    virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
         AbortedFlag = true;
@@ -40,6 +44,10 @@ protected:
         return (Scanner->IsFinished() && PartialResults.empty());
     }
 public:
+    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
+        Scanner->OnSentDataFromInterval(intervalIdx);
+    }
+
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
@@ -61,7 +69,7 @@ public:
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {
         if (!AbortedFlag) {
-            Abort();
+            Abort("unexpected on destructor");
         }
     }
 };

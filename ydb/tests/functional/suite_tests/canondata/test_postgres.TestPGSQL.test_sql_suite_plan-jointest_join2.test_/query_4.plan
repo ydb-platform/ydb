@@ -34,7 +34,16 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
                                                         "InternalOperatorId": 1
@@ -89,6 +98,7 @@
                                                                                     "name (-\u221e, +\u221e)",
                                                                                     "n (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join2.test_plan/t3"
                                                                             }
                                                                         ],
@@ -134,6 +144,7 @@
                                                                                     "name (-\u221e, +\u221e)",
                                                                                     "n (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join2.test_plan/t2"
                                                                             }
                                                                         ],

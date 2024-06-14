@@ -66,7 +66,7 @@ class Adapter(BaseAdapter, _RequestHistoryTracker):
         text: Union[str, Callback[str]] = ...,
         content: Union[bytes, Callback[bytes]] = ...,
         body: Union[IOBase, Callback[IOBase]] = ...,
-        raw: HTTPResponse = ...,
+        raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
         exc: Union[Exception, Type[Exception]] = ...,
         additional_matcher: AdditionalMatcher = ...,
         **kwargs: Any

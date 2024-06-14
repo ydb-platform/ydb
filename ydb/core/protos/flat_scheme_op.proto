@@ -18,6 +18,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
+import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -493,8 +494,28 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionPlannerConstructorContainer {
+    optional string ClassName = 1;
+
+    message TLOptimizer {
+
+    }
+
+    message TSOptimizer {
+        optional string LogicName = 1;
+        optional uint32 FreshnessCheckDurationSeconds = 2 [default = 300];
+    }
+
+    oneof Implementation {
+        TLOptimizer LBuckets = 20;
+        TSOptimizer SBuckets = 21;
+    }
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
+    optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
 }
 
 message TColumnTableSchema {
@@ -515,7 +536,7 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    optional bool CompositeMarks = 9 [ default = false ];
+    optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
@@ -523,6 +544,8 @@ message TColumnTableSchema {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2;
+    optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
 }
 
 message TAlterColumnTableSchema {
@@ -619,7 +642,6 @@ message TColumnStorageConfig {
 
 // This is used internally by schemeshard
 message TColumnStoreSharding {
-    repeated TShardIdx MetaShards = 1;
     repeated TShardIdx ColumnShards = 2;
 }
 
@@ -648,28 +670,59 @@ message TAlterColumnStore {
     repeated TRemoveColumnTableTtlSettingsPreset RESERVED_RemoveTtlSettingsPresets = 7;
 }
 
-message TColumnTableSharding {
-    // Version is incremented each time table sharding is changed
-    // This field is managed by the system.
-    optional uint64 Version = 1;
+message TConsistencyShardingTablet {
+    optional uint64 TabletId = 1;
+    optional uint64 HashIntervalLeftClosed = 2;
+    optional uint64 HashIntervalRightOpened = 3;
+}
 
+message TModuloShardingTablet {
+    optional uint64 TabletId = 1;
+    repeated uint32 AppropriateMods = 2;
+}
+
+message THashShardingInfo {
+    repeated string ColumnNames = 1;
+}
+
+message TGranuleConsistencyShardingInfo {
+    optional THashShardingInfo Hashing = 1;
+    optional TConsistencyShardingTablet ShardInfo = 2;
+}
+
+message TGranuleModuloShardingInfo {
+    optional THashShardingInfo Hashing = 1;
+    optional TModuloShardingTablet ShardInfo = 2;
+    optional uint64 ModuloPartsCount = 3;
+}
+
+message TGranuleShardingLogicContainer {
+    optional string ClassName = 1;
+    oneof Implementation {
+        TGranuleConsistencyShardingInfo Consistency = 20;
+        TGranuleModuloShardingInfo Modulo = 21;
+    }
+}
+
+message TGranuleShardingInfo {
+    optional uint64 PathId = 1;
+    optional uint64 VersionId = 2;
+    optional TGranuleShardingLogicContainer Container = 3;
+}
+
+message TGranuleShardInfo {
+    optional uint64 TabletId = 1;
+    optional uint32 SequenceIdx = 2;
+    optional bool IsOpenForRead = 3;
+    optional bool IsOpenForWrite = 4;
+    optional NKikimrColumnShardProto.TSnapshot OpenForWriteSnapshot = 5;
+    optional uint64 ShardingVersion = 6;
+}
+
+message TColumnTableSharding {
     // An ordered list of currently used column shards
     // This field is managed by the system.
     repeated uint64 ColumnShards = 2;
-
-    // An unordered list of additional column shards that may have stored data
-    // using an older sharding method. Readers may need to include these
-    // shards when performing queries.
-    // This field is managed by the system.
-    repeated uint64 AdditionalColumnShards = 3;
-
-    // When true the mapping of primary key to column shard is unique.
-    // One example when this is false is when sharding for new data is random,
-    // the same primary key may have been written to multiple column shards.
-    // One example when this is true is hash partitioning using primary key,
-    // when each unique primary key is only mapped to one column shard.
-    // This field is managed by the system.
-    optional bool UniquePrimaryKey = 4;
 
     // Random sharding chooses a random shard for new data at write time
     message TRandomSharding {
@@ -691,20 +744,20 @@ message TColumnTableSharding {
         // A list of columns used for hashing, must not be empty
         repeated string Columns = 2;
 
-        // When true the mapping of column values to column shard is unique.
-        // One example when this may become false is when table sharding is
-        // changed and older data with the same column values may be left on
-        // a different shard.
-        optional bool UniqueShardKey = 3;
-
         // Argument for HASH_FUNCTION_CLOUD_LOGS
         optional uint32 ActiveShardsCount = 4;
+        repeated TConsistencyShardingTablet TabletsForConsistency = 5;
+
+        optional uint32 ModuloPartsCount = 6;
+        repeated TModuloShardingTablet TabletsForModulo = 7;
     }
 
     oneof Method {
         TRandomSharding RandomSharding = 5;
         THashSharding HashSharding = 6;
     }
+
+    repeated TGranuleShardInfo ShardsInfo = 7;
 }
 
 message TColumnTableDescription {
@@ -718,9 +771,7 @@ message TColumnTableDescription {
 
     // Table may be created using presets specific to the olap store.
     optional uint32 SchemaPresetId = 4;
-    optional uint32 RESERVED_TtlSettingsPresetId = 5;
     optional string SchemaPresetName = 6;
-    optional string RESERVED_TtlSettingsPresetName = 7;
 
     // Associated olap store id, initialized by schemeshard
     // May be missing for tables that are not part of an ColumnStore
@@ -748,6 +799,13 @@ message TAlterColumnTable {
 
     optional string AlterSchemaPresetName = 4;
     optional string RESERVED_AlterTtlSettingsPresetName = 5;
+
+    optional TAlterShards AlterShards = 6;
+    optional TReshardColumnTable ReshardColumnTable = 7;
+}
+
+message TReshardColumnTable {
+    optional bool Increase = 1;
 }
 
 message TLoginCreateUser {
@@ -846,6 +904,10 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
+    oneof IndexMode {
+        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
+        string IndexName = 6;
+    }
 }
 
 message TAlterCdcStream {
@@ -868,6 +930,33 @@ message TAlterCdcStream {
 message TDropCdcStream {
     optional string TableName = 1;
     optional string StreamName = 2;
+}
+
+message TContinuousBackupDescription {
+}
+
+message TCreateContinuousBackup {
+    optional string TableName = 1;
+    optional TContinuousBackupDescription ContinuousBackupDescription = 2;
+}
+
+message TAlterContinuousBackup {
+    optional string TableName = 1;
+
+    message TStop {
+    }
+
+    message TTakeIncrementalBackup {
+    }
+
+    oneof Action {
+        TStop Stop = 2;
+        TTakeIncrementalBackup TakeIncrementalBackup = 3;
+    }
+}
+
+message TDropContinuousBackup {
+    optional string TableName = 1;
 }
 
 enum EIndexType {
@@ -1297,6 +1386,10 @@ message TMoveIndex {
 }
 
 message TSequenceDescription {
+    message TSetVal {
+        optional sint64 NextValue = 1;
+        optional bool NextUsed = 2;
+    }
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
     optional uint64 Version = 3; // incremented every time sequence is altered
@@ -1308,6 +1401,7 @@ message TSequenceDescription {
     optional uint64 Cache = 8; // number of items to cache, defaults to 1
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
+    optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
 }
 
 message TSequenceSharding {
@@ -1321,6 +1415,7 @@ message TReplicationDescription {
     optional NKikimrProto.TPathID PathId = 3; // path id assigned by schemeshard
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
+    optional NKikimrReplication.TReplicationState State = 6;
 }
 
 message TBlobDepotDescription {
@@ -1436,7 +1531,7 @@ enum EOperationType {
     // Replication
     ESchemeOpCreateReplication = 76;
     ESchemeOpAlterReplication = 77;
-    ESchemeOpDropReplication = 78;
+    ESchemeOpDropReplicationCascade = 78;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // BlobDepot
@@ -1469,12 +1564,23 @@ enum EOperationType {
     ESchemeOpCreateView = 93;
     ESchemeOpAlterView = 94;
     ESchemeOpDropView = 95;
+
+    ESchemeOpDropReplication = 96;
+
+    /// ContinuousBackup
+    // Create
+    ESchemeOpCreateContinuousBackup = 97;
+    // Alter
+    ESchemeOpAlterContinuousBackup = 98;
+    // Drop
+    ESchemeOpDropContinuousBackup = 99;
 }
 
 message TApplyIf {
     optional uint64 PathId = 1;
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
+    optional bool CheckEntityVersion = 4 [default = false];
 }
 
 message TUpgradeSubDomain {
@@ -1503,6 +1609,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {
@@ -1512,6 +1619,48 @@ message TLockGuard {
 message TDropIndex {
     optional string TableName = 1;
     optional string IndexName = 2;
+}
+
+message TConsistencyShardsModification {
+    repeated TConsistencyShardingTablet Shards = 1;
+}
+
+message TModuloShardsModification {
+    repeated TModuloShardingTablet Shards = 1;
+    optional uint32 PartsCount = 2;
+}
+
+message TShardingModification {
+    repeated uint64 NewShardIds = 1;
+    repeated uint64 DeleteShardIds = 2;
+
+    repeated uint64 CloseWriteIds = 3;
+    repeated uint64 CloseReadIds = 4;
+    repeated uint64 OpenWriteIds = 5;
+    repeated uint64 OpenReadIds = 6;
+
+    oneof Implementation {
+        TConsistencyShardsModification Consistency = 20;
+        TModuloShardsModification Modulo = 21;
+    }
+}
+
+message TShardingTransfer {
+    optional uint64 DestinationTabletId = 1;
+    repeated uint64 SourceTabletIds = 2;
+    optional bool Moving = 3 [default = false];
+    optional string SessionId = 4;
+}
+
+message TShardingTransfers {
+    repeated TShardingTransfer Transfers = 1;
+}
+
+message TAlterShards {
+    oneof Implementation {
+        TShardingModification Modification = 20;
+        TShardingTransfers Transfer = 21;
+    }
 }
 
 // Request for scheme modification
@@ -1595,6 +1744,11 @@ message TModifyScheme {
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
+    optional TReplicationDescription AlterReplication = 67;
+
+    optional TCreateContinuousBackup CreateContinuousBackup = 68;
+    optional TAlterContinuousBackup AlterContinuousBackup = 69;
+    optional TDropContinuousBackup DropContinuousBackup = 70;
 }
 
 message TCopySequence {
@@ -1616,6 +1770,7 @@ message TDescribeOptions {
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
+    optional bool ReturnSetVal = 10 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -1699,7 +1854,6 @@ message TPathVersion {
     optional uint64 FileStoreVersion = 15;
     optional uint64 ColumnStoreVersion = 16;
     optional uint64 ColumnTableVersion = 17;
-    optional uint64 ColumnTableShardingVersion = 18;
     optional uint64 SubDomainStateVersion = 19;
     optional uint64 ColumnTableSchemaVersion = 20;
     optional uint64 ColumnTableTtlSettingsVersion = 21;

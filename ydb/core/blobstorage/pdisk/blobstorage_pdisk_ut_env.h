@@ -30,8 +30,8 @@ public:
 
 private:
     std::optional<TActorId> PDiskActor;
-    THolder<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+    THolder<TTestActorRuntime> Runtime;
     NPDisk::TPDisk *PDisk = nullptr;
 
 public:
@@ -72,7 +72,7 @@ public:
         appData->IoContextFactory = IoContext.get();
 
         Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
-        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}});
+        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
@@ -125,8 +125,30 @@ public:
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
                     NKikimrProto::OK);
             PDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
+
+            PDiskActor = PDisk->PDiskActor;
         }
         return PDisk;
+    }
+    
+    void GracefulPDiskRestart(bool waitForRestart = true) {
+        ui32 pdiskId = GetPDisk()->PDiskId;
+
+        Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, MainKey, true, nullptr));
+
+        if (waitForRestart) {
+            const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+            UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus::OK, evInitRes->Status);
+        }
+
+        if (!Settings.UsePDiskMock) {
+            TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), pdiskId);
+
+            PDisk = nullptr;
+
+            // We will temporarily use well know pdisk actor id, because restarted pdisk actor id is not yet known.
+            PDiskActor = wellKnownPDiskActorId;
+        }
     }
 
     template<typename T>

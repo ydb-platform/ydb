@@ -22,6 +22,10 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadInsertTable(writeData.GetSize());
             break;
+        case EOverloadStatus::OverloadMetadata:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadMetadata(writeData.GetSize());
+            break;
         case EOverloadStatus::ShardTxInFly:
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadShardTx(writeData.GetSize());
@@ -52,6 +56,11 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) 
 
     if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
         return EOverloadStatus::InsertTable;
+    }
+
+    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
+    if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
+        return EOverloadStatus::OverloadMetadata;
     }
 
     ui64 txLimit = Settings.OverloadTxInFlight;
@@ -153,7 +162,12 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
 
-    NEvWrite::TWriteMeta writeMeta(writeId, tableId, source);
+    std::optional<ui32> granuleShardingVersion;
+    if (record.HasGranuleShardingVersion()) {
+        granuleShardingVersion = record.GetGranuleShardingVersion();
+    }
+
+    NEvWrite::TWriteMeta writeMeta(writeId, tableId, source, granuleShardingVersion);
     writeMeta.SetDedupId(dedupId);
     Y_ABORT_UNLESS(record.HasLongTxId());
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
@@ -189,7 +203,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL);
     }
 
-    NEvWrite::TWriteData writeData(writeMeta, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(), StoragesManager->GetInsertOperator()->StartWritingAction("WRITING"));
+    NEvWrite::TWriteData writeData(writeMeta, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
+        StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING));
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
@@ -241,10 +256,12 @@ private:
     YDB_READONLY(ui64, LockId, 0);
     YDB_READONLY(ui64, TxId, 0);
 };
-class TProposeWriteTransaction : public TProposeTransactionBase {
+class TProposeWriteTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+private:
+    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
 public:
     TProposeWriteTransaction(TColumnShard* self, TCommitOperation::TPtr op, const TActorId source, const ui64 cookie)
-        : TProposeTransactionBase(self)
+        : TBase(self)
         , WriteCommit(op)
         , Source(source)
         , Cookie(cookie)
@@ -255,14 +272,9 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
 
 private:
-    void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) override;
-    void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) override;
-
-private:
     TCommitOperation::TPtr WriteCommit;
     TActorId Source;
     ui64 Cookie;
-    std::unique_ptr<NActors::IEventBase> Result;
 };
 
 bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -270,22 +282,13 @@ bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorCon
     proto.SetLockId(WriteCommit->GetLockId());
     TString txBody;
     Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
-    ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, txc);
+    Y_UNUSED(Self->GetProgressTxController().StartProposeOnExecute(
+        TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId(), Source, Cookie, {}), txBody, txc));
     return true;
 }
 
 void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
-    ctx.Send(Source, Result.release(), 0, Cookie);
-}
-
-void TProposeWriteTransaction::OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) {
-    Y_UNUSED(proposeResult);
-    Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), txInfo.TxId, Self->GetProgressTxController().BuildCoordinatorInfo(txInfo));
-}
-
-void TProposeWriteTransaction::OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
-    Y_UNUSED(proposeResult);
-    Result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txInfo.TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, proposeResult.GetStatusMessage());
+    Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -364,7 +367,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
-        NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source), arrowData, nullptr, nullptr);
+        NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source, {}), arrowData, nullptr, nullptr);
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
         return;
@@ -372,7 +375,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
 
-    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie);
+    std::optional<ui32> granuleShardingVersionId;
+    if (record.HasGranuleShardingVersionId()) {
+        granuleShardingVersionId = record.GetGranuleShardingVersionId();
+    }
+
+    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);

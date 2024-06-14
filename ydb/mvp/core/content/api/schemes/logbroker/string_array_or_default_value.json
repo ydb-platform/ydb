@@ -1,0 +1,25 @@
+{
+    "properties": {
+        "default": {
+            "description": "Set to an empty array if default value is required",
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "userDefined": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "variantType": {
+            "type": "string",
+            "description": "oneOf case property name",
+            "enum": ["userDefined", "default"]
+        }
+    },
+    "title": "StringArrayOrDefaultValue",
+    "type": "object",
+    "required": ["variantType"]
+}

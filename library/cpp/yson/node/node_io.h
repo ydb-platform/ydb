@@ -23,6 +23,13 @@ TString NodeToCanonicalYsonString(const TNode& node, ::NYson::EYsonFormat format
 // Parse TNode from stream in YSON format
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type = ::NYson::EYsonType::Node);
 
+// Parse TNode from stream in YSON format.
+// NB: This is substantially slower (1.5-2x using the benchmark from `./benchmark/saveload.cpp`) than using
+//     the original `NodeFromYsonStream`.
+// Stops reading from `input` as soon as some valid YSON was read, leaving the remainder of the stream unread.
+// Used in TNode::Load to support cases of saveloading multiple values after the TNode from/to the same stream.
+TNode NodeFromYsonStreamNonGreedy(IInputStream* input, ::NYson::EYsonType type = ::NYson::EYsonType::Node);
+
 // Serialize TNode to stream in one of YSON formats with random order of maps' keys (don't use in tests)
 void NodeToYsonStream(const TNode& node, IOutputStream* output, ::NYson::EYsonFormat format = ::NYson::EYsonFormat::Text);
 

@@ -1013,6 +1013,12 @@ private:
         ThrowNotSupported(__func__);
     }
 
+    bool Load2(const NUdf::TUnboxedValue& state) override {
+        Y_UNUSED(state);
+        ThrowNotSupported(__func__);
+        return false;
+    }
+
     void Push(const NUdf::TUnboxedValuePod& value) override {
         Y_UNUSED(value);
         ThrowNotSupported(__func__);

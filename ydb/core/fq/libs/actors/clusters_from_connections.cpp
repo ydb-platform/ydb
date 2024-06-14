@@ -271,6 +271,18 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+            FillGenericClusterConfig(
+                common,
+                *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
+                conn.content().setting().greenplum_cluster(),
+                connectionName,
+                NYql::NConnector::NApi::EDataSourceKind::GREENPLUM,
+                authToken,
+                accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
 
         // Do not replace with default. Adding a new connection should cause a compilation error
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:

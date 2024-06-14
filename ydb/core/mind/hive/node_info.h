@@ -64,6 +64,7 @@ public:
     bool Down;
     bool Freeze;
     bool Drain;
+    bool BecomeUpOnRestart = false;
     TVector<TActorId> DrainInitiators;
     TDrainSettings DrainSettings;
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
@@ -88,6 +89,7 @@ public:
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
+    TString Name;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -241,9 +243,9 @@ public:
     }
 
     double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
-    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::Dominant) const;
+    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
-                        EResourceToBalance resource = EResourceToBalance::Dominant) const;
+                        EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

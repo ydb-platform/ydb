@@ -82,6 +82,9 @@ class Primitive(Type):
     def to_yson_type(self):
         return self.yt_type_name
 
+    def to_yson_type_v1(self):
+        return self.yt_type_name_v1
+
 
 class Generic(six.with_metaclass(ABCMeta)):
     def __init__(self, name, yt_type_name=None):
@@ -98,7 +101,7 @@ class Generic(six.with_metaclass(ABCMeta)):
         pass
 
 
-def make_primitive_type(name, yt_type_name=None):
+def make_primitive_type(name, yt_type_name=None, yt_type_name_v1=None):
     assert _is_utf8(name), "Name of primitive type must be UTF-8, got {}".format(_with_type(name))
     assert yt_type_name is None or _is_utf8(yt_type_name), \
         "YT type name of primitive type must be UTF-8, got {}".format(_with_type(name))
@@ -106,4 +109,11 @@ def make_primitive_type(name, yt_type_name=None):
     if yt_type_name is None:
         yt_type_name = name.lower()
 
-    return Primitive({"name": name, "yt_type_name": yt_type_name})
+    if yt_type_name_v1 is None:
+        yt_type_name_v1 = name.lower()
+
+    return Primitive({
+        "name": name,
+        "yt_type_name": yt_type_name,
+        "yt_type_name_v1": yt_type_name_v1,
+    })

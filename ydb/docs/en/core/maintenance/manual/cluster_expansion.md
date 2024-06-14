@@ -21,7 +21,7 @@ By adding dynamic nodes, you can expand the available computing resources (CPU 
 
 To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line options, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
 
-Once you have added the dynamic node to the cluster, the information about it becomes available on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
+Once you have added the dynamic node to the cluster, the information about it becomes available on the [cluster monitoring page in the built-in UI](../../reference/embedded-ui/ydb-monitoring.md).
 
 To remove a dynamic node from the cluster, stop the process on the dynamic node.
 
@@ -45,7 +45,7 @@ To add static nodes to the cluster, perform the following steps:
 
 1. Start the processes that serve the new static nodes in the cluster, on the appropriate servers.
 
-1. Make sure that all the new static nodes now show up on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
+1. Make sure that all the new static nodes now show up on the [cluster monitoring page in the built-in UI](../../reference/embedded-ui/ydb-monitoring.md).
 
 1. Issue an authentication token using the {{ ydb-short-name }} CLI, for example:
 
@@ -96,11 +96,11 @@ To add static nodes to the cluster, perform the following steps:
    * `ydbd-token-file`: File name of the previously issued authentication token.
    * `2135`: Port number of the gRPCs service for the static nodes.
    * `ca.crt`: Name of the file with the certificate authority certificate.
-   * `/Root/testdb` : Full path to the database.
+   * `/Root/testdb`: Full path to the database.
    * `ssd:1`: Name of the storage pool and the number of storage groups allocated.
 
-3. Make sure that all the new storage groups now show up on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
+3. Make sure that all the new storage groups now show up on the [cluster monitoring page in the built-in UI](../../reference/embedded-ui/ydb-monitoring.md).
 
-To remove a static node from the {{ ydb-short-name }} cluster, use the [documented decommissioning procedure](../../administration/decommissioning.md).
+To remove a static node from the {{ ydb-short-name }} cluster, use the [documented decommissioning procedure](../../devops/manual/decommissioning.md).
 
 If the server running the static cluster node is damaged or becomes irreparable, deploy the unavailable static node on a new server with the same or higher number of disks.

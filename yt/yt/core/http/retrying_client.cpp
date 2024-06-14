@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include "retrying_client.h"
+#include "http.h"
 #include "private.h"
 
 #include <yt/yt/core/http/client.h>
@@ -14,7 +15,7 @@ using namespace NNet;
 using namespace NYTree;
 using namespace NConcurrency;
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -179,7 +180,7 @@ private:
         const TString& url,
         Args&&... args)
     {
-        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] () {
+        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] {
             return DoMakeRequest(std::move(func), responseChecker, url, std::forward<Args>(args)...);
         }).AsyncVia(Invoker_).Run();
     }

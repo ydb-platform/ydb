@@ -243,6 +243,9 @@ public:
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
 
+    //! Use chunk prober to reduce the number of probing requests.
+    bool UseChunkProber;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -425,9 +428,7 @@ class TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
 public:
-    IMemoryUsageTrackerPtr MemoryTracker;
-
-    IMemoryReferenceTrackerPtr MemoryReferenceTracker;
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

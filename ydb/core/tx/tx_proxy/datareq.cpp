@@ -30,6 +30,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
@@ -1565,6 +1566,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
             toExpand = toInclusive ? EParseRangeKeyExp::NONE : EParseRangeKeyExp::TO_NULL;
         }
     }
+
     if (!ParseRangeKey(ReadTableRequest->Range.GetFrom(), keyTypes,
                        ReadTableRequest->FromValues, fromExpand)
         || !ParseRangeKey(ReadTableRequest->Range.GetTo(), keyTypes,
@@ -3025,7 +3027,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
-        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr, memoryOwner);
+        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, {}, true, key, errStr, memoryOwner);
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;

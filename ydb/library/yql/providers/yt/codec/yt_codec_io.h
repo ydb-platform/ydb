@@ -65,7 +65,7 @@ protected:
     void CheckValidity() const;
     void CheckReadRow() const;
 
-    void OnError(TStringBuf msg);
+    void OnError(const std::exception_ptr& error, TStringBuf msg);
 
 protected:
     NKikimr::NMiniKQL::TSamplingStatTimer TimerDecode_;

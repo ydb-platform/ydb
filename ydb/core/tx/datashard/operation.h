@@ -417,6 +417,9 @@ public:
     bool IsProposeResultSentEarly() const { return ProposeResultSentEarly_; }
     void SetProposeResultSentEarly(bool value = true) { ProposeResultSentEarly_ = value; }
 
+    bool GetPerformedUserReads() const { return PerformedUserReads_; }
+    void SetPerformedUserReads(bool value = true) { PerformedUserReads_ = value; }
+
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
     ///////////////////////////////////
@@ -443,6 +446,7 @@ private:
     // Runtime flags
     ui8 MvccSnapshotRepeatable_ : 1 = 0;
     ui8 ProposeResultSentEarly_ : 1 = 0;
+    ui8 PerformedUserReads_ : 1 = 0;
 };
 
 struct TRSData {

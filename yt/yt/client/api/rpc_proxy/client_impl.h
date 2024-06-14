@@ -137,13 +137,13 @@ public:
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullQueueOptions& options = {}) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) override;
+        const TPullQueueConsumerOptions& options = {}) override;
 
     TFuture<void> RegisterQueueConsumer(
         const NYPath::TRichYPath& queuePath,
@@ -160,6 +160,19 @@ public:
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options = {}) override;
+
+    TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options = {}) override;
+
+    TFuture<void> RemoveQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options = {}) override;
 
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
@@ -323,7 +336,7 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
-    TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+    TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
         const TGetMasterConsistentStateOptions& options) override;
 
     TFuture<void> ExitReadOnly(
@@ -536,6 +549,11 @@ public:
         const NYPath::TYPath& pipelinePath,
         const TGetPipelineStatusOptions& options) override;
 
+    TFuture<TGetFlowViewResult> GetFlowView(
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options) override;
+
 private:
     const TConnectionPtr Connection_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
@@ -548,7 +566,7 @@ private:
 
     NTransactionClient::ITimestampProviderPtr CreateTimestampProvider() const;
 
-    NRpc::IChannelPtr MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+    NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
     NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const TString& address) const;

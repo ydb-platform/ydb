@@ -611,7 +611,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Parse(
         ThrowError(formula, position, message, context);
     };
 
-    auto finishSubformula = [&] () {
+    auto finishSubformula = [&] {
         while (!stack.empty() && stack.back().Type != EFormulaTokenType::LeftBracket) {
             result.push_back(stack.back());
             stack.pop_back();
@@ -1039,6 +1039,16 @@ void TBooleanFormula::Load(TStreamLoadContext& context)
     using NYT::Load;
     auto formula = Load<TString>(context);
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
+}
+
+TString ToString(const TBooleanFormula& booleanFormula)
+{
+    return ToStringViaBuilder(booleanFormula);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*format*/)
+{
+    builder->AppendFormat("%v", booleanFormula.GetFormula());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

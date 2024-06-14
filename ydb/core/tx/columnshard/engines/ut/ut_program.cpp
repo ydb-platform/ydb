@@ -1,7 +1,7 @@
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.h>
 
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>
@@ -536,7 +536,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
         auto res = program.ApplyProgram(batch);
@@ -728,7 +730,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
 

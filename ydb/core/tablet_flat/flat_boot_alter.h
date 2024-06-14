@@ -64,24 +64,31 @@ namespace NBoot {
 
         void Apply(const NPageCollection::TLargeGlobId &largeGlobId, TArrayRef<const char> body) noexcept
         {
+            bool rewrite = false;
             if (body) {
                 TProtoBox<NTable::TSchemeChanges> alter(body);
 
                 NTable::TSchemeModifier apply(*Back->Scheme);
 
                 auto changed = apply.Apply(alter);
+                rewrite = alter.GetRewrite();
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " alter log "
                         << NFmt::TStamp(NTable::TTxStamp(largeGlobId.Lead).Raw)
                         << ", " << (changed ? "update" : "noop")
-                        << " affects " << NFmt::Arr(apply.Affects);
+                        << " affects " << NFmt::Arr(apply.Affects)
+                        << ", is " << (rewrite ? "" : "not a ") << "rewrite";
                 }
             }
 
-            if (auto *logic = Logic->Result().Alter.Get())
+            if (auto *logic = Logic->Result().Alter.Get()) {
+                if (rewrite) {
+                    logic->Clear();
+                }
                 logic->RestoreLog(largeGlobId);
+            }
         }
 
     private:

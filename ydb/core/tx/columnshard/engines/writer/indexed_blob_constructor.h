@@ -5,6 +5,7 @@
 
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -134,7 +135,7 @@ public:
                 for (auto&& s : Aggregations[i]->GetSplittedBlobs()) {
                     if (--linksCount[s.GetRange().BlobId] == 0) {
                         if (!DeclareRemoveAction) {
-                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
+                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction(NBlobOperations::EConsumer::WRITING_BUFFER);
                         }
                         DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }

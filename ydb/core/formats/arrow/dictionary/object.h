@@ -23,7 +23,7 @@ public:
     static TConclusion<TEncodingSettings> BuildFromProto(const NKikimrSchemeOp::TDictionaryEncodingSettings& proto) {
         TEncodingSettings result;
         auto resultParse = result.DeserializeFromProto(proto);
-        if (!resultParse) {
+        if (resultParse.IsFail()) {
             return resultParse;
         }
         return result;

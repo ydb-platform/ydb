@@ -29,8 +29,8 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
-NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePeNodeCacheID(true);
+NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
+NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePerNodeCacheID(true);
 
 }
 
@@ -245,8 +245,11 @@ public:
                     sb << ", ";
                 }
             }
-            sb << "], "
-                << ", RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
+            sb << "], Points: [";
+            for(size_t i = 0; i < Points.size(); ++i) {
+                sb << "# " << i << ": " << DebugPrintPoint(keyTypes, Points[i].GetCells(), *AppData()->TypeRegistry);
+            }
+            sb << "], RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
             return sb;
         }
 
@@ -568,7 +571,11 @@ public:
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
-        if (keyDesc->GetPartitions().size() == 1) {
+        if (keyDesc->GetPartitions().empty()) {
+            TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
+            CA_LOG_E(error);
+            return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
+        } else if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
             if (partition.ShardId == state->TabletId) {
                 // we re-resolved the same shard
@@ -587,12 +594,6 @@ public:
             }
         } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
-        }
-
-        if (keyDesc->GetPartitions().empty()) {
-            TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
-            CA_LOG_E(error);
-            return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         const auto& tr = *AppData()->TypeRegistry;
@@ -1326,9 +1327,9 @@ public:
     }
 
 
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) override {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) override {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {}
-    void LoadState(const NYql::NDqProto::TSourceState&) override {}
+    void LoadState(const NYql::NDq::TSourceState&) override {}
 
     void PassAway() override {
         Counters->ReadActorsCount->Dec();

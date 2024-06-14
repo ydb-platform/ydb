@@ -46,7 +46,6 @@ SRCS(
     flat_part_charge_range.cpp
     flat_page_label.cpp
     flat_part_dump.cpp
-    flat_part_iter_multi.cpp
     flat_part_index_iter_create.cpp
     flat_part_loader.cpp
     flat_part_overlay.cpp
@@ -66,6 +65,8 @@ SRCS(
     flat_table_misc.cpp
     flat_table_observer.cpp
     flat_table_observer.h
+    flat_table_committed.cpp
+    flat_table_committed.h
     flat_update_op.h
     probes.cpp
     shared_handle.cpp

@@ -34,8 +34,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FutureIndexationInputBytes;
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
+
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesBytes;
@@ -131,6 +135,11 @@ public:
         OverloadInsertTableCount->Add(1);
     }
 
+    void OnOverloadMetadata(const ui64 size) const {
+        OverloadMetadataBytes->Add(size);
+        OverloadMetadataCount->Add(1);
+    }
+
     void OnOverloadShardTx(const ui64 size) const {
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
@@ -162,6 +171,10 @@ public:
 
     void IndexationInput(const ui64 size) const {
         IndexationInputBytes->Add(size);
+    }
+
+    void OnIndexMetadataLimit(const ui64 limit) const {
+        IndexMetadataLimitBytes->Set(limit);
     }
 
     void OnStartBackground() const {

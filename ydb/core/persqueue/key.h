@@ -152,6 +152,8 @@ private:
 
 };
 
+std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition);
+
 // {char type; ui32 partiton; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
@@ -310,6 +312,8 @@ private:
     ui16 PartNo;
     ui16 InternalPartsCount;
 };
+
+TKey MakeKeyFromString(const TString& s, const TPartitionId& partition);
 
 inline
 TString GetTxKey(ui64 txId)

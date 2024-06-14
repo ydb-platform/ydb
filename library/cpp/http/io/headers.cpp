@@ -12,13 +12,6 @@ static inline TStringBuf Trim(const char* b, const char* e) noexcept {
     return StripString(TStringBuf(b, e));
 }
 
-static inline bool HeaderNameEqual(TStringBuf headerName, TStringBuf expectedName) noexcept {
-    // Most headers names have distinct sizes.
-    // Size comparison adds small overhead if all headers have the same size (~4% or lower with size = 4),
-    // but significantly speeds up the case where sizes are different (~4.5x for expectedName.size() = 4 and headerName.size() = 5)
-    return headerName.size() == expectedName.size() && AsciiCompareIgnoreCase(headerName, expectedName) == 0;
-}
-
 THttpInputHeader::THttpInputHeader(const TStringBuf header) {
     size_t pos = header.find(':');
 
@@ -66,13 +59,20 @@ THttpHeaders::THttpHeaders(IInputStream* stream) {
     }
 }
 
+THttpHeaders::THttpHeaders(TArrayRef<const THttpInputHeader> headers) {
+    for (const auto& header : headers) {
+        AddHeader(header);
+    }
+}
+
+
 bool THttpHeaders::HasHeader(const TStringBuf header) const {
     return FindHeader(header);
 }
 
 const THttpInputHeader* THttpHeaders::FindHeader(const TStringBuf header) const {
     for (const auto& hdr : Headers_) {
-        if (HeaderNameEqual(hdr.Name(), header)) {
+        if (AsciiEqualsIgnoreCase(hdr.Name(), header)) {
             return &hdr;
         }
     }
@@ -81,7 +81,7 @@ const THttpInputHeader* THttpHeaders::FindHeader(const TStringBuf header) const 
 
 void THttpHeaders::RemoveHeader(const TStringBuf header) {
     for (auto h = Headers_.begin(); h != Headers_.end(); ++h) {
-        if (HeaderNameEqual(h->Name(), header)) {
+        if (AsciiEqualsIgnoreCase(h->Name(), header)) {
             Headers_.erase(h);
             return;
         }
@@ -91,7 +91,7 @@ void THttpHeaders::RemoveHeader(const TStringBuf header) {
 void THttpHeaders::AddOrReplaceHeader(const THttpInputHeader& header) {
     TStringBuf name = header.Name();
     for (auto& hdr : Headers_) {
-        if (HeaderNameEqual(hdr.Name(), name)) {
+        if (AsciiEqualsIgnoreCase(hdr.Name(), name)) {
             hdr = header;
             return;
         }

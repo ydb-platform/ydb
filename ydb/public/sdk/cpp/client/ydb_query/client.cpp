@@ -33,7 +33,7 @@ TCreateSessionSettings::TCreateSessionSettings() {
 
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
 {
-    switch (txSettings.Mode_) {
+    switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
             break;
@@ -86,6 +86,7 @@ public:
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(settings.ExecMode_);
         request.set_stats_mode(settings.StatsMode_);
+        request.set_pool_id(settings.PoolId_);
         request.mutable_script_content()->set_syntax(settings.Syntax_);
         request.mutable_script_content()->set_text(script);
         SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());

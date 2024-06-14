@@ -4,6 +4,21 @@
 
 #include <util/string/printf.h>
 
+namespace {
+
+TString tpch_1000_stats = R"({
+    "/Root/part":       {"n_rows":2.000e+08, "byte_size":3.231e+09},
+    "/Root/lineitem":   {"n_rows":5.625e+09, "byte_size":9.900e+10},
+    "/Root/orders":     {"n_rows":1.406e+09, "byte_size":2.942e+10},
+    "/Root/customer":   {"n_rows":18750673, "byte_size":1.730e+09},
+    "/Root/nation":     {"n_rows":25, "byte_size":1880},
+    "/Root/supplier":   {"n_rows":9688077, "byte_size":9.254e+08},
+    "/Root/region":     {"n_rows":5, "byte_size":853},
+    "/Root/partsupp":   {"n_rows":7.500e+08, "byte_size":2.850e+10}
+})";
+
+}
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -724,31 +739,102 @@ create table `/Root/test/ds/store_sales`
 
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(){
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
    
     setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("2");
+    setting.SetValue("3");
     settings.push_back(setting);
 
     setting.SetName("OptEnableConstantFolding");
     setting.SetValue("true");
     settings.push_back(setting);
 
-    //setting.SetName("HashJoinMode");
-    //setting.SetValue("grace");
-    //settings.push_back(setting);
+    if (stats!="") {
+        setting.SetName("OverrideStatistics");
+        setting.SetValue(stats);
+        settings.push_back(setting);
+    }
 
-    return TKikimrRunner(settings);
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
+    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    serverSettings.SetKqpSettings(settings);
+    return TKikimrRunner(serverSettings);
 }
 
+class TChainConstructor {
+public:
+    TChainConstructor(size_t chainSize)
+        : Kikimr_(GetKikimrWithJoinSettings())
+        , TableClient_(Kikimr_.GetTableClient())
+        , Session_(TableClient_.CreateSession().GetValueSync().GetSession())
+        , ChainSize_(chainSize)
+    {}
+
+    void CreateTables() {
+        for (size_t i = 0; i < ChainSize_; ++i) {
+            TString tableName;
+            
+            tableName
+                .append("/Root/table_").append(ToString(i));;
+
+            TString createTable;
+            createTable
+                += "CREATE TABLE `" +  tableName + "` (id"
+                +  ToString(i) + " Int32, " 
+                +  "PRIMARY KEY (id" + ToString(i) + "));";
+
+            std::cout << createTable << std::endl;
+            auto res = Session_.ExecuteSchemeQuery(createTable).GetValueSync();
+            std::cout << res.GetIssues().ToString() << std::endl;
+            UNIT_ASSERT(res.IsSuccess());
+        }
+    }
+
+    void JoinTables() {
+        TString joinRequest;
+
+        joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
+
+        for (size_t i = 1; i < ChainSize_; ++i) {
+            TString table = "/Root/table_" + ToString(i);
+
+            TString prevAliasTable = "t" + ToString(i - 1);
+            TString aliasTable = "t" + ToString(i);
+
+            joinRequest
+                += "INNER JOIN `" + table + "`" + " AS " + aliasTable + " ON "
+                +  aliasTable + ".id" + ToString(i) + "=" + prevAliasTable + ".id" 
+                +  ToString(i-1) + " ";
+        }
+
+        auto result = Session_.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        std::cout << result.GetIssues().ToString() << std::endl;
+        std::cout << joinRequest << std::endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+private:
+    TKikimrRunner Kikimr_;
+    NYdb::NTable::TTableClient TableClient_;
+    TSession Session_;
+    size_t ChainSize_; 
+};
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    Y_UNIT_TEST(FiveWayJoin) {
+    Y_UNIT_TEST(Chain65Nodes) {
+        TChainConstructor chain(65);
+        chain.CreateTables();
+        chain.JoinTables();
+    }
 
-        auto kikimr = GetKikimrWithJoinSettings();
+    Y_UNIT_TEST_TWIN(FiveWayJoin, StreamLookupJoin) {
+
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -783,9 +869,47 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FourWayJoinLeftFirst) {
+    Y_UNIT_TEST(FiveWayJoinOverride) {
 
         auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = Q_(R"(
+                PRAGMA ydb.OverrideStatistics = '{"/Root/R":{"n_rows":100500, "key_columns":["id"], "columns":[{"name":"id", "n_unique_vals":50}]}}';
+                SELECT *
+                FROM `/Root/R` as R
+                  INNER JOIN
+                     `/Root/S` as S
+                  ON R.id = S.id
+                  INNER JOIN
+                     `/Root/T` as T
+                  ON S.id = T.id
+                  INNER JOIN
+                     `/Root/U` as U
+                  ON T.id = U.id
+                  INNER JOIN
+                     `/Root/V` as V
+                  ON U.id = V.id
+            )");
+
+            auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            //NJson::TJsonValue plan;
+            //NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            //Cout << result.GetPlan();
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(FourWayJoinLeftFirst, StreamLookupJoin) {
+
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -820,9 +944,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-     Y_UNIT_TEST(FiveWayJoinWithPreds) {
+     Y_UNIT_TEST_TWIN(FiveWayJoinWithPreds, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -858,9 +982,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithComplexPreds) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -896,9 +1020,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithComplexPreds2) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -934,9 +1058,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithPredsAndEquiv) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithPredsAndEquiv, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -972,9 +1096,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FourWayJoinWithPredsAndEquivAndLeft) {
+    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1010,9 +1134,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithConstantFold) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1048,9 +1172,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithConstantFoldOpt) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1086,9 +1210,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(DatetimeConstantFold) {
+    Y_UNIT_TEST_TWIN(DatetimeConstantFold, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1112,9 +1236,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(TPCH2) {
+    Y_UNIT_TEST_TWIN(TPCH2, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin, tpch_1000_stats);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1123,8 +1247,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = Q_(R"(
-PRAGMA ydb.HashJoinMode='grace';
-
 -- TPC-H/TPC-R Minimum Cost Supplier Query (Q2)
 -- using 1680793381 as a seed to the RNG
 
@@ -1199,13 +1321,90 @@ limit 100;
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query, settings).ExtractValueSync();
             auto res = CollectStreamResult(it);
 
-            Cout << *res.PlanJson;
+            TString ref = R"---({
+                "op_name" : "InnerJoin (Grace)",
+                "args" : [
+                    {
+                        "op_name" : "InnerJoin (MapJoin)",
+                        "args" : [
+                            {
+                                "op_name" : "TableFullScan",
+                                "table" : "partsupp"
+                            },
+                            {
+                                "op_name": "InnerJoin (MapJoin)",
+                                "args": [
+                                    {
+                                        "op_name" : "TableFullScan",
+                                        "table" : "supplier"
+                                    },
+                                    {
+                                        "op_name" : "InnerJoin (MapJoin)",
+                                        "args" : [
+                                            {
+                                                "op_name" : "TableFullScan",
+                                                "table" : "nation"
+                                            },
+                                            {
+                                                "op_name" : "TableFullScan",
+                                                "table" : "region"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "op_name" : "InnerJoin (MapJoin)",
+                        "args" : [
+                            {
+                                "op_name" : "InnerJoin (MapJoin)",
+                                "args" : [
+                                    {
+                                        "op_name" : "TableFullScan",
+                                        "table" : "partsupp"
+                                    },
+                                    {
+                                        "op_name" : "InnerJoin (MapJoin)",
+                                        "args" : [
+                                            {
+                                                "op_name": "TableFullScan",
+                                                "table": "supplier"
+                                            },
+                                            {
+                                                "op_name": "InnerJoin (MapJoin)",
+                                                "args" : [
+                                                    {
+                                                        "op_name" : "TableFullScan",
+                                                        "table" : "nation"
+                                                    },
+                                                    {
+                                                        "op_name" : "TableFullScan",
+                                                        "table" : "region"                                                    
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "op_name" : "TableFullScan",
+                                "table" : "part"                                                    
+                            }
+                        ]
+                    }
+                ]
+            })---";
+
+            UNIT_ASSERT(JoinOrderAndAlgosMatch(*res.PlanJson, ref));
         }
     }
 
-    Y_UNIT_TEST(TPCH9) {
+    Y_UNIT_TEST_TWIN(TPCH9, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1214,8 +1413,6 @@ limit 100;
         /* join with parameters */
         {
             const TString query = Q_(R"(
-PRAGMA ydb.HashJoinMode='grace';
-
 $p = (select p_partkey, p_name
 from
     `/Root/part`
@@ -1281,9 +1478,9 @@ order by
         }
     }
 
-    Y_UNIT_TEST(TPCH3) {
+    Y_UNIT_TEST_TWIN(TPCH3, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1354,9 +1551,9 @@ limit 10;
         }
     }
 
-    Y_UNIT_TEST(TPCH21) {
+    Y_UNIT_TEST_TWIN(TPCH21, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1420,13 +1617,14 @@ limit 100;)");
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+
             Cout << result.GetPlan();
         }
     }
 
-       Y_UNIT_TEST(TPCH5) {
+       Y_UNIT_TEST_TWIN(TPCH5, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1549,9 +1747,9 @@ order by
         }
     }
 
-    Y_UNIT_TEST(TPCH10) {
+    Y_UNIT_TEST_TWIN(TPCH10, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1659,9 +1857,9 @@ limit 20;
         }
     }
 
-    Y_UNIT_TEST(TPCH11) {
+    Y_UNIT_TEST_TWIN(TPCH11, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1742,9 +1940,9 @@ order by
         }        
     }
 
-    Y_UNIT_TEST(TPCDS16) {
+    Y_UNIT_TEST_TWIN(TPCDS16, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1798,9 +1996,9 @@ limit 100;
         }        
     }
 
-    Y_UNIT_TEST(TPCDS61) {
+    Y_UNIT_TEST_TWIN(TPCDS61, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1866,9 +2064,9 @@ limit 100;
         }        
     }
     
-    Y_UNIT_TEST(TPCDS92) {
+    Y_UNIT_TEST_TWIN(TPCDS92, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1924,9 +2122,9 @@ limit 100;
         }        
     }
 
-    Y_UNIT_TEST(TPCDS94) {
+    Y_UNIT_TEST_TWIN(TPCDS94, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1977,9 +2175,9 @@ limit 100;
         }        
     }
 
-    Y_UNIT_TEST(TPCDS95) {
+    Y_UNIT_TEST_TWIN(TPCDS95, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2032,9 +2230,9 @@ limit 100;
         }        
     }
 
-    Y_UNIT_TEST(TPCDS96) {
+    Y_UNIT_TEST_TWIN(TPCDS96, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2071,9 +2269,9 @@ limit 100;
         }        
     }
 
-    Y_UNIT_TEST(TPCDS88) {
+    Y_UNIT_TEST_TWIN(TPCDS88, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2188,9 +2386,9 @@ from
         }        
     }
 
-    Y_UNIT_TEST(TPCDS90) {
+    Y_UNIT_TEST_TWIN(TPCDS90, StreamLookupJoin) {
 
-        auto kikimr = GetKikimrWithJoinSettings();
+        auto kikimr = GetKikimrWithJoinSettings(StreamLookupJoin);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

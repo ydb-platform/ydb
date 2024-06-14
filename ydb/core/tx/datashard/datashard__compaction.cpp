@@ -196,6 +196,11 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
 void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+        "CompactionComplete of tablet# "<< TabletID() << ", table# " << tableId
+        << ", finished edge# " << finishedInfo.Edge
+        << ", ts " << finishedInfo.FullCompactionTs);
+
     TLocalPathId localPathId = InvalidLocalPathId;
     if (tableId >= Schema::MinLocalTid) {
         for (auto& ti : TableInfos) {
@@ -229,16 +234,16 @@ void TDataShard::ReplyCompactionWaiters(
     const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "CompactionComplete of tablet# "<< TabletID()
-        << ", table# " << tableId
+        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
         << ", finished edge# " << compactionInfo.Edge
         << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : std::get<0>(CompactionWaiters[tableId].front())));
 
-    auto& fullCompactionQueue = CompactionWaiters[tableId];
-    while (!fullCompactionQueue.empty()) {
-        const auto& waiter = CompactionWaiters[tableId].front();
-        if (std::get<0>(waiter) > compactionInfo.Edge)
+    auto fullCompactionQueue = CompactionWaiters.FindPtr(tableId);
+    while (fullCompactionQueue && !fullCompactionQueue->empty()) {
+        const auto& waiter = fullCompactionQueue->front();
+        if (std::get<0>(waiter) > compactionInfo.Edge) {
             break;
+        }
 
         const auto& sender = std::get<1>(waiter);
         auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
@@ -249,30 +254,35 @@ void TDataShard::ReplyCompactionWaiters(
         ctx.Send(sender, std::move(response));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Sending TEvCompactTableResult to# " << sender
+            "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
+            << " sending TEvCompactTableResult to# " << sender
             << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
 
-        fullCompactionQueue.pop_front();
+        fullCompactionQueue->pop_front();
     }
 
-    auto& compactBorrowedQueue = CompactBorrowedWaiters[tableId];
-    if (!compactBorrowedQueue.empty()) {
+    auto compactBorrowedQueue = CompactBorrowedWaiters.FindPtr(tableId);
+    if (compactBorrowedQueue && !compactBorrowedQueue->empty()) {
         const bool hasBorrowed = Executor()->HasBorrowed(tableId, TabletID());
         if (!hasBorrowed) {
-            while (!compactBorrowedQueue.empty()) {
-                const auto& waiter = compactBorrowedQueue.front();
+            while (!compactBorrowedQueue->empty()) {
+                const auto& waiter = compactBorrowedQueue->front();
+                waiter->CompactingTables.erase(tableId);
 
-                auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
-                    TabletID(),
-                    GetPathOwnerId(),
-                    localPathId);
-                ctx.Send(waiter, std::move(response));
+                if (waiter->CompactingTables.empty()) { // all requested tables have been compacted
+                    auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
+                        TabletID(),
+                        GetPathOwnerId(),
+                        waiter->RequestedTable);
+                    ctx.Send(waiter->ActorId, std::move(response));
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Sending TEvCompactBorrowedResult to# " << waiter
-                    << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
+                        << " sending TEvCompactBorrowedResult to# " << waiter->ActorId
+                        << "pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
+                }
 
-                compactBorrowedQueue.pop_front();
+                compactBorrowedQueue->pop_front();
             }
         }
     }

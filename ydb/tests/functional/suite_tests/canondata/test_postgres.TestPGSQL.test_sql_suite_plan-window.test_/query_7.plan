@@ -34,12 +34,6 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 2
-                                                    },
-                                                    {
-                                                        "ExternalPlanNodeId": 2
-                                                    },
-                                                    {
                                                         "InternalOperatorId": 1
                                                     }
                                                 ],
@@ -79,6 +73,7 @@
                                                                 "ReadRanges": [
                                                                     "empno (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_window.test_plan/empsalary"
                                                             }
                                                         ],

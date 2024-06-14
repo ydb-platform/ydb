@@ -1,213 +1,176 @@
-"""Signals and events.
-
-A small implementation of signals, inspired by a snippet of Django signal
-API client code seen in a blog post.  Signals are first-class objects and
-each manages its own receivers and message emission.
-
-The :func:`signal` function provides singleton behavior for named signals.
-
-"""
 from __future__ import annotations
 
+import collections.abc as c
 import typing as t
+import warnings
+import weakref
 from collections import defaultdict
+from contextlib import AbstractContextManager
 from contextlib import contextmanager
+from functools import cached_property
 from inspect import iscoroutinefunction
-from warnings import warn
 from weakref import WeakValueDictionary
 
-from blinker._utilities import annotatable_weakref
-from blinker._utilities import hashable_identity
-from blinker._utilities import IdentityType
-from blinker._utilities import lazy_property
-from blinker._utilities import reference
-from blinker._utilities import symbol
-from blinker._utilities import WeakTypes
+from ._utilities import make_id
+from ._utilities import make_ref
+from ._utilities import Symbol
 
 if t.TYPE_CHECKING:
-    import typing_extensions as te
+    F = t.TypeVar("F", bound=c.Callable[..., t.Any])
 
-    T_callable = t.TypeVar("T_callable", bound=t.Callable[..., t.Any])
+ANY = Symbol("ANY")
+"""Symbol for "any sender"."""
 
-    T = t.TypeVar("T")
-    P = te.ParamSpec("P")
-
-    AsyncWrapperType = t.Callable[[t.Callable[P, t.Awaitable[T]]], t.Callable[P, T]]
-    SyncWrapperType = t.Callable[[t.Callable[P, T]], t.Callable[P, t.Awaitable[T]]]
-
-ANY = symbol("ANY")
-ANY.__doc__ = 'Token for "any sender".'
 ANY_ID = 0
-
-# NOTE: We need a reference to cast for use in weakref callbacks otherwise
-#       t.cast may have already been set to None during finalization.
-cast = t.cast
 
 
 class Signal:
-    """A notification emitter."""
+    """A notification emitter.
 
-    #: An :obj:`ANY` convenience synonym, allows ``Signal.ANY``
-    #: without an additional import.
+    :param doc: The docstring for the signal.
+    """
+
     ANY = ANY
+    """An alias for the :data:`~blinker.ANY` sender symbol."""
 
-    set_class: type[set] = set
+    set_class: type[set[t.Any]] = set
+    """The set class to use for tracking connected receivers and senders.
+    Python's ``set`` is unordered. If receivers must be dispatched in the order
+    they were connected, an ordered set implementation can be used.
 
-    @lazy_property
+    .. versionadded:: 1.7
+    """
+
+    @cached_property
     def receiver_connected(self) -> Signal:
-        """Emitted after each :meth:`connect`.
+        """Emitted at the end of each :meth:`connect` call.
 
         The signal sender is the signal instance, and the :meth:`connect`
-        arguments are passed through: *receiver*, *sender*, and *weak*.
+        arguments are passed through: ``receiver``, ``sender``, and ``weak``.
 
         .. versionadded:: 1.2
-
         """
         return Signal(doc="Emitted after a receiver connects.")
 
-    @lazy_property
+    @cached_property
     def receiver_disconnected(self) -> Signal:
-        """Emitted after :meth:`disconnect`.
+        """Emitted at the end of each :meth:`disconnect` call.
 
         The sender is the signal instance, and the :meth:`disconnect` arguments
-        are passed through: *receiver* and *sender*.
+        are passed through: ``receiver`` and ``sender``.
 
-        Note, this signal is emitted **only** when :meth:`disconnect` is
-        called explicitly.
-
-        The disconnect signal can not be emitted by an automatic disconnect
-        (due to a weakly referenced receiver or sender going out of scope),
-        as the receiver and/or sender instances are no longer available for
-        use at the time this signal would be emitted.
+        This signal is emitted **only** when :meth:`disconnect` is called
+        explicitly. This signal cannot be emitted by an automatic disconnect
+        when a weakly referenced receiver or sender goes out of scope, as the
+        instance is no longer be available to be used as the sender for this
+        signal.
 
         An alternative approach is available by subscribing to
         :attr:`receiver_connected` and setting up a custom weakref cleanup
         callback on weak receivers and senders.
 
         .. versionadded:: 1.2
-
         """
         return Signal(doc="Emitted after a receiver disconnects.")
 
     def __init__(self, doc: str | None = None) -> None:
-        """
-        :param doc: optional.  If provided, will be assigned to the signal's
-          __doc__ attribute.
-
-        """
         if doc:
             self.__doc__ = doc
-        #: A mapping of connected receivers.
-        #:
-        #: The values of this mapping are not meaningful outside of the
-        #: internal :class:`Signal` implementation, however the boolean value
-        #: of the mapping is useful as an extremely efficient check to see if
-        #: any receivers are connected to the signal.
-        self.receivers: dict[IdentityType, t.Callable | annotatable_weakref] = {}
-        self.is_muted = False
-        self._by_receiver: dict[IdentityType, set[IdentityType]] = defaultdict(
-            self.set_class
-        )
-        self._by_sender: dict[IdentityType, set[IdentityType]] = defaultdict(
-            self.set_class
-        )
-        self._weak_senders: dict[IdentityType, annotatable_weakref] = {}
 
-    def connect(
-        self, receiver: T_callable, sender: t.Any = ANY, weak: bool = True
-    ) -> T_callable:
-        """Connect *receiver* to signal events sent by *sender*.
-
-        :param receiver: A callable.  Will be invoked by :meth:`send` with
-          `sender=` as a single positional argument and any ``kwargs`` that
-          were provided to a call to :meth:`send`.
-
-        :param sender: Any object or :obj:`ANY`, defaults to ``ANY``.
-          Restricts notifications delivered to *receiver* to only those
-          :meth:`send` emissions sent by *sender*.  If ``ANY``, the receiver
-          will always be notified.  A *receiver* may be connected to
-          multiple *sender* values on the same Signal through multiple calls
-          to :meth:`connect`.
-
-        :param weak: If true, the Signal will hold a weakref to *receiver*
-          and automatically disconnect when *receiver* goes out of scope or
-          is garbage collected.  Defaults to True.
-
+        self.receivers: dict[
+            t.Any, weakref.ref[c.Callable[..., t.Any]] | c.Callable[..., t.Any]
+        ] = {}
+        """The map of connected receivers. Useful to quickly check if any
+        receivers are connected to the signal: ``if s.receivers:``. The
+        structure and data is not part of the public API, but checking its
+        boolean value is.
         """
-        receiver_id = hashable_identity(receiver)
-        receiver_ref: T_callable | annotatable_weakref
+
+        self.is_muted: bool = False
+        self._by_receiver: dict[t.Any, set[t.Any]] = defaultdict(self.set_class)
+        self._by_sender: dict[t.Any, set[t.Any]] = defaultdict(self.set_class)
+        self._weak_senders: dict[t.Any, weakref.ref[t.Any]] = {}
+
+    def connect(self, receiver: F, sender: t.Any = ANY, weak: bool = True) -> F:
+        """Connect ``receiver`` to be called when the signal is sent by
+        ``sender``.
+
+        :param receiver: The callable to call when :meth:`send` is called with
+            the given ``sender``, passing ``sender`` as a positional argument
+            along with any extra keyword arguments.
+        :param sender: Any object or :data:`ANY`. ``receiver`` will only be
+            called when :meth:`send` is called with this sender. If ``ANY``, the
+            receiver will be called for any sender. A receiver may be connected
+            to multiple senders by calling :meth:`connect` multiple times.
+        :param weak: Track the receiver with a :mod:`weakref`. The receiver will
+            be automatically disconnected when it is garbage collected. When
+            connecting a receiver defined within a function, set to ``False``,
+            otherwise it will be disconnected when the function scope ends.
+        """
+        receiver_id = make_id(receiver)
+        sender_id = ANY_ID if sender is ANY else make_id(sender)
 
         if weak:
-            receiver_ref = reference(receiver, self._cleanup_receiver)
-            receiver_ref.receiver_id = receiver_id
+            self.receivers[receiver_id] = make_ref(
+                receiver, self._make_cleanup_receiver(receiver_id)
+            )
         else:
-            receiver_ref = receiver
-        sender_id: IdentityType
-        if sender is ANY:
-            sender_id = ANY_ID
-        else:
-            sender_id = hashable_identity(sender)
+            self.receivers[receiver_id] = receiver
 
-        self.receivers.setdefault(receiver_id, receiver_ref)
         self._by_sender[sender_id].add(receiver_id)
         self._by_receiver[receiver_id].add(sender_id)
-        del receiver_ref
 
         if sender is not ANY and sender_id not in self._weak_senders:
-            # wire together a cleanup for weakref-able senders
+            # store a cleanup for weakref-able senders
             try:
-                sender_ref = reference(sender, self._cleanup_sender)
-                sender_ref.sender_id = sender_id
+                self._weak_senders[sender_id] = make_ref(
+                    sender, self._make_cleanup_sender(sender_id)
+                )
             except TypeError:
                 pass
-            else:
-                self._weak_senders.setdefault(sender_id, sender_ref)
-                del sender_ref
 
-        # broadcast this connection.  if receivers raise, disconnect.
         if "receiver_connected" in self.__dict__ and self.receiver_connected.receivers:
             try:
                 self.receiver_connected.send(
                     self, receiver=receiver, sender=sender, weak=weak
                 )
-            except TypeError as e:
+            except TypeError:
+                # TODO no explanation or test for this
                 self.disconnect(receiver, sender)
-                raise e
-        if receiver_connected.receivers and self is not receiver_connected:
+                raise
+
+        if _receiver_connected.receivers and self is not _receiver_connected:
             try:
-                receiver_connected.send(
+                _receiver_connected.send(
                     self, receiver_arg=receiver, sender_arg=sender, weak_arg=weak
                 )
-            except TypeError as e:
+            except TypeError:
                 self.disconnect(receiver, sender)
-                raise e
+                raise
+
         return receiver
 
-    def connect_via(
-        self, sender: t.Any, weak: bool = False
-    ) -> t.Callable[[T_callable], T_callable]:
-        """Connect the decorated function as a receiver for *sender*.
+    def connect_via(self, sender: t.Any, weak: bool = False) -> c.Callable[[F], F]:
+        """Connect the decorated function to be called when the signal is sent
+        by ``sender``.
 
-        :param sender: Any object or :obj:`ANY`.  The decorated function
-          will only receive :meth:`send` emissions sent by *sender*.  If
-          ``ANY``, the receiver will always be notified.  A function may be
-          decorated multiple times with differing *sender* values.
+        The decorated function will be called when :meth:`send` is called with
+        the given ``sender``, passing ``sender`` as a positional argument along
+        with any extra keyword arguments.
 
-        :param weak: If true, the Signal will hold a weakref to the
-          decorated function and automatically disconnect when *receiver*
-          goes out of scope or is garbage collected.  Unlike
-          :meth:`connect`, this defaults to False.
-
-        The decorated function will be invoked by :meth:`send` with
-          `sender=` as a single positional argument and any ``kwargs`` that
-          were provided to the call to :meth:`send`.
-
+        :param sender: Any object or :data:`ANY`. ``receiver`` will only be
+            called when :meth:`send` is called with this sender. If ``ANY``, the
+            receiver will be called for any sender. A receiver may be connected
+            to multiple senders by calling :meth:`connect` multiple times.
+        :param weak: Track the receiver with a :mod:`weakref`. The receiver will
+            be automatically disconnected when it is garbage collected. When
+            connecting a receiver defined within a function, set to ``False``,
+            otherwise it will be disconnected when the function scope ends.=
 
         .. versionadded:: 1.1
-
         """
 
-        def decorator(fn: T_callable) -> T_callable:
+        def decorator(fn: F) -> F:
             self.connect(fn, sender, weak)
             return fn
 
@@ -215,208 +178,235 @@ class Signal:
 
     @contextmanager
     def connected_to(
-        self, receiver: t.Callable, sender: t.Any = ANY
-    ) -> t.Generator[None, None, None]:
-        """Execute a block with the signal temporarily connected to *receiver*.
+        self, receiver: c.Callable[..., t.Any], sender: t.Any = ANY
+    ) -> c.Generator[None, None, None]:
+        """A context manager that temporarily connects ``receiver`` to the
+        signal while a ``with`` block executes. When the block exits, the
+        receiver is disconnected. Useful for tests.
 
-        :param receiver: a receiver callable
-        :param sender: optional, a sender to filter on
-
-        This is a context manager for use in the ``with`` statement.  It can
-        be useful in unit tests.  *receiver* is connected to the signal for
-        the duration of the ``with`` block, and will be disconnected
-        automatically when exiting the block:
-
-        .. code-block:: python
-
-          with on_ready.connected_to(receiver):
-             # do stuff
-             on_ready.send(123)
+        :param receiver: The callable to call when :meth:`send` is called with
+            the given ``sender``, passing ``sender`` as a positional argument
+            along with any extra keyword arguments.
+        :param sender: Any object or :data:`ANY`. ``receiver`` will only be
+            called when :meth:`send` is called with this sender. If ``ANY``, the
+            receiver will be called for any sender.
 
         .. versionadded:: 1.1
-
         """
         self.connect(receiver, sender=sender, weak=False)
+
         try:
             yield None
         finally:
             self.disconnect(receiver)
 
     @contextmanager
-    def muted(self) -> t.Generator[None, None, None]:
-        """Context manager for temporarily disabling signal.
-        Useful for test purposes.
+    def muted(self) -> c.Generator[None, None, None]:
+        """A context manager that temporarily disables the signal. No receivers
+        will be called if the signal is sent, until the ``with`` block exits.
+        Useful for tests.
         """
         self.is_muted = True
+
         try:
             yield None
-        except Exception as e:
-            raise e
         finally:
             self.is_muted = False
 
     def temporarily_connected_to(
-        self, receiver: t.Callable, sender: t.Any = ANY
-    ) -> t.ContextManager[None]:
-        """An alias for :meth:`connected_to`.
+        self, receiver: c.Callable[..., t.Any], sender: t.Any = ANY
+    ) -> AbstractContextManager[None]:
+        """Deprecated alias for :meth:`connected_to`.
 
-        :param receiver: a receiver callable
-        :param sender: optional, a sender to filter on
+        .. deprecated:: 1.1
+            Renamed to ``connected_to``. Will be removed in Blinker 1.9.
 
         .. versionadded:: 0.9
-
-        .. versionchanged:: 1.1
-          Renamed to :meth:`connected_to`.  ``temporarily_connected_to`` was
-          deprecated in 1.2 and will be removed in a subsequent version.
-
         """
-        warn(
-            "temporarily_connected_to is deprecated; use connected_to instead.",
+        warnings.warn(
+            "'temporarily_connected_to' is renamed to 'connected_to'. The old name is"
+            " deprecated and will be removed in Blinker 1.9.",
             DeprecationWarning,
+            stacklevel=2,
         )
         return self.connected_to(receiver, sender)
 
     def send(
         self,
-        *sender: t.Any,
-        _async_wrapper: AsyncWrapperType | None = None,
+        sender: t.Any | None = None,
+        /,
+        *,
+        _async_wrapper: c.Callable[
+            [c.Callable[..., c.Coroutine[t.Any, t.Any, t.Any]]], c.Callable[..., t.Any]
+        ]
+        | None = None,
         **kwargs: t.Any,
-    ) -> list[tuple[t.Callable, t.Any]]:
-        """Emit this signal on behalf of *sender*, passing on ``kwargs``.
+    ) -> list[tuple[c.Callable[..., t.Any], t.Any]]:
+        """Call all receivers that are connected to the given ``sender``
+        or :data:`ANY`. Each receiver is called with ``sender`` as a positional
+        argument along with any extra keyword arguments. Return a list of
+        ``(receiver, return value)`` tuples.
 
-        Returns a list of 2-tuples, pairing receivers with their return
-        value. The ordering of receiver notification is undefined.
+        The order receivers are called is undefined, but can be influenced by
+        setting :attr:`set_class`.
 
-        :param sender: Any object or ``None``.  If omitted, synonymous
-          with ``None``.  Only accepts one positional argument.
-        :param _async_wrapper: A callable that should wrap a coroutine
-          receiver and run it when called synchronously.
+        If a receiver raises an exception, that exception will propagate up.
+        This makes debugging straightforward, with an assumption that correctly
+        implemented receivers will not raise.
 
-        :param kwargs: Data to be sent to receivers.
+        :param sender: Call receivers connected to this sender, in addition to
+            those connected to :data:`ANY`.
+        :param _async_wrapper: Will be called on any receivers that are async
+            coroutines to turn them into sync callables. For example, could run
+            the receiver with an event loop.
+        :param kwargs: Extra keyword arguments to pass to each receiver.
+
+        .. versionchanged:: 1.7
+            Added the ``_async_wrapper`` argument.
         """
         if self.is_muted:
             return []
 
-        sender = self._extract_sender(sender)
         results = []
+
         for receiver in self.receivers_for(sender):
             if iscoroutinefunction(receiver):
                 if _async_wrapper is None:
-                    raise RuntimeError("Cannot send to a coroutine function")
-                receiver = _async_wrapper(receiver)
-            result = receiver(sender, **kwargs)
+                    raise RuntimeError("Cannot send to a coroutine function.")
+
+                result = _async_wrapper(receiver)(sender, **kwargs)
+            else:
+                result = receiver(sender, **kwargs)
+
             results.append((receiver, result))
+
         return results
 
     async def send_async(
         self,
-        *sender: t.Any,
-        _sync_wrapper: SyncWrapperType | None = None,
+        sender: t.Any | None = None,
+        /,
+        *,
+        _sync_wrapper: c.Callable[
+            [c.Callable[..., t.Any]], c.Callable[..., c.Coroutine[t.Any, t.Any, t.Any]]
+        ]
+        | None = None,
         **kwargs: t.Any,
-    ) -> list[tuple[t.Callable, t.Any]]:
-        """Emit this signal on behalf of *sender*, passing on ``kwargs``.
+    ) -> list[tuple[c.Callable[..., t.Any], t.Any]]:
+        """Await all receivers that are connected to the given ``sender``
+        or :data:`ANY`. Each receiver is called with ``sender`` as a positional
+        argument along with any extra keyword arguments. Return a list of
+        ``(receiver, return value)`` tuples.
 
-        Returns a list of 2-tuples, pairing receivers with their return
-        value. The ordering of receiver notification is undefined.
+        The order receivers are called is undefined, but can be influenced by
+        setting :attr:`set_class`.
 
-        :param sender: Any object or ``None``.  If omitted, synonymous
-          with ``None``. Only accepts one positional argument.
-        :param _sync_wrapper: A callable that should wrap a synchronous
-          receiver and run it when awaited.
+        If a receiver raises an exception, that exception will propagate up.
+        This makes debugging straightforward, with an assumption that correctly
+        implemented receivers will not raise.
 
-        :param kwargs: Data to be sent to receivers.
+        :param sender: Call receivers connected to this sender, in addition to
+            those connected to :data:`ANY`.
+        :param _sync_wrapper: Will be called on any receivers that are sync
+            callables to turn them into async coroutines. For example,
+            could call the receiver in a thread.
+        :param kwargs: Extra keyword arguments to pass to each receiver.
+
+        .. versionadded:: 1.7
         """
         if self.is_muted:
             return []
 
-        sender = self._extract_sender(sender)
         results = []
+
         for receiver in self.receivers_for(sender):
             if not iscoroutinefunction(receiver):
                 if _sync_wrapper is None:
-                    raise RuntimeError("Cannot send to a non-coroutine function")
-                receiver = _sync_wrapper(receiver)
-            result = await receiver(sender, **kwargs)
+                    raise RuntimeError("Cannot send to a non-coroutine function.")
+
+                result = await _sync_wrapper(receiver)(sender, **kwargs)
+            else:
+                result = await receiver(sender, **kwargs)
+
             results.append((receiver, result))
+
         return results
 
-    def _extract_sender(self, sender: t.Any) -> t.Any:
-        if not self.receivers:
-            # Ensure correct signature even on no-op sends, disable with -O
-            # for lowest possible cost.
-            if __debug__ and sender and len(sender) > 1:
-                raise TypeError(
-                    f"send() accepts only one positional argument, {len(sender)} given"
-                )
-            return []
-
-        # Using '*sender' rather than 'sender=None' allows 'sender' to be
-        # used as a keyword argument- i.e. it's an invisible name in the
-        # function signature.
-        if len(sender) == 0:
-            sender = None
-        elif len(sender) > 1:
-            raise TypeError(
-                f"send() accepts only one positional argument, {len(sender)} given"
-            )
-        else:
-            sender = sender[0]
-        return sender
-
     def has_receivers_for(self, sender: t.Any) -> bool:
-        """True if there is probably a receiver for *sender*.
+        """Check if there is at least one receiver that will be called with the
+        given ``sender``. A receiver connected to :data:`ANY` will always be
+        called, regardless of sender. Does not check if weakly referenced
+        receivers are still live. See :meth:`receivers_for` for a stronger
+        search.
 
-        Performs an optimistic check only.  Does not guarantee that all
-        weakly referenced receivers are still alive.  See
-        :meth:`receivers_for` for a stronger search.
-
+        :param sender: Check for receivers connected to this sender, in addition
+            to those connected to :data:`ANY`.
         """
         if not self.receivers:
             return False
+
         if self._by_sender[ANY_ID]:
             return True
+
         if sender is ANY:
             return False
-        return hashable_identity(sender) in self._by_sender
+
+        return make_id(sender) in self._by_sender
 
     def receivers_for(
         self, sender: t.Any
-    ) -> t.Generator[t.Callable[[t.Any], t.Any], None, None]:
-        """Iterate all live receivers listening for *sender*."""
-        # TODO: test receivers_for(ANY)
-        if self.receivers:
-            sender_id = hashable_identity(sender)
-            if sender_id in self._by_sender:
-                ids = self._by_sender[ANY_ID] | self._by_sender[sender_id]
-            else:
-                ids = self._by_sender[ANY_ID].copy()
-            for receiver_id in ids:
-                receiver = self.receivers.get(receiver_id)
-                if receiver is None:
-                    continue
-                if isinstance(receiver, WeakTypes):
-                    strong = receiver()
-                    if strong is None:
-                        self._disconnect(receiver_id, ANY_ID)
-                        continue
-                    receiver = strong
-                yield receiver  # type: ignore[misc]
+    ) -> c.Generator[c.Callable[..., t.Any], None, None]:
+        """Yield each receiver to be called for ``sender``, in addition to those
+        to be called for :data:`ANY`. Weakly referenced receivers that are not
+        live will be disconnected and skipped.
 
-    def disconnect(self, receiver: t.Callable, sender: t.Any = ANY) -> None:
-        """Disconnect *receiver* from this signal's events.
-
-        :param receiver: a previously :meth:`connected<connect>` callable
-
-        :param sender: a specific sender to disconnect from, or :obj:`ANY`
-          to disconnect from all senders.  Defaults to ``ANY``.
-
+        :param sender: Yield receivers connected to this sender, in addition
+            to those connected to :data:`ANY`.
         """
-        sender_id: IdentityType
+        # TODO: test receivers_for(ANY)
+        if not self.receivers:
+            return
+
+        sender_id = make_id(sender)
+
+        if sender_id in self._by_sender:
+            ids = self._by_sender[ANY_ID] | self._by_sender[sender_id]
+        else:
+            ids = self._by_sender[ANY_ID].copy()
+
+        for receiver_id in ids:
+            receiver = self.receivers.get(receiver_id)
+
+            if receiver is None:
+                continue
+
+            if isinstance(receiver, weakref.ref):
+                strong = receiver()
+
+                if strong is None:
+                    self._disconnect(receiver_id, ANY_ID)
+                    continue
+
+                yield strong
+            else:
+                yield receiver
+
+    def disconnect(self, receiver: c.Callable[..., t.Any], sender: t.Any = ANY) -> None:
+        """Disconnect ``receiver`` from being called when the signal is sent by
+        ``sender``.
+
+        :param receiver: A connected receiver callable.
+        :param sender: Disconnect from only this sender. By default, disconnect
+            from all senders.
+        """
+        sender_id: c.Hashable
+
         if sender is ANY:
             sender_id = ANY_ID
         else:
-            sender_id = hashable_identity(sender)
-        receiver_id = hashable_identity(receiver)
+            sender_id = make_id(sender)
+
+        receiver_id = make_id(receiver)
         self._disconnect(receiver_id, sender_id)
 
         if (
@@ -425,63 +415,80 @@ class Signal:
         ):
             self.receiver_disconnected.send(self, receiver=receiver, sender=sender)
 
-    def _disconnect(self, receiver_id: IdentityType, sender_id: IdentityType) -> None:
+    def _disconnect(self, receiver_id: c.Hashable, sender_id: c.Hashable) -> None:
         if sender_id == ANY_ID:
-            if self._by_receiver.pop(receiver_id, False):
+            if self._by_receiver.pop(receiver_id, None) is not None:
                 for bucket in self._by_sender.values():
                     bucket.discard(receiver_id)
+
             self.receivers.pop(receiver_id, None)
         else:
             self._by_sender[sender_id].discard(receiver_id)
             self._by_receiver[receiver_id].discard(sender_id)
 
-    def _cleanup_receiver(self, receiver_ref: annotatable_weakref) -> None:
-        """Disconnect a receiver from all senders."""
-        self._disconnect(cast(IdentityType, receiver_ref.receiver_id), ANY_ID)
+    def _make_cleanup_receiver(
+        self, receiver_id: c.Hashable
+    ) -> c.Callable[[weakref.ref[c.Callable[..., t.Any]]], None]:
+        """Create a callback function to disconnect a weakly referenced
+        receiver when it is garbage collected.
+        """
 
-    def _cleanup_sender(self, sender_ref: annotatable_weakref) -> None:
-        """Disconnect all receivers from a sender."""
-        sender_id = cast(IdentityType, sender_ref.sender_id)
+        def cleanup(ref: weakref.ref[c.Callable[..., t.Any]]) -> None:
+            self._disconnect(receiver_id, ANY_ID)
+
+        return cleanup
+
+    def _make_cleanup_sender(
+        self, sender_id: c.Hashable
+    ) -> c.Callable[[weakref.ref[t.Any]], None]:
+        """Create a callback function to disconnect all receivers for a weakly
+        referenced sender when it is garbage collected.
+        """
         assert sender_id != ANY_ID
-        self._weak_senders.pop(sender_id, None)
-        for receiver_id in self._by_sender.pop(sender_id, ()):
-            self._by_receiver[receiver_id].discard(sender_id)
+
+        def cleanup(ref: weakref.ref[t.Any]) -> None:
+            self._weak_senders.pop(sender_id, None)
+
+            for receiver_id in self._by_sender.pop(sender_id, ()):
+                self._by_receiver[receiver_id].discard(sender_id)
+
+        return cleanup
 
     def _cleanup_bookkeeping(self) -> None:
         """Prune unused sender/receiver bookkeeping. Not threadsafe.
 
-        Connecting & disconnecting leave behind a small amount of bookkeeping
-        for the receiver and sender values. Typical workloads using Blinker,
-        for example in most web apps, Flask, CLI scripts, etc., are not
-        adversely affected by this bookkeeping.
+        Connecting & disconnecting leaves behind a small amount of bookkeeping
+        data. Typical workloads using Blinker, for example in most web apps,
+        Flask, CLI scripts, etc., are not adversely affected by this
+        bookkeeping.
 
-        With a long-running Python process performing dynamic signal routing
-        with high volume- e.g. connecting to function closures, "senders" are
-        all unique object instances, and doing all of this over and over- you
-        may see memory usage will grow due to extraneous bookkeeping. (An empty
-        set() for each stale sender/receiver pair.)
+        With a long-running process performing dynamic signal routing with high
+        volume, e.g. connecting to function closures, senders are all unique
+        object instances. Doing all of this over and over may cause memory usage
+        to grow due to extraneous bookkeeping. (An empty ``set`` for each stale
+        sender/receiver pair.)
 
         This method will prune that bookkeeping away, with the caveat that such
         pruning is not threadsafe. The risk is that cleanup of a fully
         disconnected receiver/sender pair occurs while another thread is
         connecting that same pair. If you are in the highly dynamic, unique
-        receiver/sender situation that has lead you to this method, that
-        failure mode is perhaps not a big deal for you.
+        receiver/sender situation that has lead you to this method, that failure
+        mode is perhaps not a big deal for you.
         """
         for mapping in (self._by_sender, self._by_receiver):
-            for _id, bucket in list(mapping.items()):
+            for ident, bucket in list(mapping.items()):
                 if not bucket:
-                    mapping.pop(_id, None)
+                    mapping.pop(ident, None)
 
     def _clear_state(self) -> None:
-        """Throw away all signal state.  Useful for unit tests."""
+        """Disconnect all receivers and senders. Useful for tests."""
         self._weak_senders.clear()
         self.receivers.clear()
         self._by_sender.clear()
         self._by_receiver.clear()
 
 
-receiver_connected = Signal(
+_receiver_connected = Signal(
     """\
 Sent by a :class:`Signal` after a receiver connects.
 
@@ -491,68 +498,124 @@ Sent by a :class:`Signal` after a receiver connects.
 :keyword weak_arg: true if the connection to receiver_arg is a weak reference
 
 .. deprecated:: 1.2
-
-As of 1.2, individual signals have their own private
-:attr:`~Signal.receiver_connected` and
-:attr:`~Signal.receiver_disconnected` signals with a slightly simplified
-call signature.  This global signal is planned to be removed in 1.6.
-
+    Individual signals have their own :attr:`~Signal.receiver_connected` and
+    :attr:`~Signal.receiver_disconnected` signals with a slightly simplified
+    call signature. This global signal will be removed in Blinker 1.9.
 """
 )
 
 
 class NamedSignal(Signal):
-    """A named generic notification emitter."""
+    """A named generic notification emitter. The name is not used by the signal
+    itself, but matches the key in the :class:`Namespace` that it belongs to.
+
+    :param name: The name of the signal within the namespace.
+    :param doc: The docstring for the signal.
+    """
 
     def __init__(self, name: str, doc: str | None = None) -> None:
-        Signal.__init__(self, doc)
+        super().__init__(doc)
 
         #: The name of this signal.
-        self.name = name
+        self.name: str = name
 
     def __repr__(self) -> str:
-        base = Signal.__repr__(self)
+        base = super().__repr__()
         return f"{base[:-1]}; {self.name!r}>"  # noqa: E702
 
 
-class Namespace(dict):
-    """A mapping of signal names to signals."""
+if t.TYPE_CHECKING:
+
+    class PNamespaceSignal(t.Protocol):
+        def __call__(self, name: str, doc: str | None = None) -> NamedSignal: ...
+
+    # Python < 3.9
+    _NamespaceBase = dict[str, NamedSignal]  # type: ignore[misc]
+else:
+    _NamespaceBase = dict
+
+
+class Namespace(_NamespaceBase):
+    """A dict mapping names to signals."""
 
     def signal(self, name: str, doc: str | None = None) -> NamedSignal:
-        """Return the :class:`NamedSignal` *name*, creating it if required.
+        """Return the :class:`NamedSignal` for the given ``name``, creating it
+        if required. Repeated calls with the same name return the same signal.
 
-        Repeated calls to this function will return the same signal object.
-
+        :param name: The name of the signal.
+        :param doc: The docstring of the signal.
         """
-        try:
-            return self[name]  # type: ignore[no-any-return]
-        except KeyError:
-            result = self.setdefault(name, NamedSignal(name, doc))
-            return result  # type: ignore[no-any-return]
+        if name not in self:
+            self[name] = NamedSignal(name, doc)
+
+        return self[name]
 
 
-class WeakNamespace(WeakValueDictionary):
-    """A weak mapping of signal names to signals.
+class _WeakNamespace(WeakValueDictionary):  # type: ignore[type-arg]
+    """A weak mapping of names to signals.
 
-    Automatically cleans up unused Signals when the last reference goes out
-    of scope.  This namespace implementation exists for a measure of legacy
-    compatibility with Blinker <= 1.2, and may be dropped in the future.
+    Automatically cleans up unused signals when the last reference goes out
+    of scope. This namespace implementation provides similar behavior to Blinker
+    <= 1.2.
+
+    .. deprecated:: 1.3
+        Will be removed in Blinker 1.9.
 
     .. versionadded:: 1.3
-
     """
 
+    def __init__(self) -> None:
+        warnings.warn(
+            "'WeakNamespace' is deprecated and will be removed in Blinker 1.9."
+            " Use 'Namespace' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__()
+
     def signal(self, name: str, doc: str | None = None) -> NamedSignal:
-        """Return the :class:`NamedSignal` *name*, creating it if required.
+        """Return the :class:`NamedSignal` for the given ``name``, creating it
+        if required. Repeated calls with the same name return the same signal.
 
-        Repeated calls to this function will return the same signal object.
-
+        :param name: The name of the signal.
+        :param doc: The docstring of the signal.
         """
-        try:
-            return self[name]  # type: ignore[no-any-return]
-        except KeyError:
-            result = self.setdefault(name, NamedSignal(name, doc))
-            return result  # type: ignore[no-any-return]
+        if name not in self:
+            self[name] = NamedSignal(name, doc)
+
+        return self[name]  # type: ignore[no-any-return]
 
 
-signal = Namespace().signal
+default_namespace: Namespace = Namespace()
+"""A default :class:`Namespace` for creating named signals. :func:`signal`
+creates a :class:`NamedSignal` in this namespace.
+"""
+
+signal: PNamespaceSignal = default_namespace.signal
+"""Return a :class:`NamedSignal` in :data:`default_namespace` with the given
+``name``, creating it if required. Repeated calls with the same name return the
+same signal.
+"""
+
+
+def __getattr__(name: str) -> t.Any:
+    if name == "receiver_connected":
+        warnings.warn(
+            "The global 'receiver_connected' signal is deprecated and will be"
+            " removed in Blinker 1.9. Use 'Signal.receiver_connected' and"
+            " 'Signal.receiver_disconnected' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _receiver_connected
+
+    if name == "WeakNamespace":
+        warnings.warn(
+            "'WeakNamespace' is deprecated and will be removed in Blinker 1.9."
+            " Use 'Namespace' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _WeakNamespace
+
+    raise AttributeError(name)

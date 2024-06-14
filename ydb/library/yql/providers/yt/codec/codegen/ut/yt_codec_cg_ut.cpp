@@ -101,9 +101,10 @@ public:
         YQL_ENSURE(!FirstBuffer_);
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         Y_UNUSED(rangeIndex);
         Y_UNUSED(rowIndex);
+        Y_UNUSED(error);
         return false;
     }
 

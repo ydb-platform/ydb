@@ -29,9 +29,9 @@ TSkiffRowTableReader::TSkiffRowTableReader(
 TSkiffRowTableReader::~TSkiffRowTableReader()
 { }
 
-bool TSkiffRowTableReader::Retry()
+bool TSkiffRowTableReader::Retry(const std::exception_ptr& error)
 {
-    if (PrepareRetry()) {
+    if (PrepareRetry(error)) {
         RowTaken_ = true;
         Next();
         return true;
@@ -39,9 +39,9 @@ bool TSkiffRowTableReader::Retry()
     return false;
 }
 
-bool TSkiffRowTableReader::PrepareRetry()
+bool TSkiffRowTableReader::PrepareRetry(const std::exception_ptr& error)
 {
-    if (Input_.Retry(RangeIndex_, RowIndex_)) {
+    if (Input_.Retry(RangeIndex_, RowIndex_, error)) {
         if (RangeIndex_) {
             RangeIndexShift_ += *RangeIndex_;
         }
@@ -69,7 +69,7 @@ void TSkiffRowTableReader::ReadRow(const ISkiffRowParserPtr& parser)
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Read error during parsing: %v", ex.what());
 
-            if (!Retry()) {
+            if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }
@@ -92,7 +92,7 @@ void TSkiffRowTableReader::SkipRow()
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Read error during skipping row: %v", ex.what());
 
-            if (!Retry()) {
+            if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }
@@ -173,7 +173,7 @@ void TSkiffRowTableReader::Next()
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Read error: %v", ex.what());
 
-            if (!PrepareRetry()) {
+            if (!PrepareRetry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }

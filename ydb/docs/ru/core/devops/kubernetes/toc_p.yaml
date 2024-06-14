@@ -1,0 +1,5 @@
+items:
+- name: Обзор
+  href: index.md
+- name: Первоначальное развёртывание
+  href: initial-deployment.md

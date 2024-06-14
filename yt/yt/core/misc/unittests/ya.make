@@ -22,8 +22,8 @@ SRCS(
     checksum_ut.cpp
     codicil_ut.cpp
     concurrent_cache_ut.cpp
+    consistent_hashing_ut.cpp
     default_map_ut.cpp
-    dnf_ut.cpp
     digest_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp

@@ -11,7 +11,7 @@
 
 {% node info %}
 
-Через интерфейс *Scan Queries* можно выполнять запросы к [системным таблицам](../../troubleshooting/system_views_db.md).
+Через интерфейс *Scan Queries* можно выполнять запросы к [системным таблицам](../../dev/system-views.md).
 
 {% endnote %}
 

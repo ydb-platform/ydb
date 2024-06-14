@@ -1,0 +1,179 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Backup;
+option java_package = "com.yandex.ydb.backup";
+
+import "google/protobuf/timestamp.proto";
+
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+
+// TODO: move to separate proto shared between different services
+message S3Settings {}
+
+message PathList {
+    repeated string paths = 1;
+}
+
+message S3Storage {
+    S3Settings s3_settings = 1;
+    string prefix = 2;
+    // and some additional storage settings, maybe different storage classes
+}
+
+message LocalStorage {}
+
+message BackupStorage {
+    oneof storage {
+        LocalStorage local = 1;
+        S3Storage s3 = 2;
+        // TODO: add file_storage
+    }
+}
+
+message ChangeStreamChunk {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        Broken = 3;
+        Deleting = 4;
+    }
+
+    string uuid = 1 [(required) = true];
+    State state = 2;
+    google.protobuf.Timestamp start_time = 3;
+    google.protobuf.Timestamp end_time = 4;
+}
+
+message FullBackup {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        Broken = 3;
+        Deleting = 4;
+    }
+
+    string uuid = 1 [(required) = true];
+    State state = 2;
+    google.protobuf.Timestamp time = 3;
+}
+
+message BackupTarget {
+    oneof target {
+        PathList explicit_paths = 1;
+    }
+}
+
+message Restore {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        // Stopped
+        // Cancelled
+    }
+
+    string uuid = 1 [(required) = true];
+}
+
+// Look at this as a Binding in YQ
+// Or as a View in C++
+message BackupCollection {
+    enum AccessFlags {
+        Unspecified = 0x00;
+        Read        = 0x01;
+        Write       = 0x02;
+        ReadWrite   = 0x03;
+    }
+
+    string uuid = 1 [(required) = true];
+    string description = 2;
+    uint32 access_flags = 3;
+    optional BackupTarget backup_target = 4;
+    repeated Restore restores = 5;
+    BackupStorage storage = 6;
+    repeated FullBackup full_backups = 7;
+    repeated ChangeStreamChunk change_stream_chunks = 8;
+}
+
+message FetchBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    BackupStorage backup_storage = 2;
+}
+
+message FetchBackupCollectionsResponse {
+    // Result of request will be stored inside operation with type FetchBackupCollectionsResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message FetchBackupCollectionsResult {
+    repeated BackupCollection backup_collections = 1;
+}
+
+message ListBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ListBackupCollectionsResponse {
+    // Result of request will be stored inside operation with type ListBackupCollectionsResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListBackupCollectionsResult {
+    repeated BackupCollection backup_collections = 1;
+}
+
+message CreateBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message CreateBackupCollectionResponse {
+    // Result of request will be stored inside operation with type CreateBackupCollectionResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateBackupCollectionResult {
+    BackupCollection backup_collection = 1;
+}
+
+message ReadBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ReadBackupCollectionResponse {
+    // Result of request will be stored inside operation with type ReadBackupCollectionResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadBackupCollectionResult {
+    BackupCollection backup_collection = 1;
+}
+
+message UpdateBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message UpdateBackupCollectionResponse {
+    // Result of request will be stored inside operation with type UpdateBackupCollectionResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message UpdateBackupCollectionResult {
+    BackupCollection backup_collection = 1;
+}
+
+message DeleteBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message DeleteBackupCollectionResponse {
+    // Result of request will be stored inside operation with type DeleteBackupCollectionResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteBackupCollectionResult {
+    BackupCollection backup_collection = 1;
+}

@@ -1154,6 +1154,10 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
     EXTRACT_VAL(Datetime, uint32, ui32);
     EXTRACT_VAL(Timestamp, uint64, ui64);
     EXTRACT_VAL(Interval, int64, i64);
+    EXTRACT_VAL(Date32, int32, i32);
+    EXTRACT_VAL(Datetime64, int64, i64);
+    EXTRACT_VAL(Timestamp64, int64, i64);
+    EXTRACT_VAL(Interval64, int64, i64);
     case NScheme::NTypeIds::Json :
     case NScheme::NTypeIds::Utf8 : {
             TString v = val.Gettext_value();
@@ -1325,15 +1329,21 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Json:
         vb.Json(getString());
         break;
-    case EPrimitiveType::Uuid:
-        vb.Uuid(getString());
+    case EPrimitiveType::Uuid: {
+        ui64 hi;
+        ui64 lo;
+        NUuid::UuidBytesToHalfs(cell.AsBuf().Data(), 16, hi, lo);
+        vb.Uuid(TUuidValue(lo, hi));
         break;
+    }
     case EPrimitiveType::JsonDocument:
-        vb.JsonDocument(getString());
+        vb.JsonDocument(NBinaryJson::SerializeToJson(getString()));
         break;
     case EPrimitiveType::DyNumber:
         vb.DyNumber(getString());
         break;
+    default:
+        Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
     }
 }
 

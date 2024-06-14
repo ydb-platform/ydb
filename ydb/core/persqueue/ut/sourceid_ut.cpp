@@ -492,6 +492,27 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         }
     }
 
+    Y_UNIT_TEST(ExpensiveCleanup) {
+        TSourceIdStorage storage;
+        ui64 offset = 0;
+
+        // initial info w/o heartbeats
+        for (ui32 i = 1; i <= 100000; ++i) {
+            storage.RegisterSourceId(TestSourceId(i), MakeExplicitSourceIdInfo(++offset));
+        }
+
+        NKikimrPQ::TPartitionConfig config;
+        config.SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        for (ui32 i = 0; i < 1000; ++i) {
+            Cerr << "Iteration " << i << "\n";
+            const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 1'000'000, TPartitionId(TestPartition), config);
+            UNIT_ASSERT_EQUAL(dropped, false);
+        }
+
+    }
+
 } // TSourceIdTests
 
 } // namespace NKikimr::NPQ

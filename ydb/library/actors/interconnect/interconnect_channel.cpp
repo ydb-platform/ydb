@@ -21,7 +21,7 @@ namespace NActors {
         event.Span.EndOk();
 
         Y_ABORT_UNLESS(SerializationInfo);
-        const ui32 flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
+        const ui32 flags = (event.Descr.Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession)) |
             (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
         // prepare descriptor record

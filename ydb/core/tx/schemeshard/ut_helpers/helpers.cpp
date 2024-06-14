@@ -836,6 +836,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableAlterCdcStream)
     GENERIC_HELPERS(DropCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableDropCdcStream)
 
+    // continuous backup
+    GENERIC_HELPERS(CreateContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableCreateContinuousBackup)
+    GENERIC_HELPERS(AlterContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableAlterContinuousBackup)
+    GENERIC_HELPERS(DropContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableDropContinuousBackup)
+
     // olap store
     GENERIC_HELPERS(CreateOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnStore)
     GENERIC_HELPERS(AlterOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnStore)
@@ -851,12 +856,16 @@ namespace NSchemeShardUT_Private {
     // sequence
     GENERIC_HELPERS(CreateSequence, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)
     GENERIC_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    GENERIC_HELPERS(AlterSequence, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)
     DROP_BY_PATH_ID_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence)
 
     // replication
     GENERIC_HELPERS(CreateReplication, NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication, &NKikimrSchemeOp::TModifyScheme::MutableReplication)
+    GENERIC_HELPERS(AlterReplication, NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
     GENERIC_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication)
+    GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
 
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)
@@ -2192,6 +2201,14 @@ namespace NSchemeShardUT_Private {
         }
     }
 
+    TEvTx* InternalTransaction(TEvTx* tx) {
+        for (auto& x : *tx->Record.MutableTransaction()) {
+            x.SetInternal(true);
+        }
+
+        return tx;
+    }
+
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
         return runtime.SetObserverFunc([&suppressed, type](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == type) {
@@ -2362,16 +2379,17 @@ namespace NSchemeShardUT_Private {
         runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(), sender, request.Release()));
     }
 
-    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender) {
+    i64 WaitNextValResult(
+            TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus) {
         auto ev = runtime.GrabEdgeEventRethrow<NSequenceProxy::TEvSequenceProxy::TEvNextValResult>(sender);
         auto* msg = ev->Get();
-        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
         return msg->Value;
     }
 
-    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path) {
+    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path, Ydb::StatusIds::StatusCode expectedStatus) {
         auto sender = runtime.AllocateEdgeActor(0);
         SendNextValRequest(runtime, sender, path);
-        return WaitNextValResult(runtime, sender);
+        return WaitNextValResult(runtime, sender, expectedStatus);
     }
 }

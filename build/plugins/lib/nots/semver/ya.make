@@ -1,4 +1,4 @@
-OWNER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend_build_platform)
 
 PY3_LIBRARY()
 

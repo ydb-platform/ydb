@@ -465,5 +465,18 @@ namespace NJobProberClient {
 
 } // namespace NJobProberClient
 
+
+
+// from ./ytlib/sequoia_client/public.h
+namespace NSequoiaClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+    constexpr int SequoiaRetriableError = 6002;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NSequoiaClient
+
 } // namespace NClusterErrorCodes
 } // namespace NYT

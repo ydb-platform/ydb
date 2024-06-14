@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
@@ -144,7 +145,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -236,7 +238,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -327,7 +330,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -420,7 +424,7 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::StringBuilder>("data_column", colData, arrow::utf8()),
+                        MakeArray<arrow::BinaryBuilder>("data_column", colData, arrow::binary()),
                         MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
                         NewSuccess());
             // clang-format on
@@ -430,7 +434,8 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 

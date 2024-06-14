@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/library/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -78,7 +79,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     const auto details = GetChangeRecordDetails(runtime, sender, tabletId);
     UNIT_ASSERT_VALUES_EQUAL(records.size(), details.size());
 
-    THashMap<TPathId, TVector<NChangeExchange::IChangeRecord::TPtr>> result;
+    THashMap<TPathId, TVector<TChangeRecord::TPtr>> result;
     for (size_t i = 0; i < records.size(); ++i) {
         const auto& record = records.at(i);
         const auto& detail = details.at(i);
@@ -87,7 +88,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
         const auto& pathId = std::get<4>(record);
         auto it = result.find(pathId);
         if (it == result.end()) {
-            it = result.emplace(pathId, TVector<NChangeExchange::IChangeRecord::TPtr>()).first;
+            it = result.emplace(pathId, TVector<TChangeRecord::TPtr>()).first;
         }
 
         it->second.push_back(
@@ -106,7 +107,29 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     return result;
 }
 
-using TStructKey = TVector<std::pair<TString, ui32>>;
+struct TUuidHolder {
+    TString Uuid;
+
+    TUuidHolder(const TString& uuid)
+        : Uuid(uuid)
+    {}
+
+    bool operator==(const TUuidHolder& rhs) const {
+        return Uuid == rhs.Uuid;
+    }
+
+    IOutputStream& operator<<(IOutputStream& os) const {
+        os << Uuid;
+        return os;
+    }
+
+    void Out(IOutputStream& out) const {
+        out << Uuid;
+    }
+};
+
+template <typename V>
+using TStructKey = TVector<std::pair<TString, V>>;
 using TStructValue = THashMap<TString, ui32>;
 constexpr ui32 Null = 0;
 
@@ -115,26 +138,36 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
     out << "{";
     for (const auto& [k, v] : c) {
         out << " (" << k << ": ";
-        if (v == Null) {
-            out << "null";
-        } else {
+
+        bool isUintNull = false;
+
+        if constexpr (std::is_same_v<C, ui32>) {
+            if (v == Null) {
+                isUintNull = true;
+                out << "null";
+            }
+        }
+
+        if (!isUintNull) {
             out << v;
         }
+
         out << ")";
     }
     out << " }";
 }
 
-struct TStructRecord {
+template <typename SK>
+struct TStructRecordBase {
     NTable::ERowOp Rop;
-    TStructKey Key;
+    TStructKey<SK> Key;
     TStructValue Update;
     TStructValue OldImage;
     TStructValue NewImage;
 
-    TStructRecord() = default;
+    TStructRecordBase() = default;
 
-    TStructRecord(NTable::ERowOp rop, const TStructKey& key,
+    TStructRecordBase(NTable::ERowOp rop, const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
             const TStructValue& newImage = {})
@@ -146,7 +179,7 @@ struct TStructRecord {
     {
     }
 
-    bool operator==(const TStructRecord& rhs) const {
+    bool operator==(const TStructRecordBase<SK>& rhs) const {
         return Rop == rhs.Rop
             && Key == rhs.Key
             && Update == rhs.Update
@@ -164,19 +197,19 @@ struct TStructRecord {
         << " }";
     }
 
-    static TStructRecord Parse(const NKikimrChangeExchange::TDataChange& proto,
+    static TStructRecordBase<SK> Parse(const NKikimrChangeExchange::TDataChange& proto,
             const THashMap<NTable::TTag, TString>& tagToName)
     {
-        TStructRecord record;
+        TStructRecordBase<SK> record;
 
-        Parse(proto.GetKey(), tagToName, [&record](const TString& name, ui32 value) {
+        Parse<SK>(proto.GetKey(), tagToName, [&record](const TString& name, SK value) {
             record.Key.emplace_back(name, value);
         });
 
         switch (proto.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
             record.Rop = NTable::ERowOp::Upsert;
-            Parse(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
                 record.Update.emplace(name, value);
             });
             break;
@@ -189,13 +222,13 @@ struct TStructRecord {
         }
 
         if (proto.HasOldImage()) {
-            Parse(proto.GetOldImage(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetOldImage(), tagToName, [&record](const TString& name, ui32 value) {
                 record.OldImage.emplace(name, value);
             });
         }
 
         if (proto.HasNewImage()) {
-            Parse(proto.GetNewImage(), tagToName, [&record](const TString& name, ui32 value) {
+            Parse<ui32>(proto.GetNewImage(), tagToName, [&record](const TString& name, ui32 value) {
                 record.NewImage.emplace(name, value);
             });
         }
@@ -203,17 +236,19 @@ struct TStructRecord {
         return record;
     }
 
-    static TStructRecord Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
+    static TStructRecordBase<SK> Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
         return Parse(proto, tagToName);
     }
 
 private:
-    using TInserter = std::function<void(const TString&, ui32)>;
+    template <typename T>
+    using TInserter = std::function<void(const TString&, T)>;
 
+    template <typename T>
     static void Parse(const NKikimrChangeExchange::TDataChange::TSerializedCells& proto,
-            const THashMap<NTable::TTag, TString>& tagToName, TInserter inserter)
+            const THashMap<NTable::TTag, TString>& tagToName, TInserter<T> inserter)
     {
         TSerializedCellVec serialized;
         UNIT_ASSERT(TSerializedCellVec::TryParse(proto.GetData(), serialized));
@@ -231,20 +266,34 @@ private:
             const auto& cell = cells.at(i);
 
             if (cell.IsNull()) {
-                inserter(name, Null);
+                if constexpr (std::is_same_v<T, ui32>) {
+                    inserter(name, Null);
+                } else if constexpr (std::is_same_v<T, TUuidHolder>) {
+                    inserter(name, TUuidHolder("null"));
+                }
             } else {
-                inserter(name, cell.AsValue<ui32>());
+                if constexpr (std::is_same_v<T, ui32>) {
+                    inserter(name, cell.AsValue<ui32>());
+                } else if constexpr (std::is_same_v<T, TUuidHolder>) {
+                    TStringStream ss;
+                    NUuid::UuidBytesToString(cell.Data(), ss);
+                    inserter(name, TUuidHolder(ss.Str()));
+                }
             }
         }
     }
 };
 
-using TStructRecords = THashMap<TString, TVector<TStructRecord>>;
+using TStructRecord = TStructRecordBase<ui32>;
+
+template <typename SK>
+using TStructRecords = THashMap<TString, TVector<TStructRecordBase<SK>>>;
 
 } // anonymous
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
-    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords& expectedRecords) {
+    template <typename SK = ui32>
+    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
 
@@ -309,13 +358,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
 
-    void Run(const TString& path, const TShardedTableOptions& opts, const TString& query, const TStructRecords& expectedRecords) {
+    template <typename SK = ui32>
+    void Run(const TString& path, const TShardedTableOptions& opts, const TString& query, const TStructRecords<SK>& expectedRecords) {
         Run(path, opts, TVector<TString>(1, query), expectedRecords);
     }
 
@@ -618,9 +668,10 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return pqConfig;
     }
 
+    template <typename SK = ui32>
     void Run(const NFake::TCaches& cacheParams, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
-            const TVector<TString>& queries, const TStructRecords& expectedRecords)
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
@@ -635,7 +686,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetCacheParams(cacheParams);
+            .SetCacheParams(cacheParams)
+            .SetEnableUuidAsPrimaryKey(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -710,8 +762,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i)->GetBody(), tagToName));
-                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->Get<TChangeRecord>()->GetSchemaVersion(), entry.TableId.SchemaVersion);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecordBase<SK>::Parse(actual.at(i)->GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i)->GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -726,20 +778,30 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return params;
     }
 
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
-            const TVector<TString>& queries, const TStructRecords& expectedRecords)
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
     }
 
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TCdcStream& stream,
-            const TString& query, const TStructRecords& expectedRecords)
+            const TString& query, const TStructRecords<SK>& expectedRecords)
     {
         Run(path, opts, TVector<TCdcStream>(1, stream), TVector<TString>(1, query), expectedRecords);
     }
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions();
+    }
+
+    TShardedTableOptions UuidTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uuid", true, false},
+                {"value", "Uint32", false, false},
+            });
     }
 
     TCdcStream KeysOnly() {
@@ -785,6 +847,12 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     Y_UNIT_TEST(InsertSingleRow) {
         Run("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
             {"keys_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}})}},
+        });
+    }
+
+    Y_UNIT_TEST(InsertSingleUuidRow) {
+        Run<TUuidHolder>("/Root/path", UuidTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (Uuid(\"65df1ec1-a97d-47b2-ae56-3c023da6ee8c\"), 10);", {
+            {"keys_stream", {TStructRecordBase<TUuidHolder>(NTable::ERowOp::Upsert, {{"key", TUuidHolder("65df1ec1-a97d-47b2-ae56-3c023da6ee8c")}})}},
         });
     }
 
@@ -960,8 +1028,20 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecord, out, value) {
     return value.Out(out);
 }
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey, out, value) {
-    return NKikimr::OutKvContainer(out, value);
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructRecordBase<NKikimr::TUuidHolder>, out, value) {
+    return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TUuidHolder, out, value) {
+    return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey<ui32>, out, value) {
+    return NKikimr::OutKvContainer<NKikimr::TStructKey<ui32>>(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructKey<NKikimr::TUuidHolder>, out, value) {
+    return NKikimr::OutKvContainer<NKikimr::TStructKey<NKikimr::TUuidHolder>>(out, value);
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::TStructValue, out, value) {

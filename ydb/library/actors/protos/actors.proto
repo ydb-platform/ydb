@@ -11,11 +11,6 @@ message TTraceId {
     optional bytes Data = 1;
 }
 
-message TCallbackException {
-    required TActorId ActorId = 1;
-    required string ExceptionMessage = 2;
-}
-
 message TRemoteHttpInfo {
     message TQueryParam {
         optional string Key = 1;

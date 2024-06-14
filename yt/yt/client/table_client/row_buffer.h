@@ -89,9 +89,9 @@ public:
         const TTableSchema& tableSchema,
         int schemafulColumnCount,
         const TNameTableToSchemaIdMapping& idMapping,
-        std::vector<bool>* columnPresenceBuffer,
+        bool validateDuplicateAndRequiredValueColumns,
         bool preserveIds = false,
-        std::optional<TUnversionedValue> addend = std::nullopt);
+        std::optional<TUnversionedValue> addend = {});
 
     //! Captures the row applying #idMapping to value ids.
     //! #idMapping must be identity for key columns.
@@ -100,7 +100,7 @@ public:
         TVersionedRow row,
         const TTableSchema& tableSchema,
         const TNameTableToSchemaIdMapping& idMapping,
-        std::vector<bool>* columnPresenceBuffer,
+        bool validateDuplicateAndRequiredValueColumns,
         bool allowMissingKeyColumns = false);
 
     i64 GetSize() const;

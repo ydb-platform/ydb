@@ -16,6 +16,8 @@ struct TTransactionStartOptions
     //! If not null then the transaction must use this externally provided id.
     //! Only applicable to tablet transactions.
     NTransactionClient::TTransactionId Id;
+    //! Cell tag used for id generation. Used for Sequoia transactions.
+    std::optional<NObjectClient::TCellTag> CellTag;
 
     NTransactionClient::TTransactionId ParentId;
     std::vector<NTransactionClient::TTransactionId> PrerequisiteTransactionIds;

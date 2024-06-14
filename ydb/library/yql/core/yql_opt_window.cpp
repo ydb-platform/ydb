@@ -2,6 +2,8 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_type_annotation.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
@@ -44,13 +46,13 @@ EFrameBoundsType FrameBoundsType(const TWindowFrameSettings& settings) {
     return EFrameBoundsType::GENERIC;
 }
 
-TExprNode::TPtr ReplaceLastLambdaArgWithStringLiteral(const TExprNode& lambda, TStringBuf literal, TExprContext& ctx) {
+TExprNode::TPtr ReplaceLastLambdaArgWithUnsignedLiteral(const TExprNode& lambda, ui32 literal, TExprContext& ctx) {
     YQL_ENSURE(lambda.IsLambda());
     TExprNodeList args = lambda.ChildPtr(0)->ChildrenList();
     YQL_ENSURE(!args.empty());
 
     auto literalNode = ctx.Builder(lambda.Pos())
-        .Callable("String")
+        .Callable("Uint32")
             .Atom(0, literal)
         .Seal()
         .Build();
@@ -138,7 +140,7 @@ struct TRawTrait {
 
     TExprNode::TPtr CalculateLambda;
     TMaybe<i64> CalculateLambdaLead; // lead/lag for input to CalculateLambda;
-
+    TVector<TExprNode::TPtr> Params; // NTile
 
     const TTypeAnnotationNode* OutputType = nullptr;
 
@@ -207,7 +209,7 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
             rawTraits.FrameSettings = frameSettings;
             rawTraits.Pos = traits->Pos();
 
-            YQL_ENSURE(traits->IsCallable("WindowTraits") || ft == EFrameType::FrameByRows, "Non-canonical frame for window functions");
+            YQL_ENSURE(traits->IsCallable({"WindowTraits","CumeDist"}) || ft == EFrameType::FrameByRows, "Non-canonical frame for window functions");
             if (traits->IsCallable("WindowTraits")) {
                 maxDataOutpace = Max(maxDataOutpace, frameOutpace);
                 maxDataLag = Max(maxDataLag, frameLag);
@@ -220,11 +222,11 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 YQL_ENSURE(rawTraits.OutputType);
 
                 if (initLambda->Child(0)->ChildrenSize() == 2) {
-                    initLambda = ReplaceLastLambdaArgWithStringLiteral(*initLambda, name, ctx);
+                    initLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*initLambda, i, ctx);
                 }
 
                 if (updateLambda->Child(0)->ChildrenSize() == 3) {
-                    updateLambda = ReplaceLastLambdaArgWithStringLiteral(*updateLambda, name, ctx);
+                    updateLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*updateLambda, i, ctx);
                 }
 
                 auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -268,16 +270,19 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 rawTraits.CalculateLambdaLead = lead;
                 rawTraits.OutputType = traits->Child(1)->GetTypeAnn();
                 YQL_ENSURE(rawTraits.OutputType);
-            } else if (traits->IsCallable({"Rank", "DenseRank"})) {
+            } else if (traits->IsCallable({"Rank", "DenseRank", "PercentRank"})) {
                 rawTraits.OutputType = traits->Child(1)->GetTypeAnn();
                 auto lambdaInputType =
                     traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType();
                 auto lambda = ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), *lambdaInputType, ctx);
                 rawTraits.CalculateLambda = ctx.ChangeChild(*traits, 1, std::move(lambda));
             } else {
-                YQL_ENSURE(traits->IsCallable("RowNumber"));
+                YQL_ENSURE(traits->IsCallable({"RowNumber","CumeDist","NTile"}));
                 rawTraits.CalculateLambda = traits;
                 rawTraits.OutputType = traits->GetTypeAnn();
+                for (ui32 i = 1; i < traits->ChildrenSize(); ++i) {
+                    rawTraits.Params.push_back(traits->ChildPtr(i));
+                }
             }
         }
     }
@@ -290,6 +295,14 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
 TExprNode::TPtr BuildUint64(TPositionHandle pos, ui64 value, TExprContext& ctx) {
     return ctx.Builder(pos)
         .Callable("Uint64")
+            .Atom(0, ToString(value))
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildDouble(TPositionHandle pos, double value, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("Double")
             .Atom(0, ToString(value))
         .Seal()
         .Build();
@@ -355,40 +368,27 @@ TExprNode::TPtr BuildQueue(TPositionHandle pos, const TTypeAnnotationNode& itemT
 TExprNode::TPtr CoalesceQueueOutput(TPositionHandle pos, const TExprNode::TPtr& output, bool rawOutputIsOptional,
     const TExprNode::TPtr& defaultValue, TExprContext& ctx)
 {
-    if (defaultValue->IsCallable("Null")) {
-        if (!rawOutputIsOptional) {
-            return output;
-        }
-
+    // output is has type Optional<RawOutputType>
+    if (!rawOutputIsOptional) {
         return ctx.Builder(pos)
-            .Callable("IfPresent")
+            .Callable("Coalesce")
                 .Add(0, output)
-                .Lambda(1)
-                    .Param("item")
-                    .Arg("item")
-                .Seal()
-                .Callable(2, "Null")
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    if (defaultValue->IsCallable("EmptyList")) {
-        return ctx.Builder(pos)
-            .Callable("FlatMap")
-                .Add(0, output)
-                .Lambda(1)
-                    .Param("item")
-                    .Arg("item")
-                .Seal()
+                .Add(1, defaultValue)
             .Seal()
             .Build();
     }
 
     return ctx.Builder(pos)
-        .Callable("Coalesce")
+        .Callable("IfPresent")
             .Add(0, output)
-            .Add(1, defaultValue)
+            .Lambda(1)
+                .Param("item")
+                .Callable("Coalesce")
+                    .Arg(0, "item")
+                    .Add(1, defaultValue)
+                .Seal()
+            .Seal()
+            .Add(2, defaultValue)
         .Seal()
         .Build();
 }
@@ -412,13 +412,28 @@ TExprNode::TPtr BuildInitLambdaForChain1Map(TPositionHandle pos, const TExprNode
         .Lambda()
             .Param("row")
             .List()
-                .Apply(0, calculateLambda)
-                    .With(0)
-                        .Apply(initStateLambda)
-                            .With(0, "row")
-                        .Seal()
-                    .Done()
-                .Seal()
+                .Do([&](TExprNodeBuilder& parent)->TExprNodeBuilder& {
+                    if (calculateLambda->Head().ChildrenSize() == 1) {
+                        parent.Apply(0, calculateLambda)
+                            .With(0)
+                                .Apply(initStateLambda)
+                                    .With(0, "row")
+                                .Seal()
+                            .Done()
+                        .Seal();
+                    } else {
+                        parent.Apply(0, calculateLambda)
+                            .With(0)
+                                .Apply(initStateLambda)
+                                    .With(0, "row")
+                                .Seal()
+                            .Done()
+                            .With(1, "row")
+                        .Seal();
+                    }
+
+                    return parent;
+                })
                 .Apply(1, initStateLambda)
                     .With(0, "row")
                 .Seal()
@@ -435,14 +450,30 @@ TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNo
             .Param("row")
             .Param("state")
             .List()
-                .Apply(0, calculateLambda)
-                    .With(0)
-                        .Apply(updateStateLambda)
-                            .With(0, "row")
-                            .With(1, "state")
-                        .Seal()
-                    .Done()
-                .Seal()
+                .Do([&](TExprNodeBuilder& parent)->TExprNodeBuilder& {
+                    if (calculateLambda->Head().ChildrenSize() == 1) {
+                        parent.Apply(0, calculateLambda)
+                            .With(0)
+                                .Apply(updateStateLambda)
+                                    .With(0, "row")
+                                    .With(1, "state")
+                                .Seal()
+                            .Done()
+                        .Seal();
+                    } else {
+                        parent.Apply(0, calculateLambda)
+                            .With(0)
+                                .Apply(updateStateLambda)
+                                    .With(0, "row")
+                                    .With(1, "state")
+                                .Seal()
+                            .Done()
+                            .With(1, "row")
+                        .Seal();
+                    }
+
+                    return parent;
+                })
                 .Apply(1, updateStateLambda)
                     .With(0, "row")
                     .With(1, "state")
@@ -597,6 +628,128 @@ public:
             .Seal()
             .Build();
     }
+};
+
+class TChain1MapTraitsCumeDist : public TChain1MapTraits {
+public:
+    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+        : TChain1MapTraits(name, raw.Pos)
+        , PartitionRowsColumn(partitionRowsColumn)
+    {
+    }
+
+    // Lambda(row) -> AsTuple(output, state)
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+        Y_UNUSED(dataQueue);
+        return ctx.Builder(GetPos())
+            .Lambda()
+                .Param("row")
+                .List()
+                    .Callable(0, "/")
+                        .Add(0, BuildDouble(GetPos(), 1.0, ctx))
+                        .Callable(1, "Member")
+                            .Arg(0, "row")
+                            .Atom(1, PartitionRowsColumn)
+                        .Seal()
+                    .Seal()
+                    .Add(1, BuildUint64(GetPos(), 1, ctx))
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    // Lambda(row, state) -> AsTuple(output, state)
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+        Y_UNUSED(dataQueue);
+        return ctx.Builder(GetPos())
+            .Lambda()
+                .Param("row")
+                .Param("state")
+                .List()
+                    .Callable(0, "/")
+                        .Callable(0, "SafeCast")
+                            .Callable(0, "Inc")
+                                .Arg(0, "state")
+                            .Seal()
+                            .Atom(1, "Double")
+                        .Seal()
+                        .Callable(1, "Member")
+                            .Arg(0, "row")
+                            .Atom(1, PartitionRowsColumn)
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Inc")
+                        .Arg(0, "state")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+private:
+    const TString PartitionRowsColumn;
+};
+
+class TChain1MapTraitsNTile : public TChain1MapTraits {
+public:
+    TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+        : TChain1MapTraits(name, raw.Pos)
+        , PartitionRowsColumn(partitionRowsColumn)
+    {
+        YQL_ENSURE(raw.Params.size() == 1);
+        Param = raw.Params[0];
+    }
+
+    // Lambda(row) -> AsTuple(output, state)
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+        Y_UNUSED(dataQueue);
+        return ctx.Builder(GetPos())
+            .Lambda()
+                .Param("row")
+                .List()
+                    .Add(0, BuildUint64(GetPos(), 1, ctx))
+                    .Add(1, BuildUint64(GetPos(), 1, ctx))
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    // Lambda(row, state) -> AsTuple(output, state)
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+        Y_UNUSED(dataQueue);
+        return ctx.Builder(GetPos())
+            .Lambda()
+                .Param("row")
+                .Param("state")
+                .List()
+                    .Callable(0, "Inc")
+                        .Callable(0, "Unwrap")
+                            .Callable(0, "/")
+                                .Callable(0, "*")
+                                    .Callable(0, "SafeCast")
+                                        .Add(0, Param)
+                                        .Atom(1, "Uint64")
+                                    .Seal()
+                                    .Arg(1, "state")
+                                .Seal()
+                                .Callable(1, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, PartitionRowsColumn)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Inc")
+                        .Arg(0, "state")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+private:
+    const TString PartitionRowsColumn;
+    TExprNode::TPtr Param;
 };
 
 class TChain1MapTraitsRankBase : public TChain1MapTraits {
@@ -809,6 +962,44 @@ public:
     }
 };
 
+class TChain1MapTraitsPercentRank : public TChain1MapTraitsRank {
+public:
+    TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+        : TChain1MapTraitsRank(name, raw)
+        , PartitionRowsColumn(partitionRowsColumn)
+    {
+    }
+
+  virtual TExprNode::TPtr BuildCalculateLambda(TExprContext& ctx) const {
+        return ctx.Builder(GetPos())
+            .Lambda()
+                .Param("state")
+                .Param("row")
+                .Callable("/")
+                    .Callable(0, "SafeCast")
+                        .Callable(0, "Dec")
+                            .Callable(0, "Nth")
+                                .Arg(0, "state")
+                                .Atom(1, "0")
+                            .Seal()
+                        .Seal()
+                        .Atom(1, "Double")
+                    .Seal()
+                    .Callable(1, "Dec")
+                        .Callable(0, "Member")
+                            .Arg(0, "row")
+                            .Atom(1, PartitionRowsColumn)
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+private:
+    const TString PartitionRowsColumn;
+};
+
 class TChain1MapTraitsDenseRank : public TChain1MapTraitsRankBase {
 public:
     TChain1MapTraitsDenseRank(TStringBuf name, const TRawTrait& raw)
@@ -871,6 +1062,7 @@ class TChain1MapTraitsStateBase : public TChain1MapTraits {
 public:
     TChain1MapTraitsStateBase(TStringBuf name, const TRawTrait& raw)
         : TChain1MapTraits(name, raw.Pos)
+        , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
         , InitLambda(raw.InitLambda)
         , UpdateLambda(raw.UpdateLambda)
         , CalculateLambda(raw.CalculateLambda)
@@ -894,6 +1086,8 @@ protected:
     TExprNode::TPtr GetDefaultValue() const {
         return DefaultValue;
     }
+
+    const bool FrameNeverEmpty;
 
 private:
     const TExprNode::TPtr InitLambda;
@@ -930,6 +1124,7 @@ public:
             return {};
         }
 
+        YQL_ENSURE(!FrameNeverEmpty);
         auto output = ctx.Builder(GetPos())
             .Callable("Map")
                 .Add(0, BuildQueuePeek(GetPos(), lagQueue, *LaggingQueueIndex, dependsOn, ctx))
@@ -1103,7 +1298,6 @@ public:
         : TChain1MapTraitsStateBase(name, raw)
         , QueueBegin(queueBegin)
         , QueueEnd(queueEnd)
-        , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
         , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
     {
     }
@@ -1185,7 +1379,6 @@ private:
 
     const ui64 QueueBegin;
     const ui64 QueueEnd;
-    const bool FrameNeverEmpty;
     const bool OutputIsOptional;
 };
 
@@ -1230,6 +1423,7 @@ public:
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
         const auto defaultValue = GetDefaultValue();
+        YQL_ENSURE(!FrameNeverEmpty);
 
         if (defaultValue->IsCallable("Null")) {
             auto resultingType = RawOutputType;
@@ -1239,18 +1433,6 @@ private:
 
             return ctx.Builder(GetPos())
                 .Callable("Nothing")
-                    .Add(0, ExpandType(GetPos(), *resultingType, ctx))
-                .Seal()
-                .Build();
-        }
-        if (defaultValue->IsCallable("EmptyList")) {
-            auto resultingType = RawOutputType;
-            if (resultingType->GetKind() != ETypeAnnotationKind::List) {
-                resultingType = ctx.MakeType<TListExprType>(resultingType);
-            }
-
-            return ctx.Builder(GetPos())
-                .Callable("List")
                     .Add(0, ExpandType(GetPos(), *resultingType, ctx))
                 .Seal()
                 .Build();
@@ -1269,7 +1451,8 @@ struct TQueueParams {
     const TTypeAnnotationNode* LagQueueItemType = nullptr;
 };
 
-TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, const TExprNode::TPtr& frames, TExprContext& ctx) {
+TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, const TExprNode::TPtr& frames,
+    const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
     queueParams = {};
 
     TVector<TChain1MapTraits::TPtr> result;
@@ -1309,6 +1492,12 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, co
                 result.push_back(new TChain1MapTraitsRowNumber(name, trait));
             } else if (trait.CalculateLambda->IsCallable("Rank")) {
                 result.push_back(new TChain1MapTraitsRank(name, trait));
+            } else if (trait.CalculateLambda->IsCallable("CumeDist")) {
+                result.push_back(new TChain1MapTraitsCumeDist(name, trait, *partitionRowsColumn));
+            } else if (trait.CalculateLambda->IsCallable("NTile")) {
+                result.push_back(new TChain1MapTraitsNTile(name, trait, *partitionRowsColumn));
+            } else if (trait.CalculateLambda->IsCallable("PercentRank")) {
+                result.push_back(new TChain1MapTraitsPercentRank(name, trait, *partitionRowsColumn));
             } else {
                 YQL_ENSURE(trait.CalculateLambda->IsCallable("DenseRank"));
                 result.push_back(new TChain1MapTraitsDenseRank(name, trait));
@@ -1774,7 +1963,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::INIT: {
                     auto lambda = traits->ChildPtr(1);
                     if (lambda->Child(0)->ChildrenSize() == 2) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 1);
@@ -1803,7 +1992,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::UPDATE: {
                     auto lambda = traits->ChildPtr(2);
                     if (lambda->Child(0)->ChildrenSize() == 3) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 2);
@@ -2323,8 +2512,108 @@ const TStructExprType* ApplyFramesToType(const TStructExprType& inputType, const
     return ctx.MakeType<TStructExprType>(resultItems);
 }
 
+bool NeedPartitionRows(const TExprNode::TPtr& frames, TExprContext& ctx) {
+    if (frames->ChildrenSize() == 0) {
+        return false;
+    }
+
+    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, ctx);
+    for (const auto& item : traits.RawTraits) {
+        const TRawTrait& trait = item.second;
+        if (trait.CalculateLambda->IsCallable({"CumeDist","NTile","PercentRank"})) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+TString AllocatePartitionRowsColumn(const TStructExprType& rowType) {
+    ui64 index = 0;
+    for (;;) {
+        auto name = "_yql_partition_rows_" + ToString(index);
+        if (!rowType.FindItemType(name)) {
+            return name;
+        }
+
+        ++index;
+    }
+}
+
+TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& keyColumns, 
+    const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& types) {
+    auto exportsPtr = types.Modules->GetModule("/lib/yql/window.yql");
+    YQL_ENSURE(exportsPtr);
+    const auto& exports = exportsPtr->Symbols();
+    const auto ex = exports.find("count_traits_factory");
+    YQL_ENSURE(exports.cend() != ex);
+    TNodeOnNodeOwnedMap deepClones;    
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+    auto listTypeNode = ctx.NewCallable(pos, "TypeOf", {input});
+    auto extractor = ctx.Builder(pos)
+        .Lambda()
+            .Param("row")
+            .Callable("Void")
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
+        {lambda->Head().Child(0), listTypeNode},
+        {lambda->Head().Child(1), extractor}
+    });
+
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    auto status = ExpandApply(traits, traits, ctx);
+    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
+    return ctx.Builder(pos)
+        .Callable("CalcOverWindow")
+            .Add(0, input)
+            .Add(1, keyColumns)
+            .Callable(2, "Void")
+            .Seal()
+            .List(3)
+                .Callable(0, "WinOnRows")
+                    .List(0)
+                        .List(0)
+                            .Atom(0, "begin")
+                            .Callable(1, "Void")
+                            .Seal()
+                        .Seal()
+                        .List(1)
+                            .Atom(0, "end")
+                            .Callable(1, "Void")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .List(1)
+                        .Atom(0, columnName)
+                        .Add(1, traits)
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr RemovePartitionRowsColumn(TPositionHandle pos, const TExprNode::TPtr& input, const TString& columnName, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, input)
+            .Lambda(1)
+                .Param("row")
+                .Callable("RemoveMember")
+                    .Arg(0, "row")
+                    .Atom(1, columnName)
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TStructExprType& rowType, const TExprNode::TPtr& dependsOn,
-                                  const TExprNode::TPtr& frames, TExprContext& ctx)
+                                  const TExprNode::TPtr& frames, const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx)
 {
     if (frames->ChildrenSize() == 0) {
         return input;
@@ -2332,7 +2621,7 @@ TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& in
     TExprNode::TPtr processed = input;
     TExprNode::TPtr dataQueue;
     TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, ctx);
     if (queueParams.DataQueueNeeded) {
         ui64 queueSize = (queueParams.DataOutpace == Max<ui64>()) ? Max<ui64>() : (queueParams.DataOutpace + queueParams.DataLag + 2);
         dataQueue = BuildQueue(pos, rowType, queueSize, queueParams.DataLag, dependsOn, ctx);
@@ -2365,14 +2654,15 @@ TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& in
     return WrapWithWinContext(processed, ctx);
 }
 
-TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames, TExprContext& ctx) {
+TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames,
+    const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
     if (frames->ChildrenSize() == 0) {
         return input;
     }
 
     TExprNode::TPtr processed = input;
     TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, ctx);
     YQL_ENSURE(!queueParams.DataQueueNeeded);
     YQL_ENSURE(queueParams.LagQueueSize == 0);
     YQL_ENSURE(queueParams.LagQueueItemType == nullptr);
@@ -2592,7 +2882,7 @@ TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& i
 
 TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode::TPtr& inputList, const TExprNode::TPtr& keyColumns,
     const TExprNode::TPtr& sortTraits, const TExprNode::TPtr& frames, const TExprNode::TPtr& sessionTraits,
-    const TExprNode::TPtr& sessionColumns, const TStructExprType& outputRowType, TExprContext& ctx)
+    const TExprNode::TPtr& sessionColumns, const TStructExprType& outputRowType, TExprContext& ctx, TTypeAnnotationContext& types)
 {
     if (auto expanded = TryExpandNonCompactFullFrames(pos, inputList, keyColumns, sortTraits, frames, sessionTraits, sessionColumns, ctx)) {
         YQL_CLOG(INFO, Core) << "Expanded non-compact CalcOverWindow";
@@ -2626,6 +2916,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
 
     const auto commonSortTraits = DeduceCompatibleSort(sortTraits, sessionSortTraits);
     ExtractSortKeyAndOrder(pos, commonSortTraits ? commonSortTraits : sortTraits, sortKey, sortOrder, ctx);
+    auto fullKeyColumns = keyColumns;
     if (!commonSortTraits) {
         YQL_ENSURE(sessionKey);
         YQL_ENSURE(sessionInit);
@@ -2652,6 +2943,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
         keyColumnsList.push_back(ctx.NewAtom(pos, SessionStartMemberName));
 
         auto keyColumnsWithSessionStart = ctx.NewList(pos, std::move(keyColumnsList));
+        fullKeyColumns = keyColumnsWithSessionStart;
 
         keySelector = BuildKeySelector(pos, *rowType, keyColumnsWithSessionStart, ctx);
         sessionKey = sessionInit = sessionUpdate = {};
@@ -2666,23 +2958,34 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
     auto topLevelStreamArg = ctx.NewArgument(pos, "stream");
     TExprNode::TPtr processed = topLevelStreamArg;
 
+    TMaybe<TString> partitionRowsColumn;
+    if (NeedPartitionRows(frames, ctx)) {
+        partitionRowsColumn = AllocatePartitionRowsColumn(outputRowType);
+        input = AddPartitionRowsColumn(pos, input, fullKeyColumns, *partitionRowsColumn, ctx, types);
+    }
+
     // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
     // (i.e. process range frames first)
-    processed = ProcessRangeFrames(pos, processed, originalSortKey, rangeFrames, ctx);
+    processed = ProcessRangeFrames(pos, processed, originalSortKey, rangeFrames, partitionRowsColumn, ctx);
     rowType = ApplyFramesToType(*rowType, outputRowType, *rangeFrames, ctx);
-    processed = ProcessRowsFrames(pos, processed, *rowType, topLevelStreamArg, rowsFrames, ctx);
+    processed = ProcessRowsFrames(pos, processed, *rowType, topLevelStreamArg, rowsFrames, partitionRowsColumn, ctx);
 
     auto topLevelStreamProcessingLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {topLevelStreamArg}), std::move(processed));
 
     YQL_CLOG(INFO, Core) << "Expanded compact CalcOverWindow";
-    return BuildPartitionsByKeys(pos, input, keySelector, sortOrder, sortKey, topLevelStreamProcessingLambda, sessionKey,
+    auto res = BuildPartitionsByKeys(pos, input, keySelector, sortOrder, sortKey, topLevelStreamProcessingLambda, sessionKey,
         sessionInit, sessionUpdate, sessionColumns, ctx);
+    if (partitionRowsColumn) {
+        res = RemovePartitionRowsColumn(pos, res, *partitionRowsColumn, ctx);
+    }
+
+    return res;
 }
 
 } // namespace
 
-TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_ENSURE(node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"}));
 
     auto input = node->ChildPtr(0);
@@ -2695,7 +2998,7 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
     if (calc.Frames().Size() != 0 || calc.SessionColumns().Size() != 0) {
         const TStructExprType& outputRowType = *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         input = ExpandSingleCalcOverWindow(node->Pos(), input, calc.Keys().Ptr(), calc.SortSpec().Ptr(), calc.Frames().Ptr(),
-            calc.SessionSpec().Ptr(), calc.SessionColumns().Ptr(), outputRowType, ctx);
+            calc.SessionSpec().Ptr(), calc.SessionColumns().Ptr(), outputRowType, ctx, types);
     }
 
     calcs.erase(calcs.begin());

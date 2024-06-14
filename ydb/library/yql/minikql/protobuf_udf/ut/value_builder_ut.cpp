@@ -62,6 +62,7 @@ TString YsonToProtoText(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf yson) 
         setup.HolderFactory,
         NYT::NodeToYsonString(NYT::NodeFromYsonString(yson), ::NYson::EYsonFormat::Binary),
         static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType),
+        0,
         &err, true);
     if (!val) {
         throw yexception() << err.Str();
@@ -119,7 +120,7 @@ TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoT
     auto value = FillValueFromProto(proto, &setup.ValueBuilder, info);
     TTestWriter out;
     NCommon::TOutputBuf buf(out, nullptr);
-    NCommon::WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), value, true);
+    NCommon::WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), 0, value, true);
     buf.Finish();
 
     return NYT::NodeToYsonString(NYT::NodeFromYsonString(out.Str()), ::NYson::EYsonFormat::Text);

@@ -99,10 +99,10 @@ You can now use much shorter syntax to re-write the original command:
 
 #### Profile to connect to a local database {#cmdline-example-local}
 
-Creating/replacing a `local` profile to connect to a local YDB database deployed using rapid-deployment scripts from a [binary file](../../../../getting_started/self_hosted/ydb_local.md) or [in Docker](../../../../getting_started/self_hosted/ydb_docker.md):
+Creating/replacing a `local` profile to connect to a local {{ ydb-short-name }} database deployed using [quick start](../../../../quickstart.md):
 
 ```bash
-{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/test
+{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
 ```
 
 Defining the login and password authentication method in the `local` profile:
@@ -206,7 +206,7 @@ Creating a new `mydb1` profile:
      [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. cloud.yandex.com/docs/iam/concepts/authorization/oauth-token
      [4] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/docs/compute/operations/vm-connect/auth-inside-vm
      [5] Use service account key file (sa-key-file) cloud.yandex.com/docs/iam/operations/iam-token/create-for-sa
-     [6] Set new OAuth token (ydb-token)
+     [6] Set new access token (ydb-token)
      [7] Don't save authentication data for profile "mydb1"
    Please enter your numeric choice:
    ```

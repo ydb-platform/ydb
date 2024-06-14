@@ -78,7 +78,6 @@ struct TDataEvents {
         }
 
         ui64 GetTxId() const {
-            Y_ABORT_UNLESS(Record.HasTxId());
             return Record.GetTxId();
         }
 

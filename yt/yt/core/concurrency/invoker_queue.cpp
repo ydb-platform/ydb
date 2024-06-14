@@ -16,11 +16,11 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) CpuProfilerTagGuard;
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTagGuard, CpuProfilerTagGuard);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -284,6 +284,86 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// (arkady-e1ppa): Memory orders explanation around Shutdown:
+/*
+    There are two guarantees we want to enforce:
+    1) If we read Running_ |false| we want to observe the correct value
+    of Graceful_. Otherwise we may discard tasks even when graceful
+    shutdown was requested.
+    2) We must ensure that no callback will be left in the queue. That is if
+    shutdown is not graceful, there must be no execution of
+    concurrent Enqueue and Shutdown such that (c) (or (c'))
+    reads |true| from Running_ and (f) doesn't observe
+    action placed by (a) (or (a')). Note: in case of
+    graceful shutdown we expect that caller manually drains the queue
+    when they feel like it. This is sufficient because queue will either
+    be drained by another producer or enqueue requests will stop and
+    caller's method of draining the queue (e.g. stopping thread which polls
+    the queue and ask it to drain the queue) would process the queue normally.
+
+    Let's deal with 1) first since it is very easy. Consider relevant
+    part of EnqueueCallback call (some calls are inlined):
+    if (!Running_.load(std::memory_order::relaxed)) { <- (a0)
+        std::atomic_thread_fence(std::memory_order::acquire); <- (b0)
+        if (!Graceful_.load(std::memory_order::relaxed)) { <- (c0)
+            Queue_.DrainProducer();
+        }
+
+        return GetCpuInstant();
+    }
+
+    Relevant part of Shutdown:
+    if (graceful) {
+        Graceful_.store(true, std::memory_order::relaxed); <- (d0)
+    }
+
+    Running_.store(false, std::memory_order::release); <- (e0)
+
+    Suppose we read false in a0. Then we must has (e0) -rf-> (a0)
+    rf is reads-from. Then we have (a0) -sb-> (b0)
+    and b0 is acquire-fence, thus (e0) -rf-> (a0) -sb-> (b0)
+    and so (e0) -SW-> (b0) (SW is synchronizes with) implying
+    (e0) -SIHB-> (b0) (simply happens before). By transitivity
+    (d0) (if it happened) is SIHB (b0) and thus (c0) too.
+    (d0) -SIHB-> (c0) and (d0) being the last modification
+    in modification order implies that (c0) must be reading
+    from (d0) and thus (c0) always reads the correct value.
+
+    Now, let's deal with 2). Suppose otherwise. In this case
+    (c) reads |true| and (f) doesn't observe result of (a).
+    We shall model (a) as release RMW (currently it is
+    a seq_cst rmw, but this is suboptimal) and (f)
+    as acquire RMW (again currently seq_cst but can be
+    optimized). Then we have execution
+        T1(Enqueue)                 T2(Shutdown)
+    RMW^rel(Queue_, 0, 1)   (a)  W^rlx(Running_, false) (d)
+    Fence^sc                (b)  Fence^sc               (e)
+    R^rlx(Running_, true)   (c)  RMW^acq(Queue_, 0, 0)  (f)
+
+    Here RMW^rel(Queue_, 0, 1) means an rmw op on Queue_ state
+    which reads 0 (empty queue) and writes 1 (some callback address).
+
+    Since (f) doesn't read result of (a) then it must read value of
+    another modification (either ctor or another dequeue) which
+    preceedes (a) in modification order. Thus we have (f) -cob-> (a)
+    (cob is coherence-ordered before, https://eel.is/c++draft/atomics.order#3.3).
+    For fences we have (e) -sb-> (f) (sequenced before) and (a) -sb-> (b).
+    Thus (e) -sb-> (f) -cob-> (a) -sb-> (b) => (e) -S-> (b)
+    (Here S is total order on sequentially consistent events,
+    see https://eel.is/c++draft/atomics.order#4.4).
+    Like-wise, (c) -cob-> (d) because it must be reading from
+    another modification prior to (d) in modification order.
+    (b) -sb-> (c) -cob-> (d) -sb-> (e) => (b) -S-> (e)
+    and we have a loop in S, contracting the assumption.
+
+    NB(arkady-e1ppa): We do force-drain after (c) and (c')
+    because otherwise we could be an Enqueue happening
+    concurrently to a processing thread draining the queue
+    and leave our callback in queue forever.
+*/
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
@@ -375,8 +455,12 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     NProfiling::TTagId profilingTag,
     TProfilerTagPtr profilerTag)
 {
+    // NB: We are likely to never read false here
+    // so we do relaxed load but acquire fence in
+    // IF branch.
     if (!Running_.load(std::memory_order::relaxed)) {
-        DrainProducer();
+        std::atomic_thread_fence(std::memory_order::acquire);
+        TryDrainProducer();
         YT_LOG_TRACE(
             "Queue had been shut down, incoming action ignored (Callback: %v)",
             callback.GetHandle());
@@ -392,7 +476,16 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
         Counters_[profilingTag]->EnqueuedCounter.Increment();
     }
 
-    QueueImpl_.Enqueue(std::move(action));
+    QueueImpl_.Enqueue(std::move(action)); // <- (a)
+
+    std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
+    if (!Running_.load(std::memory_order::relaxed)) { // <- (c)
+        TryDrainProducer(/*force*/ true);
+        YT_LOG_TRACE(
+            "Queue had been shut down concurrently, incoming action ignored (Callback: %v)",
+            callback.GetHandle());
+    }
+
     return cpuInstant;
 }
 
@@ -405,7 +498,10 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     auto cpuInstant = GetCpuInstant();
 
     if (!Running_.load(std::memory_order::relaxed)) {
-        DrainProducer();
+        std::atomic_thread_fence(std::memory_order::acquire);
+        TryDrainProducer();
+        YT_LOG_TRACE(
+            "Queue had been shut down, incoming actions ignored");
         return cpuInstant;
     }
 
@@ -421,7 +517,16 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
         Counters_[profilingTag]->EnqueuedCounter.Increment(std::ssize(actions));
     }
 
-    QueueImpl_.Enqueue(actions);
+    QueueImpl_.Enqueue(actions); // <- (a')
+
+    std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b')
+    if (!Running_.load(std::memory_order::relaxed)) { // <- (c')
+        TryDrainProducer(/*force*/ true);
+        YT_LOG_TRACE(
+            "Queue had been shut down concurrently, incoming actions ignored");
+        return cpuInstant;
+    }
+
     return cpuInstant;
 }
 
@@ -444,24 +549,36 @@ bool TInvokerQueue<TQueueImpl>::IsSerialized() const
 }
 
 template <class TQueueImpl>
-void TInvokerQueue<TQueueImpl>::Shutdown()
+void TInvokerQueue<TQueueImpl>::Shutdown(bool graceful)
 {
-    Running_.store(false, std::memory_order::relaxed);
+    // This is done to protect both Graceful_
+    // and Running_ to be modified independently.
+    if (Stopping_.exchange(true, std::memory_order::relaxed)) {
+        return;
+    }
+
+    if (graceful) {
+        Graceful_.store(true, std::memory_order::relaxed);
+    }
+
+    Running_.store(false, std::memory_order::release); // <- (d)
+
+    std::atomic_thread_fence(std::memory_order::seq_cst); // <- (e)
+
+    if (!graceful) {
+        // NB: There may still be tasks in
+        // local part of the Queue in case
+        // of single consumer.
+        // One must drain it after stopping
+        // consumer.
+        QueueImpl_.DrainProducer(); // <- (f)
+    }
 }
 
 template <class TQueueImpl>
-void TInvokerQueue<TQueueImpl>::DrainProducer()
+void TInvokerQueue<TQueueImpl>::OnConsumerFinished()
 {
-    YT_VERIFY(!Running_.load(std::memory_order::relaxed));
-
     QueueImpl_.DrainProducer();
-}
-
-template <class TQueueImpl>
-void TInvokerQueue<TQueueImpl>::DrainConsumer()
-{
-    YT_VERIFY(!Running_.load(std::memory_order::relaxed));
-
     QueueImpl_.DrainConsumer();
 }
 
@@ -490,9 +607,9 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
     }
 
     if (const auto& profilerTag = action->ProfilerTag) {
-        GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard(profilerTag);
+        CpuProfilerTagGuard() = TCpuProfilerTagGuard(profilerTag);
     } else {
-        GetTlsRef(CpuProfilerTagGuard) = {};
+        CpuProfilerTagGuard() = {};
     }
 
     SetCurrentInvoker(GetProfilingTagSettingInvoker(action->ProfilingTag));
@@ -503,7 +620,7 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 template <class TQueueImpl>
 void TInvokerQueue<TQueueImpl>::EndExecute(TEnqueuedAction* action)
 {
-    GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard{};
+    CpuProfilerTagGuard() = TCpuProfilerTagGuard{};
     SetCurrentInvoker(nullptr);
 
     YT_ASSERT(action);
@@ -586,6 +703,14 @@ typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::Crea
     });
 
     return counters;
+}
+
+template <class TQueueImpl>
+void TInvokerQueue<TQueueImpl>::TryDrainProducer(bool force)
+{
+    if (force || !Graceful_.load(std::memory_order::relaxed)) {
+        QueueImpl_.DrainProducer();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

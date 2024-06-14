@@ -42,11 +42,15 @@ elif [[ $1 = "disk" ]]; then
     echo Data file ydb.data not found, creating ...
     fallocate -l 80G ydb.data
     if [[ $? -ge 1 ]]; then
-      if [ -f ydb.data ]; then
-        rm ydb.data
+      echo fallocate failed. Proably not supported by FS, trying to use dd ...
+      dd if=/dev/zero of=ydb.data bs=1G count=0 seek=80
+      if [[ $? -ge 1 ]]; then
+        if [ -f ydb.data ]; then
+          rm ydb.data
+        fi
+        echo Error creating data file
+        exit
       fi
-      echo Error creating data file
-      exit
     fi
     need_init=1
   fi

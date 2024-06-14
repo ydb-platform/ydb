@@ -9,6 +9,7 @@ TString GetYdbDatabase();
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode = true);
 
 ui64 GetFullTimeValue(const TString& output);
+THashSet<TString> GetCodecsList(const TString& output);
 
 void EnsureStatisticsColumns(const TList<TString>& args,
                              const TVector<TString>& columns1,

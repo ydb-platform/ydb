@@ -268,9 +268,9 @@ public:
             const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev, ui64 cookie,
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
             NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
-            "DSProxy.Assimilate", std::move(ev->ExecutionRelay))
+            NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate"), std::move(ev->ExecutionRelay))
         , SkipBlocksUpTo(ev->SkipBlocksUpTo)
         , SkipBarriersUpTo(ev->SkipBarriersUpTo)
         , SkipBlobsUpTo(ev->SkipBlobsUpTo)

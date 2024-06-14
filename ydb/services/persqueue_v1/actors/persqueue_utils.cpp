@@ -37,7 +37,7 @@ TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEnt
             return TProcessingResult {
                     Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST,
                     Sprintf("path '%s' has unknown/invalid root prefix '%s', Marker# PQ14",
-                            fullPath.c_str(), entry.Path[0].c_str()),
+                            fullPath.c_str(), entry.Path.empty() ? "" : entry.Path[0].c_str()),
                     true
             };
         }
@@ -129,7 +129,8 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::UNAVAILABLE;
         case UNKNOWN_TXID:
             return Ydb::StatusIds::NOT_FOUND;
-
+        case PRECONDITION_FAILED:
+            return Ydb::StatusIds::PRECONDITION_FAILED;
         default:
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     }

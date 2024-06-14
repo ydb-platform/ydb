@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>

@@ -61,6 +61,16 @@ constexpr bool WithMovingPatchRequestToStaticNode = true;
 // Common types
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct TDiskDelayPrediction {
+    ui64 PredictedNs;
+    ui32 DiskIdx;
+
+    bool operator<(const TDiskDelayPrediction& other) const {
+        return PredictedNs > other.PredictedNs;
+    }
+};
+
+using TDiskDelayPredictions = TStackVec<TDiskDelayPrediction, TypicalDisksInSubring>;
 
 struct TEvDeathNote : public TEventLocal<TEvDeathNote, TEvBlobStorage::EvDeathNote> {
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
@@ -166,17 +176,17 @@ public:
     }
 
     TBlobStorageGroupRequestActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TGroupQueues> groupQueues,
-            TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie, NWilson::TTraceId traceId,
+            TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie,
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
-            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter, TString name,
-            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
+            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter,
+            NWilson::TSpan&& span, std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
         : TActor<TDerived>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
         , Info(std::move(info))
         , GroupQueues(std::move(groupQueues))
         , Mon(std::move(mon))
         , PoolCounters(storagePoolCounters)
         , LogCtx(logComponent, logAccEnabled)
-        , Span(TWilson::BlobStorage, std::move(traceId), std::move(name))
+        , Span(std::move(span))
         , RestartCounter(restartCounter)
         , CostModel(GroupQueues->CostModel)
         , Source(source)
@@ -347,6 +357,12 @@ public:
             case TEvents::TSystem::Poison: {
                 ErrorReason = "Request got Poison";
                 Derived().ReplyAndDie(NKikimrProto::ERROR);
+                return true;
+            }
+
+            case TEvBlobStorage::EvDeadline: {
+                ErrorReason = "Deadline timer hit";
+                Derived().ReplyAndDie(NKikimrProto::DEADLINE);
                 return true;
             }
         }

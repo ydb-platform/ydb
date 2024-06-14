@@ -89,8 +89,13 @@ TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
 
     auto dataInput = callable.GetInput(0);
     if (dataInput.HasValue()) {
-        TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput);
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true);
+        if (dataInput.GetStaticType()->IsData()) {
+            auto slot = *AS_TYPE(TDataType, dataInput.GetStaticType())->GetDataSlot();
+            if (NYql::NUdf::GetDataTypeInfo(slot).Features & NYql::NUdf::EDataTypeFeatures::StringType) {
+                TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput);
+                return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true);
+            }
+        }
     }
 
     return TRuntimeNode(&callable, false);
@@ -235,12 +240,10 @@ TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) 
 
     auto optionalInput = callable.GetInput(0);
     auto defaultInput = callable.GetInput(1);
-    bool isDefaultOptional;
-    UnpackOptional(defaultInput, isDefaultOptional);
     if (optionalInput.HasValue()) {
         auto optionalData = AS_VALUE(TOptionalLiteral, optionalInput);
         if (optionalData->HasItem()) {
-            return isDefaultOptional ? optionalInput : optionalData->GetItem();
+            return optionalInput.GetStaticType()->IsSameType(*defaultInput.GetStaticType())  ? optionalInput : optionalData->GetItem();
         } else {
             return defaultInput;
         }

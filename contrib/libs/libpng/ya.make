@@ -11,7 +11,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(1.6.40)
 
-ORIGINAL_SOURCE(https://github.com/glennrp/libpng/archive/v1.6.40.tar.gz)
+ORIGINAL_SOURCE(https://github.com/pnggroup/libpng/archive/v1.6.40.tar.gz)
 
 PEERDIR(
     contrib/libs/zlib

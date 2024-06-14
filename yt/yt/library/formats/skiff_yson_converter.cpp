@@ -1030,11 +1030,11 @@ TYsonToSkiffConverter CreateStructYsonToSkiffConverter(
     const TConverterCreationContext& context,
     const TYsonToSkiffConverterConfig& config)
 {
-    TYsonToSkiffConverter skipYsonValue = [](TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* /*writer*/) {
+    TYsonToSkiffConverter skipYsonValue = [] (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* /*writer*/) {
         cursor->SkipComplexValue();
     };
 
-    TYsonToSkiffConverter writeNullUnknownField = [](TYsonPullParserCursor*, TCheckedInDebugSkiffWriter* writer) {
+    TYsonToSkiffConverter writeNullUnknownField = [] (TYsonPullParserCursor*, TCheckedInDebugSkiffWriter* writer) {
         writer->WriteVariant8Tag(0);
     };
 
@@ -1088,7 +1088,7 @@ TYsonToSkiffConverter CreateTupleYsonToSkiffConverter(
     const TConverterCreationContext& context,
     const TYsonToSkiffConverterConfig& config)
 {
-    TYsonToSkiffConverter skipYsonValue = [](TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* /*writer*/) {
+    TYsonToSkiffConverter skipYsonValue = [] (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* /*writer*/) {
         cursor->SkipComplexValue();
     };
 
@@ -1154,7 +1154,7 @@ public:
             static_assert(wireType == EWireType::Variant16);
             writer->WriteVariant16Tag(tag);
         }
-        ConverterList_[tag](cursor, writer);
+        ConverterList_[tag] (cursor, writer);
         if (cursor->GetCurrent().GetType() != EYsonItemType::EndList) {
             ThrowBadYsonToken(Descriptor_, {EYsonItemType::EndList}, cursor->GetCurrent().GetType());
         }
@@ -1610,7 +1610,7 @@ TSkiffToYsonConverter CreateListSkiffToYsonConverter(
     auto match = MatchListTypes(descriptor, skiffSchema);
     auto innerConverter = CreateSkiffToYsonConverterImpl(std::move(match.first), match.second, context, config);
 
-    return [innerConverter = innerConverter, descriptor=std::move(descriptor)](TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [innerConverter = innerConverter, descriptor=std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {
             auto tag = parser->ParseVariant8Tag();
@@ -1636,7 +1636,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
     const TConverterCreationContext& context,
     const TSkiffToYsonConverterConfig& config)
 {
-    const auto insertEntity = [](TCheckedInDebugSkiffParser* /*parser*/, TCheckedInDebugYsonTokenWriter* writer) {
+    const auto insertEntity = [] (TCheckedInDebugSkiffParser* /*parser*/, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteEntity();
     };
 
@@ -1658,7 +1658,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
         }
     }
 
-    return [converterList = converterList](TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [converterList = converterList] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         for (const auto& converter : converterList) {
             converter(parser, writer);
@@ -1679,7 +1679,7 @@ TSkiffToYsonConverter CreateTupleSkiffToYsonConverter(
     for (const auto& [fieldDescriptor, fieldSkiffSchema] : tupleMatch) {
         converterList.emplace_back(CreateSkiffToYsonConverterImpl(fieldDescriptor, fieldSkiffSchema, context, config));
     }
-    return [converterList = converterList](TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [converterList = converterList] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         for (const auto& converter : converterList) {
             converter(parser, writer);

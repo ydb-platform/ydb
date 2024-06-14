@@ -689,7 +689,7 @@ namespace NKikimr {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
                 void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_DEBUG_ABORT_UNLESS(false, "should not be called");
+                    Y_DEBUG_ABORT("should not be called");
                 }
 
                 void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {

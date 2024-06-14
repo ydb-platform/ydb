@@ -1,26 +1,35 @@
-erasure: mirror-3-dc
+static_erasure: mirror-3-dc
 host_configs:
-- host_config_id: 1
-  drive:
-  - type: RAM
-  - type: RAM
-  - type: RAM
+- drive:
+  - path: SectorMap:1:64
+    type: SSD
+  - path: SectorMap:2:64
+    type: SSD
+  - path: SectorMap:3:64
+    type: SSD
+  host_config_id: 1
 hosts:
 - host: localhost
   host_config_id: 1
   port: 19001
-  location:
+  walle_location:
+    body: 1
     data_center: '1'
+    rack: '1'
 - host: localhost
   host_config_id: 1
   port: 19002
-  location:
+  walle_location:
+    body: 2
     data_center: '2'
+    rack: '2'
 - host: localhost
   host_config_id: 1
   port: 19003
-  location:
+  walle_location:
+    body: 3
     data_center: '3'
+    rack: '3'
 domains_config:
   domain:
   - name: Root
@@ -28,6 +37,7 @@ domains_config:
     - kind: ssd
       pool_config:
         box_id: 1
+        erasure_species: mirror-3-dc
         kind: ssd
         geometry:
           realm_level_begin: 10
@@ -37,15 +47,46 @@ domains_config:
         pdisk_filter:
         - property:
           - type: SSD
+        vdisk_kind: Default
   state_storage:
   - ring:
       node: [1, 2, 3]
       nto_select: 3
     ssid: 1
+table_service_config:
+  sql_version: 1
+actor_system_config:
+  executor:
+  - name: System
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: User
+    spin_threshold: 0
+    threads: 3
+    type: BASIC
+  - name: Batch
+    spin_threshold: 0
+    threads: 2
+    type: BASIC
+  - name: IO
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC
+    spin_threshold: 10
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
 blob_storage_config:
   service_set:
     groups:
-    - rings:
+    - erasure_species: mirror-3-dc
+      rings:
       - fail_domains:
         - vdisk_locations:
           - node_id: "localhost:19001"
@@ -85,10 +126,6 @@ blob_storage_config:
           - node_id: "localhost:19003"
             pdisk_category: SSD
             path: SectorMap:3:64
-tls:
-  cert: "/opt/ydb/certs/node.crt"
-  key: "/opt/ydb/certs/node.key"
-  ca: "/opt/ydb/certs/ca.crt"
 channel_profile_config:
   profile:
   - channel:

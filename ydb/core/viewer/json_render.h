@@ -200,13 +200,13 @@ public:
             if (response.GetError()) {
                 json["status"] = "error";
                 json["error"] = response.GetError();
-                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                 return;
             }
             if (response.DataSize() != Metrics.size()) {
                 json["status"] = "error";
                 json["error"] = "Invalid data size received";
-                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                 return;
             }
             for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
@@ -214,7 +214,7 @@ public:
                 if (response.TimeSize() != protoMetric.ValuesSize()) {
                     json["status"] = "error";
                     json["error"] = "Invalid value size received";
-                    ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                    ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                     return;
                 }
             }
@@ -241,7 +241,7 @@ public:
                 }
             }
 
-            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
         } else {
             TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
             viewerResponse->Record.MutableRenderResponse()->CopyFrom(response);
@@ -254,7 +254,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        HandleRenderResponse(*(ev.Get()->Get()->Record.MutableRenderResponse()));
+        auto& record = ev.Get()->Get()->Record;
+        if (record.HasRenderResponse()) {
+            HandleRenderResponse(*(record.MutableRenderResponse()));
+        } else {
+            SendGraphRequest(); // fallback
+        }
     }
 
     void HandleTimeout() {
@@ -280,28 +285,58 @@ public:
 
 template <>
 struct TJsonRequestParameters<TJsonRender> {
-    static TString GetParameters() {
-        return R"___([{"name":"target","in":"query","description":"metrics comma delimited","required":true,"type":"string"},
-                      {"name":"from","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
-                      {"name":"until","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"maxDataPoints","in":"query","description":"maximum number of data points","required":false,"type":"integer"},
-                      {"name":"format","in":"query","description":"response format","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: target
+              in: query
+              description: metrics comma delimited
+              required: true
+              type: string
+            - name: from
+              in: query
+              description: time in seconds
+              required: false
+              type: integer
+            - name: database
+              in: query
+              description: database name
+              required: false
+              type: string
+            - name: direct
+              in: query
+              description: force processing query on current node
+              required: false
+              type: boolean
+            - name: until
+              in: query
+              description: time in seconds
+              required: false
+              type: integer
+            - name: maxDataPoints
+              in: query
+              description: maximum number of data points
+              required: false
+              type: integer
+            - name: format
+              in: query
+              description: response format
+              required: false
+              type: string
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonRender> {
     static TString GetSummary() {
-        return "\"Graph data\"";
+        return "Graph data";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonRender> {
     static TString GetDescription() {
-        return "\"Returns graph data in graphite format\"";
+        return "Returns graph data in graphite format";
     }
 };
 

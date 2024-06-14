@@ -1,51 +1,77 @@
-{{ macro }}({{ name }}
-{%- if is_interface %} INTERFACE{% endif %}
-{%- if macro_args|length > 0 %}
-{%- for arg in macro_args %}
-  {{ arg }}
-{%- endfor -%}
-{% endif %})
+{%- set macro = target.macro -%}
+{%- set name = target.name -%}
 
-{% for property in properties -%}
-set_property(TARGET {{ name }} PROPERTY
-  {{ property[0] }}{% for value in property[1] %} {{ value }}
-{%- endfor %}
+{{ macro }}({{ name }}
+{%- if target.is_interface %} INTERFACE{%- endif -%}
+{%- set macro_args = target.macro_args -%}
+{%- if macro_args|length > 0 %}
+{%-     for arg in macro_args %}
+  {{ arg }}
+{%      endfor -%}
+{%- endif -%}
+)
+{%  for property in target.properties -%}
+set_property(TARGET {{ name }} PROPERTY {{ property[0] }}
+{%-     for value in property[1] %}
+  {{ value }}
+{%-     endfor %}
+)
+{%  endfor -%}
+
+{%- for attribute in target.attributes -%}
+
+{%-    if attribute[1].iface is defined %}
+{{ attribute[0] }}({{ name }} INTERFACE
+{%-        for val in attribute[1].iface %}
+  {{ val }}
+{%-        endfor %}
+)
+{%     endif -%}
+
+{%-    if attribute[1].pub is defined %}
+{{ attribute[0] }}({{ name }} PUBLIC
+{%-        for val in attribute[1].pub %}
+  {{ val }}
+{%-        endfor %}
+)
+{%     endif -%}
+
+{%-    if attribute[1].priv is defined %}
+{{ attribute[0] }}({{ name }} PRIVATE
+{%-        for val in attribute[1].priv %}
+  {{ val }}
+{%-        endfor %}
+)
+{%     endif -%}
+
+{%- endfor -%}
+
+{%- for dir_macro in target.target_dir_macros %}
+{{ dir_macro[0] }}(
+{%-    for value in dir_macro[1] %}
+  {{ value }}
+{%-    endfor %}
 )
 {% endfor -%}
-{% for attribute in attributes %}
-{%- if attribute[1].iface is defined %}
-{{ attribute[0] }}({{ name }} INTERFACE
-{% for val in attribute[1].iface %}  {{ val }}
-{% endfor %})
-{%- endif %}
-{%- if attribute[1].pub is defined %}
-{{ attribute[0] }}({{ name }} PUBLIC
-{% for val in attribute[1].pub %}  {{ val }}
-{% endfor %})
-{%- endif %}
-{%- if attribute[1].priv is defined %}
-{{ attribute[0] }}({{ name }} PRIVATE
-{% for val in attribute[1].priv %}  {{ val }}
-{% endfor %})
-{%- endif %}
-{% endfor %}
-{% for dir_macro in target_dir_macros %}
-{{ dir_macro[0] }}(
-{% for value in dir_macro[1] %}  {{ value }}
-{% endfor %})
-{% endfor %}
-{% for target_macro in target_macros %}
+
+{%- for target_macro in target.target_macros %}
 {{ target_macro[0] }}({{ name }}
-{%- if target_macro[1]|length > 0 %}
-{% for value in target_macro[1] -%}
+{%-     if target_macro[1]|length > 0 -%}
+{%-         for value in target_macro[1] %}
   {{ value }}
-{% endfor %}
-{%- endif %})
-{% endfor %}
-{% if dependencies|length > 0 -%}
+{%-         endfor %}
+{%      endif -%}
+)
+{% endfor -%}
+
+{%- set dependencies = target.dependencies -%}
+{%- if dependencies|length > 0 %}
+
 if(NOT CMAKE_CROSSCOMPILING)
   add_dependencies({{ name }}
-{% for dep in dependencies %}    {{ dep }}
-{% endfor %})
+{%-    for dep in dependencies %}
+    {{ dep }}
+{%-    endfor %}
+)
 endif()
-{%- endif -%}
+{%- endif %}

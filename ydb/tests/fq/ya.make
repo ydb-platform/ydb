@@ -1,11 +1,14 @@
 RECURSE_FOR_TESTS(
     common
+    control_plane_storage
     generic
     http_api
     mem_alloc
     multi_plane
     plans
+    pq_async_io
     restarts
     s3
     yds
+    yt
 )

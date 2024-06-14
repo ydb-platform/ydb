@@ -214,18 +214,14 @@ public:
 
     static void ResetGlobalsUT();
 
-    void EnableMemoryYellowZone() noexcept {
-        IsMemoryYellowZoneReached = true;
-    }
-
-    void DisableMemoryYellowZone() noexcept {
-        IsMemoryYellowZoneReached = false;
+    void SetMaximumLimitValueReached(bool isReached) noexcept {
+        IsMaximumLimitValueReached = isReached;
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
         return IsMemoryYellowZoneReached;
     }
-    
+
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -237,13 +233,7 @@ protected:
         UpdateMemoryYellowZone();
     }
 
-    void UpdateMemoryYellowZone() {
-        if (IncreaseMemoryLimitCallback) return;
-
-        if (Limit != 0) {
-            IsMemoryYellowZoneReached = (100 * GetUsed() / Limit) > MemoryYellowZoneThreshold;
-        }
-    }
+    void UpdateMemoryYellowZone();
 
     bool TryIncreaseLimit(ui64 required);
 
@@ -279,10 +269,22 @@ protected:
     // Indicates when memory limit is almost reached.
     bool IsMemoryYellowZoneReached = false;
     // This theshold is used to determine is memory limit is almost reached.
-    // If TIncreaseMemoryLimitCallback is set this threshold should be ignored.
-    const ui8 MemoryYellowZoneThreshold = 80;
+    // If TIncreaseMemoryLimitCallback is set this thresholds should be ignored.
+    // The yellow zone turns on when memory consumption reaches 80% and turns off when consumption drops below 50%.
+    const ui8 EnableMemoryYellowZoneThreshold = 80;
+    const ui8 DisableMemoryYellowZoneThreshold = 50;
+
+    // This flag indicates that value of memory limit reached it's maximum.
+    // Next TryIncreaseLimit call most likely will return false.
+    bool IsMaximumLimitValueReached = false;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
+
+template<typename TMmap = TSystemMmap>
+void* GetAlignedPage(ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem, ui64 size);
 
 } // NKikimr

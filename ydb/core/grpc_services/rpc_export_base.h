@@ -24,7 +24,7 @@ struct TExportConv {
             NOperationId::AddOptionalValue(operationId, "kind", "s3");
             break;
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
+            Y_DEBUG_ABORT("Unknown export kind");
             break;
         }
 
@@ -54,7 +54,7 @@ struct TExportConv {
             Fill<ExportToS3Metadata, ExportToS3Result>(operation, exprt, exprt.GetExportToS3Settings());
             break;
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
+            Y_DEBUG_ABORT("Unknown export kind");
             break;
         }
 

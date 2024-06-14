@@ -203,12 +203,11 @@ class TCreateExternalDataSource : public TSubOperation {
 
         context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
         context.SS->IncrementPathDbRefCount(externalDataSourcePathId);
-        context.SS->PersistPath(db, externalDataSourcePathId);
 
         if (!acl.empty()) {
             externalDataSourcePath->ApplyACL(acl);
-            context.SS->PersistACL(db, externalDataSourcePath);
         }
+        context.SS->PersistPath(db, externalDataSourcePathId);
 
         context.SS->PersistExternalDataSource(db,
                                               externalDataSourcePathId,

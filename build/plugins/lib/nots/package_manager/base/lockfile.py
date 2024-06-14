@@ -74,3 +74,7 @@ class BaseLockfile(object):
     @abstractmethod
     def validate_has_addons_flags(self):
         pass
+
+    @abstractmethod
+    def get_requires_build_packages(self):
+        pass

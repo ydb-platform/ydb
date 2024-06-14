@@ -2691,9 +2691,9 @@
     ],
     "test.test[ManyInputTables-SplitTableRange-Debug]": [
         {
-            "checksum": "2660612feda84911c9046886d8f9aee3",
-            "size": 2367,
-            "uri": "https://{canondata_backend}/937458/89834cdbd820b215fc71a7c537837ccf68cb7e3c/resource.tar.gz#test.test_ManyInputTables-SplitTableRange-Debug_/opt.yql"
+            "checksum": "5f2a69c00fa869a5eb7e7fdd94b2377f",
+            "size": 2365,
+            "uri": "https://{canondata_backend}/1880306/27fe92786b5911efe13eeab28ee6bd67df665f55/resource.tar.gz#test.test_ManyInputTables-SplitTableRange-Debug_/opt.yql"
         },
         {
             "checksum": "4b05f136512472f7e8516fc4362ab6cc",

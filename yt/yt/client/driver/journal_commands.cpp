@@ -84,7 +84,7 @@ void TReadJournalCommand::DoExecute(ICommandContextPtr context)
 
     // TODO(babenko): provide custom allocation tag
     TBlobOutput buffer;
-    auto flushBuffer = [&] () {
+    auto flushBuffer = [&] {
         WaitFor(output->Write(buffer.Flush()))
             .ThrowOnError();
     };
@@ -268,10 +268,8 @@ private:
 void TWriteJournalCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
-
     registrar.Parameter("journal_writer", &TThis::JournalWriter)
         .Default();
-
     registrar.ParameterWithUniversalAccessor<bool>(
         "enable_chunk_preallocation",
         [] (TThis* command) -> auto& {
@@ -307,18 +305,17 @@ void TWriteJournalCommand::DoExecute(ICommandContextPtr context)
 
     struct TWriteBufferTag { };
 
-    auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(context->GetConfig()->WriteBufferSize, {.InitializeStorage = false});
-
     auto input = context->Request().InputStream;
 
     while (true) {
-        auto bytesRead = WaitFor(input->Read(buffer))
+        auto data = WaitFor(input->Read())
             .ValueOrThrow();
 
-        if (bytesRead == 0)
+        if (!data) {
             break;
+        }
 
-        parser->Read(TStringBuf(buffer.Begin(), bytesRead));
+        parser->Read(TStringBuf(data.Begin(), data.Size()));
     }
 
     parser->Finish();

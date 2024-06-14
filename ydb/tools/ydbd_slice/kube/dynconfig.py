@@ -10,7 +10,7 @@ from ydb.draft import DynamicConfigClient
 logger = logging.getLogger(__name__)
 
 
-DYNCONFIG_NAME= 'dynconfig.yaml'
+DYNCONFIG_NAME = 'dynconfig.yaml'
 
 
 class Client():
@@ -29,8 +29,8 @@ class Client():
             self.driver.wait(timeout=5)
         except TimeoutError:
             if self.allow_fallback_to_anonymous_credentials:
-                logger.warning('Trying to fallback to anonymous credentials. ' \
-                               'To get rid of this message either set YDB_ANONYMOUS_CREDENTIALS=1 ' \
+                logger.warning('Trying to fallback to anonymous credentials. '
+                               'To get rid of this message either set YDB_ANONYMOUS_CREDENTIALS=1 '
                                'Or set correct credentials in env as it described in ydb-python-sdk.')
                 config = self.config
                 config.credentials = AnonymousCredentials()
@@ -77,11 +77,11 @@ def get_remote_config(client):
 
 
 def apply_config(client, project_path, force=False, allow_unknown_fields=True):
-        config = get_local_config(project_path)
-        if force:
-            client.set_config(config, False, allow_unknown_fields)
-        else:
-            client.replace_config(config, False, allow_unknown_fields)
-        # TODO: there is small race here, we can pull back config applied after our's, but for dev slices it's fine
-        # as far as even in real production with long approve process we faced conflict only once in a three months
-        return get_remote_config(client)
+    config = get_local_config(project_path)
+    if force:
+        client.set_config(config, False, allow_unknown_fields)
+    else:
+        client.replace_config(config, False, allow_unknown_fields)
+    # TODO: there is small race here, we can pull back config applied after our's, but for dev slices it's fine
+    # as far as even in real production with long approve process we faced conflict only once in a three months
+    return get_remote_config(client)

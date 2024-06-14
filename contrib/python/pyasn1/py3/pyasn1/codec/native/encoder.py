@@ -60,6 +60,11 @@ class ObjectIdentifierEncoder(AbstractItemEncoder):
         return str(value)
 
 
+class RelativeOIDEncoder(AbstractItemEncoder):
+    def encode(self, value, encodeFun, **options):
+        return str(value)
+
+
 class RealEncoder(AbstractItemEncoder):
     def encode(self, value, encodeFun, **options):
         return float(value)
@@ -111,6 +116,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: OctetStringEncoder(),
     univ.Null.tagSet: NullEncoder(),
     univ.ObjectIdentifier.tagSet: ObjectIdentifierEncoder(),
+    univ.RelativeOID.tagSet: RelativeOIDEncoder(),
     univ.Enumerated.tagSet: IntegerEncoder(),
     univ.Real.tagSet: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf
@@ -135,7 +141,6 @@ TAG_MAP = {
     useful.UTCTime.tagSet: OctetStringEncoder()
 }
 
-
 # Put in ambiguous & non-ambiguous types for faster codec lookup
 TYPE_MAP = {
     univ.Boolean.typeId: BooleanEncoder(),
@@ -144,6 +149,7 @@ TYPE_MAP = {
     univ.OctetString.typeId: OctetStringEncoder(),
     univ.Null.typeId: NullEncoder(),
     univ.ObjectIdentifier.typeId: ObjectIdentifierEncoder(),
+    univ.RelativeOID.typeId: RelativeOIDEncoder(),
     univ.Enumerated.typeId: IntegerEncoder(),
     univ.Real.typeId: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf

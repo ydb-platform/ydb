@@ -48,7 +48,7 @@ public:
     }
 
     void Bootstrap() {
-        TSocketType socket;
+        TSocketType socket({.TcpNotDelay = Settings.TcpNotDelay});
         TSocketAddressType bindAddress(socket.MakeAddress(Settings.Address, Settings.Port));
         int err = socket.Bind(bindAddress.get());
         if (err == 0) {

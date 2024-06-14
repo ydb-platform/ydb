@@ -10,6 +10,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 
 
@@ -18,11 +19,17 @@ def stats_mode():
     return ''
 
 
+@pytest.fixture(scope="module")
+def mvp_external_ydb_endpoint(request) -> str:
+    return request.param["endpoint"] if request is not None and hasattr(request, 'param') else None
+
+
 @pytest.fixture
-def kikimr(request: pytest.FixtureRequest, yq_version: str, stats_mode: str):
+def kikimr(request: pytest.FixtureRequest, yq_version: str, stats_mode: str, mvp_external_ydb_endpoint):
     kikimr_extensions = [DefaultConfigExtension(""),
                          YQv2Extension(yq_version),
                          ComputeExtension(),
+                         YdbMvpExtension(mvp_external_ydb_endpoint),
                          StatsModeExtension(stats_mode)]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr
@@ -47,10 +54,11 @@ class ManyRetriesConfigExtension(ExtensionPoint):
 
 
 @pytest.fixture
-def kikimr_many_retries(request: pytest.FixtureRequest, yq_version: str):
+def kikimr_many_retries(request: pytest.FixtureRequest, yq_version: str, mvp_external_ydb_endpoint):
     kikimr_extensions = [DefaultConfigExtension(""),
                          ManyRetriesConfigExtension(),
                          YQv2Extension(yq_version),
+                         YdbMvpExtension(mvp_external_ydb_endpoint),
                          ComputeExtension()]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr

@@ -1,1 +1,0 @@
-{% include [ansible-ydb-cluster](./_includes/ansible/ansible.md) %}

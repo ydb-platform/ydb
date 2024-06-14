@@ -3,10 +3,12 @@
 #include "private_events.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -19,6 +21,64 @@ using namespace NConsole;
 using namespace NSchemeShard;
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
+    void Resolve(const TPathId& pathId) {
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+
+        auto& entry = request->ResultSet.emplace_back();
+        entry.TableId = pathId;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.RedirectRequired = false;
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Become(&TThis::StateResolveDatabase);
+    }
+
+    STATEFN(StateResolveDatabase) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* response = ev->Get()->Request.Get();
+
+        Y_ABORT_UNLESS(response->ResultSet.size() == 1);
+        const auto& entry = response->ResultSet.front();
+
+        LOG_T("Handle " << ev->Get()->ToString()
+            << ": entry# " << entry.ToString());
+
+        switch (entry.Status) {
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+            break;
+        default:
+            LOG_W("Unexpected status"
+                << ": entry# " << entry.ToString());
+            return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
+        }
+
+        if (!DomainKey) {
+            if (!entry.DomainInfo) {
+                LOG_E("Empty domain info"
+                    << ": entry# " << entry.ToString());
+                return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
+            }
+
+            if (entry.SecurityObject) {
+                Owner = entry.SecurityObject->GetOwnerSID();
+            }
+
+            DomainKey = entry.DomainInfo->DomainKey;
+            Resolve(DomainKey);
+        } else {
+            Database = CanonizePath(entry.Path);
+            DescribeSrcPath(true);
+        }
+    }
+
     void GetTableProfiles() {
         LOG_T("Get table profiles");
 
@@ -111,10 +171,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
+        std::pair<TString, TString> pathPair;
+        if (!TrySplitPathByDb(DstPath, Database, pathPair, error)) {
+            return Error(NKikimrScheme::StatusSchemeError, error);
+        }
+
         // TODO: support indexed tables
         TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+        TxBody.SetWorkingDir(pathPair.first);
+
         auto& desc = *TxBody.MutableCreateTable();
-        desc.SetName(ToString(ExtractBase(DstPath)));
+        desc.SetName(pathPair.second);
+
         // TODO: support other modes
         auto& replicationConfig = *desc.MutableReplicationConfig();
         replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
@@ -147,6 +215,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void CreateDst() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = TxBody;
+
+        if (Owner) {
+            ev->Record.SetOwner(Owner);
+        }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
         Become(&TThis::StateCreateDst);
@@ -445,6 +517,7 @@ public:
             const TActorId& parent,
             ui64 schemeShardId,
             const TActorId& proxy,
+            const TPathId& pathId,
             ui64 rid,
             ui64 tid,
             TReplication::ETargetKind kind,
@@ -453,6 +526,7 @@ public:
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
+        , PathId(pathId)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
@@ -460,11 +534,10 @@ public:
         , DstPath(dstPath)
         , LogPrefix("DstCreator", ReplicationId, TargetId)
     {
-        TxBody.SetWorkingDir(ToString(ExtractParent(DstPath)));
     }
 
     void Bootstrap() {
-        DescribeSrcPath(true);
+        Resolve(PathId);
     }
 
     STATEFN(StateBase) {
@@ -479,6 +552,7 @@ private:
     const TActorId Parent;
     const ui64 SchemeShardId;
     const TActorId YdbProxy;
+    const TPathId PathId;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
@@ -486,6 +560,9 @@ private:
     const TString DstPath;
     const TActorLogPrefix LogPrefix;
 
+    TPathId DomainKey;
+    TString Database;
+    TString Owner;
     TTableProfiles TableProfiles;
     ui64 TxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
@@ -495,17 +572,17 @@ private:
 
 }; // TDstCreator
 
-IActor* CreateDstCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
 }
 
-IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, rid, tid, kind, srcPath, dstPath);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath);
 }
 
 }

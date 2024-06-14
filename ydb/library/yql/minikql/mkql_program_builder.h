@@ -236,7 +236,10 @@ public:
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
     TRuntimeNode BlockExpandChunked(TRuntimeNode flow);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockExists(TRuntimeNode data);
+    TRuntimeNode BlockMember(TRuntimeNode structure, const std::string_view& memberName);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
+    TRuntimeNode BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
@@ -394,7 +397,9 @@ public:
     TRuntimeNode WideSkipWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
 
     TRuntimeNode WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 
     TRuntimeNode WideTop(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);

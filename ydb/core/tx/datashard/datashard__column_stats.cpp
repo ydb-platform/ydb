@@ -12,11 +12,12 @@ using namespace NTable;
 
 class TStatisticsScan: public NTable::IScan {
 public:
-    explicit TStatisticsScan(TActorId replyTo, ui64 cookie, ui64 shardTabletId)
+    explicit TStatisticsScan(TActorId replyTo, ui64 cookie, ui64 shardTabletId, TSerializedCellVec&& startKey)
         : Driver(nullptr)
         , ReplyTo(replyTo)
         , Cookie(cookie)
         , ShardTabletId(shardTabletId)
+        , StartKey(std::move(startKey))
     {}
 
     void Describe(IOutputStream& o) const noexcept override {
@@ -37,7 +38,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64) noexcept override {
-        lead.To(Scheme->Tags(), {}, ESeek::Lower);
+        lead.To(Scheme->Tags(), StartKey.GetCells(), ESeek::Lower);
 
         return EScan::Feed;
     }
@@ -92,6 +93,7 @@ private:
     TActorId ReplyTo;
     ui64 Cookie = 0;
     ui64 ShardTabletId = 0;
+    TSerializedCellVec StartKey;
 
     std::vector<std::unique_ptr<TCountMinSketch>> CountMinSketches;
 };
@@ -145,11 +147,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, co
     }
     const auto& tableInfo = infoIt->second;
 
+    TSerializedCellVec startKey(record.GetStartKey());
+
     if (StatisticsScanId != 0) {
         CancelScan(StatisticsScanTableId, StatisticsScanId);
     }
 
-    auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID());
+    auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID(), std::move(startKey));
 
     auto scanOptions = TScanOptions()
         .SetResourceBroker("statistics_scan", 20)

@@ -1,3 +1,4 @@
+#include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 

@@ -51,7 +51,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
     struct TLoadResult {
         NTable::EReady Ready;
-        IChangeRecord::TPtr Record;
+        TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> Record;
 
         TLoadResult() = default;
         TLoadResult(NTable::EReady ready)
@@ -59,7 +59,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         {
         }
 
-        explicit TLoadResult(NTable::EReady ready, IChangeRecord::TPtr record)
+        explicit TLoadResult(NTable::EReady ready, TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> record)
             : Ready(ready)
             , Record(record)
         {
@@ -233,7 +233,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::make_shared<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>(std::move(records))));
         }
 
         size_t forgotten = 0;
@@ -274,7 +274,7 @@ private:
     static constexpr size_t MemLimit = 512_KB;
     size_t MemUsage = 0;
 
-    THashMap<TActorId, TVector<IChangeRecord::TPtr>> RecordsToSend;
+    THashMap<TActorId, TVector<TChangeRecord::TPtr>> RecordsToSend;
     THashMap<TActorId, TVector<ui64>> RecordsToForget;
 
 }; // TTxRequestChangeRecords
@@ -329,7 +329,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
             << ": removed# " << RemovedCount
             << ", left# " << Self->ChangeRecordsToRemove.size()
             << ", at tablet# " << Self->TabletID());
@@ -374,7 +374,7 @@ public:
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
             << ", at tablet# " << Self->TabletID());
 
         Y_ABORT_UNLESS(!Self->ChangesQueue);

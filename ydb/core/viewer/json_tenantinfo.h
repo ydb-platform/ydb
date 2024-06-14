@@ -32,10 +32,12 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     NMon::TEvHttpInfo::TPtr Event;
-    THashSet<TNodeId> SubscribedNodeIds;
+    THashSet<TNodeId> Subscribers;
+    THashSet<TNodeId> WhiteboardNodesRequested;
+    THashSet<TString> OffloadTenantsRequested;
     THashMap<TNodeId, TString> NodeIdsToTenant; // for tablet info
-    TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> NodeSysInfo;
-    THashMap<TString, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>> TenantNodeTabletInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> WhiteboardSystemStateResponse;
+    THashMap<TString, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>> WhiteboardTabletStateResponse;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString User;
@@ -45,15 +47,19 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     bool SystemTablets = false;
     bool Storage = false;
     bool Nodes = false;
+    bool Users = false;
     bool OffloadMerge = false;
-    THashMap<TString, size_t> TenantOffloadMergeTablets;
-    THashMap<TString, size_t> TenantOffloadNodesInfo;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
-    THashMap<TString, NKikimrViewer::TEvViewerResponse> TenantMergedTabletInfo;
-    THashMap<TString, NKikimrViewer::TEvViewerResponse> TenantNodesSystemInfo;
+    THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedTabletStateResponse;
+    THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedSystemStateResponse;
     TTabletId RootHiveId = 0;
     TString RootId; // id of root domain (tenant)
     NKikimrViewer::TTenantInfo Result;
+
+    struct TStorageQuota {
+        uint64 SoftQuota = 0;
+        uint64 HardQuota = 0;
+    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -103,6 +109,7 @@ public:
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
+        Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
         Path = params.Get("path");
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -136,8 +143,10 @@ public:
     }
 
     void PassAway() override {
-        for (const TNodeId nodeId : SubscribedNodeIds) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+        for (const TNodeId nodeId : Subscribers) {
+            if (nodeId != SelfId().NodeId()) {
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+            }
         }
         TBase::PassAway();
         BLOG_TRACE("PassAway()");
@@ -218,52 +227,72 @@ public:
         RequestDone();
     }
 
-    static TNodeId SelectTargetNode(const std::vector<TNodeId>& nodesIds, size_t offset = 0) {
-        std::vector<TNodeId> nodes(nodesIds);
-        auto itPos = std::next(nodes.begin(), offset % nodes.size());
-        std::nth_element(nodes.begin(), itPos, nodes.end());
-        return *itPos;
+    void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
+        Subscribers.insert(nodeId);
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+        THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+        BLOG_TRACE("Tenant " << NodeIdsToTenant[nodeId] << " send to " << nodeId << " TEvSystemStateRequest: " << request->Record.ShortDebugString());
+        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
     }
 
-    void SendViewerTabletRequest(const TString& tenantId) {
-        const std::vector<TNodeId>& nodesIds = TenantNodes[tenantId];
-        TNodeId nodeId = SelectTargetNode(nodesIds, TenantOffloadMergeTablets[tenantId]++);
-        SubscribedNodeIds.insert(nodeId);
-        TActorId viewerServiceId = MakeViewerID(nodeId);
-
-        THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
-        request->Record.MutableTabletRequest()->SetFormat("packed5");
-        request->Record.SetTimeout(Timeout / 3);
-        for (auto nodeId : nodesIds) {
-            request->Record.MutableLocation()->AddNodeId(nodeId);
-        }
-        BLOG_TRACE("Tenant " << tenantId << " send to " << nodeId << " TEvViewerRequest: " << request->Record.ShortDebugString());
-        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kTabletRequest, nodeId);
-        SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
+    void SendWhiteboardTabletStateRequest(const TNodeId nodeId) {
+        Subscribers.insert(nodeId);
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+        THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
+        request->Record.SetFormat("packed5");
+        BLOG_TRACE("Tenant " << NodeIdsToTenant[nodeId] << " send to " << nodeId << " TEvTabletStateRequest: " << request->Record.ShortDebugString());
+        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
     }
 
-    void SendViewerSystemRequest(const TString& tenantId) {
-        const std::vector<TNodeId>& nodesIds = TenantNodes[tenantId];
-        TNodeId nodeId = SelectTargetNode(nodesIds, TenantOffloadNodesInfo[tenantId]++);
-        SubscribedNodeIds.insert(nodeId);
-        TActorId viewerServiceId = MakeViewerID(nodeId);
-
-        THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
-        request->Record.MutableSystemRequest();
-        request->Record.SetTimeout(Timeout / 3);
-        for (auto nodeId : nodesIds) {
-            request->Record.MutableLocation()->AddNodeId(nodeId);
+    void SendWhiteboardRequests(const TNodeId nodeId) {
+        if (WhiteboardNodesRequested.insert(nodeId).second) {
+            SendWhiteboardSystemStateRequest(nodeId);
+            if (Tablets) {
+                SendWhiteboardTabletStateRequest(nodeId);
+            }
         }
-        BLOG_TRACE("Tenant " << tenantId << " send to " << nodeId << " TEvViewerRequest: " << request->Record.ShortDebugString());
-        ViewerWhiteboardCookie cookie (NKikimrViewer::TEvViewerRequest::kSystemRequest, nodeId);
-        SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
+    }
+
+    void SendOffloadRequests(const TString& tenantId) {
+        std::vector<TNodeId>& nodesIds = TenantNodes[tenantId];
+        if (!nodesIds.empty() && OffloadTenantsRequested.insert(tenantId).second) {
+            ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
+            auto itPos = std::next(nodesIds.begin(), hash % nodesIds.size());
+            std::nth_element(nodesIds.begin(), itPos, nodesIds.end());
+            TNodeId nodeId = *itPos;
+
+            Subscribers.insert(nodeId);
+            TActorId viewerServiceId = MakeViewerID(nodeId);
+
+            THolder<TEvViewer::TEvViewerRequest> sysRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
+            sysRequest->Record.MutableSystemRequest();
+            sysRequest->Record.SetTimeout(Timeout / 3);
+            for (auto nodeId : nodesIds) {
+                sysRequest->Record.MutableLocation()->AddNodeId(nodeId);
+            }
+            BLOG_TRACE("Tenant " << tenantId << " send to " << nodeId << " TEvViewerRequest: " << sysRequest->Record.ShortDebugString());
+            ViewerWhiteboardCookie cookie (NKikimrViewer::TEvViewerRequest::kSystemRequest, nodeId);
+            SendRequest(viewerServiceId, sysRequest.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
+
+            if (Tablets) {
+                THolder<TEvViewer::TEvViewerRequest> tblRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
+                tblRequest->Record.MutableTabletRequest()->SetFormat("packed5");
+                tblRequest->Record.SetTimeout(Timeout / 3);
+                for (auto nodeId : nodesIds) {
+                    tblRequest->Record.MutableLocation()->AddNodeId(nodeId);
+                }
+                BLOG_TRACE("Tenant " << tenantId << " send to " << nodeId << " TEvViewerRequest: " << tblRequest->Record.ShortDebugString());
+                ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kTabletRequest, nodeId);
+                SendRequest(viewerServiceId, tblRequest.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
+            }
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         for (const NKikimrHive::THiveDomainStats& hiveStat : ev->Get()->Record.GetDomainStats()) {
             TPathId subDomainKey({hiveStat.GetShardId(), hiveStat.GetPathId()});
             NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[subDomainKey];
-            auto tenantId = GetDomainId({hiveStat.GetShardId(), hiveStat.GetPathId()});
+            TString tenantId = GetDomainId({hiveStat.GetShardId(), hiveStat.GetPathId()});
             tenant.SetId(tenantId);
             if (ev->Cookie != RootHiveId || tenant.GetId() == RootId) {
                 if (!tenant.HasMetrics()) {
@@ -281,35 +310,19 @@ public:
             }
 
             BLOG_TRACE("Received HiveDomainStats for " << tenant.GetId() << " from " << ev->Cookie);
+            std::vector<TNodeId> nodesIds;
+            nodesIds.reserve(hiveStat.NodeIdsSize());
+            for (auto nodeId : hiveStat.GetNodeIds()) {
+                nodesIds.push_back(nodeId);
+                NodeIdsToTenant.insert({nodeId, tenantId});
+            }
+            TenantNodes[tenantId] = nodesIds;
 
-            if (!OffloadMerge) {
+            if (OffloadMerge) {
+                SendOffloadRequests(tenantId);
+            } else {
                 for (TNodeId nodeId : hiveStat.GetNodeIds()) {
-                    TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-                    if (SubscribedNodeIds.insert(nodeId).second) {
-                        THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
-                        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    }
-                    if (Tablets && NodeIdsToTenant.insert({nodeId, tenantId}).second) {
-                        THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
-                        request->Record.SetFormat("packed5");
-                        BLOG_TRACE("Tenant " << tenant.GetId() << " send to " << nodeId << " TEvTabletStateRequest: " << request->Record.ShortDebugString());
-                        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    }
-                }
-            } else if (hiveStat.NodeIdsSize() > 0) {
-                std::vector<TNodeId> nodesIds;
-                nodesIds.reserve(hiveStat.NodeIdsSize());
-                for (auto nodeId : hiveStat.GetNodeIds()) {
-                    nodesIds.push_back(nodeId);
-                    NodeIdsToTenant.insert({nodeId, tenantId});
-                }
-                TenantNodes[tenantId] = nodesIds;
-
-                if (TenantNodesSystemInfo.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
-                    SendViewerSystemRequest(tenantId);
-                }
-                if (Tablets && TenantMergedTabletInfo.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
-                    SendViewerTabletRequest(tenantId);
+                    SendWhiteboardRequests(nodeId);
                 }
             }
         }
@@ -359,7 +372,7 @@ public:
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
         BLOG_TRACE("Received TEvSystemStateResponse from " << nodeId);
-        NodeSysInfo[nodeId] = std::move(ev->Get()->Record);
+        WhiteboardSystemStateResponse[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
@@ -368,7 +381,7 @@ public:
         BLOG_TRACE("Received TEvTabletStateResponse from " << nodeId << " with "
             << TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::GetElementsCount(ev->Get()->Record) << " tablets");
         auto tenantId = NodeIdsToTenant[nodeId];
-        TenantNodeTabletInfo[tenantId][nodeId] = std::move(ev->Get()->Record);
+        WhiteboardTabletStateResponse[tenantId][nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
@@ -380,12 +393,12 @@ public:
                 BLOG_TRACE("Received TEvViewerResponse from " << nodeId << " with "
                     << TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::GetElementsCount(ev->Get()->Record.GetTabletResponse())
                     << " tablets");
-                TenantMergedTabletInfo[tenantId] = std::move(ev->Get()->Record);
+                OffloadMergedTabletStateResponse[tenantId] = std::move(ev->Get()->Record);
                 RequestDone();
                 break;
             case NKikimrViewer::TEvViewerResponse::kSystemResponse:
                 BLOG_TRACE("Received TEvViewerResponse from " << nodeId);
-                TenantNodesSystemInfo[tenantId] = std::move(ev->Get()->Record);
+                OffloadMergedSystemStateResponse[tenantId] = std::move(ev->Get()->Record);
                 RequestDone();
                 break;
             default:
@@ -397,7 +410,7 @@ public:
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
             ui32 nodeId = ev.Get()->Cookie;
             BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
-            if (NodeSysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
+            if (WhiteboardSystemStateResponse.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
                 RequestDone();
             }
         }
@@ -405,47 +418,80 @@ public:
             ui32 nodeId = ev.Get()->Cookie;
             BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
             auto tenantId = NodeIdsToTenant[nodeId];
-            if (TenantNodeTabletInfo[tenantId].emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+            if (WhiteboardTabletStateResponse[tenantId].emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone();
             }
         }
         if (ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
             ViewerWhiteboardCookie cookie(ev.Get()->Cookie);
+            auto nodeId = cookie.GetNodeId();
+            auto tenantId = NodeIdsToTenant[nodeId];
             BLOG_TRACE("Undelivered for node " << cookie.GetNodeId() << " event " << ev->Get()->SourceType);
-            auto tenantId = NodeIdsToTenant[cookie.GetNodeId()];
             switch (cookie.GetRequestCase()) {
                 case NKikimrViewer::TEvViewerRequest::kTabletRequest:
-                    SendViewerTabletRequest(tenantId);
+                    if (OffloadMergedTabletStateResponse.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
+                        // fallback
+                        for (TNodeId nodeId : TenantNodes[tenantId]) {
+                            SendWhiteboardTabletStateRequest(nodeId);
+                        }
+                        RequestDone();
+                    };
+
                     break;
                 case NKikimrViewer::TEvViewerRequest::kSystemRequest:
-                    SendViewerSystemRequest(tenantId);
+                    if (OffloadMergedSystemStateResponse.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
+                        // fallback
+                        for (TNodeId nodeId : TenantNodes[tenantId]) {
+                            SendWhiteboardSystemStateRequest(nodeId);
+                        }
+                        RequestDone();
+                    }
                     break;
                 default:
                     break;
             }
-            RequestDone();
         }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TString& tenantId = NodeIdsToTenant[nodeId];
-        BLOG_TRACE("NodeDisconnected for node " << nodeId);
-        if (!OffloadMerge) {
-            if (NodeSysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
+        auto tenantId = NodeIdsToTenant[nodeId];
+        BLOG_TRACE("NodeDisconnected for nodeId " << nodeId);
+
+        if (OffloadTenantsRequested.count(tenantId) > 0) {
+            // fallback
+            if (OffloadMergedSystemStateResponse.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
+                for (TNodeId nodeId : TenantNodes[tenantId]) {
+                    SendWhiteboardSystemStateRequest(nodeId);
+                }
                 RequestDone();
             }
-            if (Tablets && TenantNodeTabletInfo[tenantId].emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+            if (Tablets && OffloadMergedSystemStateResponse.emplace(tenantId, NKikimrViewer::TEvViewerResponse{}).second) {
+                for (TNodeId nodeId : TenantNodes[tenantId]) {
+                    SendWhiteboardSystemStateRequest(nodeId);
+                }
                 RequestDone();
             }
-        } else if (!TenantNodes[tenantId].empty()) {
-            if (Tablets) {
-                SendViewerTabletRequest(tenantId);
-                RequestDone();
-            }
-            SendViewerSystemRequest(tenantId);
-            RequestDone();
         }
+        if (WhiteboardNodesRequested.count(nodeId) > 0) {
+            if (WhiteboardSystemStateResponse.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
+                RequestDone();
+            }
+            if (Tablets && WhiteboardTabletStateResponse[tenantId].emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+                RequestDone();
+            }
+        }
+    }
+
+    NKikimrViewer::TStorageUsage::EType GetStorageType(const TString& poolKind) {
+        auto kind = to_lower(poolKind);
+        if (kind.StartsWith("ssd") || kind.StartsWith("nvme")) {
+            return NKikimrViewer::TStorageUsage::SSD;
+        }
+        if (kind.StartsWith("hdd") || kind.StartsWith("rot")) {
+            return NKikimrViewer::TStorageUsage::HDD;
+        }
+        return NKikimrViewer::TStorageUsage::None;
     }
 
     void ReplyAndPassAway() {
@@ -455,18 +501,15 @@ public:
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         TMap<TNodeId, NKikimrWhiteboard::TSystemStateInfo> NodeSystemStateInfo;
 
-        if (OffloadMerge) {
-            for (auto& [tenantId, record] : TenantNodesSystemInfo) {
-                for (auto& systemState : *(record.MutableSystemResponse()->MutableSystemStateInfo())) {
-                    auto ni = systemState.GetNodeId();
-                    NodeSystemStateInfo[ni] = std::move(systemState);
-                }
+        for (auto& [tenantId, record] : OffloadMergedSystemStateResponse) {
+            for (auto& systemState : *(record.MutableSystemResponse()->MutableSystemStateInfo())) {
+                auto ni = systemState.GetNodeId();
+                NodeSystemStateInfo[ni] = std::move(systemState);
             }
-        } else {
-            for (auto& [nodeId, record] : NodeSysInfo) {
-                if (record.SystemStateInfoSize() == 1) {
-                    NodeSystemStateInfo[nodeId] = std::move(record.GetSystemStateInfo(0));
-                }
+        }
+        for (auto& [nodeId, record] : WhiteboardSystemStateResponse) {
+            if (record.SystemStateInfoSize() == 1) {
+                NodeSystemStateInfo[nodeId] = std::move(record.GetSystemStateInfo(0));
             }
         }
 
@@ -475,10 +518,10 @@ public:
             NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
             THashMap<TTabletId, const NKikimrWhiteboard::TTabletStateInfo*> tabletInfoIndex;
             if (Tablets) {
-                if (OffloadMerge) {
-                    tabletInfo = std::move(*(TenantMergedTabletInfo[id].MutableTabletResponse()));
-                } else {
-                    TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::MergeResponses(tabletInfo, TenantNodeTabletInfo[id]);
+                if (WhiteboardTabletStateResponse[id].size() > 0) {
+                    TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::MergeResponses(tabletInfo, WhiteboardTabletStateResponse[id]);
+                } else if (OffloadMerge) {
+                    tabletInfo = std::move(*(OffloadMergedTabletStateResponse[id].MutableTabletResponse()));
                 }
                 if (SystemTablets) {
                     for (const auto& info : TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::GetElementsField(tabletInfo)) {
@@ -496,16 +539,18 @@ public:
                     continue;
                 }
                 std::unordered_set<TString> users;
-                if (entry.SecurityObject) {
-                    users.emplace(entry.SecurityObject->GetOwnerSID());
-                    for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
-                        if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
-                            users.emplace(ace.GetSID());
+                if(!User.empty() || Users) {
+                    if (entry.SecurityObject) {
+                        users.emplace(entry.SecurityObject->GetOwnerSID());
+                        for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
+                            if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
+                                users.emplace(ace.GetSID());
+                            }
                         }
                     }
-                }
-                if (!IsValidOwner(users)) {
-                    continue;
+                    if (!IsValidOwner(users)) {
+                        continue;
+                    }
                 }
                 NKikimrViewer::TTenant& tenant = *Result.AddTenantInfo();
                 auto itTenantByPath = TenantByPath.find(path);
@@ -603,13 +648,34 @@ public:
                         tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
                         tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                         tenant.SetStorageGroups(storageGroups);
-                        auto& ssdUsage = *tenant.AddStorageUsage();
-                        ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                        ssdUsage.SetSize(storageAllocatedSize);
-                        ssdUsage.SetLimit(storageAllocatedLimit);
-                        // TODO(andrew-rykov)
-                        auto& hddUsage = *tenant.AddStorageUsage();
-                        hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+                    }
+
+                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> storageUsageByType;
+                    THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
+                    if (entry.DomainDescription) {
+                        for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
+                            auto type = GetStorageType(poolUsage.GetPoolKind());
+                            storageUsageByType[type] += poolUsage.GetTotalSize();
+                        }
+                    }
+
+                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
+                        auto type = GetStorageType(quota.unit_kind());
+                        auto& usage = storageQuotasByType[type];
+                        usage.SoftQuota += quota.data_size_soft_quota();
+                        usage.HardQuota += quota.data_size_hard_quota();
+                    }
+
+                    for (const auto& [type, size] : storageUsageByType) {
+                        auto& storageUsage = *tenant.AddStorageUsage();
+                        storageUsage.SetType(type);
+                        storageUsage.SetSize(size);
+                        auto it = storageQuotasByType.find(type);
+                        if (it != storageQuotasByType.end()) {
+                            storageUsage.SetLimit(it->second.HardQuota);
+                            storageUsage.SetSoftQuota(it->second.SoftQuota);
+                            storageUsage.SetHardQuota(it->second.HardQuota);
+                        }
                     }
                 }
 
@@ -718,7 +784,7 @@ public:
             });
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -731,28 +797,76 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTenantInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TTenantInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TTenantInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTenantInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"user","in":"query","description":"tenant owner","required":false,"type":"string"},
-                      {"name":"followers","in":"query","description":"return followers","required":false,"type":"boolean"},
-                      {"name":"metrics","in":"query","description":"return tablet metrics","required":false,"type":"boolean"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return tablets","required":false,"type":"boolean"},
-                      {"name":"system_tablets","in":"query","description":"return system tablets","required":false,"type":"boolean"},
-                      {"name":"offload_merge","in":"query","description":"use offload merge","required":false,"type":"boolean"},
-                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
-                      {"name":"nodes","in":"query","description":"return nodes info","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: user
+              in: query
+              description: tenant owner
+              required: false
+              type: string
+            - name: followers
+              in: query
+              description: return followers
+              required: false
+              type: boolean
+            - name: metrics
+              in: query
+              description: return tablet metrics
+              required: false
+              type: boolean
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: tablets
+              in: query
+              description: return tablets
+              required: false
+              type: boolean
+            - name: system_tablets
+              in: query
+              description: return system tablets
+              required: false
+              type: boolean
+            - name: offload_merge
+              in: query
+              description: use offload merge
+              required: false
+              type: boolean
+            - name: storage
+              in: query
+              description: return storage info
+              required: false
+              type: boolean
+            - name: nodes
+              in: query
+              description: return nodes info
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 

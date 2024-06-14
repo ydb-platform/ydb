@@ -77,11 +77,14 @@ public:
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
         }
+        bool enableThrottling = (Action_ != EAction::CreateQueue);
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<TSqsEvents::TEvGetConfiguration>(
                 RequestId_,
                 UserName_,
                 GetQueueName(),
+                FolderId_,
+                enableThrottling,
                 configurationFlags)
         );
     }
@@ -252,6 +255,8 @@ protected:
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
         const size_t errors = ErrorsCount(Response_, detailedCounters ? &detailedCounters->APIStatuses : nullptr);
 
+        FinishTs_ = TActivationContext::Now();
+
         const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
         if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
@@ -287,7 +292,6 @@ protected:
             }
         }
 
-        FinishTs_ = TActivationContext::Now();
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
         }
@@ -630,14 +634,14 @@ private:
             }
         }
 
-        if (ev->Get()->Throttled) {
-            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+        if (ev->Get()->Fail) {
+            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE, "Failed to get configuration.");
             SendReplyAndDie();
             return;
         }
 
-        if (ev->Get()->Fail) {
-            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE, "Failed to get configuration.");
+        if (ev->Get()->Throttled) {
+            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
             SendReplyAndDie();
             return;
         }
@@ -647,6 +651,8 @@ private:
             SendReplyAndDie();
             return;
         }
+
+        Y_ABORT_UNLESS(SchemeCache_);
 
         bool isACLProtectedAccount = Cfg().GetForceAccessControl();
         if (!IsCloud() && (SecurityToken_ || (Cfg().GetForceAccessControl() && (isACLProtectedAccount = IsACLProtectedAccount(UserName_))))) {
@@ -664,8 +670,6 @@ private:
                 SendReplyAndDie();
                 return;
             }
-
-            Y_ABORT_UNLESS(SchemeCache_);
 
             RequestSchemeCache(GetActionACLSourcePath()); // this also checks that requested queue (if any) does exist
             RequestTicketParser();

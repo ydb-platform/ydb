@@ -7,7 +7,7 @@
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/memory_reference_tracker.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -27,7 +27,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 static const auto LightInvokerDurationWarningThreshold = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////

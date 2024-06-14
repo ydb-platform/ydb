@@ -1,12 +1,14 @@
 IF (YQL_PACKAGED)
+    PACKAGE()
 
     FROM_SANDBOX(
         FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            yqlrun EXECUTABLE
+            yqlrun
+            EXECUTABLE
     )
 
+    END()
 ELSE()
-
     PROGRAM(yqlrun)
 
     ALLOCATOR(J)
@@ -61,5 +63,4 @@ ELSE()
     )
 
     END()
-
 ENDIF()

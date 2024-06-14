@@ -6,9 +6,29 @@
 
 using namespace NSchemeShardUT_Private;
 
+static const TString createTableProto = R"(
+    Name: "Table"
+    Columns { Name: "key" Type: "Uint64" }
+    Columns { Name: "value" Type: "Uint64" }
+    KeyColumnNames: ["key"]
+)";
+
+static const TString createTableWithIndexProto = R"(
+    TableDescription {
+        Name: "Table"
+        Columns { Name: "key" Type: "Uint64" }
+        Columns { Name: "value" Type: "Uint64" }
+        KeyColumnNames: ["key"]
+    }
+    IndexDescription {
+        Name: "SyncIndex"
+        KeyColumnNames: ["value"]
+    }
+)";
+
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     template <typename T>
-    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false) {
+    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool tableWithIndex = false) {
         T t;
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
@@ -16,13 +36,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
-
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "Table"
-                    Columns { Name: "key" Type: "Uint64" }
-                    Columns { Name: "value" Type: "Uint64" }
-                    KeyColumnNames: ["key"]
-                )");
+                if (tableWithIndex) {
+                    TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", createTableWithIndexProto);
+                } else {
+                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", createTableProto);
+                }
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -43,6 +61,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                 TableName: "Table"
                 StreamDescription { %s }
+                AllIndexes {}
             )", strDesc.c_str()));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -50,6 +69,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 NLs::PathExist,
                 NLs::StreamVirtualTimestamps(vt),
             });
+
+            if (tableWithIndex) {
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
+                    NLs::PathExist,
+                    NLs::StreamVirtualTimestamps(vt),
+                });
+            }
         });
     }
 
@@ -57,12 +83,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         CreateStream<T>();
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamTableWithIndex) {
+        CreateStream<T>(Nothing(), false, true);
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReady) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReadyTableWithIndex) {
+        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, false, true);
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithInitialScan) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithInitialScanTableWithIndex) {
+        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithVirtualTimestamps) {

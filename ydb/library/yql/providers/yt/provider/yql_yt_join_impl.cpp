@@ -3775,6 +3775,7 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
     if (leftLeaf && rightLeaf) {
         YQL_ENSURE(leftLeaf->Label->Content() != rightLeaf->Label->Content());
 
+        YQL_ENSURE(leftItemType && rightItemType);
         auto inputKeyTypeLeft = BuildJoinKeyType(*leftItemType, leftJoinKeyList);
         auto inputKeyTypeRight = BuildJoinKeyType(*rightItemType, rightJoinKeyList);
         if (!IsSameAnnotation(*AsDictKeyType(RemoveNullsFromJoinKeyType(inputKeyTypeLeft), ctx),

@@ -12,11 +12,14 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <util/system/env.h>
 
@@ -29,9 +32,27 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYql::NDqProto::TComputeActorState MakeStateFromBlob(const TString& blob) {
-    NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
+    TString blob;
+    blob.reserve(blobSize);
+    for (size_t i = 0; i < blobSize; ++i) {
+        blob += static_cast<TString::value_type>(std::rand() % 100);
+    }
+
+    NUdf::TUnboxedValue value;
+    if (isIncrement) {
+        std::map<TString, TString> increment{{"1", blob}};
+        std::set<TString> deleted;
+        NKikimr::NMiniKQL::TOutputSerializer::MakeIncrementState(increment, deleted, 0);
+    } else {
+        value = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0);
+    }
+
+    const TStringBuf savedBuf = value.AsStringRef();
+    TString result;
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
+    NYql::NDq::TComputeActorState state;
+    state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
     return state;
 }
 
@@ -47,6 +68,7 @@ struct TTestRuntime {
     TString YdbDatabase;
     std::unique_ptr<NYdb::TDriver> YdbDriver;
     std::unique_ptr<NYdb::NTable::TTableClient> YdbTableClient;
+    NKikimr::TActorSystemStub ActorSystemStub;
 
     TTestRuntime(const char* tablePrefix)
         : TablePrefix(tablePrefix)
@@ -55,9 +77,11 @@ struct TTestRuntime {
     {
         Runtime.reset(new TTestBasicRuntime(1));
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-        SetupTabletServices(*Runtime);
+        TAppPrepare app;
+        SetupTabletServices(*Runtime, &app, true);
 
-        NConfig::TYdbStorageConfig storageConfig;
+        NConfig::TCheckpointCoordinatorConfig config;
+        auto& storageConfig = *config.MutableStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
@@ -69,7 +93,7 @@ struct TTestRuntime {
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-        StateStorage = NewYdbStateStorage(storageConfig, credFactory, yqSharedResources);
+        StateStorage = NewYdbStateStorage(config, credFactory, yqSharedResources);
         issues = StateStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
@@ -85,12 +109,12 @@ struct TTestRuntime {
         YdbTableClient = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver);
     }
 
-    void SaveCheckpoint(const TCoordinatorId& coordinator, const TCheckpointId& checkpointId) {
+    void SaveCheckpoint(const TCoordinatorId& coordinator, const TCheckpointId& checkpointId, bool isIncrement) {
         auto createCheckpointResult = CheckpointStorage->CreateCheckpoint(coordinator, checkpointId, NProto::TCheckpointGraphDescription(), ECheckpointStatus::Pending).GetValueSync();
         UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
 
-        StateStorage->SaveState(1, "graph", checkpointId, MakeStateFromBlob("blob")).GetValueSync();
-        StateStorage->SaveState(2, "graph", checkpointId, MakeStateFromBlob("blob")).GetValueSync();
+        StateStorage->SaveState(1, "graph", checkpointId, MakeStateFromBlob(4, isIncrement)).GetValueSync();
+        StateStorage->SaveState(2, "graph", checkpointId, MakeStateFromBlob(4, isIncrement)).GetValueSync();
 
         CheckpointStorage->UpdateCheckpointStatus(
             coordinator,
@@ -113,23 +137,24 @@ struct TTestRuntime {
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
         TCheckpointId checkpointId1(11, 1);
-        SaveCheckpoint(coordinator, checkpointId1);
+        SaveCheckpoint(coordinator, checkpointId1, false);
 
         TCheckpointId checkpointId2(11, 2);
-        SaveCheckpoint(coordinator, checkpointId2);
+        SaveCheckpoint(coordinator, checkpointId2, false);
 
         TCheckpointId checkpointId3(11, 3);
-        SaveCheckpoint(coordinator, checkpointId3);
+        SaveCheckpoint(coordinator, checkpointId3, false);
     }
 
-    void CheckpointSucceeded(const TCheckpointId& checkpointUpperBound) {
+    void CheckpointSucceeded(const TCheckpointId& checkpointUpperBound, NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         TActorId sender = Runtime->AllocateEdgeActor();
 
         TCoordinatorId coordinator("graph", 11);
 
         auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(
             coordinator,
-            checkpointUpperBound);
+            checkpointUpperBound,
+            type);
 
         auto handle = MakeHolder<IEventHandle>(ActorGC, sender, request.release());
         Runtime->Send(handle.Release());
@@ -196,6 +221,24 @@ Y_UNIT_TEST_SUITE(TGcTest) {
         countResult = runtime.StateStorage->CountStates("graph", checkpointId3).GetValueSync();
         UNIT_ASSERT(countResult.second.Empty());
         UNIT_ASSERT_VALUES_EQUAL(countResult.first, 2UL);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreIncrementCheckpoint)
+    {
+        TTestRuntime runtime("ShouldIgnoreIncrementCheckpoint");
+
+        TCheckpointId checkpointId1(11, 1);
+        TCheckpointId checkpointId2(11, 2);
+        TCheckpointId checkpointId3(11, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(runtime.CountGraphDescriptions(), 3);
+
+        runtime.CheckpointSucceeded(checkpointId3,  NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
+
+        Sleep(TDuration::MilliSeconds(2000));
+        ICheckpointStorage::TGetCheckpointsResult getResult = runtime.CheckpointStorage->GetCheckpoints("graph").GetValueSync();
+        UNIT_ASSERT(getResult.second.Empty());
+        UNIT_ASSERT(getResult.first.size() == 3);
     }
 };
 

@@ -161,6 +161,37 @@ public:
     void Initialized(const TString& initId);
 };
 
+class TRegistrationData;
+
+class TInitializationSnapshotOwner {
+private:
+    mutable TMutex Mutex;
+    std::shared_ptr<NInitializer::TSnapshot> InitializationSnapshot;
+    friend class TRegistrationData;
+    void SetInitializationSnapshot(NFetcher::ISnapshot::TPtr s) {
+        auto snapshot = dynamic_pointer_cast<NInitializer::TSnapshot>(s);
+        Y_ABORT_UNLESS(snapshot);
+        TGuard<TMutex> g(Mutex);
+        InitializationSnapshot = snapshot;
+    }
+
+    void NoInitializationSnapshot() {
+        TGuard<TMutex> g(Mutex);
+        InitializationSnapshot = std::make_shared<NInitializer::TSnapshot>(TInstant::Zero());
+    }
+public:
+    bool HasInitializationSnapshot() const {
+        TGuard<TMutex> g(Mutex);
+        return !!InitializationSnapshot;
+    }
+    bool HasModification(const TString& componentId, const TString& modificationId) const {
+        NInitializer::TDBInitializationKey key(componentId, modificationId);
+        TGuard<TMutex> g(Mutex);
+        return InitializationSnapshot->GetObjects().contains(key);
+    }
+
+};
+
 class TRegistrationData {
 public:
     enum class EStage {
@@ -170,8 +201,8 @@ public:
     };
 private:
     YDB_READONLY(EStage, Stage, EStage::Created);
-    YDB_READONLY_DEF(std::shared_ptr<NInitializer::TSnapshot>, InitializationSnapshot);
     YDB_READONLY_DEF(std::shared_ptr<NInitializer::TFetcher>, InitializationFetcher);
+    YDB_READONLY_DEF(std::shared_ptr<TInitializationSnapshotOwner>, SnapshotOwner);
 public:
     TRegistrationData();
 

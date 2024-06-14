@@ -12,10 +12,9 @@
 
 import copy
 import json
+import urllib.parse
 
 import requests
-import six
-from six.moves.urllib import parse as urlparse
 
 
 class _RequestObjectProxy(object):
@@ -61,7 +60,7 @@ class _RequestObjectProxy(object):
             if not self._case_sensitive:
                 url = url.lower()
 
-            self._url_parts_ = urlparse.urlparse(url)
+            self._url_parts_ = urllib.parse.urlparse(url)
 
         return self._url_parts_
 
@@ -110,7 +109,8 @@ class _RequestObjectProxy(object):
     @property
     def qs(self):
         if self._qs is None:
-            self._qs = urlparse.parse_qs(self.query, keep_blank_values=True)
+            self._qs = urllib.parse.parse_qs(self.query,
+                                             keep_blank_values=True)
 
         return self._qs
 
@@ -146,7 +146,7 @@ class _RequestObjectProxy(object):
     def text(self):
         body = self.body
 
-        if isinstance(body, six.binary_type):
+        if isinstance(body, bytes):
             body = body.decode('utf-8')
 
         return body

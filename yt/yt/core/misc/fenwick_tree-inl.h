@@ -112,7 +112,7 @@ template <class TItem>
 template <class TValue, class TComparer>
 int TFenwickTree<TItem>::UpperBound(const TValue& sum, TComparer&& comparer) const
 {
-    return LowerBound(sum, [&comparer](const auto& lhs, const auto& rhs) {
+    return LowerBound(sum, [&comparer] (const auto& lhs, const auto& rhs) {
         return !comparer(rhs, lhs);
     });
 }

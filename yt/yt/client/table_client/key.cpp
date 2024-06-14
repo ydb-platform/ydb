@@ -13,7 +13,7 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientKey");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientKey");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -143,7 +143,7 @@ void Serialize(const TKey& key, IYsonConsumer* consumer)
 {
     if (key) {
         BuildYsonFluently(consumer)
-            .DoListFor(MakeRange(key.Begin(), key.End()), [&](TFluentList fluent, const TUnversionedValue& value) {
+            .DoListFor(MakeRange(key.Begin(), key.End()), [&] (TFluentList fluent, const TUnversionedValue& value) {
                 fluent
                     .Item()
                     .Value(value);

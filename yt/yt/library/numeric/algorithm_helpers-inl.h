@@ -129,7 +129,7 @@ void PartialShuffle(TIter begin, TIter end, TIter last)
 template <class T, class TGetKey>
 std::pair<const T&, const T&> MinMaxBy(const T& first, const T& second, const TGetKey& getKey)
 {
-    return std::minmax(first, second, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
+    return std::minmax(first, second, [&] (auto&& left, auto&& right) { return getKey(left) < getKey(right); });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

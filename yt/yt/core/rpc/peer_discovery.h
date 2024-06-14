@@ -10,7 +10,7 @@ struct IDiscoverRequestHook
     : public TRefCounted
 {
     virtual void EnrichRequest(NProto::TReqDiscover* request) const = 0;
-    virtual void OnResponse(NProto::TRspDiscover* response) const = 0;
+    virtual void HandleResponse(NProto::TRspDiscover* response) const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IDiscoverRequestHook);

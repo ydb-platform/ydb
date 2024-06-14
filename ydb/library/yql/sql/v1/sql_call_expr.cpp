@@ -38,7 +38,7 @@ TNodePtr TSqlCallExpr::BuildCall() {
         TVector<TNodePtr> args;
         bool warnOnYqlNameSpace = true;
 
-        TUdfNode* udf_node = Node ? dynamic_cast<TUdfNode*>(Node.Get()) : nullptr;
+        TUdfNode* udf_node = Node ? Node->GetUdfNode() : nullptr;
         if (udf_node) {
             if (!udf_node->DoInit(Ctx, nullptr)) {
                 return nullptr;
@@ -177,7 +177,7 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     auto value = expression.Build(node.GetRule_expr3());
     if (value && optimizeForParam) {
         TDeferredAtom atom;
-        MakeTableFromExpression(Ctx, value, atom);
+        MakeTableFromExpression(Ctx.Pos(), Ctx, value, atom);
         value = new TCallNodeImpl(Ctx.Pos(), "String", { atom.Build() });
     }
 

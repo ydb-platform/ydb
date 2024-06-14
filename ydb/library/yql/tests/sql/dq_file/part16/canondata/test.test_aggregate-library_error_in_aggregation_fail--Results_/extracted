@@ -9,15 +9,9 @@
             <tmp_path>/program.sql:<main>:9:15: Error: At function: AssumeColumnOrderPartial
             	FROM Input as a
 	              ^
-                <tmp_path>/program.sql:<main>:8:17: Error: At function: Aggregate
+                <tmp_path>/program.sql:<main>:8:17: Error: At function: Aggregate, At function: AggApply
                 	    a.key as x, sum(b.value)
 	                ^
-                    <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: At function: AggregationTraits
-                    	
-	                 ^
-                        <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: At function: WidenIntegral
-                        	
-	                                                                                                                            ^
-                            <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: Expected numeric type, but got String
-                            	
-	                                                                                                                            ^
+                    <tmp_path>/program.sql:<main>:8:17: Error: Unsupported column type: String
+                    	    a.key as x, sum(b.value)
+	                ^

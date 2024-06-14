@@ -25,7 +25,7 @@ where
     and cs.cs_ship_mode_sk   = sm.sm_ship_mode_sk
     and cs.cs_call_center_sk = cc.cc_call_center_sk
 group by
-    substring(cast(w.w_warehouse_name as String), 1, 20) as w_warehouse_name,
+    substring(cast(w.w_warehouse_name as String), 0, 20) as w_warehouse_name,
     sm.sm_type,
     cc.cc_name
 order by w_warehouse_name,

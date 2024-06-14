@@ -219,8 +219,8 @@ public:
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {
-                NArrow::TStatusValidator::Validate(b->ValidateFull());
-                ResultBatches.push_back(b);
+                ResultBatches.push_back(NArrow::ToBatch(b, true));
+                NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
                 AFL_VERIFY(evData->Finished);
             }

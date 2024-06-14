@@ -742,6 +742,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TMap<TActorId, TActorId> ReplicaProbes;
 
+    THashMap<std::tuple<TActorId, ui64>, ui64> Subscriptions;
+
     void Handle(TEvStateStorage::TEvRequestReplicasDumps::TPtr &ev) {
         TActivationContext::Register(new TStateStorageDumpRequest(ev->Sender, Info));
     }
@@ -763,7 +765,14 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {
+        if (ev->Get()->Subscribe) {
+            Subscriptions.emplace(std::make_tuple(ev->Sender, ev->Cookie), ev->Get()->TabletID);
+        }
         ResolveReplicas(ev, ev->Get()->TabletID, Info);
+    }
+
+    void HandleUnsubscribe(STATEFN_SIG) {
+        Subscriptions.erase(std::make_tuple(ev->Sender, ev->Cookie));
     }
 
     void Handle(TEvStateStorage::TEvResolveBoard::TPtr &ev) {
@@ -859,6 +868,12 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         SchemeBoardInfo = msg->SchemeBoardConfig;
 
         RegisterDerivedServices(TlsActivationContext->ExecutorThread.ActorSystem, old.Get());
+
+        for (const auto& [key, tabletId] : Subscriptions) {
+            const auto& [sender, cookie] = key;
+            struct { TActorId Sender; ui64 Cookie; } ev{sender, cookie};
+            ResolveReplicas(&ev, tabletId, Info);
+        }
     }
 
     void RegisterDerivedServices(TActorSystem *sys, const TStateStorageInfo *old) {
@@ -983,6 +998,7 @@ public:
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
+            fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
             break;
@@ -991,18 +1007,8 @@ public:
 };
 
 class TStateStorageProxyStub : public TActor<TStateStorageProxyStub> {
+    std::deque<std::unique_ptr<IEventHandle>> PendingQ;
 
-    void Handle(TEvStateStorage::TEvLookup::TPtr &ev) {
-        BLOG_D("ProxyStub::Handle ev: " << ev->Get()->ToString());
-        const TEvStateStorage::TEvLookup *msg = ev->Get();
-        const ui64 tabletId = msg->TabletID;
-        const ui64 cookie = msg->Cookie;
-
-        Send(ev->Sender, new TEvStateStorage::TEvInfo(
-            NKikimrProto::ERROR,
-            tabletId, cookie, TActorId(), TActorId(), 0, 0, false, 0,
-            nullptr, 0, TMap<TActorId, TActorId>()));
-    }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_PROXY_STUB;
@@ -1012,15 +1018,14 @@ public:
         : TActor(&TThis::StateFunc)
     {}
 
-    STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvLookup, Handle);
-            default:
-                BLOG_W("ProxyStub::StateFunc unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
-                break;
+    STFUNC(StateFunc) {
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+            for (auto& q : PendingQ) {
+                TActivationContext::Send(q->Forward(ev->Sender));
+            }
+            PassAway();
+        } else {
+            PendingQ.emplace_back(ev.Release());
         }
     }
 };

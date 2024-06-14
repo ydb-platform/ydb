@@ -24,6 +24,7 @@ class TShardScannerInfo {
 private:
     std::optional<TActorId> ActorId;
     const ui64 TabletId;
+    const ui64 Generation;
     i64 DataChunksInFlightCount = 0;
     bool TracingStarted = false;
     const ui64 FreeSpace = (ui64)8 << 20;
@@ -46,23 +47,24 @@ private:
             TracingStarted = true;
         }
         if (NActors::TlsActivationContext) {
-            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanDataAck(FreeSpace, TabletId, 1), flags, TabletId);
+            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanDataAck(FreeSpace, Generation, 1), flags, TabletId);
         }
     }
 public:
     TShardScannerInfo(TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
         : TabletId(state.TabletId)
+        , Generation(++state.Generation)
     {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
         auto ranges = state.GetScanRanges(keyColumnTypes);
-        auto ev = externalObjectsProvider.BuildEvKqpScan(0, TabletId, ranges);
+        auto ev = externalObjectsProvider.BuildEvKqpScan(0, Generation, ranges);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("info", state.ToString(keyColumnTypes))
             ("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))("subscribed", subscribed);
 
-        NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
     }
 
@@ -72,7 +74,7 @@ public:
             auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, message ? message : "stop from fetcher");
             NActors::TActivationContext::AsActorContext().Send(*ActorId, std::move(abortEv));
             if (finalFlag) {
-                NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(TabletId));
+                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(TabletId));
                 NActors::TActivationContext::AsActorContext().Send(TActivationContext::InterconnectProxy(ActorId->NodeId()), new TEvents::TEvUnsubscribe());
             }
             ActorId = {};
@@ -249,17 +251,6 @@ private:
     const IExternalObjectsProvider& ExternalObjectsProvider;
 public:
 
-    bool RestartScanner(TShardState& state) {
-        StopScanner(state.TabletId, false);
-        state.ResetRetry();
-        static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
-        if (++state.TotalRetries >= MAX_SHARD_RETRIES) {
-            return false;
-        }
-        StartScanner(state);
-        return true;
-    }
-
     void AbortAllScanners(const TString& errorMessage) {
         for (auto&& itTablet : ShardScanners) {
             itTablet.second->Stop(true, errorMessage);
@@ -289,9 +280,9 @@ public:
         }
     }
 
-    void RegisterScannerActor(const ui64 tabletId, const TActorId& scanActorId) {
+    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId) {
         auto state = GetShardState(tabletId);
-        if (!state) {
+        if (!state || generation != state->Generation) {
             return;
         }
         AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State);

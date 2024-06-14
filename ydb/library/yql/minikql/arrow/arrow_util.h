@@ -9,6 +9,7 @@
 #include <arrow/util/bitmap.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 
 namespace NKikimr::NMiniKQL {
@@ -37,6 +38,26 @@ T GetPrimitiveScalarValue(const arrow::Scalar& scalar) {
 inline std::string_view GetStringScalarValue(const arrow::Scalar& scalar) {
     const auto& base = dynamic_cast<const arrow::BaseBinaryScalar&>(scalar);
     return std::string_view{reinterpret_cast<const char*>(base.value->data()), static_cast<size_t>(base.value->size())};
+}
+
+inline arrow::Datum MakeUint8Array(arrow::MemoryPool* pool, ui8 value, int64_t len) {
+    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
+    std::memset(data->mutable_data(), value, len);
+    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
+}
+
+inline arrow::Datum MakeFalseArray(arrow::MemoryPool* pool, int64_t len) {
+    return MakeUint8Array(pool, 0, len);
+}
+
+inline arrow::Datum MakeTrueArray(arrow::MemoryPool* pool, int64_t len) {
+    return MakeUint8Array(pool, 1, len);
+}
+
+inline arrow::Datum MakeBitmapArray(arrow::MemoryPool* pool, int64_t len, int64_t offset, const ui8* bitmap) {
+    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
+    DecompressToSparseBitmap(data->mutable_data(), bitmap, offset, len);
+    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
 }
 
 template<typename T>

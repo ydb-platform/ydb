@@ -65,6 +65,7 @@ struct TIndexInfo
 {
     NObjectClient::TObjectId TableId;
     ESecondaryIndexKind Kind;
+    std::optional<TString> Predicate;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,6 +85,8 @@ DEFINE_ENUM(ETableSchemaKind,
     (VersionedWrite)
     // Schema used for looking up rows.
     (Lookup)
+    // Schema used for locking rows.
+    (Lock)
     // For sorted schemas, coincides with primary.
     // For ordered, contains an additional tablet index columns.
     (PrimaryWithTabletIndex)

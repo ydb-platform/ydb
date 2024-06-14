@@ -47,13 +47,4 @@ TString TBackgroundController::DebugStringIndexation() const {
     return sb;
 }
 
-TString TBackgroundActivity::DebugString() const {
-    return TStringBuilder()
-        << "indexation:" << HasIndexation() << ";"
-        << "compaction:" << HasCompaction() << ";"
-        << "cleanup:" << HasCleanup() << ";"
-        << "ttl:" << HasTtl() << ";"
-        ;
-}
-
 }

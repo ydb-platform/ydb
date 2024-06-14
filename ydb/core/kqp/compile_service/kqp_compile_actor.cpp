@@ -142,7 +142,7 @@ private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
         TString cluster = QueryId.Cluster;
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
-        
+
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), kqpYqlSyntaxVersion, cluster, QueryId.Text, Config->BindingsMode, GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
@@ -352,15 +352,16 @@ private:
         ReplayMessage = std::move(message);
     }
 
-    void Reply(const TKqpCompileResult::TConstPtr& compileResult) {
+    void Reply() {
+        Y_ENSURE(KqpCompileResult);
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
             << ", self: " << SelfId()
             << ", owner: " << Owner
-            << ", status: " << compileResult->Status
-            << ", issues: " << compileResult->Issues.ToString()
-            << ", uid: " << compileResult->Uid);
+            << ", status: " << KqpCompileResult->Status
+            << ", issues: " << KqpCompileResult->Issues.ToString()
+            << ", uid: " << KqpCompileResult->Uid);
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult);
+        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
         responseEv->ReplayMessageUserView = std::move(ReplayMessageUserView);
@@ -382,7 +383,13 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
-        Reply(TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(QueryId)));
+        if (!KqpCompileResult) {
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(QueryId));
+        } else {
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(KqpCompileResult->Query));
+        }
+
+        Reply();
     }
 
     void InternalError(const TString message) {
@@ -477,7 +484,7 @@ private:
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
                 Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), {}, true);
-            Reply(KqpCompileResult);
+            Reply();
             return;
         }
 
@@ -495,6 +502,7 @@ private:
         auto queryType = QueryId.Settings.QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, std::move(QueryId));
+        KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
@@ -519,7 +527,7 @@ private:
             Counters->ReportCompileError(DbCounters);
         }
 
-        Reply(KqpCompileResult);
+        Reply();
     }
 
     void HandleTimeout() {
@@ -600,6 +608,9 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
+    kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
+    kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
+    kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.OldLookupJoinBehaviour = serviceConfig.GetOldLookupJoinBehaviour();
 

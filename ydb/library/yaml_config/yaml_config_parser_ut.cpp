@@ -1,4 +1,5 @@
 #include "yaml_config_parser.h"
+#include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/protos/key.pb.h>
@@ -75,5 +76,18 @@ pdisk_key_config:
         UNIT_ASSERT_VALUES_EQUAL(keys.end() - keys.begin(), 1);
         auto key = keys.at(0);
         UNIT_ASSERT_VALUES_EQUAL("c2FtcGxlLXBpbgo=", key.pin());
+    }
+
+    Y_UNIT_TEST(PdiskCategoryFromString) {
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("0"), 0ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("ROT"), 0ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("1"), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("SSD"), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("2"), 2ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("3"), 3ull);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("562949953421312"), 1ull << 49);
+        UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("NVME"), 144115188075855873ull);
+        UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("zzz"), yexception);
+        UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("-1"), yexception);
     }
 }

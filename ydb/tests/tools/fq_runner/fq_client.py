@@ -390,13 +390,13 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
-    def create_ydb_connection(self, name, database, endpoint, visibility=fq.Acl.Visibility.PRIVATE,
-                              auth_method=AuthMethod.no_auth(), check_issues=True):
+    def create_ydb_connection(self, name, database_id,
+                              secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
         request.content.name = name
         ydb = request.content.setting.ydb_database
-        ydb.database = database
-        ydb.endpoint = endpoint
+        ydb.database_id = database_id
+        ydb.secure = secure
 
         ydb.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility

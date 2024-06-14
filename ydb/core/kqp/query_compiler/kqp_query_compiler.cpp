@@ -752,7 +752,7 @@ private:
         stageProto.SetOutputsCount(outputsCount);
 
         // Dq sinks
-        bool hasTableSink = false;
+        bool hasTxTableSink = false;
         if (auto maybeOutputsNode = stage.Outputs()) {
             auto outputsNode = maybeOutputsNode.Cast();
             for (size_t i = 0; i < outputsNode.Size(); ++i) {
@@ -761,15 +761,20 @@ private:
                 YQL_ENSURE(maybeSinkNode);
                 auto sinkNode = maybeSinkNode.Cast();
                 auto* sinkProto = stageProto.AddSinks();
-                FillSink(sinkNode, sinkProto, ctx);
+                FillSink(sinkNode, sinkProto, tablesMap, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
 
-                // Only sinks to ydb tables can be considered as effects.
-                hasTableSink |= IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category());
+                if (IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category())) {
+                    // Only sinks with transactions to ydb tables can be considered as effects.
+                    // Inconsistent internal sinks and external sinks (like S3) aren't effects.
+                    auto settings = sinkNode.Settings().Maybe<TKqpTableSinkSettings>();
+                    YQL_ENSURE(settings);
+                    hasTxTableSink |= settings.InconsistentWrite().Cast().StringValue() != "true";
+                }
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTableSink);
+        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
@@ -1020,11 +1025,12 @@ private:
         }
     }
 
-    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink) {
+    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
         if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
             internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
             NKikimrKqp::TKqpTableSinkSettings settingsProto;
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
             FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
@@ -1032,6 +1038,7 @@ private:
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 keyColumnProto->SetId(columnMeta->Id);
                 keyColumnProto->SetName(columnName);
@@ -1061,6 +1068,10 @@ private:
                 }
             }
 
+            if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
+                settingsProto.SetInconsistentTx(true);
+            }
+
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {
             YQL_ENSURE(false, "Unsupported sink type");
@@ -1073,11 +1084,11 @@ private:
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
-            FillKqpSink(sink, protoSink);
+            FillKqpSink(sink, protoSink, tablesMap);
         } else {
             // Delegate sink filling to dq integration of specific provider
             const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);

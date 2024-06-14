@@ -16,6 +16,7 @@ private:
     std::shared_ptr<NColumnShard::TValueAggregationAgent> DifferenceWaitToEvict;
     std::shared_ptr<NColumnShard::TValueAggregationAgent> DifferenceWaitToDelete;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForCompaction;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
 public:
     TTieringGlobalCounters()
         : TBase("TieringActualizer")
@@ -25,6 +26,11 @@ public:
         DifferenceWaitToEvict = TBase::GetValueAutoAggregations("Granule/Eviction/WaitingInSeconds");
         DifferenceWaitToDelete = TBase::GetValueAutoAggregations("Granule/Deletion/WaitingInSeconds");
         SkipEvictionForCompaction = TBase::GetDeriviative("Eviction/SkipForCompaction");
+        SkipEvictionForLimit = TBase::GetDeriviative("Eviction/SkipForLimit");
+    }
+
+    static NMonitoring::TDynamicCounters::TCounterPtr GetSkipEvictionForLimit() {
+        return Singleton<TTieringGlobalCounters>()->SkipEvictionForLimit;
     }
 
     static NMonitoring::TDynamicCounters::TCounterPtr GetSkipEvictionForCompaction() {
@@ -56,6 +62,7 @@ public:
     const std::shared_ptr<NColumnShard::TValueAggregationClient> DifferenceWaitToEvict;
     const std::shared_ptr<NColumnShard::TValueAggregationClient> DifferenceWaitToDelete;
     const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForCompaction;
+    const NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
 
     TTieringCounters()
         : QueueSizeToEvict(TTieringGlobalCounters::BuildQueueSizeToEvict())
@@ -63,7 +70,7 @@ public:
         , DifferenceWaitToEvict(TTieringGlobalCounters::BuildDifferenceWaitToEvict())
         , DifferenceWaitToDelete(TTieringGlobalCounters::BuildDifferenceWaitToDelete())
         , SkipEvictionForCompaction(TTieringGlobalCounters::GetSkipEvictionForCompaction())
-    {
+        , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit()) {
     }
 
 };

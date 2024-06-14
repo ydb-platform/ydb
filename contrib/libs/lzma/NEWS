@@ -2,7 +2,140 @@
 XZ Utils Release Notes
 ======================
 
+5.6.2 (2024-05-29)
+
+    * Remove the backdoor (CVE-2024-3094).
+
+    * Not changed: Memory sanitizer (MSAN) has a false positive
+      in the CRC CLMUL code which also makes OSS Fuzz unhappy.
+      Valgrind is smarter and doesn't complain.
+
+      A revision to the CLMUL code is coming anyway and this issue
+      will be cleaned up as part of it. It won't be backported to
+      5.6.x or 5.4.x because the old code isn't wrong. There is
+      no reason to risk introducing regressions in old branches
+      just to silence a false positive.
+
+    * liblzma:
+
+        - lzma_index_decoder() and lzma_index_buffer_decode(): Fix
+          a missing output pointer initialization (*i = NULL) if the
+          functions are called with invalid arguments. The API docs
+          say that such an initialization is always done. In practice
+          this matters very little because the problem can only occur
+          if the calling application has a bug and these functions
+          return LZMA_PROG_ERROR.
+
+        - lzma_str_to_filters(): Fix a missing output pointer
+          initialization (*error_pos = 0). This is very similar
+          to the fix above.
+
+        - Fix C standard conformance with function pointer types.
+
+        - Remove GNU indirect function (IFUNC) support. This is *NOT*
+          done for security reasons even though the backdoor relied on
+          this code. The performance benefits of IFUNC are too tiny in
+          this project to make the extra complexity worth it.
+
+        - FreeBSD on ARM64: Add error checking to CRC32 instruction
+          support detection.
+
+        - Fix building with NVIDIA HPC SDK.
+
+    * xz:
+
+        - Fix a C standard conformance issue in --block-list parsing
+          (arithmetic on a null pointer).
+
+        - Fix a warning from GNU groff when processing the man page:
+          "warning: cannot select font 'CW'"
+
+    * xzdec: Add support for Linux Landlock ABI version 4. xz already
+      had the v3-to-v4 change but it had been forgotten from xzdec.
+
+    * Autotools-based build system (configure):
+
+        - Symbol versioning variant can now be overridden with
+          --enable-symbol-versions. Documentation in INSTALL was
+          updated to match.
+
+        - Add new configure option --enable-doxygen to enable
+          generation and installation of the liblzma API documentation
+          using Doxygen. Documentation in INSTALL and PACKAGERS was
+          updated to match.
+
+    CMake:
+
+        - Fix detection of Linux Landlock support. The detection code
+          in CMakeLists.txt had been sabotaged.
+
+        - Disable symbol versioning on non-glibc Linux to match what
+          the Autotools build does. For example, symbol versioning
+          isn't enabled with musl.
+
+        - Symbol versioning variant can now be overridden by setting
+          SYMBOL_VERSIONING to "OFF", "generic", or "linux".
+
+        - Add support for all tests in typical build configurations.
+          Now the only difference to the tests coverage to Autotools
+          is that CMake-based build will skip more tests if features
+          are disabled. Such builds are only for special cases like
+          embedded systems.
+
+        - Separate the CMake code for the tests into tests/tests.cmake.
+          It is used conditionally, thus it is possible to
+
+              rm -rf tests
+
+          and the CMake-based build will still work normally except
+          that no tests are then available.
+
+        - Add a option ENABLE_DOXYGEN to enable generation and
+          installation of the liblzma API documentation using Doxygen.
+
+    * Documentation:
+
+        - Omit the Doxygen-generated liblzma API documentation from the
+          package. Instead, the generation and installation of the API
+          docs can be enabled with a configure or CMake option if
+          Doxygen is available.
+
+        - Remove the XZ logo which was used in the API documentation.
+          The logo has been retired and isn't used by the project
+          anymore. However, it's OK to use it in contexts that refer
+          to the backdoor incident.
+
+        - Remove the PDF versions of the man pages from the source
+          package. These existed primarily for users of operating
+          systems which don't come with tools to render man page
+          source files. The plain text versions are still included
+          in doc/man/txt. PDF files can still be generated to doc/man,
+          if the required tools are available, using "make pdf" after
+          running "configure".
+
+        - Update home page URLs back to their old locations on
+          tukaani.org.
+
+        - Update maintainer info.
+
+    * Tests:
+
+        - In tests/files/README, explain how to recreate the ARM64
+          test files.
+
+        - Remove two tests that used tiny x86 and SPARC object files
+          as the input files. The matching .c file was included but
+          the object files aren't easy to reproduce. The test cases
+          weren't great anyway; they were from the early days (2009)
+          of the project when the test suite had very few tests.
+
+        - Improve a few tests.
+
+
 5.6.1 (2024-03-09)
+
+    IMPORTANT: This fixed bugs in the backdoor (CVE-2024-3094) (someone
+    had forgot to run Valgrind).
 
     * liblzma: Fixed two bugs relating to GNU indirect function (IFUNC)
       with GCC. The more serious bug caused a program linked with
@@ -29,6 +162,9 @@ XZ Utils Release Notes
 
 
 5.6.0 (2024-02-24)
+
+    IMPORTANT: This added a backdoor (CVE-2024-3094). It's enabled only
+    in the release tarballs.
 
     This bumps the minor version of liblzma because new features were
     added. The API and ABI are still backward compatible with liblzma
@@ -315,6 +451,95 @@ XZ Utils Release Notes
     * Added basic Codespell support to help catch typo errors.
 
 
+5.4.7 (2024-05-29)
+
+    * Not changed: Memory sanitizer (MSAN) has a false positive
+      in the CRC CLMUL code which also makes OSS Fuzz unhappy.
+      Valgrind is smarter and doesn't complain.
+
+      A revision to the CLMUL code is coming anyway and this issue
+      will be cleaned up as part of it. It won't be backported to
+      5.6.x or 5.4.x because the old code isn't wrong. There is
+      no reason to risk introducing regressions in old branches
+      just to silence a false positive.
+
+    * liblzma:
+
+        - lzma_index_decoder() and lzma_index_buffer_decode(): Fix
+          a missing output pointer initialization (*i = NULL) if the
+          functions are called with invalid arguments. The API docs
+          say that such an initialization is always done. In practice
+          this matters very little because the problem can only occur
+          if the calling application has a bug and these functions
+          return LZMA_PROG_ERROR.
+
+        - lzma_str_to_filters(): Fix a missing output pointer
+          initialization (*error_pos = 0). This is very similar
+          to the fix above.
+
+        - Fix C standard conformance with function pointer types.
+          This newly showed up with Clang 17 with -fsanitize=undefined.
+          There are no bug reports about this.
+
+        - Fix building with NVIDIA HPC SDK.
+
+    * xz:
+
+        - Fix a C standard conformance issue in --block-list parsing
+          (arithmetic on a null pointer).
+
+        - Fix a warning from GNU groff when processing the man page:
+          "warning: cannot select font 'CW'"
+
+        - Fix outdated threading related information on the man page.
+
+    * xzless:
+
+        - With "less" version 451 and later, use "||-" instead of "|-"
+          in the environment variable LESSOPEN. This way compressed
+          files that contain no uncompressed data are shown correctly
+          as empty.
+
+        - With "less" version 632 and later, use --show-preproc-errors
+          to make "less" show a warning on decompression errors.
+
+    * Autotools-based build system (configure):
+
+        - Symbol versioning variant can now be overridden with
+          --enable-symbol-versions. Documentation in INSTALL was
+          updated to match.
+
+    CMake:
+
+        - Linux on MicroBlaze is handled specially now. This matches
+          the changes made to the Autotools-based build in XZ Utils
+          5.4.2 and 5.2.11.
+
+        - Disable symbol versioning on non-glibc Linux to match what
+          the Autotools build does. For example, symbol versioning
+          isn't enabled with musl.
+
+        - Symbol versioning variant can now be overridden by setting
+          SYMBOL_VERSIONING to "OFF", "generic", or "linux".
+
+    * Documentation:
+
+        - Clarify the description of --disable-assembler in INSTALL.
+          The option only affects 32-bit x86 assembly usage.
+
+        - Add doc/examples/11_file_info.c. It was added to the
+          Git repository in 2017 but forgotten to be added into
+          distribution tarballs.
+
+        - Don't install the TODO file as part of the documentation.
+          The file is out of date.
+
+        - Update home page URLs back to their old locations on
+          tukaani.org.
+
+        - Update maintainer info.
+
+
 5.4.6 (2024-01-26)
 
     * Fixed a bug involving internal function pointers in liblzma not
@@ -337,7 +562,7 @@ XZ Utils Release Notes
     * Added a new test.
 
 
-5.4.5 (2023-11-31)
+5.4.5 (2023-11-01)
 
     * liblzma:
 
@@ -1137,6 +1362,121 @@ XZ Utils Release Notes
 
     * Capsicum sandbox support is enabled by default where available
       (FreeBSD >= 10).
+
+
+5.2.13 (2024-05-29)
+
+    * liblzma:
+
+        - lzma_index_append(): Fix an assertion failure that could be
+          triggered by a large unpadded_size argument. It was verified
+          that there was no other bug than the assertion failure.
+
+        - lzma_index_decoder() and lzma_index_buffer_decode(): Fix
+          a missing output pointer initialization (*i = NULL) if the
+          functions are called with invalid arguments. The API docs
+          say that such an initialization is always done. In practice
+          this matters very little because the problem can only occur
+          if the calling application has a bug and these functions
+          return LZMA_PROG_ERROR.
+
+        - Fix C standard conformance with function pointer types.
+          This newly showed up with Clang 17 with -fsanitize=undefined.
+          There are no bug reports about this.
+
+        - Fix building with NVIDIA HPC SDK.
+
+        - Fix building with Windows Vista threads and --enable-small.
+          (CMake build doesn't support ENABLE_SMALL in XZ Utils 5.2.x.)
+
+    * xz:
+
+        - Fix a C standard conformance issue in --block-list parsing
+          (arithmetic on a null pointer).
+
+        - Fix a warning from GNU groff when processing the man page:
+          "warning: cannot select font 'CW'"
+
+        - Windows: Handle special files such as "con" or "nul". Earlier
+          the following wrote "foo" to the console and deleted the input
+          file "con_xz":
+
+              echo foo | xz > con_xz
+              xz --suffix=_xz --decompress con_xz
+
+        - Windows: Fix an issue that prevented reading from or writing
+          to non-terminal character devices like NUL.
+
+    * xzless:
+
+        - With "less" version 451 and later, use "||-" instead of "|-"
+          in the environment variable LESSOPEN. This way compressed
+          files that contain no uncompressed data are shown correctly
+          as empty.
+
+        - With "less" version 632 and later, use --show-preproc-errors
+          to make "less" show a warning on decompression errors.
+
+    * Build systems:
+
+        - Add a new line to liblzma.pc for MSYS2 (Windows):
+
+              Cflags.private: -DLZMA_API_STATIC
+
+          When compiling code that will link against static liblzma,
+          the LZMA_API_STATIC macro needs to be defined on Windows.
+
+        - Autotools (configure):
+
+            * Symbol versioning variant can now be overridden with
+              --enable-symbol-versions. Documentation in INSTALL was
+              updated to match.
+
+        - CMake:
+
+            * Fix a bug that prevented other projects from including
+              liblzma multiple times using find_package().
+
+            * Fix a bug where configuring CMake multiple times resulted
+              in HAVE_CLOCK_GETTIME and HAVE_CLOCK_MONOTONIC not being
+              defined.
+
+            * Fix the build with MinGW-w64-based Clang/LLVM 17.
+              llvm-windres now has more accurate GNU windres emulation
+              so the GNU windres workaround from 5.4.1 is needed with
+              llvm-windres version 17 too.
+
+            * The import library on Windows is now properly named
+              "liblzma.dll.a" instead of "libliblzma.dll.a"
+
+            * Add large file support by default for platforms that
+              need it to handle files larger than 2 GiB. This includes
+              MinGW-w64, even 64-bit builds.
+
+            * Linux on MicroBlaze is handled specially now. This
+              matches the changes made to the Autotools-based build
+              in XZ Utils 5.4.2 and 5.2.11.
+
+            * Disable symbol versioning on non-glibc Linux to match
+              what the Autotools build does. For example, symbol
+              versioning isn't enabled with musl.
+
+            * Symbol versioning variant can now be overridden by
+              setting SYMBOL_VERSIONING to "OFF", "generic", or
+              "linux".
+
+    * Documentation:
+
+        - Clarify the description of --disable-assembler in INSTALL.
+          The option only affects 32-bit x86 assembly usage.
+
+        - Don't install the TODO file as part of the documentation.
+          The file is out of date.
+
+        - Update home page URLs back to their old locations on
+          tukaani.org.
+
+        - Update maintainer info.
 
 
 5.2.12 (2023-05-04)

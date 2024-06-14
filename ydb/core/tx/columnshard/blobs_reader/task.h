@@ -49,6 +49,20 @@ public:
     void Add(const TString& storageId, const TBlobRange& blobId, TString&& value) {
         BlobsByStorage[storageId].Add(blobId, std::move(value));
     }
+    bool Contains(const TString& storageId, const TBlobRange& range) const {
+        auto it = BlobsByStorage.find(storageId);
+        if (it == BlobsByStorage.end()) {
+            return false;
+        }
+        return it->second.Contains(range);
+    }
+    std::optional<TString> GetBlobRangeOptional(const TString& storageId, const TBlobRange& range) const {
+        auto it = BlobsByStorage.find(storageId);
+        if (it == BlobsByStorage.end()) {
+            return {};
+        }
+        return it->second.GetBlobRangeOptional(range);
+    }
     TString Extract(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);
         AFL_VERIFY(it != BlobsByStorage.end());

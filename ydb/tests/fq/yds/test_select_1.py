@@ -9,6 +9,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 from google.protobuf.struct_pb2 import NullValue
 
+
 class TestSelect1(object):
     @yq_all
     def test_select_1(self, kikimr, client):
@@ -28,7 +29,7 @@ class TestSelect1(object):
         assert result_set.columns[0].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].int32_value == 1
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     def test_select_z_x_y(self, client):

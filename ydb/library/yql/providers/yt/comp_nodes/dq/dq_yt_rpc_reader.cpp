@@ -36,13 +36,11 @@ TParallelFileInputState::TParallelFileInputState(const TMkqlIOSpecs& spec,
     size_t blockSize,
     size_t inflight,
     std::unique_ptr<TSettingsHolder>&& settings)
-    : InnerState_(new TInnerState (settings->RawInputs.size()))
-    , StateByReader_(settings->RawInputs.size())
+    : InnerState_(new TInnerState (settings->Requests.size(), inflight))
+    , StateByReader_(settings->Requests.size())
     , Spec_(&spec)
     , HolderFactory_(holderFactory)
-    , RawInputs_(std::move(settings->RawInputs))
     , BlockSize_(blockSize)
-    , Inflight_(inflight)
     , TimerAwaiting_(RPCReaderAwaitingStallTime, 100)
     , OriginalIndexes_(std::move(settings->OriginalIndexes))
     , Settings_(std::move(settings))
@@ -50,7 +48,7 @@ TParallelFileInputState::TParallelFileInputState(const TMkqlIOSpecs& spec,
 #ifdef RPC_PRINT_TIME
     print_add(1);
 #endif
-    YQL_ENSURE(RawInputs_.size() == OriginalIndexes_.size());
+    YQL_ENSURE(Settings_->Requests.size() == OriginalIndexes_.size());
     MkqlReader_.SetSpecs(*Spec_, HolderFactory_);
     Valid_ = NextValue();
 }
@@ -88,95 +86,111 @@ void TParallelFileInputState::Finish() {
 
 void TParallelFileInputState::CheckError() const {
     if (!InnerState_->Error.IsOK()) {
-        Cerr << "YT RPC Reader exception:\n";
+        Cerr << "YT RPC Reader exception:\n" << InnerState_->Error.GetMessage();
         InnerState_->Error.ThrowOnError();
     }
 }
 
-bool TParallelFileInputState::RunNext() {
-    while (true) {
-        size_t InputIdx = 0;
-        {
-            std::lock_guard lock(InnerState_->Lock);
-            if (InnerState_->CurrentInputIdx == RawInputs_.size() && InnerState_->CurrentInflight == 0 && InnerState_->Results.empty() && !MkqlReader_.IsValid()) {
-                return false;
-            }
+// Call when reader created, or when previous batch was successfully decoded
+void TParallelFileInputState::TInnerState::InputReady(size_t idx) {
+    std::lock_guard guard(Lock);
+    ReadyReaders.emplace(idx);
+    --ReadersInflight;
+}
 
-            if (InnerState_->CurrentInflight >= Inflight_ || InnerState_->Results.size() >= Inflight_) {
-                break;
-            }
-
-            while (InnerState_->CurrentInputIdx < InnerState_->IsInputDone.size() && InnerState_->IsInputDone[InnerState_->CurrentInputIdx]) {
-                ++InnerState_->CurrentInputIdx;
-            }
-
-            if (InnerState_->CurrentInputIdx == InnerState_->IsInputDone.size()) {
-                break;
-            }
-            InputIdx = InnerState_->CurrentInputIdx;
-            ++InnerState_->CurrentInputIdx;
-            ++InnerState_->CurrentInflight;
-        }
-
-        RawInputs_[InputIdx]->Read().SubscribeUnique(BIND([state = InnerState_, inputIdx = InputIdx
-#ifdef RPC_PRINT_TIME
-        , startAt = std::chrono::steady_clock::now()
-#endif
-        ](NYT::TErrorOr<NYT::TSharedRef>&& res_){
-#ifdef RPC_PRINT_TIME
-            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - startAt).count();
-            if (elapsed > 1'000'000) {
-                Cerr << (TStringBuilder() "Warn: request took: " << elapsed << " mcs)\n");
-            }
-#endif
-
-            TFailureInjector::Reach("dq_rpc_reader_read_err_when_empty", [&res_] {
-                res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("failure injected"));
-            });
-
-            if (!res_.IsOK()) {
-                std::lock_guard lock(state->Lock);
-                state->Error = std::move(res_);
-                --state->CurrentInflight;
-                state->WaitPromise.TrySet();
-                return;
-            }
-
-            auto block = std::move(res_.Value());
-            NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
-            NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
-
-            auto CurrentPayload_ = std::move(NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics));
-            std::lock_guard lock(state->Lock);
-            state->CurrentInputIdx = std::min(state->CurrentInputIdx, inputIdx);
-            --state->CurrentInflight;
-            // skip no-skiff data
-            if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_FORMAT) {
-                state->WaitPromise.TrySet();
-                return;
-            }
-
-            if (CurrentPayload_.Empty()) {
-                state->IsInputDone[inputIdx] = 1;
-                state->WaitPromise.TrySet();
-                return;
-            }
-            state->Results.emplace(std::move(TResult{inputIdx, std::move(CurrentPayload_)}));
-            state->WaitPromise.TrySet();
-        }));
+TMaybe<size_t> TParallelFileInputState::TInnerState::GetFreeReader() {
+    std::lock_guard guard(Lock);
+    if (ReadersInflight >= Inflight) {
+        return {};
     }
-    return true;
+    if (ReadyReaders.size()) {
+        size_t res = ReadyReaders.front();
+        ReadyReaders.pop();
+        ++ReadersInflight;
+        return res;
+    }
+    if (NextFreeReaderIdx >= RawInputs.size()) {
+        return {};
+    }
+    ++ReadersInflight;
+    return NextFreeReaderIdx++;
+}
+
+void TParallelFileInputState::TInnerState::InputDone() {
+    std::lock_guard guard(Lock);
+    --ReadersInflight;
+}
+
+bool TParallelFileInputState::TInnerState::AllReadersDone() {
+    std::lock_guard guard(Lock);
+    return NextFreeReaderIdx == RawInputs.size() && ReadyReaders.empty() && !ReadersInflight;
+}
+
+namespace {
+
+void ReadCallback(NYT::TErrorOr<NYT::TSharedRef>&& res_, std::shared_ptr<TParallelFileInputState::TInnerState> state, size_t inputIdx) {
+    TFailureInjector::Reach("dq_rpc_reader_read_err_when_empty", [&res_] {
+        res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("Failure_On_Read_Callback"));
+    });
+
+    if (!res_.IsOK()) {
+        std::lock_guard lock(state->Lock);
+        state->Error = std::move(res_);
+        state->WaitPromise.TrySet();
+        return;
+    }
+
+    auto block = std::move(res_.Value());
+    NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
+    NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
+
+    auto CurrentPayload_ = std::move(NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics));
+    // skip no-skiff data
+    if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_FORMAT) {
+        state->WaitPromise.TrySet();
+        return;
+    }
+
+    if (CurrentPayload_.Empty()) {
+        state->WaitPromise.TrySet();
+        state->InputDone();
+        return;
+    }
+    std::lock_guard lock(state->Lock);
+
+    state->Results.emplace(std::move(TParallelFileInputState::TResult{inputIdx, std::move(CurrentPayload_)}));
+    state->WaitPromise.TrySet();
+}
+
+void ExecuteRead(size_t inputIdx, std::shared_ptr<TParallelFileInputState::TInnerState> state) {
+    state->RawInputs[inputIdx]->Read().SubscribeUnique(BIND([state, inputIdx](NYT::TErrorOr<NYT::TSharedRef>&& res_){
+        ReadCallback(std::move(res_), state, inputIdx);
+    }));
+}
+}
+
+void TParallelFileInputState::RunNext() {
+    while (auto idx = InnerState_->GetFreeReader()) {
+        auto inputIdx = *idx;
+        if (!InnerState_->RawInputs[inputIdx]) {
+            CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([state = InnerState_, inputIdx](NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
+                if (!stream.IsOK()) {
+                    state->Error = stream;
+                    return;
+                }
+                state->RawInputs[inputIdx] = std::move(stream.Value());
+                ExecuteRead(inputIdx, state);
+            }));
+            continue;
+        }
+        ExecuteRead(inputIdx, InnerState_);
+    }
 }
 
 bool TParallelFileInputState::NextValue() {
     for (;;) {
-        if (!RunNext()) {
-            Y_ENSURE(InnerState_->Results.empty());
-#ifdef RPC_PRINT_TIME
-        print_add(-1);
-#endif
-            CheckError();
-            return false;
+        if (!InnerState_->AllReadersDone()) {
+            RunNext();
         }
         if (MkqlReader_.IsValid()) {
             CurrentValue_ = std::move(MkqlReader_.GetRow());
@@ -186,14 +200,20 @@ bool TParallelFileInputState::NextValue() {
             MkqlReader_.Next();
             return true;
         }
-        if (MkqlReader_.GetRowIndexUnchecked()) {
-            StateByReader_[CurrentInput_].CurrentRow = *MkqlReader_.GetRowIndexUnchecked() - 1;
+        if (!Settings_->Requests.empty()) {
+            if (MkqlReader_.GetRowIndexUnchecked()) {
+                StateByReader_[CurrentInput_].CurrentRow = *MkqlReader_.GetRowIndexUnchecked() - 1;
+            }
+            StateByReader_[CurrentInput_].CurrentRange = MkqlReader_.GetRangeIndexUnchecked();
         }
-        StateByReader_[CurrentInput_].CurrentRange = MkqlReader_.GetRangeIndexUnchecked();
         bool needWait = false;
         {
             std::lock_guard lock(InnerState_->Lock);
             needWait = InnerState_->Results.empty();
+        }
+        if (needWait && InnerState_->AllReadersDone()) {
+            CheckError();
+            return false;
         }
         if (needWait) {
             auto guard = Guard(TimerAwaiting_);
@@ -214,6 +234,7 @@ bool TParallelFileInputState::NextValue() {
         CurrentReader_ = MakeIntrusive<TPayloadRPCReader>(std::move(result.Value_));
         MkqlReader_.SetReader(*CurrentReader_, 1, BlockSize_, ui32(OriginalIndexes_[CurrentInput_]), true, StateByReader_[CurrentInput_].CurrentRow, StateByReader_[CurrentInput_].CurrentRange);
         MkqlReader_.Next();
+        InnerState_->InputReady(CurrentInput_);
     }
 }
 

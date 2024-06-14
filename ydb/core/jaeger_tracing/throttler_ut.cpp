@@ -1,23 +1,28 @@
 #include "throttler.h"
 
+#include <util/generic/scope.h>
+#include <util/system/thread.h>
+
+#include <library/cpp/time_provider/time_provider.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NJaegerTracing {
 
 class TTimeProviderMock : public ITimeProvider {
 public:
-    TTimeProviderMock(TInstant now) : CurrentTime(now) {}
+    TTimeProviderMock(TInstant now) : CurrentTimeUS(now.GetValue()) {}
 
     void Advance(TDuration delta) {
-        CurrentTime += delta;
+        CurrentTimeUS.fetch_add(delta.GetValue());
     }
 
     TInstant Now() final {
-        return CurrentTime;
+        return TInstant::FromValue(CurrentTimeUS.load());
     }
 
 private:
-    TInstant CurrentTime;
+    std::atomic<ui64> CurrentTimeUS;
 };
 
 Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
@@ -84,6 +89,87 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
 
         CheckAtLeast(throttler, 1);
     }
+
+    void TestMultiThreaded(ui32 threads, ui64 ticks, ui64 init, ui64 step) {
+        constexpr std::array<TDuration, 4> delays = {
+            TDuration::MilliSeconds(1),
+            TDuration::MilliSeconds(10),
+            TDuration::MilliSeconds(100),
+            TDuration::Seconds(1)
+        };
+
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+
+        TThrottler throttler(60, init - 1, timeProvider);
+
+        auto shouldStop = std::make_shared<std::atomic<bool>>(false);
+        TVector<THolder<TThread>> workers;
+        Y_SCOPE_EXIT(shouldStop, &workers) {
+            shouldStop->store(true);
+
+            try {
+                for (auto& worker : workers) {
+                    worker->Join();
+                }
+            } catch (yexception& e) {
+                Cerr << "Failed to join worker:" << Endl;
+                Cerr << e.what() << Endl;
+            }
+        };
+
+        std::atomic<ui64> totalConsumed{0};
+        workers.reserve(threads);
+        for (size_t i = 0; i < threads; ++i) {
+            workers.push_back(MakeHolder<TThread>([&]() {
+                while (!shouldStop->load(std::memory_order_relaxed)) {
+                    if (!throttler.Throttle()) {
+                        totalConsumed.fetch_add(1);
+                    }
+                }
+            }));
+        }
+        for (auto& worker : workers) {
+            worker->Start();
+        }
+
+        auto waitForIncrease = [&](ui64 expected) -> bool {
+            for (const TDuration& delay : delays) {
+                Sleep(delay);
+                if (totalConsumed.load() == expected) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        ui64 expected = init;
+        UNIT_ASSERT(waitForIncrease(expected));
+
+        auto advance = [&](ui64 seconds, ui64 expectedIncrease) {
+            timeProvider->Advance(TDuration::Seconds(seconds));
+            expected += expectedIncrease;
+            UNIT_ASSERT(waitForIncrease(expected));
+        };
+
+        advance(1, 1);
+
+        for (size_t i = 0; i < ticks; ++i) {
+            advance(step, step);
+        }
+
+        advance(init + 1000, init);
+    }
+
+    #define TEST_MULTI_THREADED(threads, ticks, init, step)                                 \
+    Y_UNIT_TEST(MultiThreaded##threads##Threads##ticks##Ticks##init##Init##step##Step) {    \
+        TestMultiThreaded(threads, ticks, init, step);                                      \
+    }
+
+    TEST_MULTI_THREADED(2, 200, 30, 7);
+    TEST_MULTI_THREADED(5, 150, 500, 15);
+    TEST_MULTI_THREADED(10, 100, 1000, 22);
+
+    #undef TEST_MULTI_THREADED
 }
 
 } // namespace NKikimr::NJaegerTracing

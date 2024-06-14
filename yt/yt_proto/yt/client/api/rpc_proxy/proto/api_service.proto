@@ -10,9 +10,10 @@ import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
-import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
+import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
 // Scalars
@@ -365,6 +366,11 @@ message TRowsetStatistics
 
 message TReqStartTransaction
 {
+    message TReplicateToMasterCellTags
+    {
+        repeated uint32 cell_tags = 1;
+    }
+
     required ETransactionType type = 1;
 
     optional int64 timeout = 2;
@@ -391,6 +397,8 @@ message TReqStartTransaction
     repeated NYT.NProto.TGuid prerequisite_transaction_ids = 13;
 
     optional uint64 start_timestamp = 14;
+
+    optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
     optional TMutatingOptions mutating_options = 103;
 }
@@ -674,7 +682,7 @@ message TRspPullQueue
     optional int64 start_offset = 2;
 }
 
-message TReqPullConsumer
+message TReqPullQueueConsumer
 {
     optional string consumer_path = 1;
     optional string queue_path = 2;
@@ -685,7 +693,7 @@ message TReqPullConsumer
     optional EReplicaConsistency replica_consistency = 6;
 }
 
-message TRspPullConsumer
+message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
@@ -752,6 +760,35 @@ message TRspListQueueConsumerRegistrations
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqCreateQueueProducerSession
+{
+    optional string producer_path = 1;
+    optional string queue_path = 2;
+    optional string session_id = 3;
+    optional bytes user_meta = 4; // YSON
+}
+
+message TRspCreateQueueProducerSession
+{
+    optional uint64 sequence_number = 1;
+    optional uint64 epoch = 2;
+    optional bytes user_meta = 3; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRemoveQueueProducerSession
+{
+    optional string producer_path = 1;
+    optional string queue_path = 2;
+    optional string session_id = 3;
+}
+
+message TRspRemoveQueueProducerSession
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqExplainQuery
 {
     required string query = 1;
@@ -767,7 +804,7 @@ message TReqExplainQuery
     optional string udf_registry_path = 10;
     optional string execution_pool = 11;
     optional bool new_range_inference = 12;
-    optional int32 syntax_version = 13;
+    optional int32 syntax_version = 13 [default = 1];
 }
 
 message TRspExplainQuery
@@ -905,13 +942,16 @@ message TReqModifyRows
     required string path = 2;
     repeated ERowModificationType row_modification_types = 3;
     // COMPAT(lukyan): Remove after RPC protocol version update
-    repeated uint32 row_read_locks = 7;
-    repeated uint64 row_locks = 8;
+    repeated uint32 row_legacy_read_locks = 7;
+    // COMPAT(ponasenko-rs): Remove after RPC protocol version update
+    repeated uint64 row_legacy_locks = 8;
 
     optional bool require_sync_replica = 4;
     optional NYT.NProto.TGuid upstream_replica_id = 5;
 
     optional bool allow_missing_key_columns = 10;
+
+    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }
@@ -1050,6 +1090,26 @@ message TReqResumeChaosCells
 message TRspResumeChaosCells
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqSuspendTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspSuspendTabletCells
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqResumeTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspResumeTabletCells
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1350,6 +1410,7 @@ message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
+    optional string predicate = 3;
 }
 
 message TReqGetTableMountInfo
@@ -2834,6 +2895,19 @@ message TRspGetPipelineStatus
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetFlowView
+{
+    required string pipeline_path = 1;
+    optional string view_path = 2;
+}
+
+message TRspGetFlowView
+{
+    required bytes flow_view_part = 1; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

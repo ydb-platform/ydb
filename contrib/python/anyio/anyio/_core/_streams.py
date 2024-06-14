@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any, TypeVar, overload
+from typing import Tuple, TypeVar
+from warnings import warn
 
 from ..streams.memory import (
     MemoryObjectReceiveStream,
@@ -12,36 +13,40 @@ from ..streams.memory import (
 T_Item = TypeVar("T_Item")
 
 
-@overload
-def create_memory_object_stream(
-    max_buffer_size: float = ...,
-) -> tuple[MemoryObjectSendStream[Any], MemoryObjectReceiveStream[Any]]:
-    ...
-
-
-@overload
-def create_memory_object_stream(
-    max_buffer_size: float = ..., item_type: type[T_Item] = ...
-) -> tuple[MemoryObjectSendStream[T_Item], MemoryObjectReceiveStream[T_Item]]:
-    ...
-
-
-def create_memory_object_stream(
-    max_buffer_size: float = 0, item_type: type[T_Item] | None = None
-) -> tuple[MemoryObjectSendStream[Any], MemoryObjectReceiveStream[Any]]:
+class create_memory_object_stream(
+    Tuple[MemoryObjectSendStream[T_Item], MemoryObjectReceiveStream[T_Item]],
+):
     """
     Create a memory object stream.
 
-    :param max_buffer_size: number of items held in the buffer until ``send()`` starts blocking
-    :param item_type: type of item, for marking the streams with the right generic type for
-        static typing (not used at run time)
+    The stream's item type can be annotated like
+    :func:`create_memory_object_stream[T_Item]`.
+
+    :param max_buffer_size: number of items held in the buffer until ``send()`` starts
+        blocking
+    :param item_type: old way of marking the streams with the right generic type for
+        static typing (does nothing on AnyIO 4)
+
+        .. deprecated:: 4.0
+          Use ``create_memory_object_stream[YourItemType](...)`` instead.
     :return: a tuple of (send stream, receive stream)
 
     """
-    if max_buffer_size != math.inf and not isinstance(max_buffer_size, int):
-        raise ValueError("max_buffer_size must be either an integer or math.inf")
-    if max_buffer_size < 0:
-        raise ValueError("max_buffer_size cannot be negative")
 
-    state: MemoryObjectStreamState = MemoryObjectStreamState(max_buffer_size)
-    return MemoryObjectSendStream(state), MemoryObjectReceiveStream(state)
+    def __new__(  # type: ignore[misc]
+        cls, max_buffer_size: float = 0, item_type: object = None
+    ) -> tuple[MemoryObjectSendStream[T_Item], MemoryObjectReceiveStream[T_Item]]:
+        if max_buffer_size != math.inf and not isinstance(max_buffer_size, int):
+            raise ValueError("max_buffer_size must be either an integer or math.inf")
+        if max_buffer_size < 0:
+            raise ValueError("max_buffer_size cannot be negative")
+        if item_type is not None:
+            warn(
+                "The item_type argument has been deprecated in AnyIO 4.0. "
+                "Use create_memory_object_stream[YourItemType](...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        state = MemoryObjectStreamState[T_Item](max_buffer_size)
+        return (MemoryObjectSendStream(state), MemoryObjectReceiveStream(state))

@@ -111,6 +111,11 @@ public:
     }
 
     template <typename... Args>
+    auto ModifyOwner(Args&&... args) {
+        return Client.ModifyOwner(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     auto Describe(Args&&... args) {
         return Client.Ls(std::forward<Args>(args)...);
     }

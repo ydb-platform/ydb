@@ -133,6 +133,50 @@ bool TYsonItem::IsEndOfStream() const
     return GetType() == EYsonItemType::EndOfStream;
 }
 
+// NB: Keep in sync with yson token writer.
+i64 TYsonItem::GetBinarySize() const
+{
+    // Temporary buffer for calculating actual size of varints.
+    std::array<char, MaxVarUint64Size> buffer;
+
+    // Each token requires at least 1 byte for the marker.
+    i64 result = 1;
+    switch (GetType()) {
+        case EYsonItemType::EndOfStream:
+            // This isn't a real token.
+            return 0;
+        case EYsonItemType::BeginList:
+        case EYsonItemType::EndList:
+        case EYsonItemType::BeginMap:
+        case EYsonItemType::EndMap:
+        case EYsonItemType::BeginAttributes:
+        case EYsonItemType::EndAttributes:
+            // These system values are represented solely by the marker.
+            break;
+        case EYsonItemType::EntityValue:
+        case EYsonItemType::BooleanValue:
+            // These values are represented solely by the marker.
+            break;
+        case EYsonItemType::Int64Value:
+            result += WriteVarInt64(buffer.data(), UncheckedAsInt64());
+            break;
+        case EYsonItemType::Uint64Value:
+            result += WriteVarUint64(buffer.data(), UncheckedAsUint64());
+            break;
+        case EYsonItemType::DoubleValue:
+            result += sizeof(double);
+            break;
+        case EYsonItemType::StringValue:
+            result += WriteVarInt32(buffer.data(), UncheckedAsString().size());
+            result += UncheckedAsString().size();
+            break;
+        default:
+            YT_ABORT();
+    }
+
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void NDetail::TZeroCopyInputStreamReader::RefreshBlock()

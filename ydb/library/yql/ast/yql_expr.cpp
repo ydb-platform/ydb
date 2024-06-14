@@ -1178,8 +1178,9 @@ namespace {
         if (typeExpr.size() != 1U)
             return false;
 
+        auto typePos = node.GetChild(2)->GetPosition();
         auto parameterExpr = ctx.ProcessNode(node,
-            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
+            ctx.Expr.NewCallable(typePos, "Parameter", {
                 ctx.Expr.NewAtom(node.GetPosition(), nameStr),
                 std::move(typeExpr.front())
             }));
@@ -1708,6 +1709,7 @@ namespace {
         size_t Order = 0ULL;
         bool RefAtoms = false;
         bool AllowFreeArgs = false;
+        bool NormalizeAtomFlags = false;
         TNodeMap<size_t> FreeArgs;
         std::unique_ptr<TMemoryPool> Pool;
         std::vector<TFrameContext> Frames;
@@ -1832,10 +1834,11 @@ namespace {
             case TExprNode::Atom:
                 {
                     auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                    auto flags = ctx.NormalizeAtomFlags ? TNodeFlags::ArbitraryContent : node.Flags();
                     auto content = AnnotateAstNode(
                         ctx.RefAtoms ?
-                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()) :
-                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()),
+                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags) :
+                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags),
                         &node, annotationFlags, pool, ctx.RefAtoms);
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, content);
@@ -2712,6 +2715,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
+    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     ctx.Pool = std::make_unique<TMemoryPool>(4096);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
@@ -2776,6 +2780,13 @@ TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf
 TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
     const auto newNode = node.Clone(AllocateNextUniqueId());
+    ExprNodes.emplace_back(newNode.Get());
+    return newNode;
+}
+
+TExprNode::TPtr TExprContext::ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos) {
+    YQL_ENSURE(node.Type() != TExprNode::Lambda);
+    const auto newNode = node.CloneWithPosition(AllocateNextUniqueId(), pos);
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }
@@ -3027,6 +3038,24 @@ bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const {
 
 bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
     return Validate(ctx.GetPosition(position), ctx);
+}
+
+TStringBuf TItemExprType::GetCleanName(bool isVirtual) const {
+    if (!isVirtual) {
+        return Name;
+    }
+
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
+    return Name.SubStr(YqlVirtualPrefix.size());
+}
+
+const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& ctx) const {
+    if (!isVirtual) {
+        return this;
+    }
+
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
+    return ctx.MakeType<TItemExprType>(Name.SubStr(YqlVirtualPrefix.size()), ItemType);
 }
 
 bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const {

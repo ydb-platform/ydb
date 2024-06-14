@@ -141,6 +141,13 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         ToProto(req->mutable_parent_id(), options.ParentId);
     }
     ToProto(req->mutable_prerequisite_transaction_ids(), options.PrerequisiteTransactionIds);
+
+    if (options.ReplicateToMasterCellTags) {
+        ToProto(
+            req->mutable_replicate_to_master_cell_tags()->mutable_cell_tags(),
+            *options.ReplicateToMasterCellTags);
+    }
+
     // XXX(sandello): Better? Remove these fields from the protocol at all?
     // COMPAT(kiselyovp): remove auto_abort from the protocol
     req->set_auto_abort(false);

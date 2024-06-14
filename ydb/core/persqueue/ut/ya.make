@@ -29,6 +29,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    autoscaling_ut.cpp
+    balancing_ut.cpp
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
@@ -42,7 +44,6 @@ SRCS(
     pqtablet_ut.cpp
     quota_tracker_ut.cpp
     sourceid_ut.cpp
-    autoscaling_ut.cpp
     type_codecs_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp

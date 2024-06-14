@@ -207,7 +207,9 @@ namespace {
 
 
 #define STRING_STREAM_PAD_FORMATTER_UDF(function)                                                    \
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(T##function, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {  \
+    BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(T##function,                                           \
+                                              char*(TAutoMap<char*>, ui64, TOptional<char*>), 1)     \
+    {                                                                                                \
         TStringStream result;                                                                        \
         const TStringBuf input(args[0].AsStringRef());                                               \
         char paddingSymbol = ' ';                                                                    \
@@ -223,7 +225,33 @@ namespace {
         }                                                                                            \
         result << function(input, padLen, paddingSymbol);                                            \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));                    \
-    }
+    }                                                                                                \
+                                                                                                     \
+    struct T##function##KernelExec                                                                   \
+        : public TGenericKernelExec<T##function##KernelExec, 3>                                      \
+    {                                                                                                \
+        template <typename TSink>                                                                    \
+        static void Process(TBlockItem args, const TSink& sink) {                                    \
+            TStringStream result;                                                                    \
+            const TStringBuf input(args.GetElement(0).AsStringRef());                                \
+            char paddingSymbol = ' ';                                                                \
+            if (args.GetElement(2)) {                                                                \
+                if (args.GetElement(2).AsStringRef().Size() != 1) {                                  \
+                    ythrow yexception() << "Not 1 symbol in paddingSymbol";                          \
+                }                                                                                    \
+                paddingSymbol = TString(args.GetElement(2).AsStringRef())[0];                        \
+            }                                                                                        \
+            const ui64 padLen = args.GetElement(1).Get<ui64>();                                      \
+            if (padLen > padLim) {                                                                   \
+                ythrow yexception() << "Padding length (" << padLen                                  \
+                                    << ") exceeds maximum: " << padLim;                              \
+            }                                                                                        \
+            result << function(input, padLen, paddingSymbol);                                        \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));                              \
+        }                                                                                            \
+    };                                                                                               \
+                                                                                                     \
+    END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 #define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                        \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<argType>)) {        \
@@ -510,11 +538,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         size_t tpos = 0;
-        for (const char c : input) {
+        for (const ui8 c : input) {
             if (!chars[c]) {
                 input[tpos++] = c;
             }
@@ -534,11 +562,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             size_t tpos = 0;
-            for (const char c : input) {
+            for (const ui8 c : input) {
                 if (!chars[c]) {
                     input[tpos++] = c;
                 }
@@ -558,11 +586,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         for (auto it = input.cbegin(); it != input.cend(); ++it) {
-            if (chars[*it]) {
+            if (chars[static_cast<ui8>(*it)]) {
                 input.erase(it);
                 return valueBuilder->NewString(input);
             }
@@ -578,11 +606,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             for (auto it = input.cbegin(); it != input.cend(); ++it) {
-                if (chars[*it]) {
+                if (chars[static_cast<ui8>(*it)]) {
                     input.erase(it);
                     return sink(TBlockItem(input));
                 }
@@ -598,11 +626,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         for (auto it = input.crbegin(); it != input.crend(); ++it) {
-            if (chars[*it]) {
+            if (chars[static_cast<ui8>(*it)]) {
                 input.erase(input.crend() - it - 1, 1);
                 return valueBuilder->NewString(input);
             }
@@ -618,11 +646,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             for (auto it = input.crbegin(); it != input.crend(); ++it) {
-                if (chars[*it]) {
+                if (chars[static_cast<ui8>(*it)]) {
                     input.erase(input.crend() - it - 1, 1);
                     return sink(TBlockItem(input));
                 }

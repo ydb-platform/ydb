@@ -141,7 +141,7 @@ protected:
             };
 
             std::unique_ptr<IOptimizerNew> opt;
-            TDummyProviderContext pctx;
+            TBaseProviderContext pctx;
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:
@@ -180,12 +180,12 @@ protected:
             hasDqConnections |= !!list.Maybe<TDqConnection>();
         }
 
-        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx) : node;
+        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx) : node;
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
-            return DqExpandWindowFunctions(node, ctx, true);
+            return DqExpandWindowFunctions(node, ctx, TypesCtx, true);
         }
         return node;
     }

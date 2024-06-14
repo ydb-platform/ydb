@@ -16,6 +16,12 @@ Y_UNIT_TEST_SUITE(SizeCalcer) {
         std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
         Cerr << GetBatchDataSize(batch) << Endl;
         UNIT_ASSERT(GetBatchDataSize(batch) == 2048 * 512 + 2048 * 4);
+        auto slice05 = batch->Slice(batch->num_rows() / 2, batch->num_rows() / 2);
+        Cerr << GetBatchDataSize(slice05) << Endl;
+        UNIT_ASSERT(GetBatchDataSize(slice05) == 0.5 * (2048 * 512 + 2048 * 4));
+        auto slice025 = slice05->Slice(slice05->num_rows() / 3, slice05->num_rows() / 2);
+        Cerr << GetBatchDataSize(slice025) << Endl;
+        UNIT_ASSERT(GetBatchDataSize(slice025) == 0.25 * (2048 * 512 + 2048 * 4));
     }
 
     Y_UNIT_TEST(DictionaryStrings) {

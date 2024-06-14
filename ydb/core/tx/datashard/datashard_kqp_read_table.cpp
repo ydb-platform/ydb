@@ -243,7 +243,7 @@ protected:
     TSmallVec<bool> SkipNullKeys;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
-    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIt, NTable::TTableIt>;
+    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIter, NTable::TTableIter>;
     mutable TAutoPtr<TTableIterator> Iterator;
     mutable std::optional<ui64> Remains;
 };

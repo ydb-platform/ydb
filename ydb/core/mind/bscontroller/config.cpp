@@ -43,6 +43,8 @@ namespace NKikimr::NBsController {
                         ApplyPDiskDeleted(overlay->first, *base->second);
                     } else if (!base) {
                         ApplyPDiskCreated(overlay->first, *overlay->second);
+                    } else {
+                        ApplyPDiskDiff(overlay->first, *base->second, *overlay->second);
                     }
                 }
                 for (auto&& [base, overlay] : State.VSlots.Diff()) {
@@ -66,16 +68,21 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskCreated(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
-                if (!State.StaticPDisks.count(pdiskId)) {
-                    // don't create static PDisks as they are already created
-                    NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
-                    pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
+                NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
+                pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
+            }
+
+            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
+                if (prev.Mood != cur.Mood) {
+                    // PDisk's mood has changed
+                    CreatePDiskEntry(pdiskId, cur);
                 }
             }
 
             void ApplyPDiskDeleted(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
                 DeletedPDiskIds.insert(pdiskId);
-                if (!State.StaticPDisks.count(pdiskId)) {
+                TNodeInfo *nodeInfo = Self->FindNode(pdiskId.NodeId);
+                if (!State.StaticPDisks.count(pdiskId) || (nodeInfo && nodeInfo->DeclarativePDiskManagement)) {
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 }
@@ -103,6 +110,14 @@ namespace NKikimr::NBsController {
                     // TODO(alexvru): report this somehow
                 }
                 pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder);
+
+                switch (pdiskInfo.Mood) {
+                    case NBsController::TPDiskMood::EValue::Normal:
+                        break;
+                    case NBsController::TPDiskMood::EValue::Restarting:
+                        pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
+                        break;
+                }
 
                 return pdisk;
             }
@@ -232,6 +247,18 @@ namespace NKikimr::NBsController {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
                     SerializeGroupInfo(service->AddGroups(), groupInfo, storagePoolName, scopeId);
                 }
+
+                // push group state notification to NodeWhiteboard (for virtual groups only)
+                if (groupInfo.VirtualGroupState) {
+                    TBlobStorageGroupInfo::TDynamicInfo dynInfo(groupInfo.ID, groupInfo.Generation);
+                    for (const auto& vdisk : groupInfo.VDisksInGroup) {
+                        const auto& id = vdisk->VSlotId;
+                        dynInfo.PushBackActorId(MakeBlobStorageVDiskID(id.NodeId, id.PDiskId, id.VSlotId));
+                    }
+                    State.NodeWhiteboardOutbox.emplace_back(new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(
+                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
+                        scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
+                }
             }
 
             void ApplyGroupDeleted(const TGroupId &groupId, const TGroupInfo& /*groupInfo*/) {
@@ -266,7 +293,7 @@ namespace NKikimr::NBsController {
 
         bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
                 bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
-                TTransactionContext& txc, TString *errorDescription) {
+                TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
             NIceDb::TNiceDb db(txc.DB);
 
             for (TGroupId groupId : state.GroupContentChanged) {
@@ -282,6 +309,11 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            bool errors = false;
+            std::vector<TGroupId> disintegratedByExpectedStatus;
+            std::vector<TGroupId> disintegrated;
+            std::vector<TGroupId> degraded;
+
             if (!suppressDisintegratedGroupsChecking) {
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
                     if (base && overlay->second) {
@@ -289,9 +321,8 @@ namespace NKikimr::NBsController {
                         const TGroupInfo::TGroupStatus& status = overlay->second->Status;
                         if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
                                 status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
-                            *errorDescription = TStringBuilder() << "GroupId# " << overlay->first
-                                << " ExpectedStatus# DISINTEGRATED";
-                           return false;
+                            disintegratedByExpectedStatus.push_back(overlay->first);
+                            errors = true;
                         }
                      }
                 }
@@ -313,18 +344,42 @@ namespace NKikimr::NBsController {
                         // check the failure model
                         auto& checker = *topology.QuorumChecker;
                         if (!checker.CheckFailModelForGroup(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
-                                << " may lose data while modifying group";
-                            return false;
+                            disintegrated.push_back(groupId);
+                            errors = true;
                         } else if (!suppressDegradedGroupsChecking && checker.IsDegraded(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
-                                << " may become DEGRADED while modifying group";
-                            return false;
+                            degraded.push_back(groupId);
+                            errors = true;
                         }
                     } else {
                         Y_ABORT_UNLESS(group); // group must exist
                     }
                 }
+            }
+
+            if (errors) {
+                TStringStream msg;
+                if (!degraded.empty()) {
+                    msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
+                    if (response) {
+                        response->MutableGroupsGetDegraded()->Add(degraded.begin(), degraded.end());
+                    }
+                }
+                if (!disintegrated.empty()) {
+                    msg << "Disintegrated GroupIds# " << FormatList(disintegrated) << ' ';
+                    if (response) {
+                        response->MutableGroupsGetDisintegrated()->Add(disintegrated.begin(), disintegrated.end());
+                    }
+                }
+                if (!disintegratedByExpectedStatus.empty()) {
+                    msg << "DisintegratedByExpectedStatus GroupIds# " << FormatList(disintegratedByExpectedStatus) << ' ';
+                    if (response) {
+                        response->MutableGroupsGetDisintegratedByExpectedStatus()->Add(disintegratedByExpectedStatus.begin(),
+                            disintegratedByExpectedStatus.end());
+                    }
+                }
+                *errorDescription = msg.Str();
+                errorDescription->pop_back();
+                return false;
             }
 
             // trim PDisks awaiting deletion
@@ -495,6 +550,9 @@ namespace NKikimr::NBsController {
                             sh->GroupsToUpdate[slot->GroupId].emplace();
                         }
                     }
+                    if (StaticPDisks.contains(overlay->first)) {
+                        state.PushStaticGroupsToSelfHeal = true;
+                    }
                 }
             }
 
@@ -595,6 +653,9 @@ namespace NKikimr::NBsController {
             for (auto& ev : StatProcessorOutbox) {
                 Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
             }
+            for (auto& ev : NodeWhiteboardOutbox) {
+                Self.SelfId().Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(Self.SelfId().NodeId()), ev.release());
+            }
 
             if (UpdateSelfHealInfoMsg) {
                 UpdateSelfHealInfoMsg->ConfigTxSeqNo = Self.NextConfigTxSeqNo;
@@ -603,6 +664,9 @@ namespace NKikimr::NBsController {
 
             for (auto& fn : Callbacks) {
                 fn();
+            }
+            if (PushStaticGroupsToSelfHeal) {
+                Self.PushStaticGroupsToSelfHeal();
             }
             return Self.NextConfigTxSeqNo++;
         }
@@ -1080,6 +1144,23 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+        }
+
+        void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
+            settings->AddDefaultMaxSlots(DefaultMaxSlots);
+            settings->AddEnableSelfHeal(SelfHealEnable);
+            settings->AddEnableDonorMode(DonorMode);
+            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->AddGroupReserveMin(GroupReserveMin);
+            settings->AddGroupReservePartPPM(GroupReservePart);
+            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
+            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
 } // NKikimr::NBsController

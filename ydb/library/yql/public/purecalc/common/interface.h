@@ -245,6 +245,11 @@ namespace NYql {
             /// LLVM settings. Assign "OFF" to disable LLVM, empty string for default settings.
             TString LLVMSettings;
 
+            /// Block engine settings. Assign "force" to unconditionally enable
+            /// it, "disable" for turn it off and "auto" to left the final
+            /// decision to the platform heuristics.
+            TString BlockEngineSettings;
+
             /// Provider for generic counters which can be used to export statistics from UDFs.
             NKikimr::NUdf::ICountersProvider* CountersProvider;
 
@@ -312,6 +317,13 @@ namespace NYql {
             TProgramFactoryOptions& SetLLVMSettings(TStringBuf llvm_settings);
 
             /**
+             * Set new block engine settings.
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetBlockEngineSettings(TStringBuf blockEngineSettings);
+
+            /**
              * Set new counters provider. Passed pointer should stay alive for as long as the processor factory
              * stays alive.
              *
@@ -363,7 +375,8 @@ namespace NYql {
         enum class ETranslationMode {
             SQL   /* "SQL" */,
             SExpr /* "s-expression" */,
-            Mkql  /* "mkql" */
+            Mkql  /* "mkql" */,
+            PG    /* PostgreSQL */
         };
 
         /**

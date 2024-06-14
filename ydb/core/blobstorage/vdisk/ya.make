@@ -37,7 +37,6 @@ RECURSE(
     hullop
     ingress
     localrecovery
-    protos
     query
     repl
     scrub

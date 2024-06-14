@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NActualizer {
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(const TPortionInfo& portion) const {
     AFL_VERIFY(TargetSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto portionSchema = VersionedIndex.GetSchema(portion.GetMinSnapshot());
+    auto portionSchema = portion.GetSchema(VersionedIndex);
     if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
         auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
@@ -71,7 +71,7 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             }
             auto info = BuildActualizationInfo(*portion);
             AFL_VERIFY(info);
-            auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
+            auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
@@ -81,7 +81,6 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 portionsToRemove.emplace(portion->GetPortionId());
             }
         }
-        
     }
     for (auto&& i : portionsToRemove) {
         RemovePortion(i);

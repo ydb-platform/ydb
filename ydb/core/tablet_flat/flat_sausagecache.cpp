@@ -315,6 +315,9 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
         if (page->Empty()) {
             Touches.PushBack(page);
             Stats.CurrentCacheHits++;
+            if (!page->Sticky) {
+                Stats.CurrentCacheHitSize += page->Size;
+            }
         }
         return &page->PinnedBody;
     }
@@ -322,8 +325,8 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
     if (page->Empty()) {
         ToLoad.PushBack(page);
 
-        // Note: we mark index pages sticky before we load them
-        if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::Index) {
+        // Note: we mark flat index pages sticky before we load them
+        if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::FlatIndex) {
             MarkSticky(page->Id, info);
         }
 
@@ -363,6 +366,32 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
 
     TryEraseIfUnnecessary(page);
     return { };
+}
+
+void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
+    if (pinned.empty()) {
+        newPages += Stats.CurrentCacheHits;
+        newMemory += Stats.CurrentCacheHitSize;
+        return;
+    }
+
+    for (auto &page : Touches) {
+        bool isPinned = pinned[page.Info->Id].contains(page.Id);
+
+        if (!isPinned) {
+            newPages++;
+        }
+
+        // Note: it seems useless to count sticky pages in tx usage
+        // also we want to read index from Env
+        if (!page.Sticky) {
+            if (isPinned) {
+                pinnedMemory += page.Size;
+            } else {
+                newMemory += page.Size;
+            }
+        }
+    }
 }
 
 void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory) {
@@ -443,7 +472,7 @@ void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     }
 }
 
-// todo: do we really need that groupping by page collection?
+// todo: do we really need that grouping by page collection?
 THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> TPrivatePageCache::GetToLoad() const {
     THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> result;
     for (auto &page : ToLoad) {
@@ -456,6 +485,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     if (verifyEmpty) {
         Y_ABORT_UNLESS(!Touches);
         Y_ABORT_UNLESS(!Stats.CurrentCacheHits);
+        Y_ABORT_UNLESS(!Stats.CurrentCacheHitSize);
         Y_ABORT_UNLESS(!ToLoad);
         Y_ABORT_UNLESS(!Stats.CurrentCacheMisses);
     }
@@ -465,6 +495,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
         TryUnload(page);
     }
     Stats.CurrentCacheHits = 0;
+    Stats.CurrentCacheHitSize = 0;
 
     while (ToLoad) {
         TPage *page = ToLoad.PopBack();
@@ -478,8 +509,8 @@ void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRe
     if (!page)
         return;
 
-    // Note: shared cache may accept a peinding page if it is used by multiple private caches
-    // (for expample, used by tablet and its follower)
+    // Note: shared cache may accept a pending page if it is used by multiple private caches
+    // (for example, used by tablet and its follower)
     if (Y_UNLIKELY(!page->SharedPending)) {
         return;
     }
@@ -503,8 +534,8 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
     if (!page)
         return;
 
-    // Note: shared cache may drop a peinding page if it is used by multiple private caches
-    // (for expample, used by tablet and its follower)
+    // Note: shared cache may drop a pending page if it is used by multiple private caches
+    // (for example, used by tablet and its follower)
     if (Y_UNLIKELY(page->SharedPending)) {
         // Shared cache rejected our page so we should drop it too
         Stats.TotalSharedPending -= page->Size;

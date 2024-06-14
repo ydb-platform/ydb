@@ -31,7 +31,8 @@ public:
 
     bool Retry(
         const TMaybe<ui32>& rangeIndex,
-        const TMaybe<ui64>& rowIndex) override;
+        const TMaybe<ui64>& rowIndex,
+        const std::exception_ptr& error) override;
 
     void ResetRetries() override;
 

@@ -1,15 +1,12 @@
 Metadata-Version: 2.1
 Name: patch
 Version: 1.16
-Summary: Patch utility to apply unified diffs
+Author: anatoly techtonik
+Author-email: techtonik at gmail com
 Home-page: https://github.com/techtonik/python-patch/
-Author: anatoly techtonik <techtonik@gmail.com>
-Author-email: UNKNOWN
-License: MIT
-Platform: UNKNOWN
-Classifier: Classifier: Programming Language :: Python :: 2
-Classifier: Classifier: Programming Language :: Python :: 3
+Summary: Library to parse and apply unified diffs
+License: MIT License
 
-UNKNOWN
 
+### Features
 

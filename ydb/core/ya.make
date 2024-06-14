@@ -1,24 +1,26 @@
 RECURSE(
     actorlib_impl
+    backup
     base
-    blobstorage
     blob_depot
+    blobstorage
     blockstore
     change_exchange
     client
     cms
-    control
     config
+    control
     debug
     debug_tools
     discovery
     docapi
+    driver_lib
     engine
     erasure
     external_sources
     filestore
-    fq
     formats
+    fq
     graph
     grpc_caching
     grpc_services
@@ -26,6 +28,7 @@ RECURSE(
     health_check
     http_proxy
     io_formats
+    jaeger_tracing
     kafka_proxy
     kesus
     keyvalue
@@ -40,7 +43,6 @@ RECURSE(
     node_whiteboard
     persqueue
     pgproxy
-    protos
     public_http
     quoter
     raw_socket
@@ -59,9 +61,7 @@ RECURSE(
     wrappers
     ydb_convert
     ymq
-    driver_lib
     yql_testlib
-    jaeger_tracing
 )
 
 RECURSE_FOR_TESTS(

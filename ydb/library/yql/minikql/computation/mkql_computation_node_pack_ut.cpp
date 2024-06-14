@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -61,7 +62,7 @@ protected:
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")
         , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
-        , ArrowPool_(arrow::default_memory_pool())
+        , ArrowPool_(NYql::NUdf::GetYqlMemoryPool())
     {
     }
 
@@ -492,7 +493,7 @@ protected:
         }
     }
 
-    NUdf::TUnboxedValue MakeTupleValue(TType*& tupleType) {
+    NUdf::TUnboxedValue MakeTupleValue(TType*& tupleType, bool forPerf = false) {
         std::vector<TType*> tupleElemenTypes;
         tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
@@ -500,7 +501,17 @@ protected:
         tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
+        if (!forPerf) {
+            tupleElemenTypes.push_back(PgmBuilder.NewDecimalType(16, 8));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(22, 3)));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(35, 2)));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(29, 0)));
+        }
         tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
+
+        auto inf = NYql::NDecimal::FromString("inf", 16, 8);
+        auto dec1 = NYql::NDecimal::FromString("12345.673", 22, 3);
+        auto dec2 = NYql::NDecimal::FromString("-9781555555.99", 35, 2);
 
         TUnboxedValueVector tupleElemens;
         tupleElemens.push_back(MakeString("01234567890123456789"));
@@ -509,11 +520,17 @@ protected:
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
         tupleElemens.push_back(NUdf::TUnboxedValuePod());
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        if (!forPerf) {
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(inf));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec1));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec2));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod());
+        }
 
         return HolderFactory.VectorAsArray(tupleElemens);
     }
 
-    void ValidateTupleValue(const NUdf::TUnboxedValue& value) {
+    void ValidateTupleValue(const NUdf::TUnboxedValue& value, bool forPerf = false) {
         using NYql::NUdf::TStringValue;
         UNIT_ASSERT(value.IsBoxed());
 
@@ -525,11 +542,17 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(3).Get<ui64>(), 12345);
         UNIT_ASSERT(!value.GetElement(4).HasValue());
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(5).Get<ui64>(), 12345);
+        if (!forPerf) {
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(6).GetInt128(), 16, 8)), "inf");
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(7).GetInt128(), 22, 3)), "12345.673");
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(8).GetInt128(), 35, 2)), "-9781555555.99");
+            UNIT_ASSERT(!value.GetElement(9).HasValue());
+        }
     }
 
     void TestTuplePackPerformance() {
         TType* tupleType;
-        const auto value = MakeTupleValue(tupleType);
+        const auto value = MakeTupleValue(tupleType, true);
         TestPackPerformance(tupleType, value);
     }
 
@@ -571,9 +594,9 @@ protected:
             TString packed = buffer.ConvertToString();
 
             if constexpr (Fast) {
-                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 59);
+                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 73);
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 43);
+                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 54);
             }
 
             for (size_t chunk = 1; chunk < packed.size(); ++chunk) {
@@ -643,6 +666,9 @@ protected:
             auto scalarOptStrType = PgmBuilder.NewBlockType(optStrType, TBlockType::EShape::Scalar);
             auto blockOptTupleOptUi32StrType = PgmBuilder.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
             auto scalarUi64Type = PgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
+            
+            auto tzDateType = PgmBuilder.NewDataType(NUdf::EDataSlot::TzDate);
+            auto blockTzDateType = PgmBuilder.NewBlockType(tzDateType, TBlockType::EShape::Many);
 
             auto rowType =
                 legacyStruct
@@ -652,10 +678,11 @@ protected:
                           {"_yql_block_length", scalarUi64Type},
                           {"a", scalarOptStrType},
                           {"b", blockOptTupleOptUi32StrType},
+                          {"c", blockTzDateType}
                       })
                     : PgmBuilder.NewMultiType(
                           {blockUi32Type, blockOptStrType, scalarOptStrType,
-                           blockOptTupleOptUi32StrType, scalarUi64Type});
+                           blockOptTupleOptUi32StrType, blockTzDateType, scalarUi64Type});
 
             ui64 blockLen = 1000;
             UNIT_ASSERT_LE(offset + len, blockLen);
@@ -663,6 +690,7 @@ protected:
             auto builder1 = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), nullptr);
             auto builder2 = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), nullptr);
             auto builder3 = MakeArrayBuilder(TTypeInfoHelper(), optTupleOptUi32StrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleOptUi32StrType)), nullptr);
+            auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
 
             for (ui32 i = 0; i < blockLen; ++i) {
                 TBlockItem b1(i);
@@ -675,6 +703,10 @@ protected:
                 TBlockItem b3items[] = { (i % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(a) };
                 TBlockItem b3 = (i % 7) ? TBlockItem(b3items) : TBlockItem();
                 builder3->Add(b3);
+                
+                TBlockItem tzDate {i};
+                tzDate.SetTimezoneId(i % 100);
+                builder4->Add(tzDate);
             }
 
             std::string_view testScalarString = "foobar";
@@ -687,11 +719,13 @@ protected:
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
+                datums.emplace_back(builder4->Build(true));
             } else {
                 datums.emplace_back(builder1->Build(true));
                 datums.emplace_back(builder2->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
+                datums.emplace_back(builder4->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
             }
 
@@ -745,6 +779,7 @@ protected:
             auto reader1 = MakeBlockReader(TTypeInfoHelper(), ui32Type);
             auto reader2 = MakeBlockReader(TTypeInfoHelper(), optStrType);
             auto reader3 = MakeBlockReader(TTypeInfoHelper(), optTupleOptUi32StrType);
+            auto reader4 = MakeBlockReader(TTypeInfoHelper(), tzDateType);
 
             for (ui32 i = offset; i < len; ++i) {
                 TBlockItem b1 = reader1->GetItem(*TArrowBlock::From(unpackedColumns[0]).GetDatum().array(), i - offset);
@@ -770,6 +805,10 @@ protected:
                 } else {
                     UNIT_ASSERT(!b3);
                 }
+
+                TBlockItem b4 = reader4->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 5 : 4]).GetDatum().array(), i - offset);
+                UNIT_ASSERT(b4.Get<ui16>() == i);
+                UNIT_ASSERT(b4.GetTimezoneId() == (i % 100));
             }
         }
     }

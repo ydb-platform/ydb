@@ -180,7 +180,7 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx);
+        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx);
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -193,7 +193,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqExpandWindowFunctions(node, ctx, true);
+        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, true);
         DumpAppliedRule("ExpandWindowFunctions", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

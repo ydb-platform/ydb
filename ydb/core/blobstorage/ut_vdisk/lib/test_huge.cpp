@@ -136,7 +136,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
 
     bool InitHugeBlobKeeper(const TActorContext &ctx, const TStartingPoints &startingPoints) {
         Y_UNUSED(ctx);
-        const ui32 minHugeBlobInBytes = 64 << 10;
+        const ui32 oldMinHugeBlobInBytes = 64 << 10;
         const ui32 milestoneHugeBlobInBytes = 64 << 10;
         const ui32 maxBlobInBytes = 128 << 10;
         auto logFunc = [] (const TString) { /* empty */ };
@@ -148,12 +148,12 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->VCtx,
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
-                        minHugeBlobInBytes,
+                        HmCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
-                        HmCtx->Config->HugeBlobOldMapCompatible,
                         logFunc);
         } else {
             // read existing one
@@ -167,12 +167,12 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->VCtx,
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
-                        minHugeBlobInBytes,
+                        HmCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
-                        HmCtx->Config->HugeBlobOldMapCompatible,
                         lsn, entryPoint, logFunc);
         }
 

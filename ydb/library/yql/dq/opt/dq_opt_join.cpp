@@ -117,10 +117,18 @@ TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBa
 }
 
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
-    const THashMap<TStringBuf, TJoinInputDesc>& inputs, EHashJoinMode mode, bool useCBO, TExprContext& ctx)
+    const THashMap<TStringBuf, TJoinInputDesc>& inputs, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
 {
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
+
+    if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+        mode = EHashJoinMode::Map;
+    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+        mode = EHashJoinMode::GraceAndSelf;
+    }
+
     bool leftAny = linkSettings.LeftHints.contains("any");
     bool rightAny = linkSettings.RightHints.contains("any");
 
@@ -129,7 +137,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
     } else {
-        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx);
+        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
         if (!left) {
             return {};
         }
@@ -140,7 +148,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         right = inputs.at(joinTuple.RightScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
     } else {
-        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx);
+        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
         if (!right) {
             return {};
         }
@@ -373,7 +381,7 @@ bool CheckJoinColumns(const TExprBase& node) {
  * physical stages with join operators.
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx) {
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
     }
@@ -390,7 +398,7 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useC
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-    auto result = BuildDqJoin(joinTuple, inputs, mode, useCBO, ctx);
+    auto result = BuildDqJoin(joinTuple, inputs, mode, useCBO, ctx, typeCtx);
     if (!result) {
         return node;
     }
@@ -1118,25 +1126,9 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
-
-    if (useCBO) {
-        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-        switch (joinAlgo) {
-            case EJoinAlgoType::LookupJoin:
-            case EJoinAlgoType::MapJoin:
-                mode = EHashJoinMode::Map;
-                break;
-            case EJoinAlgoType::GraceJoin:
-                mode = EHashJoinMode::GraceAndSelf;
-                break;
-            default:
-                break;
-        }
-
-    }
 
     const auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     const auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();

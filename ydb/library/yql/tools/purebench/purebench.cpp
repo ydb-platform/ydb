@@ -32,13 +32,17 @@ int Main(int argc, const char *argv[])
     bool showResults;
     TString udfsDir;
     TString LLVMSettings;
+    TString blockEngineSettings;
     opts.AddHelpOption();
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
+    opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&blockEngineSettings).DefaultValue("disable");
     opts.AddLongOption('c', "count", "count of input rows").StoreResult(&count).DefaultValue(1000000);
     opts.AddLongOption('g', "gen-sql", "SQL query to generate data").StoreResult(&genSql).DefaultValue("select index from Input");
     opts.AddLongOption('t', "test-sql", "SQL query to test").StoreResult(&testSql).DefaultValue("select count(*) as count from Input");
     opts.AddLongOption('r', "repeats", "number of iterations").StoreResult(&repeats).DefaultValue(10);
     opts.AddLongOption('w', "show-results", "show results of test SQL").StoreResult(&showResults).DefaultValue(true);
+    opts.AddLongOption("pg", "use PG syntax for generate query").NoArgument();
+    opts.AddLongOption("pt", "use PG syntax for test query").NoArgument();
     opts.AddLongOption("udfs-dir", "directory with UDFs").StoreResult(&udfsDir).DefaultValue("");
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
     opts.SetFreeArgsMax(0);
@@ -47,12 +51,13 @@ int Main(int argc, const char *argv[])
     auto factoryOptions = TProgramFactoryOptions();
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
+    factoryOptions.SetBlockEngineSettings(blockEngineSettings);
     auto factory = MakeProgramFactory(factoryOptions);
 
     NYT::TNode members{NYT::TNode::CreateList()};
     auto typeNode = NYT::TNode::CreateList()
                         .Add("DataType")
-                        .Add("Uint64");
+                        .Add("Int64");
 
     members.Add(NYT::TNode::CreateList()
                     .Add("index")
@@ -67,13 +72,13 @@ int Main(int argc, const char *argv[])
         inputSpec1,
         outputSpec1,
         genSql,
-        ETranslationMode::SQL);
+        res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL);
 
     TStringStream stream;
     NSkiff::TUncheckedSkiffWriter writer{&stream};
     for (ui64 i = 0; i < count; ++i) {
         writer.WriteVariant16Tag(0);
-        writer.WriteUint64(i);
+        writer.WriteInt64(i);
     }
     writer.Finish();
     auto input1 = TStringStream(stream);
@@ -90,7 +95,7 @@ int Main(int argc, const char *argv[])
         inputSpec2,
         outputSpec2,
         testSql,
-        ETranslationMode::SQL);
+        res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL);
     auto input2 = TStringStream(output1);
     auto handle2 = testProgram->Apply(&input2);
     TStringStream output2;
@@ -138,7 +143,7 @@ int main(int argc, const char *argv[]) {
     try {
         return Main(argc, argv);
     } catch (const TCompileError& e) {
-        Cerr << e.GetIssues();
+        Cerr << e.what() << "\n" << e.GetIssues();
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;

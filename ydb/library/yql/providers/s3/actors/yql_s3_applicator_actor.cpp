@@ -231,7 +231,7 @@ public:
     , CredentialsFactory(credentialsFactory)
     , ExternalEffect(externalEffect)
     , ActorSystem(NActors::TActivationContext::ActorSystem())
-    , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(TDuration::Zero(), 3))
+    , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxRetries = 3, .RetriedCurlCodes = NYql::FqRetriedCurlCodes()}))
     , RetryCount(GLOBAL_RETRY_LIMIT) {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^
@@ -488,32 +488,42 @@ public:
 
     void Process(TEvPrivate::TEvListParts::TPtr& ev) {
         auto& result = ev->Get()->Result;
-        if (!result.Issues && result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
-            TS3Result s3Result(result.Content.Extract());
-            if (s3Result.IsError) {
-                Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
-            } else {
-                LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
-                const auto& root = s3Result.GetRootNode();
-                if (root.Name() == "ListPartsResult") {
-                    const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
-                    auto state = ev->Get()->State->CompleteState;
-                    state->Tags.reserve(state->Tags.size() + root.Node("s3:MaxParts", false, nss).Value<ui32>());
-                    const auto& parts = root.XPath("s3:Part", true, nss);
-                    for (const auto& part : parts) {
-                        state->Tags.push_back(part.Node("s3:ETag", false, nss).Value<TString>());
-                    }
-                    if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
-                        ev->Get()->State->PartNumberMarker = root.Node("s3:NextPartNumberMarker", false, nss).Value<TString>();
-                        PushListParts(ev->Get()->State);
-                    } else {
-                        PushCommitMultipartUpload(state);
-                    }
-                } else {
-                    Finish(true, "ListParts reply: " + root.Name());
-                }
+        if (!result.Issues) {
+            if (result.Content.HttpResponseCode == 404) {
+                LOG_W("ListParts NOT FOUND " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                return;
             }
-            return;
+            if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
+                TS3Result s3Result(result.Content.Extract());
+                if (s3Result.IsError) {
+                    Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
+                } else {
+                    LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
+                    const auto& root = s3Result.GetRootNode();
+                    if (root.Name() == "ListPartsResult") {
+                        const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
+                        auto state = ev->Get()->State->CompleteState;
+                        state->Tags.reserve(state->Tags.size() + root.Node("s3:MaxParts", false, nss).Value<ui32>());
+                        const auto& parts = root.XPath("s3:Part", true, nss);
+                        for (const auto& part : parts) {
+                            state->Tags.push_back(part.Node("s3:ETag", false, nss).Value<TString>());
+                        }
+                        if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
+                            ev->Get()->State->PartNumberMarker = root.Node("s3:NextPartNumberMarker", false, nss).Value<TString>();
+                            PushListParts(ev->Get()->State);
+                        } else {
+                            if (state->Tags.empty()) {
+                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                                return;
+                            }
+                            PushCommitMultipartUpload(state);
+                        }
+                    } else {
+                        Finish(true, "ListParts reply: " + root.Name());
+                    }
+                }
+                return;
+            }
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("ListParts ERROR " << url);

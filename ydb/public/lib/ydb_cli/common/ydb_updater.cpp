@@ -89,7 +89,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     const TString DownloadUrl = TStringBuilder() << StorageUrl << LatestVersion << "/" << OsVersion << "/amd64/"
         << BinaryName;
     Cout << "Downloading binary from url " << DownloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl " << DownloadUrl << " -o " << tmpPathToBinary.GetPath());
+    TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << DownloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
     if (curlCmd.GetExitCode() != 0) {
         Cerr << "Failed to download from url \"" << DownloadUrl << "\". " << curlCmd.GetError() << Endl;
@@ -202,7 +202,7 @@ bool TYdbUpdater::GetLatestVersion() {
         return true;
     }
 
-    TShellCommand curlCmd(TStringBuilder() << "curl --silent " << VersionUrl);
+    TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 10 " << VersionUrl);
     curlCmd.Run().Wait();
 
     if (curlCmd.GetExitCode() == 0) {

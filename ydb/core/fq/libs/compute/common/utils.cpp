@@ -471,6 +471,101 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+namespace {
+
+void SerializeStats(google::protobuf::RepeatedPtrField<Ydb::ValuePair>& dest, const THashMap<TString, i64>& stats) {
+    for (const auto& [name, stat] : stats) {
+        auto& elem = *dest.Add();
+        elem.mutable_key()->set_text_value(name);
+        elem.mutable_payload()->set_int64_value(stat);
+    }
+}
+
+struct StatsAggregator {
+    bool TryExtractAggregates(const NJson::TJsonValue& node, const TString& name) {
+        auto dstAggr = Aggregates.find(name);
+        if (dstAggr != Aggregates.end()) {
+            if (auto sum = node.GetValueByPath("Sum")) {
+                dstAggr->second += sum->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TryExtractSourceStats(const NJson::TJsonValue& node, const TString& name) {
+        constexpr TStringBuf prefix = "Ingress=";
+        if (name.StartsWith(prefix)) {
+            if (auto ingress = node.GetValueByPath("Ingress.Bytes.Sum")) {
+                auto source = name.substr(prefix.size());
+                Aggregates[source] += ingress->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    THashMap<TString, i64> Aggregates{std::pair<TString, i64>
+        {"IngressBytes", 0},
+        {"EgressBytes", 0},
+        {"InputBytes", 0},
+        {"OutputBytes", 0},
+        {"CpuTimeUs", 0},
+    };
+};
+
+void TraverseStats(const NJson::TJsonValue& node, const TString& name, StatsAggregator& aggregator) {
+    auto type = node.GetType();
+    if (type == NJson::JSON_MAP) {
+        if (!aggregator.TryExtractAggregates(node, name) && !aggregator.TryExtractSourceStats(node, name)) {
+            for (const auto& [key, value] : node.GetMapSafe()) {
+                TraverseStats(value, key, aggregator);
+            }
+        }
+    } else if (type == NJson::JSON_ARRAY) {
+        for (const auto& subNode : node.GetArray()) {
+            if (auto nameNode = subNode.GetValueByPath("Name")) {
+                TraverseStats(subNode, name + "=" + nameNode->GetStringSafe(), aggregator);
+            }
+        }
+    }
+}
+
+void TraversePlans(const NJson::TJsonValue& node, StatsAggregator& aggregator) {
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        for (const auto& plan : plans->GetArray()) {
+            TraversePlans(plan, aggregator);
+        }
+    }
+
+    if (auto stats = node.GetValueByPath("Stats")) {
+        TraverseStats(*stats, "", aggregator);
+    }
+}
+}
+
+THashMap<TString, i64> AggregateStats(TStringBuf plan) {
+    StatsAggregator aggregator;
+
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue root;
+    if (!NJson::ReadJsonTree(plan, &jsonConfig, &root)) {
+        return std::move(aggregator.Aggregates);
+    }
+    NJson::TJsonValue* plans = nullptr;
+    if (plans = root.GetValueByPath("Plan.Plans"); !plans) {
+        return std::move(aggregator.Aggregates);
+    }
+
+    for (const auto& subPlan : plans->GetArray()) {
+        if (!subPlan.GetValueByPath("Node Type")) {
+            continue;
+        }
+        TraversePlans(subPlan, aggregator);
+    }
+    return std::move(aggregator.Aggregates);
+}
+
 std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
     std::optional<ui64> value;
     if (auto* subNode = node.GetValueByPath(name)) {
@@ -830,6 +925,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
             // YQv2
@@ -849,6 +945,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
         }
@@ -937,22 +1034,73 @@ TPublicStat GetPublicStat(const TString& statistics) {
     return counters;
 }
 
+void CleanupPlans(NJson::TJsonValue& node) {
+    node.EraseValue("Stats");
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        if (plans->IsArray()) {
+            for (auto& plan : plans->GetArraySafe()) {
+                CleanupPlans(plan);
+            }
+        }
+    }
+}
+
+TString CleanupPlanStats(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        planRoot.EraseValue("SimplifiedPlan");
+        if (auto* plan = planRoot.GetValueByPath("Plan")) {
+            CleanupPlans(*plan);
+            return NJson::WriteJson(&planRoot, false);
+        }
+    }
+
+    return plan;
+}
+
+TString SimplifiedPlan(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        if (auto* simplified = planRoot.GetValueByPath("SimplifiedPlan")) {
+            if (auto* plan = planRoot.GetValueByPath("Plan")) {
+                plan->Swap(*simplified);
+                planRoot.EraseValue("SimplifiedPlan");
+                return NJson::WriteJson(&planRoot, false);
+            }
+        }
+    }
+
+    return plan;
+}
+
 struct TNoneStatProcessor : IPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_NONE;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString&, double& cpuUsage) override {
+    TString GetPlanVisualization(const TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(const TString&, double& cpuUsage) override {
         cpuUsage = 0.0;
         return "";
     }
 
-    TPublicStat GetPublicStat(TString&) override {
+    TPublicStat GetPublicStat(const TString&) override {
         return TPublicStat{};
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf) override {
+        return {};
     }
 };
 
@@ -962,32 +1110,52 @@ struct TBasicStatProcessor : TNoneStatProcessor {
     }
 };
 
-struct TFullStatProcessor : IPlanStatProcessor {
+struct TPlanStatProcessor : IPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_FULL;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetPlanVisualization(const TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
         return GetV1StatFromV2Plan(plan, &cpuUsage);
     }
 
-    TPublicStat GetPublicStat(TString& stat) override {
-        return NFq::GetPublicStat(stat);
+    TPublicStat GetPublicStat(const TString& stat) override {
+        return ::NFq::GetPublicStat(stat);
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf plan) override {
+        return AggregateStats(plan);
     }
 };
 
-struct TProfileStatProcessor : TFullStatProcessor {
+struct TFullStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return CleanupPlanStats(plan);
+    }
+};
+
+struct TCostStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return SimplifiedPlan(plan);
+    }
+};
+
+struct TProfileStatProcessor : TPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
     }
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
         return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
     }
 };
@@ -996,7 +1164,9 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
     // disallow none and basic stat since they do not support metering
     // if (statViewName == "stat_none") return std::make_unique<TNoneStatProcessor>();
     // if (statViewName == "stat_basc") return std::make_unique<TBasicStatProcessor>();
+    if (statViewName == "stat_plan") return std::make_unique<TPlanStatProcessor>();
     if (statViewName == "stat_full") return std::make_unique<TFullStatProcessor>();
+    if (statViewName == "stat_cost") return std::make_unique<TCostStatProcessor>();
     if (statViewName == "stat_prof") return std::make_unique<TProfileStatProcessor>();
     if (statViewName == "stat_prod") return std::make_unique<TProdStatProcessor>();
     return std::make_unique<TFullStatProcessor>();
@@ -1047,17 +1217,24 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan conversion: " << ex.what()));
     }
 
+    auto planView = plan;
+    try {
+        planView = Processor->GetPlanVisualization(planView);
+    } catch(const NJson::TJsonException& ex) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan visualization: " << ex.what()));
+    }
+
     if (Compressor.IsEnabled()) {
         auto [astCompressionMethod, astCompressed] = Compressor.Compress(queryAst);
         pingTaskRequest.mutable_ast_compressed()->set_method(astCompressionMethod);
         pingTaskRequest.mutable_ast_compressed()->set_data(astCompressed);
 
-        auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+        auto [planCompressionMethod, planCompressed] = Compressor.Compress(planView);
         pingTaskRequest.mutable_plan_compressed()->set_method(planCompressionMethod);
         pingTaskRequest.mutable_plan_compressed()->set_data(planCompressed);
     } else {
         pingTaskRequest.set_ast(queryAst);
-        pingTaskRequest.set_plan(plan);
+        pingTaskRequest.set_plan(planView);
     }
 
     CpuUsage = 0.0;
@@ -1065,12 +1242,45 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         auto stat = Processor->GetQueryStat(plan, CpuUsage);
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
+        SerializeStats(*pingTaskRequest.mutable_flat_stats(), Processor->GetFlatStat(plan));
         PublicStat = Processor->GetPublicStat(stat);
     } catch(const NJson::TJsonException& ex) {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));
     }
 
     return pingTaskRequest;
+}
+
+TString GetStatViewName(const TRunActorParams& params) {
+    static TStringBuf hint("--fq_dev_hint_");
+    auto p = params.Sql.find(hint);
+    if (p != params.Sql.npos) {
+        p += hint.size();
+        auto p1 = params.Sql.find("\n", p);
+        TString mode = params.Sql.substr(p, p1 == params.Sql.npos ? params.Sql.npos : p1 - p);
+        if (mode) {
+            return mode;
+        }
+    }
+
+    if (!params.Config.GetControlPlaneStorage().GetDumpRawStatistics()) {
+        return "stat_prod";
+    }
+
+    switch (params.Config.GetControlPlaneStorage().GetStatsMode()) {
+        case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return "stat_none";
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return "stat_basc";
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return "stat_prof";
+        default:
+            return "stat_full";
+    }
 }
 
 } // namespace NFq

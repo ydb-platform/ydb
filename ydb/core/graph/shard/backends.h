@@ -49,7 +49,9 @@ public:
 
         void Clear() {
             Timestamps.clear();
-            Values.clear();
+            for (auto& value : Values) {
+                value.clear();
+            }
         }
     };
 

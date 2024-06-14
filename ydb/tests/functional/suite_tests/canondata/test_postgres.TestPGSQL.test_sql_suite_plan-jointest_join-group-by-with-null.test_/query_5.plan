@@ -61,6 +61,15 @@
                                                                 "Inputs": [
                                                                     {
                                                                         "InternalOperatorId": 1
+                                                                    },
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    },
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    },
+                                                                    {
+                                                                        "InternalOperatorId": 1
                                                                     }
                                                                 ],
                                                                 "Name": "Aggregate"
@@ -99,6 +108,7 @@
                                                                                     "q1 (-\u221e, +\u221e)",
                                                                                     "q2 (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
                                                                             }
                                                                         ],
@@ -137,6 +147,7 @@
                                                                                                     "q1 (-\u221e, +\u221e)",
                                                                                                     "q2 (-\u221e, +\u221e)"
                                                                                                 ],
+                                                                                                "Scan": "Parallel",
                                                                                                 "Table": "postgres_jointest/join-group-by-with-null.test_plan/int8_tbl"
                                                                                             }
                                                                                         ],

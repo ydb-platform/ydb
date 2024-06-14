@@ -21,29 +21,29 @@ void EnqueueAll(
 
 TEST(TNonblockingBatcherTest, Simple)
 {
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(3), TDuration::Max());
-    b->Enqueue(1);
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(3), TDuration::Max());
+    batcher->Enqueue(1);
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    b->Enqueue(2);
+    batcher->Enqueue(2);
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    b->Enqueue(3);
+    batcher->Enqueue(3);
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
-    b->Enqueue(10);
-    b->Enqueue(11);
+    batcher->Enqueue(10);
+    batcher->Enqueue(11);
     ASSERT_FALSE(e2.IsSet());
-    b->Enqueue(12);
+    batcher->Enqueue(12);
     ASSERT_TRUE(e2.IsSet());
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({10, 11, 12}));
-    b->Enqueue(0);
-    b->Enqueue(1);
-    b->Enqueue(2);
-    auto e3 = b->DequeueBatch();
+    batcher->Enqueue(0);
+    batcher->Enqueue(1);
+    batcher->Enqueue(2);
+    auto e3 = batcher->DequeueBatch();
     ASSERT_TRUE(e3.IsSet());
     ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>({0, 1, 2}));
 }
@@ -53,21 +53,21 @@ TEST(TNonblockingBatcherTest, Duration)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
-    auto e1 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
+    auto e1 = batcher->DequeueBatch();
     Sleep(overTimeout);
     ASSERT_FALSE(e1.IsSet());
-    b->Enqueue(1);
-    auto e2 = b->DequeueBatch();
+    batcher->Enqueue(1);
+    auto e2 = batcher->DequeueBatch();
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>{1});
-    b->Enqueue(2);
+    batcher->Enqueue(2);
     ASSERT_FALSE(e2.IsSet());
-    b->Enqueue(3);
+    batcher->Enqueue(3);
     ASSERT_TRUE(e2.IsSet());
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({2, 3}));
 }
@@ -77,40 +77,40 @@ TEST(TNonblockingBatcherTest, Dequeue)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
-    EnqueueAll(b, {1, 2, 3, 4, 5});
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
+    EnqueueAll(batcher, {1, 2, 3, 4, 5});
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({1, 2}));
     }
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 4}));
     }
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({5}));
     }
-    EnqueueAll(b, {6, 7, 8});
+    EnqueueAll(batcher, {6, 7, 8});
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({6, 7}));
     }
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_FALSE(e.IsSet());
-        EnqueueAll(b, {9, 10, 11});
+        EnqueueAll(batcher, {9, 10, 11});
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({8, 9}));
     }
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({10, 11}));
     }
@@ -120,22 +120,22 @@ TEST(TNonblockingBatcherTest, Drop)
 {
     auto timeout = Quantum;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout);
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    EnqueueAll(b, {1, 2, 3});
+    EnqueueAll(batcher, {1, 2, 3});
     ASSERT_TRUE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    b->Drop();
+    batcher->Drop();
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2}));
     ASSERT_TRUE(e2.IsSet());
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>());
-    b->Enqueue(10);
-    auto e3 = b->DequeueBatch();
+    batcher->Enqueue(10);
+    auto e3 = batcher->DequeueBatch();
     ASSERT_FALSE(e3.IsSet());
-    b->Drop();
+    batcher->Drop();
     ASSERT_TRUE(e3.IsSet());
     ASSERT_EQ(e3.Get().ValueOrThrow(), std::vector<int>());
 }
@@ -145,11 +145,11 @@ TEST(TNonblockingBatcherTest, EnqueueTimeout)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(3), timeout);
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(3), timeout);
     Sleep(overTimeout);
     {
-        auto e = b->DequeueBatch();
-        b->Enqueue(1);
+        auto e = batcher->DequeueBatch();
+        batcher->Enqueue(1);
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
@@ -182,19 +182,19 @@ TEST(TNonblockingBatcherTest, SumLimiter)
 {
     auto timeout = Quantum;
 
-    auto b = New<TNonblockingBatcher<int, TSumLimiter>>(TSumLimiter(10), timeout);
-    EnqueueAll(b, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1});
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
-    auto e3 = b->DequeueBatch();
-    auto e4 = b->DequeueBatch();
-    auto e5 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int, TSumLimiter>>(TSumLimiter(10), timeout);
+    EnqueueAll(batcher, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1});
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
+    auto e3 = batcher->DequeueBatch();
+    auto e4 = batcher->DequeueBatch();
+    auto e5 = batcher->DequeueBatch();
     ASSERT_TRUE(e1.IsSet());
     ASSERT_TRUE(e2.IsSet());
     ASSERT_TRUE(e3.IsSet());
     ASSERT_TRUE(e4.IsSet());
     ASSERT_FALSE(e5.IsSet());
-    b->Enqueue(9);
+    batcher->Enqueue(9);
     ASSERT_TRUE(e5.IsSet());
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3, 4}));
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({5, 6}));
@@ -207,19 +207,19 @@ TEST(TNonblockingBatcherTest, CompositeLimiterLimiter)
 {
     auto timeout = Quantum;
     using TLimiter = TCompositeBatchLimiter<TBatchSizeLimiter, TSumLimiter>;
-    auto b = New<TNonblockingBatcher<int, TLimiter>>(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{10}), timeout);
-    EnqueueAll(b, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1});
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
-    auto e3 = b->DequeueBatch();
-    auto e4 = b->DequeueBatch();
-    auto e5 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int, TLimiter>>(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{10}), timeout);
+    EnqueueAll(batcher, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1});
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
+    auto e3 = batcher->DequeueBatch();
+    auto e4 = batcher->DequeueBatch();
+    auto e5 = batcher->DequeueBatch();
     ASSERT_TRUE(e1.IsSet());
     ASSERT_TRUE(e2.IsSet());
     ASSERT_TRUE(e3.IsSet());
     ASSERT_TRUE(e4.IsSet());
     ASSERT_FALSE(e5.IsSet());
-    b->Enqueue(9);
+    batcher->Enqueue(9);
     ASSERT_TRUE(e5.IsSet());
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({4, 5, 6}));
@@ -234,33 +234,33 @@ TEST(TNonblockingBatcherTest, UpdateLimiter)
     auto overTimeout = timeout * 2;
 
     using TLimiter = TCompositeBatchLimiter<TBatchSizeLimiter, TSumLimiter>;
-    auto b = New<TNonblockingBatcher<int, TLimiter>>(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{6}), timeout);
-    EnqueueAll(b, {1, 2, 3, 3, 2});
+    auto batcher = New<TNonblockingBatcher<int, TLimiter>>(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{6}), timeout);
+    EnqueueAll(batcher, {1, 2, 3, 3, 2});
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({1, 2, 3}));
     }
-    b->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{4}));
+    batcher->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{4}));
     {
         // continue to use previous limiter
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_FALSE(e.IsSet());
         Sleep(overTimeout);
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 2}));
     }
-    EnqueueAll(b, {3, 2});
+    EnqueueAll(batcher, {3, 2});
     {
         // new batch with new limiter
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({3, 2}));
     }
-    b->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{100}));
-    EnqueueAll(b, {5, 6, 7});
+    batcher->UpdateBatchLimiter(TLimiter(TBatchSizeLimiter{3}, TSumLimiter{100}));
+    EnqueueAll(batcher, {5, 6, 7});
     {
-        auto e = b->DequeueBatch();
+        auto e = batcher->DequeueBatch();
         ASSERT_TRUE(e.IsSet());
         ASSERT_EQ(e.Get().ValueOrThrow(), std::vector<int>({5, 6, 7}));
     }
@@ -271,15 +271,15 @@ TEST(TNonblockingBatcherTest, NoEmptyBatches)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
-    EnqueueAll(b, {1});
+    EnqueueAll(batcher, {1});
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
@@ -287,7 +287,7 @@ TEST(TNonblockingBatcherTest, NoEmptyBatches)
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
     ASSERT_FALSE(e2.IsSet());
-    EnqueueAll(b, {2});
+    EnqueueAll(batcher, {2});
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
     ASSERT_TRUE(e2.IsSet());
@@ -300,9 +300,9 @@ TEST(TNonblockingBatcherTest, AllowEmptyBatches)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, true);
-    auto e1 = b->DequeueBatch();
-    auto e2 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, true);
+    auto e1 = batcher->DequeueBatch();
+    auto e2 = batcher->DequeueBatch();
     ASSERT_FALSE(e1.IsSet());
     ASSERT_FALSE(e2.IsSet());
     Sleep(overTimeout);
@@ -318,18 +318,41 @@ TEST(TNonblockingBatcherTest, IncompleteBatchAfterDeque)
     auto timeout = Quantum;
     auto overTimeout = timeout * 2;
 
-    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
-    b->Enqueue(1);
-    b->Enqueue(2);
-    b->Enqueue(3);
-    auto e1 = b->DequeueBatch();
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
+    batcher->Enqueue(1);
+    batcher->Enqueue(2);
+    batcher->Enqueue(3);
+    auto e1 = batcher->DequeueBatch();
     ASSERT_TRUE(e1.IsSet());
     ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2}));
     Sleep(overTimeout);
-    b->Enqueue(4);
-    auto e2 = b->DequeueBatch();
+    batcher->Enqueue(4);
+    auto e2 = batcher->DequeueBatch();
     ASSERT_TRUE(e2.IsSet());
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({3, 4}));
+}
+
+TEST(TNonblockingBatcherTest, Drain)
+{
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), TDuration::Max());
+    for (int i = 0; i < 5; ++i) {
+        batcher->Enqueue(i);
+    }
+
+    auto batches = batcher->Drain();
+
+    ASSERT_EQ(std::ssize(batches), 3);
+    ASSERT_EQ(batches[0], std::vector({0, 1}));
+    ASSERT_EQ(batches[1], std::vector({2, 3}));
+    ASSERT_EQ(batches[2], std::vector({4}));
+
+    batcher->Enqueue(0);
+    auto batch = batcher->DequeueBatch();
+    auto drainedBatches = batcher->Drain();
+
+    ASSERT_FALSE(batch.Get().IsOK());
+    ASSERT_EQ(std::ssize(drainedBatches), 1);
+    ASSERT_EQ(drainedBatches[0], std::vector({0}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

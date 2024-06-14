@@ -9,7 +9,7 @@
 
 namespace NYT::NConcurrency {
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,22 +62,15 @@ void TThreadPoolBase::DoStart()
 
 void TThreadPoolBase::DoShutdown()
 {
-    GetFinalizerInvoker()->Invoke(MakeFinalizerCallback());
-}
-
-TClosure TThreadPoolBase::MakeFinalizerCallback()
-{
     decltype(Threads_) threads;
     {
         auto guard = Guard(SpinLock_);
         std::swap(threads, Threads_);
     }
 
-    return BIND_NO_PROPAGATE([threads = std::move(threads)] () {
-        for (const auto& thread : threads) {
-            thread->Stop();
-        }
-    });
+    for (const auto& thread : threads) {
+        thread->Stop();
+    }
 }
 
 int TThreadPoolBase::GetThreadCount()

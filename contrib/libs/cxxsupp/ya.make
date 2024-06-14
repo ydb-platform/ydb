@@ -25,10 +25,12 @@ ENDIF()
 
 END()
 
-RECURSE(
-    libcxx
-    libcxxabi
-    libcxxmsvc
-    libcxxrt
-    openmp
-)
+IF (NOT USE_STL_SYSTEM)
+    RECURSE(
+        libcxx
+        libcxxabi
+        libcxxmsvc
+        libcxxrt
+        openmp
+    )
+ENDIF()

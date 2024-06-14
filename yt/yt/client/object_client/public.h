@@ -48,7 +48,7 @@ using TObjectId = TGuid;
 constexpr TObjectId NullObjectId = {};
 
 //! |#|-prefix.
-extern const TStringBuf ObjectIdPathPrefix;
+inline const TStringBuf ObjectIdPathPrefix = "#";
 
 //! Used to mark counters for well-known ids.
 constexpr ui64 WellKnownCounterMask = 0x8000000000000000;
@@ -112,6 +112,7 @@ DEFINE_ENUM(EObjectType,
     ((TransactionMap)                               (407))
     ((TopmostTransactionMap)                        (418))
     ((LockMap)                                      (422))
+    ((ForeignTransactionMap)                        (437))
 
     // Chunk Manager stuff
     ((Chunk)                                        (100))
@@ -341,8 +342,8 @@ DEFINE_ENUM(EObjectType,
     ((Pipeline)                                    (1600))
 
     // Queue stuff
-    ((Consumer)                                    (1700))
-    ((Producer)                                    (1701))
+    ((QueueConsumer)                               (1700))
+    ((QueueProducer)                               (1701))
 );
 
 //! A bit mask marking schema types.
@@ -408,8 +409,8 @@ bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 class TObjectServiceProxy;
 
-struct TDirectObjectIdHash;
-struct TDirectVersionedObjectIdHash;
+struct TObjectIdEntropyHash;
+struct TVersionedObjectIdEntropyHash;
 
 ////////////////////////////////////////////////////////////////////////////////
 

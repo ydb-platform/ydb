@@ -48,6 +48,7 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
             return NYT::FarmFingerprint(0);
 
         case EValueType::Composite:
+        case EValueType::Any:
             return CompositeFarmHash(NYson::TYsonStringBuf(value.AsStringBuf()));
 
         default:

@@ -79,16 +79,19 @@ void TLoader::StageParseMeta() noexcept
 
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        for (bool history : {false, true}) {
-            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                NPage::TBtreeIndexMeta converted{{
-                    meta.GetRootPageId(), 
-                    meta.GetRowCount(), 
-                    meta.GetDataSize(), 
-                    meta.GetErasedRowCount()}, 
-                    meta.GetLevelCount(), 
-                    meta.GetIndexSize()};
-                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+        if (layout.HasBTreeIndexesFormatVersion() && layout.GetBTreeIndexesFormatVersion() == NPage::TBtreeIndexNode::FormatVersion) {
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetRowCount(), 
+                        meta.GetDataSize(),
+                        meta.GetGroupDataSize(),
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
             }
         }
 
@@ -108,7 +111,7 @@ void TLoader::StageParseMeta() noexcept
 
             switch (type) {
             case EPage::Scheme: SchemeId = pageId; break;
-            case EPage::Index: FlatGroupIndexes = {pageId}; break;
+            case EPage::FlatIndex: FlatGroupIndexes = {pageId}; break;
             /* All special pages have to be placed after the index
                 page, hack is required for legacy page collections without
                 topology data in metablob.

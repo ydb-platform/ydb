@@ -23,7 +23,7 @@ struct TDataStats {
     TChanneledDataSize DataSize = { };
 };
 
-struct IStatsPartGroupIterator {
+struct IStatsPartGroupIter {
     virtual EReady Start() = 0;
     virtual EReady Next() = 0;
     virtual void AddLastDeltaDataSize(TChanneledDataSize& dataSize) = 0;
@@ -36,11 +36,12 @@ struct IStatsPartGroupIterator {
 
     virtual TPos GetKeyCellsCount() const = 0;
     virtual TCell GetKeyCell(TPos index) const = 0;
+    virtual void GetKeyCells(TSmallVec<TCell>& keyCells) const = 0;
 
-    virtual ~IStatsPartGroupIterator() = default;
+    virtual ~IStatsPartGroupIter() = default;
 };
 
-THolder<IStatsPartGroupIterator> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
+THolder<IStatsPartGroupIter> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
     ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints);
     
 }

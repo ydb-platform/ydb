@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/core/statistics)
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
@@ -26,6 +21,7 @@ PEERDIR(
 SRCS(
     ut_common.h
     ut_common.cpp
+    ut_aggregator.cpp
     ut_statistics.cpp
     ut_save_load_stats.cpp
 )

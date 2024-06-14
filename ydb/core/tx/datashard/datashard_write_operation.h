@@ -15,11 +15,26 @@
 namespace NKikimr {
 namespace NDataShard {
 
+class TValidatedWriteTxOperation: TMoveOnly {
+public:
+    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
+    TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
+    void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
+    
+    ui64 ComputeTxSize() const;
+private:
+    YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
+    YDB_READONLY_DEF(TTableId, TableId);
+    YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
+    YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
+};
+
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev);
+    TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
+            bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
     EType GetType() const override { 
@@ -33,7 +48,6 @@ public:
     ui64 GetTxId() const override {
         return GlobalTxId;
     }
-
 
     bool NeedDiagnostics() const {
         return true;
@@ -71,7 +85,7 @@ public:
     bool ReValidateKeys(const NTable::TScheme& scheme);
 
     ui64 HasOperations() const {
-        return Matrix.GetRowCount() != 0;
+        return !Operations.empty();
     }
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
@@ -99,10 +113,6 @@ public:
     }
 
 private:
-    bool ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos);
-    void SetTxKeys(const TUserTable& tableInfo);
-    TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
-
     void ComputeTxSize();
 
 private:
@@ -111,17 +121,16 @@ private:
     const ui64 TabletId;
     const bool IsImmediate;
 
+    YDB_READONLY_DEF(std::vector<TValidatedWriteTxOperation>, Operations);
+
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
-    YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
-    YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
-    YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
-    YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
+    YDB_READONLY_DEF(bool, MvccSnapshotRead);
 
     YDB_READONLY_DEF(ui64, TxSize);
 

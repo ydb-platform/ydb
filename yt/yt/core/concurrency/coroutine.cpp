@@ -4,35 +4,28 @@ namespace NYT::NConcurrency::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCoroutineBase::TCoroutineBase(const EExecutionStackKind stackKind)
-    : CoroutineStack_(CreateExecutionStack(stackKind))
-    , CoroutineContext_({
-        this,
-        TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize())})
-{ }
-
-void TCoroutineBase::DoRun()
+TCoroutineBase::~TCoroutineBase()
 {
-    try {
-        Invoke();
-    } catch (...) {
-        CoroutineException_ = std::current_exception();
+    if (State_ == EState::Running) {
+        State_ = EState::Abandoned;
+        Resume();
     }
 
-    Completed_ = true;
-    JumpToCaller();
-
-    YT_ABORT();
+    std::destroy_at(std::launder(&CoroutineContext));
 }
 
-void TCoroutineBase::JumpToCaller()
+void TCoroutineBase::Suspend()
 {
-    CoroutineContext_.SwitchTo(&CallerContext_);
+    std::launder(&CoroutineContext)->SwitchTo(&CallerContext_);
+
+    if (State_ == EState::Abandoned) {
+        throw TCoroutineAbandonedException{};
+    }
 }
 
-void TCoroutineBase::JumpToCoroutine()
+void TCoroutineBase::Resume()
 {
-    CallerContext_.SwitchTo(&CoroutineContext_);
+    CallerContext_.SwitchTo(std::launder(&CoroutineContext));
 
     if (CoroutineException_) {
         std::exception_ptr exception;
@@ -41,9 +34,9 @@ void TCoroutineBase::JumpToCoroutine()
     }
 }
 
-bool TCoroutineBase::IsCompleted() const
+bool TCoroutineBase::IsCompleted() const noexcept
 {
-    return Completed_;
+    return State_ == EState::Completed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

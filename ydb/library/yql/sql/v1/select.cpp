@@ -76,7 +76,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSubqueryNode(Source->CloneSource(), Alias, InSubquery, EnsureTupleSize, Scoped);
     }
 
 protected:
@@ -412,8 +412,9 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        auto& label = *column.GetSourceName();
-        if (!label.empty() && label != GetLabel()) {
+        const auto& label = *column.GetSourceName();
+        const auto& source = GetLabel();
+        if (!label.empty() && label != source && !(source.StartsWith(label) && source[label.size()] == ':')) {
             if (column.IsReliable()) {
                 ctx.Error(column.GetPos()) << "Unknown correlation name: " << label;
             }
@@ -448,6 +449,14 @@ protected:
 protected:
     TColumns Columns;
 };
+
+class IComposableSource : private TNonCopyable {
+public:
+    virtual ~IComposableSource() = default;
+    virtual void BuildProjectWindowDistinct(TNodePtr& blocks, TContext& ctx, bool ordered) = 0;
+};
+
+using TComposableSourcePtr = TIntrusivePtr<IComposableSource>;
 
 class TMuxSource: public ISource {
 public:
@@ -695,7 +704,8 @@ public:
     }
 
     bool ShouldUseSourceAsColumn(const TString& source) const override {
-        return source && source != GetLabel();
+        const auto& label = GetLabel();
+        return source && source != label && !(label.StartsWith(source) && label[source.size()] == ':');
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
@@ -843,7 +853,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node->GetSource();
         if (!source) {
-            NewSource = TryMakeSourceFromExpression(ctx, Service, Cluster, Node);
+            NewSource = TryMakeSourceFromExpression(Pos, ctx, Service, Cluster, Node);
             source = NewSource.Get();
         }
 
@@ -1210,7 +1220,7 @@ bool InitAndGetGroupKey(TContext& ctx, const TNodePtr& expr, ISource* src, TStri
     if (keyNamePtr && expr->GetLabel().empty()) {
         keyColumn = *keyNamePtr;
         auto sourceNamePtr = expr->GetSourceName();
-        auto columnNode = dynamic_cast<TColumnNode*>(expr.Get());
+        auto columnNode = expr->GetColumnNode();
         if (isJoin && (!columnNode || !columnNode->IsArtificial())) {
             if (!sourceNamePtr || sourceNamePtr->empty()) {
                 if (!src->IsAlias(EExprSeat::GroupBy, keyColumn)) {
@@ -1308,6 +1318,20 @@ public:
                 return false;
             }
         }
+
+        TMaybe<size_t> groupingColumnsCount;
+        size_t idx = 0;
+        for (const auto& select : Subselects) {
+            size_t count = select->GetGroupingColumnsCount();
+            if (!groupingColumnsCount.Defined()) {
+                groupingColumnsCount = count;
+            } else if (*groupingColumnsCount != count) {
+                ctx.Error(select->GetPos()) << TStringBuilder() << "Mismatch GROUPING() column count in composite select input #"
+                    << idx << ": expected " << *groupingColumnsCount << ", got: " << count << ". Please submit bug report";
+                return false;
+            }
+            ++idx;
+        }
         return true;
     }
 
@@ -1338,6 +1362,7 @@ public:
 
         TNodePtr compositeNode = Y("UnionAll");
         for (const auto& select: Subselects) {
+            YQL_ENSURE(dynamic_cast<IComposableSource*>(select.Get()));
             auto addNode = select->Build(ctx);
             if (!addNode) {
                 return nullptr;
@@ -1345,7 +1370,10 @@ public:
             compositeNode->Add(addNode);
         }
 
-        return GroundWithExpr(block, compositeNode);
+        block = L(block, Y("let", "core", compositeNode));
+        YQL_ENSURE(!Subselects.empty());
+        dynamic_cast<IComposableSource*>(Subselects.front().Get())->BuildProjectWindowDistinct(block, ctx, false);
+        return Y("block", Q(L(block, Y("return", "core"))));
     }
 
     bool IsGroupByColumn(const TString& column) const override {
@@ -1428,7 +1456,7 @@ private:
 };
 
 /// \todo simplify class
-class TSelectCore: public IRealSource {
+class TSelectCore: public IRealSource, public IComposableSource {
 public:
     TSelectCore(
         TPosition pos,
@@ -1440,7 +1468,7 @@ public:
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
-        TWinSpecs& winSpecs,
+        const TWinSpecs& winSpecs,
         TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
@@ -1480,6 +1508,10 @@ public:
     void GetInputTables(TTableList& tableList) const override {
         Source->GetInputTables(tableList);
         ISource::GetInputTables(tableList);
+    }
+
+    size_t GetGroupingColumnsCount() const override {
+        return Source->GetGroupingColumnsCount();
     }
 
     bool DoInit(TContext& ctx, ISource* initSrc) override {
@@ -1710,6 +1742,26 @@ public:
             block = L(block, Y("let", "core", Aggregate));
             ordered = false;
         }
+
+        const bool haveCompositeTerms = Source->IsCompositeSource() && !Columns.All && !Columns.QualifiedAll && !Columns.List.empty();
+        if (haveCompositeTerms) {
+            // column order does not matter here - it will be set in projection
+            YQL_ENSURE(Aggregate);
+            block = L(block, Y("let", "core", Y("Map", "core", BuildLambda(Pos, Y("row"), CompositeTerms, "row"))));
+        }
+
+        if (auto grouping = Source->BuildGroupingColumns("core")) {
+            block = L(block, Y("let", "core", grouping));
+        }
+
+        if (!Source->GetCompositeSource()) {
+            BuildProjectWindowDistinct(block, ctx, ordered);
+        }
+
+        return Y("block", Q(L(block, Y("return", "core"))));
+    }
+
+    void BuildProjectWindowDistinct(TNodePtr& block, TContext& ctx, bool ordered) override {
         if (PrewindowMap) {
             block = L(block, Y("let", "core", PrewindowMap));
         }
@@ -1722,8 +1774,6 @@ public:
         if (Distinct) {
             block = L(block, Y("let", "core", Y("PersistableRepr", Y("SqlAggregateAll", Y("RemoveSystemMembers", "core")))));
         }
-
-        return Y("block", Q(L(block, Y("return", "core"))));
     }
 
     TNodePtr BuildSort(TContext& ctx, const TString& label) override {
@@ -1856,13 +1906,9 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        TWinSpecs newSpecs;
-        for (auto cur: WinSpecs) {
-            newSpecs.emplace(cur.first, cur.second->Clone());
-        }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
-                SafeClone(Having), newSpecs, SafeClone(LegacyHoppingWindowSpec),
+                SafeClone(Having), CloneContainer(WinSpecs), SafeClone(LegacyHoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
     }
 
@@ -2044,7 +2090,6 @@ private:
     TNodePtr BuildSqlProject(TContext& ctx, bool ordered) {
         auto sqlProjectArgs = Y();
         const bool isJoin = Source->GetJoin();
-        const bool haveCompositeTerms = Source->IsCompositeSource() && !Columns.All && !Columns.QualifiedAll && !Columns.List.empty();
 
         if (Columns.All) {
             YQL_ENSURE(Columns.List.empty());
@@ -2120,9 +2165,6 @@ private:
                 auto sourceName = term->GetSourceName();
                 if (!term->IsAsterisk()) {
                     auto body = Y();
-                    if (haveCompositeTerms) {
-                        body = L(body, Y("let", "row", Y("Apply", "addCompositTerms", "row")));
-                    }
                     body = L(body, Y("let", "res", term));
                     TPosition lambdaPos = Pos;
                     TPosition aliasPos = Pos;
@@ -2172,9 +2214,6 @@ private:
 
             for (const auto& [columnName, column]: ExtraSortColumns) {
                 auto body = Y();
-                if (haveCompositeTerms) {
-                    body = L(body, Y("let", "row", Y("Apply", "addCompositTerms", "row")));
-                }
                 body = L(body, Y("let", "res", column));
                 TPosition pos = column->GetPos();
                 auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
@@ -2183,10 +2222,6 @@ private:
         }
 
         auto block(Y(Y("let", "projectCoreType", Y("TypeOf", "core"))));
-        if (haveCompositeTerms) {
-            block = L(block, Y("let", "addCompositTerms", BuildLambda(Pos, Y("row"), CompositeTerms, "row")));
-        }
-
         block = L(block, Y("let", "core", Y(ordered ? "OrderedSqlProject" : "SqlProject", "core", Q(sqlProjectArgs))));
         if (!(UniqueSets.empty() && DistinctSets.empty())) {
             block = L(block, Y("let", "core", Y("RemoveSystemMembers", "core")));
@@ -2554,14 +2589,23 @@ public:
         return CompositeSelect;
     }
 
-    bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override {
+    bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& hintColumn) override {
         Y_UNUSED(ctx);
-        hint = 0;
+        hintColumn = TStringBuilder() << "GroupingHint" << Hints.size();
+        ui64 hint = 0;
         if (GroupByColumns.empty()) {
+            const bool isJoin = GetJoin();
             for (const auto& groupByNode: GroupBy) {
                 auto namePtr = groupByNode->GetColumnName();
                 YQL_ENSURE(namePtr);
-                GroupByColumns.insert(*namePtr);
+                TString column = *namePtr;
+                if (isJoin) {
+                    auto sourceNamePtr = groupByNode->GetSourceName();
+                    if (sourceNamePtr && !sourceNamePtr->empty()) {
+                        column = DotJoin(*sourceNamePtr, column);
+                    }
+                }
+                GroupByColumns.insert(column);
             }
         }
         for (const auto& column: columns) {
@@ -2570,8 +2614,28 @@ public:
                 hint += 1;
             }
         }
+        Hints.push_back(hint);
         return true;
     }
+
+    size_t GetGroupingColumnsCount() const override {
+        return Hints.size();
+    }
+
+    TNodePtr BuildGroupingColumns(const TString& label) override {
+        if (Hints.empty()) {
+            return nullptr;
+        }
+
+        auto body = Y();
+        for (size_t i = 0; i < Hints.size(); ++i) {
+            TString hintColumn = TStringBuilder() << "GroupingHint" << i;
+            TString hintValue = ToString(Hints[i]);
+            body = L(body, Y("let", "row", Y("AddMember", "row", Q(hintColumn), Y("Uint64", Q(hintValue)))));
+        }
+        return Y("Map", label, BuildLambda(Pos, Y("row"), body, "row"));
+    }
+
 
     void FinishColumns() override {
         Source->FinishColumns();
@@ -2587,6 +2651,7 @@ public:
     }
 
     TPtr DoClone() const final {
+        YQL_ENSURE(Hints.empty());
         return Holder.Get() ? new TNestedProxySource(Pos, CloneContainer(GroupBy), Holder->CloneSource()) :
             new TNestedProxySource(CompositeSelect, CloneContainer(GroupBy));
     }
@@ -2596,6 +2661,7 @@ private:
     TSourcePtr Holder;
     TVector<TNodePtr> GroupBy;
     mutable TSet<TString> GroupByColumns;
+    mutable TVector<ui64> Hints;
 };
 
 
@@ -2658,7 +2724,7 @@ TSourcePtr DoBuildSelectCore(
         }
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
-            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
+            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
             legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }
@@ -3096,6 +3162,9 @@ public:
         if (WriteResult || writeSettings.Discard) {
             if (EOrderKind::None == Source->GetOrderKind() && ctx.UseUnordered(*Source)) {
                 node = L(node, Y("let", "output", Y("Unordered", "output")));
+                if (ctx.UnorderedResult) {
+                    settings = L(settings, Q(Y(Q("unordered"))));
+                }
             }
             auto writeResult(BuildWriteResult(Pos, "output", settings));
             if (!writeResult->Init(ctx, src)) {

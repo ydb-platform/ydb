@@ -167,12 +167,15 @@ public:
 
     void RequireStats() { NeedsStats = true; }
     bool GetNeedsStats() const { return NeedsStats; }
+    void DisableAuthInfo() { NeedAuthInfo = false; }
+    bool GetNeedAuthInfo() const { return NeedAuthInfo; }
     ETableType GetTableType() const { return TableType; }
     void SetTableType(ETableType tableType) { TableType = tableType; }
 
 private:
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
+    bool NeedAuthInfo = true;
     ETableType TableType;
 };
 
@@ -232,7 +235,10 @@ enum class TYdbOperation : ui32 {
     AlterTopic           = 1 << 20,
     DropTopic            = 1 << 21,
     ModifyPermission     = 1 << 22,
-    RenameGroup          = 1 << 23
+    RenameGroup          = 1 << 23,
+    CreateReplication    = 1 << 24,
+    AlterReplication     = 1 << 25,
+    DropReplication      = 1 << 26,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

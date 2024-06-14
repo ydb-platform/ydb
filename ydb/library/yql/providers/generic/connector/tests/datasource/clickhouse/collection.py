@@ -3,9 +3,9 @@ from typing import Sequence, Mapping
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
 # test cases
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as select_missing_database
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as select_missing_table
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 import select_positive
 import select_datetime
 

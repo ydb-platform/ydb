@@ -7,17 +7,17 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained) {
-//    if (CurrentPortionRecords + columnChunk.GetMeta().GetNumRowsVerified() <= Context.GetPortionRowsCountLimit() &&
-//        columnChunk.GetMeta().GetRawBytesVerified() < Context.GetChunkRawBytesLimit() &&
+//    if (CurrentPortionRecords + columnChunk.GetMeta().GetNumRows() <= Context.GetPortionRowsCountLimit() &&
+//        columnChunk.GetMeta().GetRawBytes() < Context.GetChunkRawBytesLimit() &&
 //        data.size() < Context.GetChunkPackedBytesLimit() &&
-//        columnChunk.GetMeta().GetRawBytesVerified() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker() &&
+//        columnChunk.GetMeta().GetRawBytes() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker() &&
 //        Context.GetUseWholeChunksOptimization())
 //    {
 //        NChanges::TGeneralCompactionCounters::OnFullBlobAppend(columnChunk.BlobRange.GetBlobSize());
 //        FlushBuffer();
 //        Chunks.emplace_back(std::make_shared<TChunkPreparation>(data, columnChunk, Context.GetSchemaInfo()));
 //        PackedSize += Chunks.back()->GetPackedSize();
-//        CurrentPortionRecords += columnChunk.GetMeta().GetNumRowsVerified();
+//        CurrentPortionRecords += columnChunk.GetMeta().GetNumRows();
 //        return nullptr;
 //    } else {
         NChanges::TGeneralCompactionCounters::OnSplittedBlobAppend(columnChunk.BlobRange.GetSize());

@@ -3,7 +3,7 @@ import time
 import random
 import subprocess
 import ydb.apps.dstool.lib.grouptool as grouptool
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import sys
 
@@ -18,6 +18,7 @@ def add_options(p):
     p.add_argument('--enable-pdisk-encryption-keys-changes', action='store_true', help='Enable changes of PDisk encryption keys')
     p.add_argument('--enable-kill-tablets', action='store_true', help='Enable tablet killer')
     p.add_argument('--enable-kill-blob-depot', action='store_true', help='Enable BlobDepot killer')
+    p.add_argument('--enable-restart-pdisks', action='store_true', help='Enable PDisk restarter')
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
 
 
@@ -144,6 +145,19 @@ def do(args):
             if args.enable_pdisk_encryption_keys_changes:
                 remove_old_pdisk_keys(pdisk_keys, pdisk_key_versions, node_id)
 
+        def do_restart_pdisk(node_id, pdisk_id):
+            assert can_act_on_vslot(node_id, pdisk_id)
+            request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
+            cmd = request.Command.add().RestartPDisk
+            cmd.TargetPDiskId.NodeId = node_id
+            cmd.TargetPDiskId.PDiskId = pdisk_id
+            try:
+                response = common.invoke_bsc_request(request)
+            except Exception as e:
+                raise Exception('failed to perform restart request: %s' % e)
+            if not response.Success:
+                raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
+
         def do_evict(vslot_id):
             assert can_act_on_vslot(*vslot_id)
             try:
@@ -215,7 +229,7 @@ def do(args):
 
         ################################################################################################################
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         while recent_restarts and recent_restarts[0] + timedelta(minutes=1) < now:
             recent_restarts.pop(0)
 
@@ -230,6 +244,7 @@ def do(args):
         wipes = []
         readonlies = []
         unreadonlies = []
+        pdisk_restarts = []
 
         for vslot in base_config.VSlot:
             if common.is_dynamic_group(vslot.GroupId):
@@ -237,13 +252,15 @@ def do(args):
                 vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
                 if vslot_id in vslot_readonly and not args.disable_readonly:
                     unreadonlies.append(('un-readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, False)))
+                if can_act_on_vslot(*vslot_id[:2]) and args.enable_restart_pdisks:
+                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % vslot_id[:2], (do_restart_pdisk, *vslot_id[:2])))
                 if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
                     if not args.disable_evicts:
                         evicts.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))
                     if not args.disable_wipes:
                         wipes.append(('wipe vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_wipe, vslot)))
                     if not args.disable_readonly:
-                        readolies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
+                        readonlies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
 
         def pick(v):
             action_name, action = random.choice(v)
@@ -258,6 +275,8 @@ def do(args):
             possible_actions.append(('readonly', (pick, readonlies)))
         if unreadonlies:
             possible_actions.append(('un-readonly', (pick, unreadonlies)))
+        if pdisk_restarts:
+            possible_actions.append(('restart-pdisk', (pick, pdisk_restarts)))
 
         restarts = []
 
@@ -283,7 +302,7 @@ def do(args):
         ################################################################################################################
 
         action_name, action = random.choice(possible_actions)
-        print('%s %s' % (action_name, datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')))
+        print('%s %s' % (action_name, datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')))
 
         try:
             action[0](*action[1:])

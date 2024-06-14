@@ -198,6 +198,9 @@ struct TConfig
     /// Which implemetation of table writer to use.
     ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
 
+    /// Redirects stdout to stderr for jobs.
+    bool RedirectStdoutToStderr = false;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);

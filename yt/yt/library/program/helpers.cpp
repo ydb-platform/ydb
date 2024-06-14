@@ -19,6 +19,7 @@
 #include <yt/yt/core/logging/log_manager.h>
 
 #include <yt/yt/core/concurrency/execution_stack.h>
+#include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <tcmalloc/malloc_extension.h>
@@ -85,7 +86,7 @@ private:
             return;
         }
 
-        YT_LOG_INFO("Changing tcmalloc memory limit (Limit: %v, IsHard: %v)",
+        YT_LOG_INFO("Changing tcmalloc memory limit (Limit: %v, Hard: %v)",
             proposed.limit,
             proposed.hard);
 
@@ -122,7 +123,7 @@ private:
 
         TAllocatorMemoryLimit proposed;
         proposed.limit = *heapLimitConfig->ContainerMemoryRatio * totalMemory;
-        proposed.hard = heapLimitConfig->IsHard;
+        proposed.hard = heapLimitConfig->Hard;
 
         return proposed;
     }
@@ -237,6 +238,8 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
+
+    NConcurrency::UpdateMaxIdleFibers(dynamicConfig->MaxIdleFibers);
 
     if (!NYTAlloc::IsConfiguredFromEnv()) {
         NYTAlloc::Configure(dynamicConfig->YTAlloc ? dynamicConfig->YTAlloc : config->YTAlloc);

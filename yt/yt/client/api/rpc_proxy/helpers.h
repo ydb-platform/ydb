@@ -275,7 +275,10 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned = true);
+bool IsRetriableError(
+    const TError& error,
+    bool retryProxyBanned = true,
+    bool retrySequoiaErrorsOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

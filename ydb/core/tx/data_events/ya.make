@@ -27,6 +27,7 @@ SRCS(
     shard_writer.cpp
     shards_splitter.cpp
     write_data.cpp
+    columnshard_splitter.cpp
 )
 
 END()

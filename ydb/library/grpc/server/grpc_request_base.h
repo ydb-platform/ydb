@@ -112,6 +112,8 @@ public:
     //! reply in flight
     virtual void SetNextReplyCallback(TOnNextReply&& cb) = 0;
 
+    virtual bool IsStreamCall() const = 0;
+
     //! Finish streaming reply
     virtual void FinishStreamingOk() = 0;
 

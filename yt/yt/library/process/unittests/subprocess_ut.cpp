@@ -43,7 +43,7 @@ TEST(TSubprocessTest, PipeStdin)
 {
     auto queue = New<TActionQueue>();
 
-    BIND([] () {
+    BIND([] {
         TSubprocess subprocess("/bin/cat");
         subprocess.AddArgument("-");
 
@@ -61,7 +61,7 @@ TEST(TSubprocessTest, PipeBigOutput)
 {
     auto queue = New<TActionQueue>();
 
-    auto result = BIND([] () {
+    auto result = BIND([] {
         TSubprocess subprocess("/bin/bash");
 
         subprocess.AddArgument("-c");
@@ -79,7 +79,7 @@ TEST(TSubprocessTest, PipeBigError)
 {
     auto queue = New<TActionQueue>();
 
-    auto result = BIND([] () {
+    auto result = BIND([] {
         TSubprocess subprocess("/bin/bash");
 
         subprocess.AddArgument("-c");

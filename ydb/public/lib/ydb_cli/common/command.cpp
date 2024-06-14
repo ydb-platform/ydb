@@ -51,7 +51,7 @@ namespace {
         return false;
     }
 
-    void PrintOptionsDescription(IOutputStream& os, const NLastGetopt::TOpts* opts, NColorizer::TColors& colors) {
+    void PrintOptionsDescription(IOutputStream& os, const NLastGetopt::TOpts* opts, NColorizer::TColors& colors, const TString& command) {
         using namespace NLastGetopt;
         NColorizer::TColors disabledColors(false);
         os << "  ";
@@ -68,20 +68,25 @@ namespace {
             firstPrintedOption = false;
         }
 
-        os << Endl << "  To get full description of these options run 'ydb --help'.";
+        os << Endl << "  To get full description of these options run '" << command << "--help'.";
     }
 
     void PrintParentOptions(TStringStream& stream, TClientCommand::TConfig& config, NColorizer::TColors& colors) {
         bool foundRootParent = false;
-        for (const auto& parentCommand : config.ParentCommands) {
+        TStringBuilder fullCommand;
+        for (const auto& parentCommand: config.ParentCommands) {
+            fullCommand << parentCommand.Name << " ";
             if (parentCommand.Options) {
+                TString name = "Global";
                 if (!foundRootParent) {
                     foundRootParent = true;
-                    stream << colors.BoldColor() << "Global options" << colors.OldColor() << ":" << Endl;
-                    PrintOptionsDescription(stream, parentCommand.Options, colors);
                 } else {
-                    throw yexception() << "More than two tree commands have options";
+                    name = parentCommand.Name;
+                    name[0] = toupper(name[0]);
+                    stream << Endl << Endl;
                 }
+                stream << colors.BoldColor() << name << " options" << colors.OldColor() << ":" << Endl;
+                PrintOptionsDescription(stream, parentCommand.Options, colors, fullCommand);
             }
         }
     }
@@ -238,7 +243,7 @@ void TClientCommand::SetCustomUsage(TConfig& config) {
                 foundRootParent = true;
                 fullName << " [global options...]";
             } else {
-                throw yexception() << "More than two tree commands have options";
+                fullName << " [" << parent.Name << " options...]";
             }
         }
         fullName << " ";

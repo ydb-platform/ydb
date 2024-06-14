@@ -20,12 +20,14 @@ using namespace NChunkClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TRetentionConfigPtr& obj)
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec)
 {
-    static const TString NullPtrName("<nullptr>");
-    return obj
-        ? NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text).ToString()
-        : NullPtrName;
+    static const TStringBuf NullPtrName("<nullptr>");
+    if (!obj) {
+        FormatValue(builder, NullPtrName, spec);
+        return;
+    }
+    FormatValue(builder, NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text), spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -525,6 +527,18 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("t_digest", &TThis::TDigest)
         .DefaultNew();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("max_batch_size", &TThis::MaxBatchSize)
+        .Default(1000);
+    registrar.Parameter("flush_period", &TThis::FlushPeriod)
+        .Default(TDuration::Seconds(5));
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

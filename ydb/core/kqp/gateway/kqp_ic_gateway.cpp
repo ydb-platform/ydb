@@ -37,6 +37,8 @@
 #include <util/string/split.h>
 #include <util/string/vector.h>
 
+#include <ydb/core/protos/auth.pb.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -950,6 +952,30 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateSequence(const TString& cluster,
+            const NYql::TCreateSequenceSettings& settings, bool existingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(existingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropSequence(const TString& cluster,
+            const NYql::TDropSequenceSettings& settings, bool missingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterSequence(const TString& cluster,
+            const NYql::TAlterSequenceSettings& settings, bool missingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
         try {
             if (!CheckCluster(cluster)) {
@@ -993,6 +1019,18 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+    }
+
+    TFuture<TGenericResult> CreateReplication(const TString&, const NYql::TCreateReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterReplication(const TString&, const NYql::TAlterReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropReplication(const TString&, const NYql::TDropReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> AlterColumnTable(const TString& cluster,

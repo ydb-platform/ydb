@@ -22,7 +22,7 @@ public:
 
     void Reset();
     void Commit(TInstant time = TInstant::Zero());
-    TInstant GetCommitTime();
+    TInstant GetCommitTime() const;
 
     void UseBuiltinOpenSslX509Store();
 
@@ -52,7 +52,6 @@ public:
 
 private:
     const TIntrusivePtr<TSslContextImpl> Impl_;
-    TInstant CommitTime_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSslContext)

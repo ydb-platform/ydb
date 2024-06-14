@@ -227,7 +227,7 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
     , ConnectionId_(TGuid::Create())
     , LoggingTag_(MakeConnectionLoggingTag(Config_, ConnectionId_))
     , ClusterId_(MakeConnectionClusterId(Config_))
-    , Logger(RpcProxyClientLogger.WithRawTag(LoggingTag_))
+    , Logger(RpcProxyClientLogger().WithRawTag(LoggingTag_))
     , ChannelFactory_(Config_->ProxyUnixDomainSocket
         ? NRpc::NBus::CreateUdsBusChannelFactory(Config_->BusClient)
         : NRpc::NBus::CreateTcpBusChannelFactory(Config_->BusClient))

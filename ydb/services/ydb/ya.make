@@ -11,6 +11,7 @@ SRCS(
     ydb_scheme.cpp
     ydb_scripting.cpp
     ydb_table.cpp
+    ydb_object_storage.cpp
 )
 
 PEERDIR(
@@ -36,7 +37,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-    sdk_credprovider_ut
     sdk_sessions_ut
     sdk_sessions_pool_ut
     table_split_ut

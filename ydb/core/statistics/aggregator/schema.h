@@ -15,15 +15,40 @@ struct TAggregatorSchema : NIceDb::Schema {
 
     struct BaseStats : Table<2> {
         struct SchemeShardId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Stats : Column<2, NScheme::NTypeIds::String> {};
+        struct Stats         : Column<2, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<SchemeShardId>;
         using TColumns = TableColumns<SchemeShardId, Stats>;
     };
 
+    struct Statistics : Table<3> {
+        struct ColumnTag      : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct CountMinSketch : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ColumnTag>;
+        using TColumns = TableColumns<ColumnTag, CountMinSketch>;
+    };
+
+    struct ScanTables : Table<4> {
+        struct OwnerId        : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId    : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastUpdateTime : Column<3, NScheme::NTypeIds::Timestamp> {};
+        struct SchemeShardId  : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<OwnerId, LocalPathId>;
+        using TColumns = TableColumns<
+            OwnerId,
+            LocalPathId,
+            LastUpdateTime,
+            SchemeShardId
+        >;
+    };
+
     using TTables = SchemaTables<
         SysParams,
-        BaseStats
+        BaseStats,
+        Statistics,
+        ScanTables
     >;
 
     using TSettings = SchemaSettings<
@@ -32,6 +57,10 @@ struct TAggregatorSchema : NIceDb::Schema {
     >;
 
     static constexpr ui64 SysParam_Database = 1;
+    static constexpr ui64 SysParam_StartKey = 2;
+    static constexpr ui64 SysParam_ScanTableOwnerId = 3;
+    static constexpr ui64 SysParam_ScanTableLocalPathId = 4;
+    static constexpr ui64 SysParam_ScanStartTime = 5;
 };
 
 } // NKikimr::NStat

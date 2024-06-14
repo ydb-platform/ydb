@@ -66,6 +66,8 @@ const TStringBuf CurrentYtClusterShortcut = "current";
 const TStringBuf YqlIOSpecTables = "tables";
 const TStringBuf YqlIOSpecRegistry = "registry";
 
+const TStringBuf SecurityTagsName = "security_tags";
+
 extern const TVector<TStringBuf> YAMR_FIELDS;
 
 }

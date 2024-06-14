@@ -1,4 +1,6 @@
 RECURSE(
-    template
+    gen
     gen_queries
+    template
+    runner
 )

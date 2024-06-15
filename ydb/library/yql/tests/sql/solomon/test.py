@@ -50,7 +50,7 @@ def test(suite, case, cfg, solomon):
     log('===' + suite)
     log('===' + case + '-' + cfg)
 
-    xfail = is_xfail(cfg)
+    xfail = is_xfail(config)
     program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
     sql_query = codecs.open(program_sql, encoding='utf-8').read()
 

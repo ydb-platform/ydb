@@ -41,6 +41,7 @@ enum EObjectType {
     ExternalTable = 24;
     ExternalDataSource = 25;
     View = 26;
+    ResourcePool = 27;
 }
 
 message TBrowseInfo {

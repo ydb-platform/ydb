@@ -905,6 +905,18 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
     entry->SetQueryText(viewInfo->QueryText);
 }
 
+void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->ResourcePools.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "ResourcePools is not found");
+    TResourcePoolInfo::TPtr resourcePoolInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
+    entry->SetPoolId(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(resourcePoolInfo->AlterVersion);
+    entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1055,6 +1067,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeView:
             DescribeView(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeResourcePool:
+            DescribeResourcePool(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

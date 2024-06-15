@@ -1518,6 +1518,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateExternalDataSource:
     case TTxState::TxCreateView:
     case TTxState::TxCreateContinuousBackup:
+    case TTxState::TxCreateResourcePool:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1552,6 +1553,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterExternalDataSource:
     case TTxState::TxAlterView:
     case TTxState::TxAlterContinuousBackup:
+    case TTxState::TxAlterResourcePool:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1575,6 +1577,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropExternalDataSource:
     case TTxState::TxDropView:
     case TTxState::TxDropContinuousBackup:
+    case TTxState::TxDropResourcePool:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -2962,6 +2965,25 @@ void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
     db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ResourcePool::Properties>{resourcePool->Properties.SerializeAsString()}
+    );
+}
+
+void TSchemeShard::PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (ResourcePools.contains(pathId)) {
+        ResourcePools.erase(pathId);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4203,6 +4225,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetViewVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeResourcePool: {
+                auto it = ResourcePools.find(pathId);
+                Y_ABORT_UNLESS(it != ResourcePools.end());
+                result.SetResourcePoolVersion(it->second->AlterVersion);
+                generalVersion += result.GetResourcePoolVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -5004,6 +5033,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeView:
         TabletCounters->Simple()[COUNTER_VIEW_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeResourcePool:
+        TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

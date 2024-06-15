@@ -92,6 +92,7 @@ SRCS(
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
     schemeshard__operation_alter_replication.cpp
+    schemeshard__operation_alter_resource_pool.cpp
     schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
@@ -119,6 +120,7 @@ SRCS(
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_pq.cpp
     schemeshard__operation_create_replication.cpp
+    schemeshard__operation_create_resource_pool.cpp
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
@@ -136,6 +138,7 @@ SRCS(
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_pq.cpp
     schemeshard__operation_drop_replication.cpp
+    schemeshard__operation_drop_resource_pool.cpp
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp

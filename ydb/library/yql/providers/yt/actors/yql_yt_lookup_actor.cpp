@@ -89,7 +89,7 @@ public:
     ~TYtLookupActor() {
         auto guard = Guard(*Alloc);
         KeyTypeHelper.reset();
-        TKeyTypeHelper empty{};
+        TKeyTypeHelper empty;
         Data = IDqAsyncLookupSource::TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
     }
 

@@ -94,7 +94,7 @@ namespace NYql::NDq {
         ~TGenericLookupActor() {
             auto guard = Guard(*Alloc);
             KeyTypeHelper.reset();
-            TKeyTypeHelper empty{};
+            TKeyTypeHelper empty;
             Request = IDqAsyncLookupSource::TUnboxedValueMap(0, empty.GetValueHash(), empty.GetValueEqual());
         }
 

@@ -59,7 +59,6 @@ public:
     void Bootstrap() {
         auto ev = new NDq::IDqAsyncLookupSource::TEvLookupRequest(Alloc, std::move(Request));
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
-        auto guard = Guard(*Alloc);
     }
 
 private:
@@ -156,25 +155,25 @@ Y_UNIT_TEST(Lookup) {
     auto guard2 = Guard(*alloc.get());
     auto lookupResult = std::move(ev->Get()->Result);
     UNIT_ASSERT_EQUAL(4, lookupResult.size());
-    if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host1", "vpc1"}))) {
+    {
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host1", "vpc1"}));
+        UNIT_ASSERT(v);
         UNIT_ASSERT(CheckStructValue(*v, {"host1.vpc1.net", "192.168.1.1"}));
-    } else {
-        UNIT_ASSERT(false);
     }
-    if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc1"}))) {
+    {
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc1"}));
+        UNIT_ASSERT(v);
         UNIT_ASSERT(CheckStructValue(*v, {"host2.vpc1.net", "192.168.1.2"}));
-    } else {
-        UNIT_ASSERT(false);
     }
-    if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc2"}))) {
+    {
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc2"}));
+        UNIT_ASSERT(v);
         UNIT_ASSERT(!*v);
-    } else {
-        UNIT_ASSERT(false);
     }
-    if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"very very long hostname to for test 2", "vpc2"}))) {
+    {
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"very very long hostname to for test 2", "vpc2"}));
+        UNIT_ASSERT(v);
         UNIT_ASSERT(CheckStructValue(*v, {"very very long fqdn for test 2", "192.168.100.2"}));
-    } else {
-        UNIT_ASSERT(false);
     }
 }
 

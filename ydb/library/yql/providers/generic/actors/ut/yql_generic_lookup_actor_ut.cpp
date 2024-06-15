@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         void Bootstrap() {
             LookupSource->AsyncLookup(std::move(Request));
-            auto guard = Guard(*Alloc);
         }
 
     private:
@@ -101,8 +100,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                         .Disjunction()
                             .Operand()
                                 .Conjunction()
-                                    .Operand().Equal().Column("id").Value<ui64>(0).Done().Done()
-                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(100).Done().Done()
+                                    .Operand().Equal().Column("id").Value<ui64>(2).Done().Done()
+                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(102).Done().Done()
                                     .Done()
                                 .Done()
                             .Operand()
@@ -113,8 +112,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                                 .Done()
                             .Operand()
                                 .Conjunction()
-                                    .Operand().Equal().Column("id").Value<ui64>(2).Done().Done()
-                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(102).Done().Done()
+                                    .Operand().Equal().Column("id").Value<ui64>(0).Done().Done()
+                                    .Operand().Equal().Column("optional_id").OptionalValue<ui64>(100).Done().Done()
                                     .Done()
                                 .Done()
                             .Done()
@@ -195,22 +194,22 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         auto lookupResult = std::move(ev->Get()->Result);
 
         UNIT_ASSERT_EQUAL(3, lookupResult.size());
-        if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {0, 100}))) {
+        {
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {0, 100}));
+            UNIT_ASSERT(v);
             NYql::NUdf::TUnboxedValue val = v->GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("a"));
-        } else {
-            UNIT_ASSERT(false);
         }
-        if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {1, 101}))) {
+        {
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {1, 101}));
+            UNIT_ASSERT(v);
             NYql::NUdf::TUnboxedValue val = v->GetElement(0);
             UNIT_ASSERT(val.AsStringRef() == TStringBuf("b"));
-        } else {
-            UNIT_ASSERT(false);
         }
-        if (const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {2, 102}))) {
-            UNIT_ASSERT(*v);
-        } else {
-            UNIT_ASSERT(false);
+        {
+            const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {2, 102}));
+            UNIT_ASSERT(v);
+            UNIT_ASSERT(!*v);
         }
     }
 

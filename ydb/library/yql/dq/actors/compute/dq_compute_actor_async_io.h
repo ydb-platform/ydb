@@ -218,7 +218,7 @@ struct IDqAsyncLookupSource {
         }
         ~TEvLookupRequest() {
             auto guard = Guard(*Alloc);
-            TKeyTypeHelper empty{};
+            TKeyTypeHelper empty;
             Request = TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
         }
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -233,7 +233,7 @@ struct IDqAsyncLookupSource {
         }
         ~TEvLookupResult() {
             auto guard = Guard(*Alloc.get());
-            TKeyTypeHelper empty{};
+            TKeyTypeHelper empty;
             Result = TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
         }
 

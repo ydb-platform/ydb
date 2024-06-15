@@ -172,6 +172,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
     UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortJob, (NJobTrackerClient::TJobId, const TAbortJobOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, DumpJobProxyLog, (NJobTrackerClient::TJobId, NJobTrackerClient::TOperationId, const NYPath::TYPath&, const TDumpJobProxyLogOptions&));
     UNSUPPORTED_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (const TGetClusterMetaOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, CheckClusterLiveness, (const TCheckClusterLivenessOptions&));
     UNSUPPORTED_METHOD(TFuture<int>, BuildSnapshot, (const TBuildSnapshotOptions&));

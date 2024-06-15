@@ -306,6 +306,7 @@ public:
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TDumpJobProxyLogCommand,              "dump_job_proxy_log",              Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TGetVersionCommand,                   "get_version",                     Null,       Structured, false, false);
         REGISTER_ALL(TGetSupportedFeaturesCommand,         "get_supported_features",          Null,       Structured, false, false);

@@ -1513,6 +1513,24 @@ TFuture<void> TClient::AbortJob(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::DumpJobProxyLog(
+    NJobTrackerClient::TJobId jobId,
+    NJobTrackerClient::TOperationId operationId,
+    const NYPath::TYPath& path,
+    const TDumpJobProxyLogOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.DumpJobProxyLog();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_job_id(), jobId);
+    ToProto(req->mutable_operation_id(), operationId);
+    ToProto(req->mutable_path(), path);
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
     const TString& md5,
     const TGetFileFromCacheOptions& options)

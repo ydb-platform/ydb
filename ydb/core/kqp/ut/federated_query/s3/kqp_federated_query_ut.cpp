@@ -1752,22 +1752,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation
-        TInstant forgetOperationTimeout = TInstant::Now() + NSan::PlainOrUnderSanitizer(TDuration::Minutes(5), TDuration::Minutes(20));
         NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
-        while (TInstant::Now() < forgetOperationTimeout) {
-            auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
-            if (status.GetStatus() == NYdb::EStatus::SUCCESS || status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
-                return;
-            }
+        auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
 
-            UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::ABORTED || status.GetStatus() == NYdb::EStatus::TIMEOUT || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status.GetIssues().ToString());
-
-            if (status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
-                // Wait until last forget is not finished
-                Sleep(TDuration::Seconds(30));
-            }
+        const size_t forgetRowsLimit = 100000;
+        if (numberRows > forgetRowsLimit) {
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), TStringBuilder() << "Info: Query result rows count is " << numberRows << ", that is larger than allowed limit " << forgetRowsLimit << " rows for one time forget, results will be forgotten in the background process");
         }
-        UNIT_ASSERT_C(false, "Forget operation timeout");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

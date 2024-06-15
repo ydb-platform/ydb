@@ -823,11 +823,10 @@ class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
     static constexpr i32 MAX_NUMBER_ROWS_IN_BATCH = 100000;
 
 public:
-    TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
+    TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database)
         : TQueryBase(__func__, executionId)
         , ExecutionId(executionId)
         , Database(database)
-        , Deadline(operationDeadline)
     {}
 
     void OnRunQuery() override {
@@ -891,7 +890,16 @@ public:
         }
         MaxRowId = *maxRowId;
 
-        ClearTimeInfo();
+        if (MaxRowId >= NumberRowsInBatch) {
+            TStringBuilder message = TStringBuilder() << "Query result rows count is " << MaxRowId + 1;
+            if (*maxResultSetId > 0) {
+                message << " in " << *maxResultSetId + 1 << " result sets";
+            }
+            NYql::TIssue issue(message << ", that is larger than allowed limit " << MAX_NUMBER_ROWS_IN_BATCH << " rows for one time forget, results will be forgotten in the background process");
+            issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+            SendResponse(Ydb::StatusIds::SUCCESS, {issue});
+        }
+
         DeleteScriptResults();
     }
 
@@ -937,34 +945,34 @@ public:
             return;
         }
 
-        if (TInstant::Now() + 2 * GetAverageTime() >= Deadline) {
-            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
-            return;
-        }
-
         DeleteScriptResults();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
-    }
-
-    static NYql::TIssues ForgetOperationTimeoutIssues() {
-        return { NYql::TIssue("Forget script execution operation timeout") };
+        SendResponse(status, std::move(issues));
     }
 
 private:
-    TString ExecutionId;
-    TString Database;
-    TInstant Deadline;
+    void SendResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+        if (ResponseSent) {
+            return;
+        }
+        ResponseSent = true;
+        Send(Owner, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
+    }
+
+private:
+    const TString ExecutionId;
+    const TString Database;
     i64 NumberRowsInBatch = 0;
     i64 MaxRowId = 0;
+    bool ResponseSent = false;
 };
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
-public:
-    using TForgetOperationRetryActor = TQueryRetryActor<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse, TString, TString, TInstant>;
+    using TForgetOperationRetryActor = TQueryRetryActor<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse, TString, TString>;
 
+public:
     explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev)
         : Request(std::move(ev))
     {}
@@ -1002,19 +1010,7 @@ public:
         }
 
         KQP_PROXY_LOG_D("[TForgetScriptExecutionOperationActor] ExecutionId: " << ExecutionId << ", lease check success. Start TForgetOperationRetryActor");
-
-        TDuration minDelay = TDuration::MilliSeconds(10);
-        TDuration maxTime = Request->Get()->Deadline - TInstant::Now();
-        if (maxTime <= minDelay) {
-            Reply(Ydb::StatusIds::TIMEOUT, TForgetScriptExecutionOperationQueryActor::ForgetOperationTimeoutIssues());
-            return;
-        }
-
-        Register(new TForgetOperationRetryActor(
-            SelfId(),
-            TForgetOperationRetryActor::IRetryPolicy::GetExponentialBackoffPolicy(TForgetOperationRetryActor::Retryable, minDelay, TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), maxTime),
-            ExecutionId, Request->Get()->Database, TInstant::Now() + maxTime
-        ));
+        Register(new TForgetOperationRetryActor(SelfId(), ExecutionId, Request->Get()->Database));
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
@@ -1042,7 +1038,7 @@ public:
     }
 
 private:
-    TEvForgetScriptExecutionOperation::TPtr Request;
+    const TEvForgetScriptExecutionOperation::TPtr Request;
     TString ExecutionId;
     bool ExecutionEntryExists = true;
 };

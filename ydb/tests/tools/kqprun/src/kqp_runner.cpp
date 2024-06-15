@@ -199,6 +199,10 @@ public:
             return false;
         }
 
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
         return true;
     }
 

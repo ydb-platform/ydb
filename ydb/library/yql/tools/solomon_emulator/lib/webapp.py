@@ -126,8 +126,8 @@ def _dict_to_labels(body):
 @routes.post("/api/v2/projects/{project}/sensors/data")
 async def sensors_data(request):
     project = request.match_info["project"]
-    labels = _dict_to_labels(request.json())
-    labels["project_x"] = project
+    #labels = _dict_to_labels(request.json())
+    #labels["project_x"] = project
     return web.json_response({"vector": [
         {
             "timeseries": {

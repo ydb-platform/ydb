@@ -133,7 +133,7 @@ async def sensors_data(request):
             "timeseries": {
                 "kind": "MY_KIND1",
                 "type": "MY_TYPE1",
-                "labels": labels,
+                "labels": {"p": project},
                 "timestamps": [1, 2, 3],
                 "values": [100, 200, 300],
             }

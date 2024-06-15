@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 
+import configparser
 import datetime
 import os
 import ydb
 import uuid
 import subprocess
 
+dir=os.path.dirname(__file__)
+config = configparser.ConfigParser() 
+config_file_path=f'{dir}/../config/ydb_qa_db.ini'
+config.read(config_file_path)  
 
-YDBD_PATH = "ydb/apps/ydbd/ydbd"
-DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"
-DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"
+YDBD_PATH = config["YDBD"]["YDBD_PATH"]
+DATABASE_ENDPOINT=config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH=config["QA_DB"]["DATABASE_PATH"]
 
 FROM_ENV_COLUMNS = [
     "github_head_ref",

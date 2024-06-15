@@ -15,6 +15,9 @@ public:
         return ChannelBufferSize;
     }
 
+    virtual ~TFacilityProviderCommon() {
+    }
+
 private:
     const ui64 ChannelBufferSize;
 };

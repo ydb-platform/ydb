@@ -127,7 +127,7 @@ def _dict_to_labels(body):
 async def sensors_data(request):
     project = request.match_info["project"]
     labels = _dict_to_labels(request.json)
-    labels["project"] = project
+    labels["project_x"] = project
     return web.json_response({"vector": [
         {
             "timeseries": {

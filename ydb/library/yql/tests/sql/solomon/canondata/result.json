@@ -1,4 +1,24 @@
 {
+    "test.test[solomon-BadDownsamplingAggregation-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingAggregation-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingDisabled-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingDisabled-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingFill-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingFill-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingInterval-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingInterval-_/extracted"
+        }
+    ],
     "test.test[solomon-Basic-default.txt]": [
         {
             "uri": "file://test.test_solomon-Basic-default.txt_/results.txt"

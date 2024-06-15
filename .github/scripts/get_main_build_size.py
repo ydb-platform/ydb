@@ -25,8 +25,8 @@ def main():
     
     # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
     # So, set up it locally
-    #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]= "/home/kirrysin/.ydb/my-robot-key.json"
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+    #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]= "/home/kirrysin/.ydb/my-robot-key.json"
 
     sql = f"""
         --!syntax_v1

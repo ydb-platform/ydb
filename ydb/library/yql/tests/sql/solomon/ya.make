@@ -25,9 +25,7 @@ DATA(
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 PEERDIR(
-#    contrib/python/PyHamcrest
     library/python/testing/swag/lib
-#    ydb/library/yql/library/python
     ydb/library/yql/tests/common/test_framework
 )
 

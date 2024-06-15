@@ -131,8 +131,8 @@ async def sensors_data(request):
     return web.json_response({"vector": [
         {
             "timeseries": {
-                "kind": "MY_KIND",
-                "type": "MY_TYPE",
+                "kind": "MY_KIND1",
+                "type": "MY_TYPE1",
                 "labels": labels,
                 "timestamps": [1, 2, 3],
                 "values": [100, 200, 300],

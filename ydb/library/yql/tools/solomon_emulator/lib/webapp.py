@@ -78,17 +78,62 @@ async def write(request):
     return web.json_response({"writtenMetricsCount": shard.add_metrics(metrics_json)})
 
 
+def _dict_to_labels(body):
+    """
+    Possible input
+    {
+    "downsampling": {
+         "aggregation": "MAX",
+         "disabled": true,
+         "fill": "PREVIOUS",
+         "gridMillis": 3600000,
+         "ignoreMinStepMillis": true,
+         "maxPoints": 500
+     },
+     "forceCluster": "",
+     "from": "2023-12-08T14:40:39Z",
+     "program": "{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}",
+     "to": "2023-12-08T14:45:39Z"
+     })";
+
+    :param body:
+    :return:
+    """
+    result = dict()
+    for key, value in body.iteritems():
+
+        if isinstance(value, dict):
+            sublabels = _dict_to_labels(value)
+            for subkey, subvalue in sublabels.iteritems():
+                result[f"{key}.{subkey}"] = subvalue
+            continue
+
+        label_name = key
+        if key == "program":
+            label_value = f"program length {str(len(value))}"
+        else:
+            if isinstance(value, bool):
+                label_value = f"bool {value}"
+            elif isinstance(value, int):
+                label_value = f"int {value}"
+            else:
+                label_value = str(value)
+
+        result[label_name] = label_value
+    return result
+
+
 @routes.post("/api/v2/projects/{project}/sensors/data")
 async def sensors_data(request):
     project = request.match_info["project"]
+    labels = _dict_to_labels(request.json)
+    labels["project"] = project
     return web.json_response({"vector": [
         {
             "timeseries": {
                 "kind": "MY_KIND",
                 "type": "MY_TYPE",
-                "labels": {
-                    "project": project
-                },
+                "labels": labels,
                 "timestamps": [1, 2, 3],
                 "values": [100, 200, 300],
             }

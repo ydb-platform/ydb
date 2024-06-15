@@ -23,6 +23,7 @@ namespace NYql::NDq {
                 credentialsFactory,
                 std::move(args.ParentId),
                 args.Alloc,
+                args.KeyTypeHelper,
                 std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,

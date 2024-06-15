@@ -12,6 +12,7 @@ namespace NYql::NDq {
                 ytServices,
                 std::move(args.ParentId),
                 args.Alloc,
+                args.KeyTypeHelper,
                 functionRegistry,
                 std::move(lookupSource),
                 args.KeyType,

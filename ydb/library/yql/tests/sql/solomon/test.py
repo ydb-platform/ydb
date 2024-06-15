@@ -70,5 +70,5 @@ def test(suite, case, cfg, solomon):
         return [normalize_source_code_path(yqlrun_res.std_err)]
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
-            yatest.common.canonical_file(yqlrun_res.op_file, local=True, diff_tool=ASTDIFF_PATH),
+            yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),
             yatest.common.canonical_file(yqlrun_res.plan_file, local=True)]

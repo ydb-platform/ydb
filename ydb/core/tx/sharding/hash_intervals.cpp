@@ -28,6 +28,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
                 auto& transfer = *alter.MutableTransfer()->AddTransfers();
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(i);
+                transfer.SetSessionId("SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
                 result.emplace_back(alter);
             }
             {
@@ -74,6 +75,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
+                transfer.SetSessionId("MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
                 transfer.SetMoving(true);
                 result.emplace_back(alter);
             }
@@ -190,6 +192,19 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding6
         TSpecificShardingInfo info(GetOrderedShardIds());
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId));
     }
+}
+
+ui64 TSpecificShardingInfo::GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const {
+    AFL_VERIFY(idx <= shardsCount);
+    if (idx == shardsCount) {
+        return Max<ui64>();
+    }
+#ifdef KIKIMR_DISABLE_WINDOWS
+    AFL_VERIFY(false)("error", "windows implementation doesn't works");
+    return 0;
+#else
+    return Max<ui64>() * (1.0 * idx / shardsCount);
+#endif
 }
 
 }

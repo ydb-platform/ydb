@@ -40,10 +40,9 @@ public:
 
     const IInvokerPtr& GetInvoker(int bucketIndex, int queueIndex) const;
 
-    void Shutdown();
-
-    void DrainProducer();
-    void DrainConsumer();
+    // See TInvokerQueue::Shutdown/OnConsumerFinished.
+    void Shutdown(bool graceful = false);
+    void OnConsumerFinished();
 
     bool IsRunning() const;
 

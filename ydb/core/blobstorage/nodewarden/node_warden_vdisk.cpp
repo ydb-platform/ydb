@@ -48,11 +48,12 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        vdisk.ShutdownPending = true;
 
         SendDiskMetrics(false);
     }
 
-    void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk, TDuration yardInitDelay) {
+    void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         const ui64 pdiskGuid = vdisk.Config.GetVDiskLocation().GetPDiskGuid();
         const bool donorMode = vdisk.Config.HasDonorMode();
@@ -67,6 +68,11 @@ namespace NKikimr::NStorage {
         }
 
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
+            return;
+        }
+
+        if (vdisk.ShutdownPending) {
+            vdisk.RestartAfterShutdown = true;
             return;
         }
 
@@ -168,7 +174,7 @@ namespace NKikimr::NStorage {
         baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
         baseInfo.ReplNodeRequestQuoter = ReplNodeRequestQuoter;
         baseInfo.ReplNodeResponseQuoter = ReplNodeResponseQuoter;
-        baseInfo.YardInitDelay = yardInitDelay;
+        baseInfo.YardInitDelay = VDiskCooldownTimeout;
 
         TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
@@ -184,20 +190,9 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
+        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
-        if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
-            for (auto type : Cfg->BlobStorageConfig.GetCostMetricsSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasBurstThresholdNs()) {
-                        vdiskConfig->BurstThresholdNs = type.GetBurstThresholdNs();
-                    }
-                    if (type.HasDiskTimeAvailableScale()) {
-                        vdiskConfig->DiskTimeAvailableScale = type.GetDiskTimeAvailableScale();
-                    }
-                }
-            }
-        }
+        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
             for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
@@ -217,8 +212,10 @@ namespace NKikimr::NStorage {
 
         // create an actor
         auto *as = TActivationContext::ActorSystem();
-        as->RegisterLocalService(vdiskServiceId, as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
-            TMailboxType::Revolving, AppData()->SystemPoolId));
+        TActorId actorId = as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
+            TMailboxType::Revolving, AppData()->SystemPoolId);
+        as->RegisterLocalService(vdiskServiceId, actorId);
+        VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
             (PDiskGuid, pdiskGuid));
@@ -242,6 +239,20 @@ namespace NKikimr::NStorage {
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         vdisk.ReportedVDiskStatus.reset();
         vdisk.ScrubCookie = scrubCookie;
+    }
+
+    void TNodeWarden::HandleGone(STATEFN_SIG) {
+        if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
+            if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
+                TVDiskRecord& vdisk = jt->second;
+                Y_ABORT_UNLESS(vdisk.ShutdownPending);
+                vdisk.ShutdownPending = false;
+                if (std::exchange(vdisk.RestartAfterShutdown, false)) {
+                    StartLocalVDiskActor(vdisk);
+                }
+            }
+            VDiskIdByActor.erase(it);
+        }
     }
 
     void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
@@ -301,10 +312,10 @@ namespace NKikimr::NStorage {
         } else if (vdisk.GetDoWipe()) {
             Slay(record);
         } else if (!record.RuntimeData) {
-            StartLocalVDiskActor(record, TDuration::Zero());
+            StartLocalVDiskActor(record);
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
             PoisonLocalVDisk(record);
-            StartLocalVDiskActor(record, VDiskCooldownTimeout);
+            StartLocalVDiskActor(record);
         }
     }
 
@@ -331,7 +342,7 @@ namespace NKikimr::NStorage {
             auto& record = it->second;
             if (record.GetVDiskId() == vDiskId) {
                 PoisonLocalVDisk(record);
-                StartLocalVDiskActor(record, VDiskCooldownTimeout);
+                StartLocalVDiskActor(record);
                 break;
             }
         }

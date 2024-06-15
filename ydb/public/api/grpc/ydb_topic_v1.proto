@@ -96,15 +96,19 @@ service TopicService {
     // Create DirectRead Session
     // Pipeline:
     // client                  server
-    //         StartDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
+    //         InitRequest(SessionID1, TopicReadSettings, Consumer)
     //        ---------------->
+    //         InitResponse
+    //        <----------------
+    //         StartDirectReadPartitionSessionRequest(PartitionSessionID1, LastDirectReadID, TabletGeneration1)
+    //        ---------------->
+    //         StartDirectReadPartitionSessionResponse(PartitionSessionID1, TabletGeneration1)
+    //        <----------------
     //         DirectReadResponse(PartitionSessionID1, DirectReadID1, Secret1, ...)
     //        <----------------
     //         DirectReadResponse(PartitionSessionID1, DirectReadID2, Secret1, ...)
     //        <----------------
-    //         UpdateDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
-    //        ---------------->
-    //         StopDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
+    //         StopDirectReadPartitionSession(status, issues, PartitionSessionID1, TabletGeneration1)
     //        <----------------
     rpc StreamDirectRead(stream StreamDirectReadMessage.FromClient) returns (stream StreamDirectReadMessage.FromServer);
 

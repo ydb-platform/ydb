@@ -5,6 +5,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -22,6 +23,7 @@ public:
 
     enum class EState: ui8 {
         Ready,
+        Done,
         Removing,
         Error = 255
     };
@@ -32,7 +34,6 @@ public:
 
     enum class EDstState: ui8 {
         Creating,
-        Syncing,
         Ready,
         Alter,
         Done,
@@ -73,12 +74,20 @@ public:
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
-        virtual void Progress(TReplication::TPtr replication, const TActorContext& ctx) = 0;
+        virtual void AddWorker(ui64 id) = 0;
+        virtual void RemoveWorker(ui64 id) = 0;
+        virtual const THashSet<ui64>& GetWorkers() const = 0;
+
+        virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
     protected:
-        virtual IActor* CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const = 0;
+        virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
     };
+
+    friend class TTargetBase;
+    void AddPendingAlterTarget(ui64 id);
+    void RemovePendingAlterTarget(ui64 id);
 
     struct TDropOp {
         TActorId Sender;
@@ -103,6 +112,7 @@ public:
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
+    void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
@@ -115,6 +125,8 @@ public:
 
     void SetTenant(const TString& value);
     const TString& GetTenant() const;
+
+    bool CheckAlterDone() const;
 
     void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
     const std::optional<TDropOp>& GetDropOp() const;

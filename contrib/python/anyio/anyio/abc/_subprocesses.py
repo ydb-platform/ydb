@@ -59,8 +59,8 @@ class Process(AsyncResource):
     @abstractmethod
     def returncode(self) -> int | None:
         """
-        The return code of the process. If the process has not yet terminated, this will be
-        ``None``.
+        The return code of the process. If the process has not yet terminated, this will
+        be ``None``.
         """
 
     @property

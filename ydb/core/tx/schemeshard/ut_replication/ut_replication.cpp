@@ -400,4 +400,36 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST(DropReplicationWithUnknownSecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  PasswordSecretName: "unknown_secret"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathExist});
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+    }
+
 } // TReplicationTests

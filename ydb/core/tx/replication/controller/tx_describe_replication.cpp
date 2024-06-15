@@ -43,8 +43,12 @@ public:
             }
 
             auto& item = *Result->Record.AddTargets();
+            item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
+            if (target->GetStreamName()) {
+                item.SetSrcStreamName(target->GetStreamName());
+            }
         }
 
         auto& state = *Result->Record.MutableState();
@@ -53,13 +57,15 @@ public:
         case TReplication::EState::Removing:
             state.MutableStandBy();
             break;
+        case TReplication::EState::Done:
+            state.MutableDone();
+            break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
                 issue->set_message(replication->GetIssue());
             }
             break;
-        // TODO: 'done' state
         }
 
         return true;

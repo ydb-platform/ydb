@@ -9,6 +9,8 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NYql {
 
 using namespace NNodes;

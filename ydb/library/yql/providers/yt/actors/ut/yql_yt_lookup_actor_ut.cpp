@@ -48,19 +48,19 @@ class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
 public:
     TCallLookupActor(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        NYql::NDq::IDqAsyncLookupSource* lookupSource,
+        const NActors::TActorId& lookupActor,
         NKikimr::NMiniKQL::TUnboxedValueVector&& keysToLookUp)
         : Alloc(alloc)
-        , LookupSource(lookupSource)
+        , LookupActor(lookupActor)
         , KeysToLookUp(std::move(keysToLookUp))
     {
     }
 
     void Bootstrap() {
-        LookupSource->AsyncLookup(std::move(KeysToLookUp));
+        auto ev = new NDq::IDqAsyncLookupSource::TEvLookupRequest(Alloc, std::move(KeysToLookUp));
+        TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
         auto guard = Guard(*Alloc);
-        KeysToLookUp.clear();
-        KeysToLookUp.shrink_to_fit();
+        KeysToLookUp = NKikimr::NMiniKQL::TUnboxedValueVector{};
     }
 
 private:
@@ -68,7 +68,7 @@ private:
 
 private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    NYql::NDq::IDqAsyncLookupSource* LookupSource;
+    const NActors::TActorId LookupActor;
     NKikimr::NMiniKQL::TUnboxedValueVector KeysToLookUp;
 };
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST(Lookup) {
         mapping
     );
     auto guard = Guard(*alloc.get());
-    auto [lookupSource, actor] = NYql::NDq::CreateYtLookupActor(
+    auto [_, lookupActor] = NYql::NDq::CreateYtLookupActor(
         ytServices,
         edge,
         alloc,
@@ -138,7 +138,7 @@ Y_UNIT_TEST(Lookup) {
         typeEnv,
         holderFactory,
         1'000'000);
-    runtime.Register(actor);
+    runtime.Register(lookupActor);
 
     NKikimr::NMiniKQL::TUnboxedValueVector keys {\
         CreateStructValue(holderFactory, {"host1", "vpc1"}),
@@ -149,7 +149,7 @@ Y_UNIT_TEST(Lookup) {
 
     guard.Release(); //let actors use alloc
 
-    auto callLookupActor = new TCallLookupActor(alloc, lookupSource, std::move(keys));
+    auto callLookupActor = new TCallLookupActor(alloc, lookupActor->SelfId(), std::move(keys));
     runtime.Register(callLookupActor);
 
     auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);

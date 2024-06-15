@@ -4190,6 +4190,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->WaitTxId = rowset.GetValueOrDefault<Schema::Exports::WaitTxId>(InvalidTxId);
                     exportInfo->Issue = rowset.GetValueOrDefault<Schema::Exports::Issue>(TString());
 
+                    exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
+                    exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
+
                     Self->Exports[id] = exportInfo;
                     if (uid) {
                         Self->ExportsByUid[uid] = exportInfo;
@@ -4281,6 +4284,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     importInfo->State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::Imports::State>());
                     importInfo->Issue = rowset.GetValueOrDefault<Schema::Imports::Issue>(TString());
+
+                    importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
+                    importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
                     Self->Imports[id] = importInfo;
                     if (uid) {

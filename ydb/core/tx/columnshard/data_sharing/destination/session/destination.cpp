@@ -25,7 +25,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
 }
 
 ui32 TDestinationSession::GetSourcesInProgressCount() const {
-    AFL_VERIFY(IsStarted() || IsStarting());
+    AFL_VERIFY(IsInProgress());
     AFL_VERIFY(Cursors.size());
     ui32 result = 0;
     for (auto&& [_, cursor] : Cursors) {
@@ -37,7 +37,7 @@ ui32 TDestinationSession::GetSourcesInProgressCount() const {
 }
 
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
-    AFL_VERIFY(IsStarted() || IsStarting());
+    AFL_VERIFY(IsInProgress() || IsPrepared());
     bool found = false;
     for (auto&& [_, cursor] : Cursors) {
         if (tabletId && *tabletId != cursor.GetTabletId()) {
@@ -46,11 +46,11 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
         found = true;
         if (cursor.GetDataFinished()) {
             auto ev = std::make_unique<NEvents::TEvAckFinishToSource>(GetSessionId());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else if (cursor.GetPackIdx()) {
             auto ev = std::make_unique<NEvents::TEvAckDataToSource>(GetSessionId(), cursor.GetPackIdx());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else {
             std::set<ui64> pathIdsBase;
@@ -59,7 +59,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             }
             TSourceSession source(GetSessionId(), TransferContext, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID());
             auto ev = std::make_unique<NEvents::TEvStartToSource>(source);
-            NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         }
     }

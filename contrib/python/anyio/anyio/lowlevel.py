@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 import enum
-import sys
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, Literal, TypeVar, overload
 from weakref import WeakKeyDictionary
 
-from ._core._eventloop import get_asynclib
-
-if sys.version_info >= (3, 8):
-    from typing import Literal
-else:
-    from typing_extensions import Literal
+from ._core._eventloop import get_async_backend
 
 T = TypeVar("T")
 D = TypeVar("D")
@@ -30,7 +24,7 @@ async def checkpoint() -> None:
     .. versionadded:: 3.0
 
     """
-    await get_asynclib().checkpoint()
+    await get_async_backend().checkpoint()
 
 
 async def checkpoint_if_cancelled() -> None:
@@ -42,7 +36,7 @@ async def checkpoint_if_cancelled() -> None:
     .. versionadded:: 3.0
 
     """
-    await get_asynclib().checkpoint_if_cancelled()
+    await get_async_backend().checkpoint_if_cancelled()
 
 
 async def cancel_shielded_checkpoint() -> None:
@@ -58,12 +52,16 @@ async def cancel_shielded_checkpoint() -> None:
     .. versionadded:: 3.0
 
     """
-    await get_asynclib().cancel_shielded_checkpoint()
+    await get_async_backend().cancel_shielded_checkpoint()
 
 
 def current_token() -> object:
-    """Return a backend specific token object that can be used to get back to the event loop."""
-    return get_asynclib().current_token()
+    """
+    Return a backend specific token object that can be used to get back to the event
+    loop.
+
+    """
+    return get_async_backend().current_token()
 
 
 _run_vars: WeakKeyDictionary[Any, dict[str, Any]] = WeakKeyDictionary()
@@ -101,9 +99,7 @@ class RunVar(Generic[T]):
     _token_wrappers: set[_TokenWrapper] = set()
 
     def __init__(
-        self,
-        name: str,
-        default: T | Literal[_NoValueSet.NO_VALUE_SET] = NO_VALUE_SET,
+        self, name: str, default: T | Literal[_NoValueSet.NO_VALUE_SET] = NO_VALUE_SET
     ):
         self._name = name
         self._default = default
@@ -111,26 +107,17 @@ class RunVar(Generic[T]):
     @property
     def _current_vars(self) -> dict[str, T]:
         token = current_token()
-        while True:
-            try:
-                return _run_vars[token]
-            except TypeError:
-                # Happens when token isn't weak referable (TrioToken).
-                # This workaround does mean that some memory will leak on Trio until the problem
-                # is fixed on their end.
-                token = _TokenWrapper(token)
-                self._token_wrappers.add(token)
-            except KeyError:
-                run_vars = _run_vars[token] = {}
-                return run_vars
+        try:
+            return _run_vars[token]
+        except KeyError:
+            run_vars = _run_vars[token] = {}
+            return run_vars
 
     @overload
-    def get(self, default: D) -> T | D:
-        ...
+    def get(self, default: D) -> T | D: ...
 
     @overload
-    def get(self) -> T:
-        ...
+    def get(self) -> T: ...
 
     def get(
         self, default: D | Literal[_NoValueSet.NO_VALUE_SET] = NO_VALUE_SET

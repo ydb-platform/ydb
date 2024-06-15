@@ -53,13 +53,17 @@ struct TEvWorker {
         };
 
         EStatus Status;
+        TString ErrorDescription;
 
-        explicit TEvGone(EStatus status);
+        explicit TEvGone(EStatus status, const TString& errorDescription = {});
         TString ToString() const override;
     };
 };
 
-IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn);
+IActor* CreateWorker(
+    const TActorId& parent,
+    std::function<IActor*(void)>&& createReaderFn,
+    std::function<IActor*(void)>&& createWriterFn);
 
 }
 

@@ -74,13 +74,13 @@ public:
         const TPullQueueOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
+    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options),
+        const TPullQueueConsumerOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RegisterQueueConsumer, (
@@ -100,6 +100,21 @@ public:
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
@@ -796,6 +811,12 @@ public:
     MOCK_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
         const NYPath::TYPath& pipelinePath,
         const TGetPipelineStatusOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
         (override));
 
 private:

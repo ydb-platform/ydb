@@ -73,6 +73,7 @@ namespace NKikimr::NStorage {
                EvErrorTimeout,
                EvStorageConfigLoaded,
                EvStorageConfigStored,
+               EvReconnect,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -167,6 +168,7 @@ namespace NKikimr::NStorage {
             }
         };
 
+        const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
 
         // currently active storage config
@@ -248,7 +250,8 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig,
+            bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
@@ -358,6 +361,30 @@ namespace NKikimr::NStorage {
         std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
         void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Dynamic node interaction
+
+        TBindQueue StaticBindQueue;
+        THashMap<TActorId, TActorId> DynamicConfigSubscribers; // <session id> -> <actor id>
+        ui32 ConnectedToStaticNode = 0;
+        TActorId StaticNodeSessionId;
+        bool ReconnectScheduled = false;
+        THashSet<ui32> ConnectedDynamicNodes;
+
+        // these are used on the dynamic nodes
+        void ApplyStaticNodeIds(const std::vector<ui32>& nodeIds);
+        void ConnectToStaticNode();
+        void HandleReconnect();
+        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId);
+        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId);
+        void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
+
+        // these are used on the static nodes
+        void ApplyConfigUpdateToDynamicNodes();
+        void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
+        void HandleDynamicConfigSubscribe(STATEFN_SIG);
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery

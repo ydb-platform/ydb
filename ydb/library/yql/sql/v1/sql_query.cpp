@@ -41,34 +41,39 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
 }
 
 static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
-        const TRule_replication_settings_entry& in, TTranslation& ctx, bool alter)
+        const TRule_replication_settings_entry& in, TTranslation& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     auto value = BuildLiteralSmartString(ctx.Context(), ctx.Token(in.GetToken3()));
 
-    THashMap<TString, bool> settings = {
-        {"connection_string", false},
-        {"endpoint", false},
-        {"database", false},
-        {"token", false},
-        {"token_secret_name", false},
-        {"user", false},
-        {"password", false},
-        {"password_secret_name", false},
-        {"state", true},
-        {"failover_mode", true},
+    TSet<TString> configSettings = {
+        "connection_string",
+        "endpoint",
+        "database",
+        "token",
+        "token_secret_name",
+        "user",
+        "password",
+        "password_secret_name",
     };
 
-    auto it = settings.find(to_lower(key.Name));
-    if (it == settings.end()) {
+    TSet<TString> stateSettings = {
+        "state",
+        "failover_mode",
+    };
+
+    const auto keyName = to_lower(key.Name);
+    if (!configSettings.count(keyName) && !stateSettings.count(keyName)) {
         ctx.Context().Error() << "Unknown replication setting: " << key.Name;
-        return false;
-    } else if (alter != it->second) {
-        ctx.Context().Error() << key.Name << " is not supported in " << (alter ? "ALTER" : "CREATE");
         return false;
     }
 
-    if (!out.emplace(it->first, value).second) {
+    if (create && stateSettings.count(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in CREATE";
+        return false;
+    }
+
+    if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate replication setting: " << key.Name;
     }
 
@@ -76,14 +81,14 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
 }
 
 static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
-        const TRule_replication_settings& in, TTranslation& ctx, bool alter = false)
+        const TRule_replication_settings& in, TTranslation& ctx, bool create)
 {
-    if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, alter)) {
+    if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
     }
 
     for (auto& block : in.GetBlock2()) {
-        if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx, alter)) {
+        if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx, create)) {
             return false;
         }
     }
@@ -104,7 +109,7 @@ static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
         const TRule_alter_replication_action& in, TTranslation& ctx)
 {
     // TODO(ilnaz): support other actions
-    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, true);
+    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
 }
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
@@ -178,7 +183,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 for (size_t i = 0; i < names.size(); ++i) {
                     nodes.push_back(BuildSubqueryRef(blocks.back(), ref, names.size() == 1 ? -1 : i));
                 }
-            } else {
+            } else if (!Ctx.CompactNamedExprs || nodeExpr->GetUdfNode()) {
+                // Unlike other nodes, TUdfNode is not an independent node, but more like a set of parameters which should be
+                // applied on UDF call site. For example, TUdfNode can not be Translate()d
+                // So we can't add it to blocks and use reference, instead we store the TUdfNode itself as named node
+                // TODO: remove this special case
                 if (names.size() > 1) {
                     auto tupleRes = BuildTupleResult(nodeExpr, names.size());
                     for (size_t i = 0; i < names.size(); ++i) {
@@ -186,6 +195,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                 } else {
                     nodes.push_back(std::move(nodeExpr));
+                }
+            } else {
+                const auto ref = Ctx.MakeName("namedexprnode");
+                blocks.push_back(BuildNamedExpr(names.size() > 1 ? BuildTupleResult(nodeExpr, names.size()) : nodeExpr));
+                blocks.back()->SetLabel(ref);
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildNamedExprReference(blocks.back(), ref, names.size() == 1 ? TMaybe<size_t>() : i));
                 }
             }
 
@@ -474,10 +490,23 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore18: {
             Ctx.BodyPart();
-            if (!DefineActionOrSubqueryStatement(core.GetAlt_sql_stmt_core18().GetRule_define_action_or_subquery_stmt1())) {
+            TNodePtr lambda;
+            TSymbolNameWithPos nameAndPos;
+            const auto& stmt = core.GetAlt_sql_stmt_core18().GetRule_define_action_or_subquery_stmt1();
+            const TString kind = to_lower(Ctx.Token(stmt.GetToken2()));
+            YQL_ENSURE(kind == "action" || kind == "subquery");
+            if (!DefineActionOrSubqueryStatement(stmt, nameAndPos, lambda)) {
                 return false;
             }
 
+            if (Ctx.CompactNamedExprs) {
+                const auto ref = Ctx.MakeName("named" + kind + "node");
+                blocks.push_back(BuildNamedExpr(lambda));
+                blocks.back()->SetLabel(ref);
+                lambda = BuildNamedExprReference(blocks.back(), ref, {});
+            }
+
+            PushNamedNode(nameAndPos.Pos, nameAndPos.Name, lambda);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore19: {
@@ -945,7 +974,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TNodePtr> settings;
-            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), *this)) {
+            if (!AsyncReplicationSettings(settings, node.GetRule_replication_settings10(), *this, true)) {
                 return false;
             }
 
@@ -2483,6 +2512,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
+        } else if (normalizedPragma == "compactnamedexprs") {
+            Ctx.CompactNamedExprs = true;
+            Ctx.IncrementMonCounter("sql_pragma", "CompactNamedExprs");
+        } else if (normalizedPragma == "disablecompactnamedexprs") {
+            Ctx.CompactNamedExprs = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
+        } else if (normalizedPragma == "validateunusedexprs") {
+            Ctx.ValidateUnusedExprs = true;
+            Ctx.IncrementMonCounter("sql_pragma", "ValidateUnusedExprs");
+        } else if (normalizedPragma == "disablevalidateunusedexprs") {
+            Ctx.ValidateUnusedExprs = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableValidateUnusedExprs");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

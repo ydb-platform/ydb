@@ -148,8 +148,10 @@ private:
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<TGranulesStat> Stats;
+    std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
+    mutable TInstant NextActualizations = TInstant::Zero();
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
@@ -161,6 +163,12 @@ public:
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
     }
+
+    std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
+        return OptimizerPlanner->GetTasksDescription();
+    }
+
+    void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -193,10 +201,7 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-        NActualizer::TExternalTasksContext extTasks(Portions);
-        ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-    }
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);
@@ -244,13 +249,11 @@ public:
         return OptimizerPlanner->IsLocked(dataLocksManager);
     }
 
-    void ActualizeOptimizer(const TInstant currentInstant) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag(TDuration::Seconds(1))) {
+    void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
+        if (OptimizerPlanner->GetActualizationInstant() + recalcLag < currentInstant) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }
-
-    bool InCompaction() const;
 
     bool IsErasable() const {
         return Activity.empty() && Portions.empty();

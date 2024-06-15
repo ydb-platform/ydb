@@ -52,7 +52,7 @@ public:
             , Offset(blob.Offset)
             , PartNo(blob.PartNo)
         {
-            KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition.InternalPartitionId) << 17) + PartNo + Partition.IsSupportivePartition() ? 0 : (1 << 16));
+            KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition.InternalPartitionId) << 17) + PartNo + (Partition.IsSupportivePartition() ? 0 : (1 << 16)));
             KeyHash = Hash128to32(KeyHash, Offset);
         }
 

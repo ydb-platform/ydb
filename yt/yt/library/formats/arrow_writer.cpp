@@ -29,7 +29,7 @@ namespace NYT::NFormats {
 using namespace NTableClient;
 using namespace NComplexTypes;
 
-static const auto& Logger = FormatsLogger;
+static constexpr auto& Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;
@@ -696,7 +696,8 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -725,7 +726,8 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -1266,8 +1268,7 @@ private:
             auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
                 flatbufBuilder,
                 flatbufBuilder.CreateString("TableId"),
-                flatbufBuilder.CreateString(std::to_string(tableIndex))
-            );
+                flatbufBuilder.CreateString(std::to_string(tableIndex)));
             customMetadata.push_back(keyValueOffsett);
         }
 

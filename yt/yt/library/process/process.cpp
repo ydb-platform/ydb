@@ -58,7 +58,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("Process");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
 
 static constexpr pid_t InvalidProcessId = -1;
 
@@ -210,7 +210,7 @@ private:
 
 TErrorOr<TString> ResolveBinaryPath(const TString& binary)
 {
-    auto Logger = NYT::Logger
+    auto Logger = NYT::Logger()
         .WithTag("Binary: %v", binary);
 
     YT_LOG_DEBUG("Resolving binary path");
@@ -755,7 +755,10 @@ TFuture<void> TProcessBase::Spawn()
 
         DoSpawn();
     } catch (const std::exception& ex) {
-        FinishedPromise_.TrySet(ex);
+        FinishedPromise_.TrySet(TError(EProcessErrorCode::CannotStartProcess,
+            "Cannot spawn child process %v",
+            ResolvedPath_)
+            << ex);
     }
     return FinishedPromise_;
 }

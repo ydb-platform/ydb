@@ -115,6 +115,20 @@ DEFINE_REFCOUNTED_TYPE(IReconfigurableThroughputThrottler)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! An interface for unit test purpose.
+/*!
+ *  Thread affinity: any
+ */
+struct ITestableReconfigurableThroughputThrottler
+    : public IReconfigurableThroughputThrottler
+{
+    virtual void SetLastUpdated(TInstant lastUpdated) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(ITestableReconfigurableThroughputThrottler)
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Constructs a throttler from #config.
 IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,

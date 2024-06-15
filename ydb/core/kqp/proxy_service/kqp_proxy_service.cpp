@@ -136,7 +136,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvOnRequestTimeout,
             EvCloseIdleSessions,
             EvResourcesSnapshot,
-            EvScriptExecutionsTableCreationFinished,
         };
 
         struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
@@ -169,10 +168,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
                 : Snapshot(std::move(snapshot)) {}
         };
-
-        struct TEvScriptExecutionsTablesCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTablesCreationFinished, EvScriptExecutionsTableCreationFinished> {
-            TEvScriptExecutionsTablesCreationFinished() = default;
-        };
     };
 
 public:
@@ -187,7 +182,8 @@ public:
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory
+        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
         ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
@@ -198,6 +194,7 @@ public:
         , PendingRequests()
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -205,7 +202,7 @@ public:
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup);
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -269,7 +266,7 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory, FederatedQuerySetup));
+        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, AsyncIoFactory, FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
@@ -1320,7 +1317,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
-            hFunc(TEvPrivate::TEvScriptExecutionsTablesCreationFinished, Handle);
+            hFunc(TEvScriptExecutionsTablesCreationFinished, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
@@ -1582,11 +1579,16 @@ private:
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()), TMailboxType::HTSwap, AppData()->SystemPoolId);
+                Register(CreateScriptExecutionsTablesCreator(), TMailboxType::HTSwap, AppData()->SystemPoolId);
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {
-                    DelayedEventsQueue.emplace_back(std::move(ev));
+                    DelayedEventsQueue.push_back({
+                        .Event = std::move(ev),
+                        .ResponseBuilder = [](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+                            return new TResponse(status, std::move(issues));
+                        }
+                    });
                 } else {
                     NYql::TIssues issues;
                     issues.AddIssue("Too many queued requests");
@@ -1598,10 +1600,25 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
+    void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+
+        NYql::TIssue rootIssue;
+        if (!ev->Get()->Success) {
+            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+            rootIssue.SetMessage("Failed to create script execution tables");
+            for (const NYql::TIssue& issue : ev->Get()->Issues) {
+                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+        }
+
         while (!DelayedEventsQueue.empty()) {
-            Send(std::move(DelayedEventsQueue.front()));
+            auto delayedEvent = std::move(DelayedEventsQueue.front());
+            if (ev->Get()->Success) {
+                Send(std::move(delayedEvent.Event));
+            } else {
+                Send(delayedEvent.Event->Sender, delayedEvent.ResponseBuilder(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue}));
+            }
             DelayedEventsQueue.pop_front();
         }
     }
@@ -1739,6 +1756,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
     std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
@@ -1765,8 +1783,12 @@ private:
         Pending,
         Finished,
     };
+    struct TDelayedEvent {
+        THolder<IEventHandle> Event;
+        std::function<IEventBase*(Ydb::StatusIds::StatusCode, NYql::TIssues)> ResponseBuilder;
+    };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
-    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    std::deque<TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
 };
@@ -1780,11 +1802,12 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory
+    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
     )
 {
     return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, metadataProviderConfig, std::move(settings),
-        std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory));
+        std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
 
 } // namespace NKikimr::NKqp

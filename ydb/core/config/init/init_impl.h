@@ -1183,7 +1183,7 @@ public:
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
-        Labels["dynamic"] = ToString(cf.NodeBrokerAddresses.empty() ? "false" : "true");
+        Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();

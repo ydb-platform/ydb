@@ -5,6 +5,8 @@
 
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace Ydb::Replication {
     class ConnectionParams;
     class DescribeReplicationResult;
@@ -74,8 +76,10 @@ private:
 class TReplicationDescription {
 public:
     struct TItem {
+        ui64 Id;
         TString SrcPath;
         TString DstPath;
+        std::optional<TString> SrcChangefeedName;
     };
 
     enum class EState {

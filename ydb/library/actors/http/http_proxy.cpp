@@ -127,7 +127,7 @@ protected:
     void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr event, const NActors::TActorContext& ctx) {
         const TString& host(event->Get()->Host);
         auto it = Hosts.find(host);
-        if (it == Hosts.end() || it->second.DeadlineTime > ctx.Now()) {
+        if (it == Hosts.end() || it->second.DeadlineTime < ctx.Now()) {
             TString addressPart;
             TIpPort portPart = 0;
             CrackAddress(host, addressPart, portPart);
@@ -172,6 +172,22 @@ protected:
                         }
                         it->second.Address = address;
                         it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                    }
+                }
+                catch (const TNetworkResolutionError& e) {
+                    if (it != Hosts.end()) {
+                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
+                        return;
+                    } else {
+                        ctx.Send(event->Sender,
+                            new TEvHttpProxy::TEvResolveHostResponse(
+                                TStringBuilder() 
+                                    << "Resolution failed and no stale cached value has been found to fallback.\n" 
+                                    << "Resolution error: " 
+                                    << e.what()
+                            )
+                        );
+                        return;
                     }
                 }
                 catch (const yexception& e) {

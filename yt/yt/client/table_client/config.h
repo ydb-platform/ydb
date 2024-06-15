@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/misc/config.h>
+
 #include <yt/yt/library/quantile_digest/public.h>
 
 namespace NYT::NTableClient {
@@ -31,7 +33,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TRetentionConfig)
 
-TString ToString(const TRetentionConfigPtr& obj);
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -476,6 +478,23 @@ struct TRowBatchReadOptions
     //! If false then the reader must return a non-columnar batch.
     bool Columnar = false;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSchemalessBufferedDynamicTableWriterConfig
+    : public TTableWriterConfig
+{
+public:
+    i64 MaxBatchSize;
+    TDuration FlushPeriod;
+    TExponentialBackoffOptions RetryBackoff;
+
+    REGISTER_YSON_STRUCT(TSchemalessBufferedDynamicTableWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TSchemalessBufferedDynamicTableWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

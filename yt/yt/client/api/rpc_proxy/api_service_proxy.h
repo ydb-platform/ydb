@@ -87,10 +87,13 @@ public:
     // Queues
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullConsumer);
+    DEFINE_RPC_PROXY_METHOD_GENERIC(PullConsumer, NRpcProxy::NProto::TReqPullQueueConsumer, NRpcProxy::NProto::TRspPullQueueConsumer);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, UnregisterQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueueConsumerRegistrations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateQueueProducerSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveQueueProducerSession);
 
     // Scheduler pools
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferPoolResources);
@@ -159,6 +162,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MigrateReplicationCards);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendChaosCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeChaosCells);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendTabletCells);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeTabletCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMaintenance);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMaintenance);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DisableChunkLocations);
@@ -182,6 +187,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StopPipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineStatus);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);

@@ -183,7 +183,7 @@ private:
 
 }; // TDstRemover
 
-IActor* CreateDstRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),

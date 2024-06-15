@@ -166,13 +166,8 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
     const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
     const bool changedSchemeBoard = !StateStorageProxyConfigured || changed(*SchemeBoardInfo, *schemeBoardInfo);
-    if (changedStateStorage || changedBoard || changedSchemeBoard) { // reconfigure proxy
-        STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
-        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(stateStorageInfo, boardInfo,
-            schemeBoardInfo));
-        StateStorageProxyConfigured = true;
-    } else { // no changes
-        return;
+    if (!changedStateStorage && !changedBoard && !changedSchemeBoard) {
+        return; // no changes
     }
 
     // start new replicas if needed
@@ -222,8 +217,21 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     // terminate unused replicas
     for (const auto& replicaId : localActorIds) {
         STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(actorId, TActorId());
+        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+    }
+
+    // reconfigure proxy
+    STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
+    if (StateStorageProxyConfigured) {
+        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
+            SchemeBoardInfo));
+    } else {
+        const TActorId newInstance = as->Register(CreateStateStorageProxy(StateStorageInfo, BoardInfo, SchemeBoardInfo),
+            TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+        const TActorId stubInstance = as->RegisterLocalService(MakeStateStorageProxyID(), newInstance);
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, stubInstance, newInstance, nullptr, 0));
+        StateStorageProxyConfigured = true;
     }
 }
 

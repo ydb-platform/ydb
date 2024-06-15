@@ -442,7 +442,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, Wakeup);
+            HFunc(TEvents::TEvWakeup, Wakeup);
         }
     }
 
@@ -451,20 +451,25 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void Wakeup(const TActorContext &ctx) {
-        for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
+    void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+        auto *event = ev->Get();
+        if (event->Tag == 0) {
+            StartOfCollecting = ctx.Now();
+        }
+        if (event->Tag < PoolCounters.size()) {
+            ui16 poolId = event->Tag;
             TVector<TExecutorThreadStats> stats;
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
             ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
+            ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
+            return;
         }
         THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
-
         OnWakeup(ctx);
-
-        ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }
 
     void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
@@ -483,6 +488,7 @@ private:
 
 protected:
     const ui32 IntervalSec;
+    TInstant StartOfCollecting;
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;

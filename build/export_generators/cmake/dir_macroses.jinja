@@ -1,0 +1,15 @@
+{%- if dir_macroses is defined -%}
+{%-     for dir_macros in dir_macroses -%}
+{%-         if dir_macros.macro == "set_vars" -%}
+{%-             for set_var in dir_macros.args %}
+set({{ set_var|replace("=", ' ') }})
+{%              endfor -%}
+{%          else %}
+{{ dir_macros.macro }}(
+{%-             for arg in dir_macros.args %}
+  {{ arg }}
+{%-             endfor %}
+)
+{%          endif -%}
+{%-     endfor -%}
+{%- endif -%}

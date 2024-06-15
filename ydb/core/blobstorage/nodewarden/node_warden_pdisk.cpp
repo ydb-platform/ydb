@@ -47,13 +47,14 @@ namespace NKikimr::NStorage {
 
             if (splitted[0] == "SectorMap") {
                 Y_ABORT_UNLESS(tokenCount >= 2);
-                ui64 size = (ui64)100 << 30; // 100GB is default
+                ui32 defaultSizeGb = 100;
+                ui64 size = (ui64)defaultSizeGb << 30;
                 if (splitted.size() >= 3) {
                     ui64 minSize = (ui64)100 << 30;
                     if (pdiskConfig->FeatureFlags.GetEnableSmallDiskOptimization()) {
-                        minSize = (32ull << 20) * 256; // at least needed 256 chunks
+                        minSize = (32ull << 20) * 256; // we need at least 256 chunks
                     }
-                    size = Max(minSize, FromStringWithDefault<ui64>(splitted[2], size) << 30);
+                    size = Max(minSize, (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30);
                 }
 
                 auto diskMode = NPDisk::NSectorMap::DM_NONE;
@@ -250,7 +251,7 @@ namespace NKikimr::NStorage {
                         key.PDiskId, key.VDiskSlotId));
                     it->second = round;
                 } else {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
             SendDiskMetrics(false);
@@ -262,7 +263,7 @@ namespace NKikimr::NStorage {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
                 if (!value.RuntimeData && !SlayInFlight.contains(key)) {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
         }

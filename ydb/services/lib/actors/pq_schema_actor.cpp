@@ -717,6 +717,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() << "Partition scale threshold time must be greater then 1 second, provided " << strategy.GetScaleThresholdSeconds() << " seconds";
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
+        if (strategy.GetPartitionStrategyType() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED && config.GetPartitionConfig().HasStorageLimitBytes()) {
+            error = TStringBuilder() << "Partitions autoscaling is incompatible with retention storage bytes option";
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
 
         return std::nullopt;
     }
@@ -736,10 +740,31 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto minParts = 1;
         auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
-        if (settings.has_partitions_count()) {
-            if (settings.partitions_count() > 0) {
-                minParts = settings.partitions_count();
+
+        switch (settings.retention_case()) {
+            case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
+                partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
             }
+            break;
+
+            case Ydb::PersQueue::V1::TopicSettings::kRetentionStorageBytes: {
+                if (settings.retention_storage_bytes() <= 0) {
+                    error = TStringBuilder() << "retention_storage_bytes must be positive, provided " <<
+                        settings.retention_storage_bytes();
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                partConfig->SetStorageLimitBytes(settings.retention_storage_bytes());
+            }
+            break;
+
+            default: {
+                error = TStringBuilder() << "retention_storage_bytes or retention_period_ms should be set";
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+
+        if (settings.has_partitions_count()) {
+            minParts = settings.partitions_count();
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
             if (autoScalteSettings.min_active_partitions() > 0) {
@@ -749,10 +774,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
 
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(autoScalteSettings.max_active_partitions(), 0L, 1L));
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoScalteSettings.max_active_partitions(), 0L, 1L));
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_up_threshold_percent(), 0 ,30));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_down_threshold_percent(), 0, 90));
-                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
                 switch(autoScalteSettings.strategy()) {
                     case ::Ydb::PersQueue::V1::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -768,6 +793,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     return code->YdbCode;
                 }
             }
+        }
+        if (minParts <= 0) {
+            error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+            return Ydb::StatusIds::BAD_REQUEST;
         }
         pqDescr->SetTotalGroupCount(minParts);
         pqTabletConfig->SetRequireAuthWrite(true);
@@ -815,28 +844,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
         partConfig->SetMaxSizeInPartition(settings.max_partition_storage_size() ? settings.max_partition_storage_size() : Max<i64>());
         partConfig->SetMaxCountInPartition(Max<i32>());
-
-        switch (settings.retention_case()) {
-            case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
-                partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
-            }
-            break;
-
-            case Ydb::PersQueue::V1::TopicSettings::kRetentionStorageBytes: {
-                if (settings.retention_storage_bytes() <= 0) {
-                    error = TStringBuilder() << "retention_storage_bytes must be positive, provided " <<
-                        settings.retention_storage_bytes();
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
-                partConfig->SetStorageLimitBytes(settings.retention_storage_bytes());
-            }
-            break;
-
-            default: {
-                error = TStringBuilder() << "retention_storage_bytes or retention_period_ms should be set";
-                return Ydb::StatusIds::BAD_REQUEST;
-            }
-        }
 
         if (settings.message_group_seqno_retention_period_ms() > 0 && settings.message_group_seqno_retention_period_ms() < settings.retention_period_ms()) {
             error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be more then retention_period_ms (provided " << settings.retention_period_ms() << ")";
@@ -1077,19 +1084,25 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         auto pqTabletConfig = pqDescr->MutablePQTabletConfig();
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
+
+        if (request.retention_storage_mb())
+            partConfig->SetStorageLimitBytes(request.retention_storage_mb() * 1024 * 1024);
+
         if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() > 0) {
-                minParts = settings.min_active_partitions();
+            if (settings.min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
+            minParts = std::max<ui32>(1, settings.min_active_partitions());
             if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(settings.max_active_partitions(),0L,1L));
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(settings.max_active_partitions(),0L,1L));
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_up_threshold_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_down_threshold_percent(), 0, 30));
-                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoscaleSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoscaleSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
                 switch(autoscaleSettings.strategy()) {
                     case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -1161,9 +1174,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
-
-        if (request.retention_storage_mb())
-            partConfig->SetStorageLimitBytes(request.retention_storage_mb() * 1024 * 1024);
 
         if (local) {
             auto partSpeed = request.partition_write_speed_bytes_per_second();
@@ -1237,9 +1247,16 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto pqTabletConfig = pqDescr.MutablePQTabletConfig();
         NPQ::Migrate(*pqTabletConfig);
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
-        if (request.has_alter_partitioning_settings()) {
-            auto splitMergeFeatureEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge();
+        auto splitMergeFeatureEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge();
 
+        if (request.has_set_retention_storage_mb()) {
+            CHECK_CDC;
+            partConfig->ClearStorageLimitBytes();
+            if (request.set_retention_storage_mb())
+                partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
+        }
+
+        if (request.has_alter_partitioning_settings()) {
             const auto& settings = request.alter_partitioning_settings();
             if (settings.has_set_min_active_partitions()) {
                 auto minParts = IfEqualThenDefault(settings.set_min_active_partitions(), 0L, 1L);
@@ -1248,6 +1265,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);
                 }
             }
+
             if (splitMergeFeatureEnabled) {
                 if (settings.has_set_max_active_partitions()) {
                     pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
@@ -1278,11 +1296,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                         }
                     }
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
-                    return code->YdbCode;
-                }
             }
+        }
 
+        if (splitMergeFeatureEnabled) {
+            auto code = ValidatePartitionStrategy(*pqTabletConfig, error);
+            if (code) return code->YdbCode;
         }
 
         if (request.alter_attributes().size()) {
@@ -1297,14 +1316,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (request.has_set_retention_period()) {
             CHECK_CDC;
             partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
-        }
-
-
-        if (request.has_set_retention_storage_mb()) {
-            CHECK_CDC;
-            partConfig->ClearStorageLimitBytes();
-            if (request.set_retention_storage_mb())
-                partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
         }
 
         bool local = true; //todo: check locality
@@ -1434,7 +1445,4 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
     }
-
-
-
 }

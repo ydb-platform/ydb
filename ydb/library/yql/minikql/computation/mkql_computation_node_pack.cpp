@@ -4,8 +4,9 @@
 #include "mkql_computation_node_holders.h"
 #include "presort.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -1039,7 +1040,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
     InitBlocks();
@@ -1050,7 +1051,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::Mem
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     InitBlocks();
 }

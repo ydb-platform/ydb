@@ -66,6 +66,7 @@
                                                     "unique1 (null, 10)",
                                                     "unique2 (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Sequential",
                                                 "Table": "postgres_select.test_plan/onek"
                                             }
                                         ],

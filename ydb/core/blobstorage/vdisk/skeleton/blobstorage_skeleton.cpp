@@ -1692,7 +1692,7 @@ namespace NKikimr {
             TEvDetectedPhantomBlob *msg = ev->Get();
 
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
-                LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                LOG_NOTICE_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                         << "adding DoNotKeep to phantom LogoBlobId# " << logoBlobId
                         << " Marker# BSVS27");
             }
@@ -2201,13 +2201,21 @@ namespace NKikimr {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
                                 }
-                                TABLER() {
-                                    TABLED() {str << "BurstThresholdNs";}
-                                    TABLED() {str << Config->BurstThresholdNs;}
-                                }
-                                TABLER() {
-                                    TABLED() {str << "DiskTimeAvailableScale";}
-                                    TABLED() {str << Config->DiskTimeAvailableScale;}
+
+                                if (PDiskCtx && PDiskCtx->Dsk) {
+                                    NPDisk::EDeviceType trueMedia = PDiskCtx->Dsk->TrueMediaType;
+                                    TABLER() {
+                                        TABLED() {str << "TrueMediaType";}
+                                        TABLED() {str << NPDisk::DeviceTypeStr(trueMedia, true); }
+                                    }
+                                    TABLER() {
+                                        TABLED() {str << "BurstThresholdNs";}
+                                        TABLED() {str << (i64)Config->CostMetricsParametersByMedia[trueMedia].BurstThresholdNs;}
+                                    }
+                                    TABLER() {
+                                        TABLED() {str << "DiskTimeAvailableScale";}
+                                        TABLED() {str << 0.001 * Config->CostMetricsParametersByMedia[trueMedia].DiskTimeAvailableScale;}
+                                    }
                                 }
                             }
                         }

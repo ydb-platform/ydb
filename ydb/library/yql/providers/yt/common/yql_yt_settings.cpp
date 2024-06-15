@@ -149,7 +149,19 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseTmpfs);
     REGISTER_SETTING(*this, SuspendIfAccountLimitExceeded);
     REGISTER_SETTING(*this, ExtraTmpfsSize);
-    REGISTER_SETTING(*this, OptimizeFor).Parser([](const TString& v) { return FromString<NYT::EOptimizeForAttr>(v); });
+    REGISTER_SETTING(*this, OptimizeFor)
+        .Parser([](const TString& v) {
+            return FromString<NYT::EOptimizeForAttr>(v);
+        })
+        .ValueSetter([this](const TString& cluster, const NYT::EOptimizeForAttr& value) {
+            OptimizeFor[cluster] = value;
+            if (value == NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) {
+                if (ColumnGroupMode.Get(cluster).GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable) {
+                    ColumnGroupMode[cluster] = EColumnGroupMode::Disable;
+                }
+            }
+        });
+
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
             if (!ValidClusters.contains(value)) {
@@ -489,6 +501,18 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, ViewIsolation);
     REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
+    REGISTER_SETTING(*this, ColumnGroupMode)
+        .Parser([](const TString& v) {
+            return FromString<EColumnGroupMode>(v);
+        })
+        .ValueSetter([this](const TString& cluster, EColumnGroupMode value) {
+            ColumnGroupMode[cluster] = value;
+            if (value != EColumnGroupMode::Disable) {
+                if (OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_SCAN_ATTR) {
+                    OptimizeFor[cluster] = NYT::EOptimizeForAttr::OF_SCAN_ATTR;
+                }
+            }
+        });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

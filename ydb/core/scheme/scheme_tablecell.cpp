@@ -316,24 +316,16 @@ bool TCellsBatcher::IsEmpty() const {
     return Batches.empty();
 }
 
-TCellsBatcher::TOutputBatch TCellsBatcher::Flush(bool force) {
-    TOutputBatch res;
+TCellsBatcher::TBatch TCellsBatcher::Flush(bool force) {
+    TBatch res;
     if ((!Batches.empty() && force) || Batches.size() > 1) {
-        TOutputBatch res;
-        res.Memory = Batches.front().Memory;
-        SerializeCellMatrix(
-            Batches.front().Data,
-            Batches.front().Data.size() / ColCount,
-            ColCount,
-            res.Data,
-            nullptr /*resultCells*/);
+        res = std::move(Batches.front());
         Batches.pop_front();
-        return res;
     }
     return res;
 }
 
-ui64 TCellsBatcher::AddRow(TVector<TCell>&& cells) {
+ui64 TCellsBatcher::AddRow(TArrayRef<TCell> cells) {
     Y_ABORT_UNLESS(cells.size() == ColCount);
     ui64 newMemory = 0;
     for (const auto& cell : cells) {
@@ -345,7 +337,7 @@ ui64 TCellsBatcher::AddRow(TVector<TCell>&& cells) {
         Batches.back().MemorySerialized = CellMatrixHeaderSize;
     }
 
-    for (const auto& cell : cells) {
+    for (auto& cell : cells) {
         Batches.back().Data.emplace_back(std::move(cell));
     }
 

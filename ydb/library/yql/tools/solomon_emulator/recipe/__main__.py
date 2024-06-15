@@ -30,8 +30,10 @@ def start(argv):
     args = parse_args(argv)
     pm = PortManager()
     port = pm.get_port()
+    binary_path = ya_common.binary_path("ydb/library/yql/tools/solomon_emulator/bin/solomon_emulator")
+    assert binary_path
     cmd = [
-        ya_common.binary_path("kikimr/yq/tools/solomon_emulator/bin/solomon_emulator"),
+        binary_path,
         "--port",
         str(port)
     ]

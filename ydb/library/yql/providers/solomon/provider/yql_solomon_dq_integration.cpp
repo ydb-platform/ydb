@@ -161,7 +161,10 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    downsamplingDisabled = FromString<bool>(value);
+                    if (!TryFromString<bool>(value, downsamplingDisabled)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.disabled must be true or false, but has " << value));
+                        return {};
+                    }
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.aggregation"sv)) {

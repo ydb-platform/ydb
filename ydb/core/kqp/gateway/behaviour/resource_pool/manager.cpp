@@ -46,7 +46,7 @@ TResourcePoolManager::TYqlConclusionStatus StatusFromActivityType(TResourcePoolM
 }  // anonymous namespace
 
 NThreading::TFuture<TResourcePoolManager::TYqlConclusionStatus> TResourcePoolManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
-    Y_UNUSED(settings, nodeId, manager);
+    Y_UNUSED(nodeId, manager);
 
     try {
         CheckFeatureFlag(context);
@@ -59,7 +59,7 @@ NThreading::TFuture<TResourcePoolManager::TYqlConclusionStatus> TResourcePoolMan
 }
 
 TResourcePoolManager::TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
-    Y_UNUSED(schemeOperation, settings, manager);
+    Y_UNUSED(schemeOperation, manager);
 
     try {
         CheckFeatureFlag(context);
@@ -72,7 +72,7 @@ TResourcePoolManager::TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpP
 }
 
 NThreading::TFuture<TResourcePoolManager::TYqlConclusionStatus> TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, const IOperationsManager::TExternalModificationContext& context) const {
-    Y_UNUSED(schemeOperation, nodeId, manager, context);
+    Y_UNUSED(nodeId, manager, context);
 
     return NThreading::MakeFuture(TYqlConclusionStatus::Fail(TStringBuilder() << "Execution of prepare operation for RESOURCE_POOL object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
 }

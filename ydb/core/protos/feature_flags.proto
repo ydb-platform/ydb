@@ -140,4 +140,5 @@ message TFeatureFlags {
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
+    optional bool EnableTableDatetime64 = 128 [default = false];
 }

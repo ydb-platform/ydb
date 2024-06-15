@@ -14,8 +14,14 @@ void CheckFeatureFlag(TResourcePoolManager::TInternalModificationContext& contex
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
 
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableDynamicResourcePools()) {
-        throw std::runtime_error("Dynamic resource pools are disabled. Please contact your system administrator to enable it");
+    if (!AppData(actorSystem)->FeatureFlags.GetEnableResourcePools()) {
+        throw std::runtime_error("Resource pools are disabled. Please contact your system administrator to enable it");
+    }
+}
+
+void ValidateObjectId(const TString& objectId) {
+    if (objectId.find('/') != TString::npos) {
+        throw std::runtime_error("Resource pool id should not contain '/' symbol");
     }
 }
 
@@ -28,10 +34,10 @@ TResourcePoolManager::TYqlConclusionStatus StatusFromActivityType(TResourcePoolM
             return TYqlConclusionStatus::Fail("Undefined operation for RESOURCE_POOL object");
         case EActivityType::Upsert:
             return TYqlConclusionStatus::Fail("Upsert operation for RESOURCE_POOL objects is not implemented");
-        case EActivityType::Alter:
-            return TYqlConclusionStatus::Fail("Alter operation for RESOURCE_POOL objects is not implemented");
         case EActivityType::Create:
             return TYqlConclusionStatus::Fail("Create operation for RESOURCE_POOL objects is not implemented");
+        case EActivityType::Alter:
+            return TYqlConclusionStatus::Fail("Alter operation for RESOURCE_POOL objects is not implemented");
         case EActivityType::Drop:
             return TYqlConclusionStatus::Fail("Drop operation for RESOURCE_POOL objects is not implemented");
     }
@@ -44,6 +50,7 @@ NThreading::TFuture<TResourcePoolManager::TYqlConclusionStatus> TResourcePoolMan
 
     try {
         CheckFeatureFlag(context);
+        ValidateObjectId(settings.GetObjectId());
 
         return NThreading::MakeFuture<TYqlConclusionStatus>(StatusFromActivityType(context.GetActivityType()));
     } catch (...) {
@@ -56,6 +63,7 @@ TResourcePoolManager::TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpP
 
     try {
         CheckFeatureFlag(context);
+        ValidateObjectId(settings.GetObjectId());
 
         return StatusFromActivityType(context.GetActivityType());
     } catch (...) {

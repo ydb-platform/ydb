@@ -5989,8 +5989,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(DisableDynamicResourcePools) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableDynamicResourcePools(false));
+    Y_UNIT_TEST(DisableResourcePools) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -5998,7 +5998,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cerr << "Check query:\n" << query << "\n";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Dynamic resource pools are disabled. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled. Please contact your system administrator to enable it");
         };
 
         // CREATE RESOURCE POOL
@@ -6019,6 +6019,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // DROP RESOURCE POOL
         checkDisabled("DROP RESOURCE POOL `MyResourcePool`;");
+    }
+
+    Y_UNIT_TEST(ResourcePoolsValidation) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL `MyFolder/MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol");
     }
 }
 

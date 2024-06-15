@@ -520,10 +520,10 @@ class Factory:
 
         data_in = [
             [
-                '@@{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@',
-                '@@{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@',
+                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
+                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
             ],
-            ['@@{ "TODO" : "unicode" }@@', '@@{ "TODO" : "unicode" }@@'],
+            ['{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
             [None, None],
         ]
 

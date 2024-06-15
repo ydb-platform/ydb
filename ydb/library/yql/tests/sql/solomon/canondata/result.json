@@ -4,9 +4,48 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/results.txt"
         },
         {
-            "checksum": "510b38fa82b3a75e6a81a9f53c57352e",
-            "size": 1964,
-            "uri": "https://{canondata_backend}/1937429/256df771ed8fb4dd6fd261b6d648907b4871d9a3/resource.tar.gz#test.test_solomon-Basic-default.txt_/plan.txt"
+            "uri": "file://test.test_solomon-Basic-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-Basic-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-Downsampling-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-DownsamplingValidSettings-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-LabelColumns-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-UnknownSetting-]": [
+        {
+            "uri": "file://test.test_solomon-UnknownSetting-_/extracted"
         }
     ]
 }

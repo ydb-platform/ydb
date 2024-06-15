@@ -12,9 +12,10 @@ namespace NYql {
 namespace {
 using namespace NNodes;
 
-std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode::TListType& settings) {
+std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
+            settings.erase(it);
             return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
         }
     }
@@ -22,7 +23,7 @@ std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode::TListType& settings) 
     return {};
 }
 
-TVector<TCoAtom> GetUserLabels(TPositionHandle pos, TExprContext& ctx, const TExprNode::TListType& settings) {
+TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("labels")) {
             TVector<TCoAtom> result;
@@ -32,6 +33,7 @@ TVector<TCoAtom> GetUserLabels(TPositionHandle pos, TExprContext& ctx, const TEx
                 auto v = Build<TCoAtom>(ctx, pos).Value(StripString(label)).Done();
                 result.emplace_back(std::move(v));
             }
+            settings.erase(it);
             return result;
         }
     }
@@ -68,7 +70,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
     }
 
     for (const auto& label : userLabels) {
-        if (IsIn({ SOLOMON_SCHEME_TS, SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE }, label.Value())) {
+        if (IsIn(allSystemColumns, label.Value())) {
             // tmp constraint
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "System column should not be used as label name: " << label.Value()));
             return nullptr;
@@ -135,11 +137,15 @@ public:
 
                 auto settings = read.Ref().Child(4);
                 auto settingsList = read.Ref().Child(4)->ChildrenList();
-                auto userSchema = GetSchema(settingsList);
-                TVector<TCoAtom> userLabels = GetUserLabels(settings->Pos(), ctx, settingsList);
+                auto userSchema = ExtractSchema(settingsList);
+                TVector<TCoAtom> userLabels = ExtractUserLabels(settings->Pos(), ctx, settingsList);
+
+                auto newSettings = Build<TCoNameValueTupleList>(ctx, settings->Pos())
+                                        .Add(settingsList)
+                                    .Done();
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
-                                  .Settings(settings)
+                                  .Settings(newSettings)
                                 .Done();
                 
                 TVector<TCoAtom> systemColumns;

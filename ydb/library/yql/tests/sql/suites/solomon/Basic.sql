@@ -1,6 +1,3 @@
-pragma DqEngine="force";
-USE local_solomon;
-
 SELECT * FROM local_solomon.my_project WITH (
   program = @@{}@@,
   from = "2023-12-08T14:40:39Z",

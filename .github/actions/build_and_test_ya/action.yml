@@ -121,7 +121,7 @@ runs:
     - name: show_bild_size_diff
       shell: bash
       continue-on-error: true
-      if: ${{inputs.build_preset == 'relwithdebinfo' && GITHUB_EVENT_NAME=='pull_request_target'"}}
+      if: ${{inputs.build_preset == 'relwithdebinfo' && GITHUB_EVENT_NAME=='pull_request_target'}}
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 

@@ -10,7 +10,6 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    source_context.cpp
     util.cpp
 )
 
@@ -26,6 +25,10 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     CFLAGS (
         -DARCADIA_BUILD -DUSE_PARQUET
+    )
+
+    SRCS(
+        source_context.cpp
     )
 
 ENDIF()

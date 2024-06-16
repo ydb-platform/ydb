@@ -8,6 +8,7 @@ SRCS(
     browse_db.h
     browse_pq.h
     browse.h
+    check_access.h
     counters_hosts.h
     json_acl.h
     json_autocomplete.h
@@ -21,9 +22,12 @@ SRCS(
     json_content.h
     json_counters.h
     json_describe.h
+    json_describe_consumer.h
+    json_describe_topic.h
     json_local_rpc.h
     json_getblob.h
     json_graph.h
+    json_handlers_operation.cpp
     json_handlers_pdisk.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
@@ -55,6 +59,10 @@ SRCS(
     json_wb_req.h
     json_whoami.h
     log.h
+    operation_cancel.h
+    operation_forget.h
+    operation_get.h
+    operation_list.h
     pdisk_info.h
     pdisk_status.h
     query_autocomplete_helper.h

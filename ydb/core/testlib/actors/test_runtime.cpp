@@ -174,7 +174,7 @@ namespace NActors {
             }
 
             if (NeedMonitoring && !SingleSysEnv) {
-                ui16 port = GetPortManager().GetPort();
+                ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPortManager().GetPort();
                 node->Mon.Reset(new NActors::TSyncHttpMon({
                     .Port = port,
                     .Threads = 10,

@@ -444,9 +444,9 @@
     ],
     "test.test[blocks-combine_all_pg--Peephole]": [
         {
-            "checksum": "fe5c2a8333de61f5eafe28d98f2a69ac",
-            "size": 9021,
-            "uri": "https://{canondata_backend}/1781765/297731b42b097719a64312f0eba0b1fbb4cf8db1/resource.tar.gz#test.test_blocks-combine_all_pg--Peephole_/opt.yql"
+            "checksum": "995e2fe04ec8a441ceb4854e485df58c",
+            "size": 8894,
+            "uri": "https://{canondata_backend}/1889210/8d5c13cbda8afcad329454d1d2ddac1ca42ab013/resource.tar.gz#test.test_blocks-combine_all_pg--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_pg--Plan]": [
@@ -461,6 +461,34 @@
             "checksum": "c464d7eec49c8d32858b23d56dd49c47",
             "size": 4450,
             "uri": "https://{canondata_backend}/1775059/3537a7096af92f6c747d78f769fafb259258445e/resource.tar.gz#test.test_blocks-combine_all_pg--Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-date_add_interval_scalar--Debug]": [
+        {
+            "checksum": "f524b5a1061b60afb717c07e5ac543e7",
+            "size": 5987,
+            "uri": "https://{canondata_backend}/1689644/b7af3c19ae211442e0ec76734dc107ae8e4c6a60/resource.tar.gz#test.test_blocks-date_add_interval_scalar--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_add_interval_scalar--Peephole]": [
+        {
+            "checksum": "04e6dd8cf9ff3d0880a802894fe63790",
+            "size": 5464,
+            "uri": "https://{canondata_backend}/1889210/8d5c13cbda8afcad329454d1d2ddac1ca42ab013/resource.tar.gz#test.test_blocks-date_add_interval_scalar--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_add_interval_scalar--Plan]": [
+        {
+            "checksum": "c28e45d0f81615fe6344f89c392cdcdc",
+            "size": 7174,
+            "uri": "https://{canondata_backend}/1689644/b7af3c19ae211442e0ec76734dc107ae8e4c6a60/resource.tar.gz#test.test_blocks-date_add_interval_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_add_interval_scalar--Results]": [
+        {
+            "checksum": "ba641811a906bac4eb30bc1937fb955e",
+            "size": 18944,
+            "uri": "https://{canondata_backend}/1847551/a263d5ba22b47de694e729328d55c3a72ff6e5dd/resource.tar.gz#test.test_blocks-date_add_interval_scalar--Results_/results.txt"
         }
     ],
     "test.test[blocks-if--Debug]": [
@@ -489,6 +517,34 @@
             "checksum": "a5abbe9bdba751baae4b20a204496613",
             "size": 7090,
             "uri": "https://{canondata_backend}/937458/4ef5c22fa3a7e5fd4e0ef2192cee531d67d22319/resource.tar.gz#test.test_blocks-if--Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-interval_add_date--Debug]": [
+        {
+            "checksum": "58f774fab68002afff0de34e694ec2b6",
+            "size": 6001,
+            "uri": "https://{canondata_backend}/1689644/b7af3c19ae211442e0ec76734dc107ae8e4c6a60/resource.tar.gz#test.test_blocks-interval_add_date--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-interval_add_date--Peephole]": [
+        {
+            "checksum": "cf1131efd6037ebbfa9afdc28f4322d0",
+            "size": 6208,
+            "uri": "https://{canondata_backend}/1689644/b7af3c19ae211442e0ec76734dc107ae8e4c6a60/resource.tar.gz#test.test_blocks-interval_add_date--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-interval_add_date--Plan]": [
+        {
+            "checksum": "e23af43a05bd72ba0d384f4d97897543",
+            "size": 7241,
+            "uri": "https://{canondata_backend}/1847551/a263d5ba22b47de694e729328d55c3a72ff6e5dd/resource.tar.gz#test.test_blocks-interval_add_date--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-interval_add_date--Results]": [
+        {
+            "checksum": "71bee6f8ae9a9a945d22f368ca4efa05",
+            "size": 6450,
+            "uri": "https://{canondata_backend}/1817427/b4ff719d2d246a010e5e5c4e97b4b63a1628b78b/resource.tar.gz#test.test_blocks-interval_add_date--Results_/results.txt"
         }
     ],
     "test.test[blocks-sort_one_asc--Debug]": [

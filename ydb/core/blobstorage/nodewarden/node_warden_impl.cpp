@@ -335,7 +335,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
             } else {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk, TDuration::Zero()); // restart actor after successful wiping
+                StartLocalVDiskActor(vdisk); // restart actor after successful wiping
                 SendDiskMetrics(false);
             }
             break;

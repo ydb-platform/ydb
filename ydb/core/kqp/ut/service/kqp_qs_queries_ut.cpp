@@ -235,6 +235,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+        settings.PoolId("sample_pool_id");
+
+        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+        auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        CheckQueryResult(result);
+    }
+
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
         ui32 totalRows = 0;
         ui32 totalBatches = 0;

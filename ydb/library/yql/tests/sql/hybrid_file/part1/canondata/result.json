@@ -573,6 +573,20 @@
             "uri": "https://{canondata_backend}/1889210/b0118a685beb1cfba4436799d514f392b983c379/resource.tar.gz#test.test_blocks-combine_hashed_max--Plan_/plan.txt"
         }
     ],
+    "test.test[blocks-date_less_or_equal--Debug]": [
+        {
+            "checksum": "2f262f60ebb04476fa9f8c49e6630661",
+            "size": 13501,
+            "uri": "https://{canondata_backend}/1936947/3efb1e2970a90e550620af4f90be091b3ead7d37/resource.tar.gz#test.test_blocks-date_less_or_equal--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-date_less_or_equal--Plan]": [
+        {
+            "checksum": "0ea9da0a9e9a97a950c7e51a0d8312a9",
+            "size": 8094,
+            "uri": "https://{canondata_backend}/1936947/3efb1e2970a90e550620af4f90be091b3ead7d37/resource.tar.gz#test.test_blocks-date_less_or_equal--Plan_/plan.txt"
+        }
+    ],
     "test.test[blocks-distinct_mixed_keys--Debug]": [
         {
             "checksum": "8a1c4eaf681e49661dbe802d96a52122",
@@ -599,6 +613,20 @@
             "checksum": "dec608820e749ec64885ad0efcc7a75c",
             "size": 13898,
             "uri": "https://{canondata_backend}/1889210/b0118a685beb1cfba4436799d514f392b983c379/resource.tar.gz#test.test_blocks-distinct_opt_state_all--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-interval_add_interval_scalar--Debug]": [
+        {
+            "checksum": "f640f3efe8daee3adb1ebf7cfe9989da",
+            "size": 3053,
+            "uri": "https://{canondata_backend}/1777230/9a1233b6a0655fde22e405e6269b927cb019b6d1/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-interval_add_interval_scalar--Plan]": [
+        {
+            "checksum": "83346add489df45fa08e15e22f3014ae",
+            "size": 4323,
+            "uri": "https://{canondata_backend}/1925821/ecd9dd14fd5c368a780124aeaab181143df1a49c/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Plan_/plan.txt"
         }
     ],
     "test.test[blocks-lazy_nonstrict_nested--Debug]": [

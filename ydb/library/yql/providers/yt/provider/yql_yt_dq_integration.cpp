@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <ydb/library/yql/providers/yt/proto/source.pb.h>
 
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
@@ -645,6 +646,28 @@ public:
         }
         return read;
     }
+
+    void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
+        const TDqLookupSourceWrap wrap(&node);
+        auto table = wrap.Input().Cast<TYtTable>();
+        TYtTableBaseInfo::TPtr tableInfo{TYtTableBaseInfo::Parse(table)};
+        auto codecSpec = tableInfo->GetCodecSpecNode({});
+        TString rowSpec = NodeToYsonString(codecSpec, NYT::NYson::EYsonFormat::Text);
+        
+        NYt::NSource::TLookupSource source;
+        source.SetCluster(table.Cluster().StringValue());
+        source.SetTable(table.Name().StringValue());
+        source.SetRowSpec(rowSpec);
+        YQL_CLOG(INFO, ProviderYt)
+            << "Filling lookup source settings"
+            << ": cluster: " << source.cluster()
+            << ", table: " << source.table()
+            << ", RowSpec: " << rowSpec
+        ;
+        settings.PackFrom(source);
+        sourceType = "yt";
+    }
+
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {

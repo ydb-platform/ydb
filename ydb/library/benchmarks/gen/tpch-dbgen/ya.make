@@ -1,7 +1,5 @@
 LIBRARY()
 
-IF(LINUX OR OS_MACOS)
-
 CONLYFLAGS(
     -Wno-deprecated-non-prototype
     -Wno-format
@@ -11,9 +9,11 @@ CONLYFLAGS(
     -Wno-unused-but-set-variable
     -Wno-unused-parameter
     -Wno-unused-variable
+    -Wno-void-pointer-to-int-cast
+    -Wno-int-to-void-pointer-cast
 )
 
-IF (OS_MACOS)
+IF (OS_MACOS OR OS_DARWIN)
     CONLYFLAGS(-D_POSIX_SOURCE)
 ENDIF()
 
@@ -32,5 +32,4 @@ SRCS(
     rng64.c
 )
 
-ENDIF()
 END()

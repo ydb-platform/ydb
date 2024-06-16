@@ -67,12 +67,11 @@ TQueryBase::TEvQueryBasePrivate::TEvDataQueryResult::TEvDataQueryResult(const Ta
     response.operation().result().UnpackTo(&Result);
 }
 
-TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultPart(const Query::ExecuteQueryResponsePart& response)
+TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultPart(Query::ExecuteQueryResponsePart&& response)
     : Status(response.status())
     , Issues(IssuesFromProtoMessage(response))
-    , TxMeta(response.tx_meta())
     , ResultSetId(response.result_set_index())
-    , ResultSet(response.result_set())
+    , ResultSet(std::move(response.result_set()))
 {}
 
 TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(const Table::CreateSessionResponse& response)

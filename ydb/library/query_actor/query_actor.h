@@ -75,11 +75,10 @@ private:
         };
 
         struct TEvStreamQueryResultPart : public NActors::TEventLocal<TEvStreamQueryResultPart, EvStreamQueryResultPart> {
-            TEvStreamQueryResultPart(const Ydb::Query::ExecuteQueryResponsePart& response);
+            TEvStreamQueryResultPart(Ydb::Query::ExecuteQueryResponsePart&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
-            const Ydb::Query::TransactionMeta TxMeta;
             const i64 ResultSetId;
             Ydb::ResultSet ResultSet;
         };
@@ -168,8 +167,8 @@ private:
 
     template <class TProto, class TEvent>
     std::function<void(const TProto&)> GetOperationCallback() const {
-        return [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProto& result) {
-            actorSystem->Send(selfId, new TEvent(result));
+        return [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](TProto&& result) {
+            actorSystem->Send(selfId, new TEvent(std::move(result)));
         };
     }
 

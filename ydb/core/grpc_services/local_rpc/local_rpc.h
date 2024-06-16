@@ -340,7 +340,7 @@ TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<vo
 template <typename TResponsePart>
 class TStreamReadProcessor : public NGRpcService::NLocalGrpc::TContextBase {
     using TBase = NGRpcService::NLocalGrpc::TContextBase;
-    using TOnResponseCallback = std::function<void(const TResponsePart&)>;
+    using TOnResponseCallback = std::function<void(TResponsePart&&)>;
 
 public:
     using TPtr = TIntrusivePtr<TStreamReadProcessor>;

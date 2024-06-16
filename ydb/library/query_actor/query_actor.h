@@ -129,7 +129,7 @@ protected:
     void Finish();
 
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
-    void RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr);
+    void RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, ui64 channelBufferSize = 60_MB);
     void CancelStreamQuery();
     void CommitTransaction();
 

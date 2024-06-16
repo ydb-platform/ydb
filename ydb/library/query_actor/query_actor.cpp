@@ -251,7 +251,7 @@ void TQueryBase::CallOnQueryResult() {
 
 //// TQueryBase stream query operations
 
-void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params) {
+void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params, ui64 channelBufferSize) {
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Query::ExecuteQueryRequest, Query::ExecuteQueryResponsePart>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -265,7 +265,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), 60_MB);
+    auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), channelBufferSize);
     StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &NQuery::DoExecuteQuery, true);
     ReadNextStreamPart();
 }

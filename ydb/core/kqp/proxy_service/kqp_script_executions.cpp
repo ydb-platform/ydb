@@ -2092,7 +2092,7 @@ public:
                 .Uint64(RowsLimit ? RowsLimit + 1 : std::numeric_limits<ui64>::max())
                 .Build();
 
-        RunStreamQuery(sql, &params);
+        RunStreamQuery(sql, &params, SizeLimit ? SizeLimit : 60_MB);
         SetQueryResultHandler(&TGetScriptExecutionResultQueryActor::OnQueryResult, TStringBuilder() << "Fetch results for offset " << Offset);
     }
 

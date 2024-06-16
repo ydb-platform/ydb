@@ -11,6 +11,8 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     util.cpp
+    source_context.cpp
+
 )
 
 PEERDIR(
@@ -27,9 +29,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         -DARCADIA_BUILD -DUSE_PARQUET
     )
 
-    SRCS(
-        source_context.cpp
-    )
+
 
 ENDIF()
 

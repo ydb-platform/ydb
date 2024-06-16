@@ -286,7 +286,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     NumberRequests++;
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
-    LOG_D("TEvStreamQueryResultPart " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+    LOG_D("TEvStreamQueryResultPart " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         try {
@@ -320,6 +320,8 @@ void TQueryBase::CancelStreamQuery() {
 }
 
 void TQueryBase::FinishStreamRequest() {
+    Y_ABORT_UNLESS(StreamQueryProcessor && StreamQueryProcessor->IsFinished());
+
     StreamQueryProcessor = nullptr;
     try {
         (this->*QueryResultHandler)();
@@ -376,7 +378,7 @@ void TQueryBase::Finish(StatusIds::StatusCode status, TIssues&& issues, bool rol
 //// TQueryBase transactions operations
 
 void TQueryBase::CommitTransaction() {
-    using TEvCommitTransactionRequest = TGrpcRequestOperationCall<Table::CommitTransactionRequest, Table::CommitTransactionResponse>;
+    using TCommitTransactionRequest = TGrpcRequestOperationCall<Table::CommitTransactionRequest, Table::CommitTransactionResponse>;
 
     Y_ABORT_UNLESS(SessionId);
     Y_ABORT_UNLESS(TxId);
@@ -386,7 +388,7 @@ void TQueryBase::CommitTransaction() {
     Table::CommitTransactionRequest request;
     request.set_session_id(SessionId);
     request.set_tx_id(TxId);
-    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(DoLocalRpc<TEvCommitTransactionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(DoLocalRpc<TCommitTransactionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {

@@ -27,8 +27,8 @@ def main():
         ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)]
     )
    
-    size_stripped_bytes=binary_size_stripped_bytes.decode("utf-8"),
-    size_bytes=binary_size_bytes.decode("utf-8"),
+    size_stripped_bytes=int(binary_size_stripped_bytes.decode("utf-8")),
+    size_bytes=int(binary_size_bytes.decode("utf-8")),
     print(f'sizes:{size_bytes}:{size_stripped_bytes}')
     return 0
 

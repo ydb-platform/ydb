@@ -150,7 +150,7 @@ runs:
         read -ra main_sizes_result <<< "$result"
         read -ra current_sizes_result <<< "$result2"
 
-        if [ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]; then
+        if [[ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]]; then
 
           main_github_sha=${main_sizes_result[1]} 
           main_git_commit_time=${main_sizes_result[2]} 

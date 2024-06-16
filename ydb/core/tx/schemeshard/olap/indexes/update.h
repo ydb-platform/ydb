@@ -11,6 +11,7 @@ namespace NKikimr::NSchemeShard {
     private:
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(TString, TypeName);
+        YDB_READONLY_DEF(std::optional<TString>, StorageId);
     protected:
         NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
     public:
@@ -20,7 +21,7 @@ namespace NKikimr::NSchemeShard {
             return IndexConstructor;
         }
 
-        void DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
+        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
         void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
     };
 

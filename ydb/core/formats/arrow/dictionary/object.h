@@ -13,7 +13,9 @@ private:
     TEncodingSettings() = default;
     friend class TEncodingDiff;
 public:
-
+    bool IsEqualTo(const TEncodingSettings& item) const {
+        return Enabled == item.Enabled;
+    }
     NTransformation::ITransformer::TPtr BuildEncoder() const;
     NTransformation::ITransformer::TPtr BuildDecoder() const;
 
@@ -21,7 +23,7 @@ public:
     static TConclusion<TEncodingSettings> BuildFromProto(const NKikimrSchemeOp::TDictionaryEncodingSettings& proto) {
         TEncodingSettings result;
         auto resultParse = result.DeserializeFromProto(proto);
-        if (!resultParse) {
+        if (resultParse.IsFail()) {
             return resultParse;
         }
         return result;

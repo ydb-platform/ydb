@@ -12,11 +12,16 @@ namespace NKikimr::NColumnShard {
         using TBase::TBase;
 
         virtual bool Parse(const TString& data) override {
-            Y_UNUSED(data);
-            return true;
+            NKikimrTxColumnShard::TCommitWriteTxBody commitTxBody;
+            if (!commitTxBody.ParseFromString(data)) {
+                return false;
+            }
+            LockId = commitTxBody.GetLockId();
+            return !!LockId;
         }
 
-        TProposeResult Propose(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/, bool /*proposed*/) const override {
+        TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool /*proposed*/) const override {
+            owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
             return TProposeResult();
         }
 
@@ -25,7 +30,7 @@ namespace NKikimr::NColumnShard {
         }
 
         virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(owner.TabletID(), GetTxId());
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;
         }
@@ -33,6 +38,8 @@ namespace NKikimr::NColumnShard {
         virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             return owner.OperationsManager->AbortTransaction(owner, GetTxId(), txc);
         }
+    private:
+        ui64 LockId = 0;
     };
 
 }

@@ -102,6 +102,7 @@ private:
     bool AdvancedMode = false;
     bool Recursive = false;
     bool FromNewLine = false;
+    bool Multithread = false;
 };
 
 class TCommandPermissions : public TClientCommandTree {

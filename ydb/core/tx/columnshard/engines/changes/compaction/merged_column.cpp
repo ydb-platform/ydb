@@ -3,7 +3,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 void TMergedColumn::AppendBlob(const TString& data, const TColumnRecord& columnChunk) {
-    RecordsCount += columnChunk.GetMeta().GetNumRowsVerified();
+    RecordsCount += columnChunk.GetMeta().GetNumRows();
     ui32 remained;
     std::shared_ptr<arrow::Array> dataArray = Portions.back().AppendBlob(data, columnChunk, remained);
     while (remained) {

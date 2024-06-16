@@ -1,6 +1,5 @@
 #pragma once
 
-#include "blob_manager.h"
 #include "blobs_action/abstract/gc.h"
 #include "defs.h"
 
@@ -36,6 +35,11 @@ struct TEvPrivate {
 
         EvWritingAddDataToBuffer,
         EvWritingFlushBuffer,
+
+        EvExportWritingFinished,
+        EvExportWritingFailed,
+        EvExportCursorSaved,
+        EvExportSaveCursor,
 
         EvEnd
     };
@@ -76,7 +80,7 @@ struct TEvPrivate {
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
-        NOlap::TVersionedIndex IndexInfo;
+        std::shared_ptr<NOlap::TVersionedIndex> IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         bool GranuleCompaction{false};
         TUsage ResourceUsage;
@@ -84,10 +88,10 @@ struct TEvPrivate {
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
 
-        TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
+        TEvWriteIndex(const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
             bool cacheData)
-            : IndexInfo(std::move(indexInfo))
+            : IndexInfo(indexInfo)
             , IndexChanges(indexChanges)
             , CacheData(cacheData)
         {

@@ -26,9 +26,10 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             ACFL_DEBUG("event", "TEvWriteIndex")("count", ev->Get()->IndexChanges->GetWritePortionsCount());
             AFL_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
 
-            const bool needDraftTransaction = ev->Get()->IndexChanges->GetBlobsAction().NeedDraftWritingTransaction();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
-            if (needDraftTransaction) {
+            const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
+            AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
+            if (*needDraftTransaction) {
                 Execute(new TTxWriteDraft(this, writeController));
             } else {
                 ctx.Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));

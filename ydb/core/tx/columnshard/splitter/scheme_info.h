@@ -8,11 +8,15 @@
 namespace NKikimr::NOlap {
 
 class ISchemaDetailInfo {
+private:
+    YDB_ACCESSOR_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, OverrideSerializer);
+protected:
+    virtual TColumnSaver DoGetColumnSaver(const ui32 columnId) const = 0;
 public:
     using TPtr = std::shared_ptr<ISchemaDetailInfo>;
     virtual ~ISchemaDetailInfo() = default;
     virtual ui32 GetColumnId(const std::string& fieldName) const = 0;
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
+    TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const = 0;
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const = 0;
     virtual bool NeedMinMaxForColumn(const ui32 columnId) const = 0;

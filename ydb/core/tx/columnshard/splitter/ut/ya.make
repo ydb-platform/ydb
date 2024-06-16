@@ -8,12 +8,16 @@ PEERDIR(
 
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/common
+    ydb/core/tx/columnshard/blobs_action
+    ydb/core/tx/columnshard/data_sharing
     ydb/core/kqp/common
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf
     ydb/core/persqueue
     ydb/core/kqp/session_actor
     ydb/core/tx/tx_proxy
+    ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx
     ydb/core/mind
     ydb/library/yql/minikql/comp_nodes/llvm14

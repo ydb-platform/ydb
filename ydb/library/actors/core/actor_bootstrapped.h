@@ -16,7 +16,7 @@ namespace NActors {
         }
 
         STFUNC(StateBootstrap) {
-            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message");
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message: %s", ev->GetTypeName().data());
             using T = decltype(&TDerived::Bootstrap);
             TDerived& self = static_cast<TDerived&>(*this);
             if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {

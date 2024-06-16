@@ -27,10 +27,14 @@ def main():
         ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)]
     )
    
-    size_stripped_bytes=int(binary_size_stripped_bytes.decode("utf-8")),
-    size_bytes=int(binary_size_bytes.decode("utf-8")),
-    print(f'sizes:{size_bytes}:{size_stripped_bytes}')
-    return 0
+    size_stripped_bytes=int(binary_size_stripped_bytes.decode("utf-8"))
+    size_bytes=int(binary_size_bytes.decode("utf-8"))
+    if binary_size_bytes and binary_size_stripped_bytes:
+        print(f'sizes:{size_bytes}:{size_stripped_bytes}')
+        return 0
+    else:
+        print(f'Cant get build size')
+        return 1
 
 if __name__ == "__main__":
     exit(main())

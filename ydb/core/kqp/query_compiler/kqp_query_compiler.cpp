@@ -1072,6 +1072,16 @@ private:
                 settingsProto.SetInconsistentTx(true);
             }
 
+            if (settings.Mode().Cast().StringValue() == "replace") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
+            } else if (settings.Mode().Cast().StringValue() == "upsert") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+            } else if (settings.Mode().Cast().StringValue() == "insert") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+            } else if (settings.Mode().Cast().StringValue() == "delete") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+            }
+
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {
             YQL_ENSURE(false, "Unsupported sink type");

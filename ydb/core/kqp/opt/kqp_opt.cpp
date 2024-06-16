@@ -82,6 +82,12 @@ bool IsKqpEffectsStage(const TDqStageBase& stage) {
     return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
 }
 
+bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
+    return kqpCtx.IsGenericQuery()
+        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
+        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
+}
+
 TExprBase ProjectColumns(const TExprBase& input, const TVector<TString>& columnNames, TExprContext& ctx) {
     return ProjectColumnsInternal(input, columnNames, ctx);
 }

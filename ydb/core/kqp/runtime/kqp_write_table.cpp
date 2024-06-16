@@ -72,16 +72,22 @@ std::vector<ui32> BuildWriteIndexKeyFirst(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     const auto& columns = schemeEntry.Columns;
 
+    THashSet<ui32> inputColumnsNames;
+    for (const auto& column : inputColumns) {
+        inputColumnsNames.insert(column.GetId());
+    }
+
     THashMap<ui32, ui32> writeColumnIdToIndex;
     {
         for (const auto& [index, column] : columns) {
             if (column.KeyOrder >= 0) {
                 writeColumnIdToIndex[column.Id] = column.KeyOrder;
+                YQL_ENSURE(inputColumnsNames.contains(column.Id));
             }
         }
         ui32 number = writeColumnIdToIndex.size();
         for (const auto& [index, column] : columns) {
-            if (column.KeyOrder < 0) {
+            if (column.KeyOrder < 0 && inputColumnsNames.contains(column.Id)) {
                 writeColumnIdToIndex[column.Id] = number++;
             }
         }

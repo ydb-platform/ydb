@@ -243,6 +243,7 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const 
                     .InconsistentWrite(settings.AllowInconsistentWrites
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
+                    .Mode(ctx.NewAtom(expr.Pos(), "upsert"))
                     .Settings()
                         .Build()
                     .Build()
@@ -286,9 +287,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
-    sinkEffect = kqpCtx.IsGenericQuery()
-        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
-        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
+    sinkEffect = NeedSinks(table, kqpCtx);
 
     TKqpUpsertRowsSettings settings;
     if (node.Settings()) {
@@ -337,6 +336,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .InconsistentWrite(settings.AllowInconsistentWrites
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
+                .Mode(ctx.NewAtom(node.Pos(), "upsert"))
                 .Settings()
                     .Build()
                 .Build()

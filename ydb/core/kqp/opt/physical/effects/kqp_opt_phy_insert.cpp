@@ -127,6 +127,8 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
+    //const bool pipeline = NeedSinks(table, kqpCtx) && abortOnError;
+
     const static TMaybe<THashSet<TStringBuf>> empty;
     auto insertRows = MakeConditionalInsertRows(insert.Input(), table, empty, abortOnError, insert.Pos(), ctx);
     if (!insertRows) {

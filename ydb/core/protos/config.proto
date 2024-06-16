@@ -1012,6 +1012,32 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
 }
 
+message TWorkloadManagerConfig {
+    message TMemoryLimit {
+        optional uint64 Bytes = 1 [default = 0]; // 0 = infinity
+        optional double Percentage = 2 [default = 100]; // Percentage from overall memory limit
+    }
+
+    message TCommonLimits {
+        optional TMemoryLimit MemoryLimitPerNode = 1;
+
+        optional double VCpuLimitPerNode = 2 [default = 0]; // 0 = infinity
+    }
+
+    message TQueueConfig {
+        optional uint64 ActiveCountLimit = 1 [default = 0]; // 0 = infinity
+        optional uint64 OverallCountLimit = 2 [default = 1000]; // 0 = infinity
+        optional uint64 WaitTimeoutSeconds = 3 [default = 86400]; // default = 1 day
+
+        optional TCommonLimits Query = 4;
+        optional TCommonLimits Overall = 5;
+
+        optional string ACL = 6;
+    }
+
+    map<string, TQueueConfig> Queues = 1; // mapping of QueueId / QueueConfig
+}
+
 // Config describes immediate controls and allows
 // to manage their values (not variety and limits)
 // via CMS. All fields should be either [u]int64 or
@@ -1880,6 +1906,7 @@ message TAppConfig {
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
+    optional TWorkloadManagerConfig WorkloadManagerConfig = 81;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

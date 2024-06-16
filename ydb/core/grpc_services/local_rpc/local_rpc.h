@@ -343,8 +343,6 @@ class TStreamReadProcessor : public NGRpcService::NLocalGrpc::TContextBase {
     using TOnResponseCallback = std::function<void(TResponsePart&&)>;
 
 public:
-    using TPtr = TIntrusivePtr<TStreamReadProcessor>;
-
     TStreamReadProcessor(std::shared_ptr<NGRpcService::IRequestCtx> baseRequest)
         : TBase(std::move(baseRequest))
     {}
@@ -469,13 +467,16 @@ private:
     TOnResponseCallback OnResponseCallback;
 };
 
+template <typename TResponsePart>
+using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
+
 using TFacilityProviderPtr = std::shared_ptr<NGRpcService::IFacilityProvider>;
 TFacilityProviderPtr CreateFacilityProviderSameMailbox(TActorContext actorContext, ui64 channelBufferSize);
 
 using TRpcActorCreator = std::function<void((std::unique_ptr<NGRpcService::IRequestNoOpCtx> p, const NGRpcService::IFacilityProvider& f))>;
 
 template <typename TRpc>
-TStreamReadProcessor<typename TRpc::TResponse>::TPtr DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
@@ -488,7 +489,7 @@ TStreamReadProcessor<typename TRpc::TResponse>::TPtr DoLocalRpcStreamSameMailbox
 }
 
 template <typename TRpc>
-TStreamReadProcessor<typename TRpc::TResponse>::TPtr DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
     return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), std::move(facilityProvider), std::move(actorCreator), internalCall);
 }
 

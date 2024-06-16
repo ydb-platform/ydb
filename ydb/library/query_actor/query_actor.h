@@ -221,7 +221,7 @@ protected:
 private:
     TQueryResultHandler QueryResultHandler = &TQueryBase::CallOnQueryResult;
     TStreamResultHandler StreamResultHandler = &TQueryBase::CallOnStreamResult;
-    NRpcService::TStreamReadProcessor<Ydb::Query::ExecuteQueryResponsePart>::TPtr StreamQueryProcessor;
+    NRpcService::TStreamReadProcessorPtr<Ydb::Query::ExecuteQueryResponsePart> StreamQueryProcessor;
 
     NMonitoring::TDynamicCounters::TCounterPtr FinishOk;
     NMonitoring::TDynamicCounters::TCounterPtr FinishError;

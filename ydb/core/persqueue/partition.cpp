@@ -1840,6 +1840,36 @@ void TPartition::RunPersist() {
         AddCmdWriteConfig(PersistRequest->Record);
     }
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        // Apply counters
+        for (const auto& writeInfo : WriteInfosApplied) {
+            // writeTimeLag
+            if (InputTimeLag) {
+                writeInfo->InputLags->UpdateTimestamp(ctx.Now().MilliSeconds());
+                for (const auto& values : writeInfo->InputLags->GetValues()) {
+                    if (values.second)
+                        InputTimeLag->IncFor(std::ceil(values.first), values.second);
+                }
+            }
+            //MessageSize
+            auto i = 0u;
+            for (auto range : MessageSize.GetRanges()) {
+                if (i >= writeInfo->MessagesSizes.size()) {
+                    break;
+                }
+                MessageSize.IncFor(range, writeInfo->MessagesSizes[i++]);
+            }
+
+            // Bytes Written
+            BytesWrittenTotal.Inc(writeInfo->BytesWrittenTotal);
+            BytesWrittenGrpc.Inc(writeInfo->BytesWrittenGrpc);
+            BytesWrittenUncompressed.Inc(writeInfo->BytesWrittenUncompressed);
+            // Messages written
+            MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
+            MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
+        }
+        WriteInfosApplied.clear();
+        //Done with counters.
+
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
         KVWriteInProgress = true;
     } else {
@@ -2192,34 +2222,6 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                                  ChangeConfig->TopicConverter,
                                  ctx);
     }
-
-    // Apply counters
-    for (const auto& writeInfo : WriteInfosApplied) {
-        // writeTimeLag
-        auto finalLag = TMultiBucketCounter(std::move(*writeInfo->InputLags), ctx.Now().MilliSeconds());
-        for (const auto& values : finalLag.GetValues()) {
-            if (InputTimeLag) {
-                InputTimeLag->IncFor(std::ceil(values.first), values.second);
-            }
-        }
-        //MessageSize
-        auto i = 0u;
-        for (auto range : MessageSize.GetRanges()) {
-            if (i >= writeInfo->MessagesSizes.size()) {
-                break;
-            }
-            MessageSize.IncFor(range, writeInfo->MessagesSizes[i++]);
-        }
-
-        // Bytes Written
-        BytesWrittenTotal.Inc(writeInfo->BytesWrittenTotal);
-        BytesWrittenGrpc.Inc(writeInfo->BytesWrittenGrpc);
-        BytesWrittenUncompressed.Inc(writeInfo->BytesWrittenUncompressed);
-        // Messages written
-        MsgsWrittenTotal.Inc(writeInfo->MessagesWrittenTotal);
-        MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
-    }
-    WriteInfosApplied.clear();
 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {

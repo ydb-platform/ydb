@@ -104,16 +104,25 @@ public:
 
 class TMultiBucketCounter {
 private:
-    TVector<ui64> Buckets;
-    TVector<double> AvgValues;
-    TVector<ui64> ValuesCount;
+    struct TBucket {
+        ui64 Range;
+        double AvgValue = 0;
+        ui64 ValuesCount = 0;
+        TBucket() = default;
+        explicit TBucket(ui64 range)
+            : Range(range)
+            , AvgValue(0)
+            , ValuesCount(0)
+        {}
+    };
+    TVector<TBucket> Buckets;
     ui64 TimeReference;
 
     ui64 InsertWithHint(double value, ui64 count, ui64 hint) noexcept;
 
 public:
-    TMultiBucketCounter(TMultiBucketCounter&& other, ui64 newTimeReference);
     TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
+    void UpdateTimestamp(ui64 newTimeReference);
     void Insert(i64 value, ui64 count) noexcept;
     TVector<std::pair<double, ui64>> GetValues() const noexcept;
 

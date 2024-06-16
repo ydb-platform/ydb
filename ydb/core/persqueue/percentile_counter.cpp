@@ -204,57 +204,58 @@ TPartitionHistogramWrapper::operator bool() const {
 
 
 ui64 TMultiBucketCounter::InsertWithHint(double value, ui64 count, ui64 hint) noexcept {
+    if (!count) {
+        return hint;
+    }
     while (hint < Buckets.size()) {
-        if (Buckets[hint] > value) {
+        if (Buckets[hint].Range < value) {
+            ++hint;
+            continue;
+        } else {
             break;
         }
-        ++hint;
     }
-    auto newAvg = (AvgValues[hint] * ValuesCount[hint] + count * value) / (ValuesCount[hint] + count);
+    auto& bucket = Buckets[hint];
+    auto newAvg = (bucket.AvgValue * bucket.ValuesCount + count * value) / (bucket.ValuesCount + count);
 
-    ValuesCount[hint] += count;
-    AvgValues[hint] = newAvg;
+    bucket.ValuesCount += count;
+    bucket.AvgValue = newAvg;
     return hint;
 }
 
-TMultiBucketCounter::TMultiBucketCounter(TMultiBucketCounter&& other, ui64 newTimeRef)
-    : TimeReference(newTimeRef)
+void TMultiBucketCounter::UpdateTimestamp(ui64 newTimeRef)
 {
-    Buckets = std::move(other.Buckets);
-    ValuesCount.resize(Buckets.size(), 0);
-    AvgValues.resize(Buckets.size(), 0.0);
-
-    ui64 timeDiff = 0;
-    if (newTimeRef > other.TimeReference) {
-        timeDiff = newTimeRef - other.TimeReference;
+    if (newTimeRef <= TimeReference) { // Cannot update in the past
+        return;
+    }
+    ui64 timeDiff = newTimeRef - TimeReference;
+    auto oldBuckets = std::move(Buckets);
+    Buckets = TVector<TBucket>(oldBuckets.size());
+    for (auto i = 0u; i < Buckets.size(); ++i) {
+        Buckets[i].Range = oldBuckets[i].Range;
     }
     ui64 hint = 0;
-    for (ui64 i = 0; i < Buckets.size(); ++i) {
-        if (other.ValuesCount[i])
-            hint = InsertWithHint(other.AvgValues[i] + timeDiff, other.ValuesCount[i], hint);
+    for (const auto& b : oldBuckets) {
+        hint = InsertWithHint(b.AvgValue + timeDiff, b.ValuesCount, hint);
     }
-
+    TimeReference = newTimeRef;
 }
 
 TMultiBucketCounter::TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef)
-    : TimeReference(timeRef)
+    : Buckets(buckets.size() * multiplier + 1)
+    , TimeReference(timeRef)
 {
-
-    Buckets.resize(buckets.size() * multiplier + 1);
-    auto prev = 0u;
+    ui64 prev = 0;
     ui64 i = 0;
     for (auto b : buckets) {
         ui64 step = (b - prev) / multiplier;
         for (auto j = 1u; j < multiplier; ++j) {
-            Buckets[i++] = prev + j * step;
+            Buckets[i++].Range = prev + j * step;
         }
-        Buckets[i++] = b;
+        Buckets[i++].Range = b;
         prev = b;
     }
-    Buckets[i++] = std::numeric_limits<ui64>::max();
-    AvgValues.resize(Buckets.size(), 0.0);
-    ValuesCount.resize(Buckets.size(), 0);
-
+    Buckets[i++].Range = std::numeric_limits<ui64>::max();
 }
 
 void TMultiBucketCounter::Insert(i64 value, ui64 count) noexcept {
@@ -266,7 +267,7 @@ void TMultiBucketCounter::Insert(i64 value, ui64 count) noexcept {
     ui64 begin = 0, end = Buckets.size() - 1;
     while (end - begin > 10) {
         ui64 median = begin + (end - begin) / 2;
-        if (Buckets[median] >= (ui64)value) {
+        if (Buckets[median].Range >= (ui64)value) {
             end = median;
         } else {
             begin = median;
@@ -277,9 +278,8 @@ void TMultiBucketCounter::Insert(i64 value, ui64 count) noexcept {
 
 TVector<std::pair<double, ui64>> TMultiBucketCounter::GetValues() const noexcept {
     TVector<std::pair<double, ui64>> result;
-    for (auto i = 0u; i < ValuesCount.size(); ++i) {
-        if (ValuesCount[i] != 0)
-            result.push_back(std::make_pair(AvgValues[i], ValuesCount[i]));
+    for (const auto b: Buckets) {
+        result.push_back(std::make_pair(b.AvgValue, b.ValuesCount));
     }
     return result;
 }

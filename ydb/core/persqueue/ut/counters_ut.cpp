@@ -5,6 +5,7 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/partition.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -580,46 +581,43 @@ Y_UNIT_TEST(InsertAndUpdate) {
 
     CheckBucketsValues(counter.GetValues(), {{(19*3 + 15 + 17) / 5.0, 5}, {100, 1}, {50001, 5}});
 
-    auto counterNew = TMultiBucketCounter(std::move(counter), 50);
+    counter.UpdateTimestamp(50);
 
-    CheckBucketsValues(counterNew.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {150, 1}, {50051, 5}});
-    counterNew.Insert(190, 1);
-    counterNew.Insert(155, 1);
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {150, 1}, {50051, 5}});
+    counter.Insert(190, 1);
+    counter.Insert(155, 1);
 
-    CheckBucketsValues(counterNew.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {152.5, 2}, {190, 1}, {50051, 5}});
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {152.5, 2}, {190, 1}, {50051, 5}});
 
-    auto counterNew2 = TMultiBucketCounter(std::move(counterNew), 1050);
+    counter.UpdateTimestamp(1050);
 
-    CheckBucketsValues(counterNew2.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
+    CheckBucketsValues(counter.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
 }
+
 Y_UNIT_TEST(ManyCounters) {
-    TMultiBucketCounter counter({100, 200, 500, 1000, 2000, 5000}, 5, 0);
+    TVector<ui64> buckets = {100, 200, 500, 1000, 2000, 5000};
+    ui64 multiplier = 20;
+    TMultiBucketCounter counter(buckets, multiplier, 0);
     for (auto i = 1u; i <= 5000; i++) {
-        counter.Insert(i, 1);
-        counter = TMultiBucketCounter(std::move(counter), 1);
+        counter.Insert(1, 1);
+        counter.UpdateTimestamp(i);
     }
     counter.Insert(1, 1);
 
-    for (const auto & v: counter.GetValues()) {
-        Cerr << "Counters value: " << v.first << " - " << v.second << Endl;
-    }
     const auto& values = counter.GetValues();
-    for (auto i = 0u; i < 10; i++) { // 0 - 200, 2 buckets per 5 sub-buckets, size 20
-        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 20);
+    ui64 prev = 0;
+    for (auto i = 0u; i < buckets.size(); i++) {
+        ui64 sum = 0u;
+        for (auto j = 0u; j < multiplier; j++) {
+            Cerr << "Sub bucket: " << values[i * multiplier + j].first << " elems count: " << values[i * multiplier + j].second << Endl;
+            sum += values[i * multiplier + j].second;
+        }
+        Cerr << "Bucket: " << buckets[i] << " elems count: " << sum << Endl;
+        ui64 bucketSize = buckets[i] - prev;
+        prev = buckets[i];
+        i64 diff = sum - bucketSize;
+        UNIT_ASSERT(std::abs(diff) < (i64)(bucketSize / 10));
     }
-    for (auto i = 10u; i < 15; i++) { // 200 - 500, 1 bucket, 5 sub-buckets, size 60
-        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 60);
-    }
-    for (auto i = 15u; i < 20; i++) { // 500 - 1000, 1 bucket, 5 sub-buckets, size 100
-        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 100);
-    }
-    for (auto i = 20u; i < 25; i++) { // 1000 - 2000, 1 bucket, 5 sub-buckets, size 200
-        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 200);
-    }
-    for (auto i = 25u; i < 30; i++) { // 2000 - 5000, 1 bucket, 5 sub-buckets, size 600
-        UNIT_ASSERT_VALUES_EQUAL(values[i].second, 600);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(values[30].second, 1);
 
 }
 

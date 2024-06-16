@@ -6,7 +6,6 @@ namespace NKikimr::NPQ {
 
 static const ui32 LEVEL0 = 32;
 static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
-static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 5;
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);

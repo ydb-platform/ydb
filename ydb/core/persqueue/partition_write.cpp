@@ -525,7 +525,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     );
 
     if (SupportivePartitionTimeLag) {
-        SupportivePartitionTimeLag.Reset(new TMultiBucketCounter(std::move(*SupportivePartitionTimeLag), now.MilliSeconds()));
+        SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
     if (SplitMergeEnabled(Config)) {
         SplitMergeAvgWriteBytes->Update(WriteNewSizeFull, now);

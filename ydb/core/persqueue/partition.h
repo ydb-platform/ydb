@@ -28,6 +28,7 @@
 namespace NKikimr::NPQ {
 
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
+static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 

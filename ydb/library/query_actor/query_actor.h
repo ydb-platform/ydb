@@ -67,7 +67,7 @@ private:
 
         // Events
         struct TEvDataQueryResult : public NActors::TEventLocal<TEvDataQueryResult, EvDataQueryResult> {
-            TEvDataQueryResult(const Ydb::Table::ExecuteDataQueryResponse& response);
+            TEvDataQueryResult(Ydb::Table::ExecuteDataQueryResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
@@ -84,7 +84,7 @@ private:
         };
 
         struct TEvCreateSessionResult : public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
-            TEvCreateSessionResult(const Ydb::Table::CreateSessionResponse& response);
+            TEvCreateSessionResult(Ydb::Table::CreateSessionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
@@ -92,21 +92,21 @@ private:
         };
 
         struct TEvDeleteSessionResponse : public NActors::TEventLocal<TEvDeleteSessionResponse, EvDeleteSessionResponse> {
-            TEvDeleteSessionResponse(const Ydb::Table::DeleteSessionResponse& response);
+            TEvDeleteSessionResponse(Ydb::Table::DeleteSessionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
         };
 
         struct TEvRollbackTransactionResponse : public NActors::TEventLocal<TEvRollbackTransactionResponse, EvRollbackTransactionResponse> {
-            TEvRollbackTransactionResponse(const Ydb::Table::RollbackTransactionResponse& response);
+            TEvRollbackTransactionResponse(Ydb::Table::RollbackTransactionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
         };
 
         struct TEvCommitTransactionResponse : public NActors::TEventLocal<TEvCommitTransactionResponse, EvCommitTransactionResponse> {
-            TEvCommitTransactionResponse(const Ydb::Table::CommitTransactionResponse& response);
+            TEvCommitTransactionResponse(Ydb::Table::CommitTransactionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
@@ -160,13 +160,13 @@ private:
 
     template <class TProto, class TEvent>
     void Subscribe(NThreading::TFuture<TProto>&& f) const {
-        f.Subscribe([callback = GetOperationCallback<TProto, TEvent>()](const NThreading::TFuture<TProto>& f) {
-            callback(f.GetValue());
+        f.Subscribe([callback = GetOperationCallback<TProto, TEvent>()](NThreading::TFuture<TProto> f) {
+            callback(f.ExtractValue());
         });
     }
 
     template <class TProto, class TEvent>
-    std::function<void(const TProto&)> GetOperationCallback() const {
+    std::function<void(TProto&&)> GetOperationCallback() const {
         return [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](TProto&& result) {
             actorSystem->Send(selfId, new TEvent(std::move(result)));
         };

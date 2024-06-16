@@ -60,7 +60,7 @@ TQueryBase::TTxControl TQueryBase::TTxControl::ContinueAndCommitTx() {
 
 //// Private events
 
-TQueryBase::TEvQueryBasePrivate::TEvDataQueryResult::TEvDataQueryResult(const Table::ExecuteDataQueryResponse& response)
+TQueryBase::TEvQueryBasePrivate::TEvDataQueryResult::TEvDataQueryResult(Table::ExecuteDataQueryResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
 {
@@ -71,29 +71,29 @@ TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultP
     : Status(response.status())
     , Issues(IssuesFromProtoMessage(response))
     , ResultSetId(response.result_set_index())
-    , ResultSet(std::move(response.result_set()))
+    , ResultSet(std::move(*response.mutable_result_set()))
 {}
 
-TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(const Table::CreateSessionResponse& response)
+TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(Table::CreateSessionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
 {
     Table::CreateSessionResult result;
     response.operation().result().UnpackTo(&result);
-    SessionId = result.session_id();
+    SessionId = std::move(*result.mutable_session_id());
 }
 
-TQueryBase::TEvQueryBasePrivate::TEvDeleteSessionResponse::TEvDeleteSessionResponse(const Table::DeleteSessionResponse& response)
+TQueryBase::TEvQueryBasePrivate::TEvDeleteSessionResponse::TEvDeleteSessionResponse(Table::DeleteSessionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
 {}
 
-TQueryBase::TEvQueryBasePrivate::TEvRollbackTransactionResponse::TEvRollbackTransactionResponse(const Table::RollbackTransactionResponse& response)
+TQueryBase::TEvQueryBasePrivate::TEvRollbackTransactionResponse::TEvRollbackTransactionResponse(Table::RollbackTransactionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
 {}
 
-TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransactionResponse(const Table::CommitTransactionResponse& response)
+TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransactionResponse(Table::CommitTransactionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
 {}

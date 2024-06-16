@@ -135,7 +135,6 @@ runs:
 
     - name: show_bild_size_diff
       shell: bash
-      if: (github.event_name == 'pull_request_target')
       continue-on-error: true
       run: |
         set -x

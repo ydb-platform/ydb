@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import os
 import configparser
+import os
 import ydb
 
 
@@ -15,23 +15,21 @@ build_preset = os.environ.get("build_preset", "relwithdebinfo")
 DATABASE_ENDPOINT=config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH=config["QA_DB"]["DATABASE_PATH"]
 
-
-
 def main():
 
-   # if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-     #   print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-     #   return 1
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
     
     # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
     # So, set up it locally
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-    #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]= "/home/kirrysin/.ydb/my-robot-key.json"
+    #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]= "~/.ydb/my-robot-key.json"
 
     sql = f"""
         --!syntax_v1
     select git_commit_time,github_sha,size_bytes,size_stripped_bytes,build_preset from binary_size 
-    where github_workflow="Postcommit_relwithdebinfo" and build_preset="{build_preset}"
+    where github_workflow="Postcommit_{build_preset}" and build_preset="{build_preset}"
     order by git_commit_time desc
     limit 1;    
     """
@@ -66,7 +64,6 @@ def main():
 
             print( f'sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
             return 0
-
 
 if __name__ == "__main__":
     main()

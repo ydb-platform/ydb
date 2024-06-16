@@ -132,7 +132,55 @@ runs:
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
+
+    - name: show_bild_size_diff
+      shell: bash
+      if: (github.event_name == 'pull_request_target')
+      continue-on-error: true
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        python3 -m pip install ydb ydb[yc]
+
+        script=.github/scripts/get_main_build_size.py
+        script2=.github/scripts/get_current_build_size.py 
         
+        result=`$script`
+        result2=`$script2`
+        IFS=':'
+        read -ra main_sizes_result <<< "$result"
+        read -ra current_sizes_result <<< "$result2"
+
+        if [ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]; then
+
+          main_github_sha=${main_sizes_result[1]} 
+          main_git_commit_time=${main_sizes_result[2]} 
+          main_size_bytes=${main_sizes_result[3]} 
+          main_size_stripped_bytes=${main_sizes_result[4]} 
+
+          echo main_github_sha $main_github_sha
+          echo main_git_commit_time $main_git_commit_time
+          echo main_size_bytes $main_size_bytes
+          echo main_size_stripped_bytes $main_size_stripped_bytes
+
+          current_size_bytes=${current_sizes_result[1]}
+          current_size_stripped_bytes=${current_sizes_result[2]}
+
+          echo current_size_bytes $current_size_bytes
+          echo current_size_stripped_bytes $current_size_stripped_bytes
+
+          bytes_diff=$((main_size_bytes-current_size_bytes))
+          main_url="https://github.com/ydb-platform/ydb/commit/"$main_github_sha
+
+          if [ "$bytes_diff" -ge "100" ]; then
+            echo "Current build is less by $bytes_diff bytes than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color green
+          else
+            echo "Current build is larger by $bytes_diff bytes than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color red
+          fi
+        else
+          echo "Skipped build size difference"
+        fi
+
     - name: Notify about failed build
       if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
       shell: bash
@@ -155,52 +203,7 @@ runs:
         python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
 
-    - name: show_bild_size_diff
-      shell: bash
-      continue-on-error: true
-      run: |
-        set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        python3 -m pip install ydb ydb[yc]
-
-        script=.github/scripts/get_main_build_size.py
-        script2=.github/scripts/get_current_build_size.py 
-        
-        result=`$script`
-        result2=`$script2`
-        IFS=':'
-        read -ra main_sizes_result <<< "$result"
-        read -ra current_sizes_result <<< "$result2"
-
-        if [ ${main_sizes_result[0]} == "sizes" ]; then
-
-            main_github_sha=${main_sizes_result[1]} 
-            main_git_commit_time=${main_sizes_result[2]} 
-            main_size_bytes=${main_sizes_result[3]} 
-            main_size_stripped_bytes=${main_sizes_result[4]} 
-            echo $main_github_sha
-            echo $main_git_commit_time
-            echo $main_size_bytes
-            echo $main_size_stripped_bytes
-        fi 
-        echo ${current_sizes_result[0]}
-        if [ ${current_sizes_result[0]} == "sizes" ]; then
-            current_size_bytes=${current_sizes_result[1]}
-            current_size_stripped_bytes=${current_sizes_result[2]}
-            echo  $current_size_bytes
-            echo  $current_size_stripped_bytes
-        fi
-
-        bytes_diff=$((main_size_bytes-current_size_bytes))
-        main_url="https://github.com/ydb-platform/ydb/commit/"$main_github_sha
-
-        if [ "$bytes_diff" -gt "0" ]; then
-                echo "Current build is less by $bytes_diff bytes than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color green
-            else
-              echo "Current build is lagreg by $bytes_diff bytes than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color red
-
-        fi
-        
+    
     - name: comment-if-cancel
       shell: bash
       if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')

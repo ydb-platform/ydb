@@ -836,15 +836,19 @@ private:
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
-    if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
-        bool isWaitingForReduce = TryToReduceMemoryAndWait();
-        if (isWaitingForReduce) return;
-    }
-
+    ui64 cntrows = 0;
     while (*HaveMoreLeftRows || *HaveMoreRightRows) {
+        if (0 == (cntrows++ % CheckMemoryRowLimit)) { // checks before first loop and
+                                                      // every CheckMemoryRowLimit rows
+            if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
+                bool isWaitingForReduce = TryToReduceMemoryAndWait();
+                if (isWaitingForReduce) break;
+            }
+        }
         bool isYield = FetchAndPackData(ctx);
-        if (isYield) return;
+        if (isYield) break;
     }
+    YQL_LOG_IF(TRACE, cntrows > 0) << "chunk " << cntrows;
 
     if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
         if (!IsSpillingFinished()) return;
@@ -951,6 +955,8 @@ private:
     bool IsSpillingFinalized = false;
 
     ui32 NextBucketToJoin = 0;
+
+    static constexpr ui64 CheckMemoryRowLimit = 0x10000;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {

@@ -11,7 +11,6 @@ namespace {
 class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
     STRICT_STFUNC(StateFunc,
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
     )
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -23,9 +22,11 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
             TString secretValue;
             const bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
             if (!isFound) {
-                LastResponse = TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") });
-                if (!SubscribedOnSecrets) {
-                    CompleteAndPassAway(LastResponse);
+                if (!AskSent) {
+                    AskSent = true;
+                    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
+                } else {
+                    CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
                 }
                 return;
             }
@@ -35,16 +36,10 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
         CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(secretValues));
     }
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-        CompleteAndPassAway(LastResponse);
-    }
-
     void CompleteAndPassAway(const TEvDescribeSecretsResponse::TDescription& response) {
         Promise.SetValue(response);
 
-        if (SubscribedOnSecrets) {
-            this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
-        }
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         PassAway();
     }
 
@@ -53,11 +48,9 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     }
 
 public:
-    TDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise, TDuration maximalSecretsSnapshotWaitTime)
+    TDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise)
         : SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
-        , LastResponse(Ydb::StatusIds::TIMEOUT, { NYql::TIssue("secrets snapshot fetching timeout") })
-        , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
     {}
 
     void Bootstrap() {
@@ -67,20 +60,14 @@ public:
             return;
         }
 
-        if (MaximalSecretsSnapshotWaitTime) {
-            this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
-            this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
-        } else {
-            this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
-            SubscribedOnSecrets = false;
-        }
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
         Become(&TDescribeSecretsActor::StateFunc);
     }
 
 private:
     static std::vector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId, const std::vector<TString>& secretIds) {
         std::vector<NMetadata::NSecret::TSecretId> result;
-        for (const auto& secretId: secretIds) {
+        for (const TString& secretId : secretIds) {
             result.emplace_back(ownerUserId, secretId);
         }
         return result;
@@ -89,32 +76,30 @@ private:
 private:
     const std::vector<NMetadata::NSecret::TSecretId> SecretIds;
     NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
-    TEvDescribeSecretsResponse::TDescription LastResponse;
-    TDuration MaximalSecretsSnapshotWaitTime;
-    bool SubscribedOnSecrets = true;
+    bool AskSent = false;
 };
 
 }  // anonymous namespace
 
-IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise, TDuration maximalSecretsSnapshotWaitTime) {
-    return new TDescribeSecretsActor(ownerUserId, secretIds, promise, maximalSecretsSnapshotWaitTime);
+IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
+    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
-void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem, TDuration maximalSecretsSnapshotWaitTime) {
+void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretIds, promise, maximalSecretsSnapshotWaitTime));
+    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretIds, promise));
 
     promise.GetFuture().Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));
     });
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem, TDuration maximalSecretsSnapshotWaitTime) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId}, promise, maximalSecretsSnapshotWaitTime));
+            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId}, promise));
             return promise.GetFuture();
         }
 
@@ -124,7 +109,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {passwordSecretId}, promise, maximalSecretsSnapshotWaitTime));
+            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {passwordSecretId}, promise));
             return promise.GetFuture();
         }
 
@@ -132,7 +117,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId, passwordSecreId}, promise, maximalSecretsSnapshotWaitTime));
+            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId, passwordSecreId}, promise));
             return promise.GetFuture();
         }
 
@@ -140,14 +125,14 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
             const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
+            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {tokenSecretId}, promise, maximalSecretsSnapshotWaitTime));
+            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {tokenSecretId}, promise));
             return promise.GetFuture();
         }
 

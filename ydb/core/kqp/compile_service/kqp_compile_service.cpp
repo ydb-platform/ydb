@@ -441,14 +441,13 @@ public:
     }
 
     TKqpCompileService(const TTableServiceConfig& tableServiceConfig, const TQueryServiceConfig& queryServiceConfig,
-        const TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
+        const TKqpSettings::TConstPtr& kqpSettings,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
         )
         : TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
-        , MetadataProviderConfig(metadataProviderConfig)
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -1058,7 +1057,7 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
+        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
             request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
@@ -1171,7 +1170,6 @@ private:
 private:
     TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;
-    TMetadataProviderConfig MetadataProviderConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -1186,13 +1184,12 @@ private:
 };
 
 IActor* CreateKqpCompileService(const TTableServiceConfig& tableServiceConfig, const TQueryServiceConfig& queryServiceConfig,
-    const TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
     )
 {
-    return new TKqpCompileService(tableServiceConfig, queryServiceConfig, metadataProviderConfig, kqpSettings, moduleResolverState, counters,
+    return new TKqpCompileService(tableServiceConfig, queryServiceConfig, kqpSettings, moduleResolverState, counters,
                                   std::move(queryReplayFactory), federatedQuerySetup);
 }
 

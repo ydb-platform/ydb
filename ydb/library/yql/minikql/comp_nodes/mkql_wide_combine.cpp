@@ -371,6 +371,7 @@ public:
             case EOperatingMode::ProcessSpilled:
                return false;
             case EOperatingMode::Spilling: {
+                CurrentBucketId = -1;
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing()) {
@@ -397,21 +398,41 @@ public:
 
     // TODO make const
     NUdf::TUnboxedValuePod* GetTongue() {
-        if (GetMode() == EOperatingMode::Spilling) {
+        if (GetMode() == EOperatingMode::InMemory) {
+            return InMemoryProcessingState.Tongue;
+        }
+
+        if (CurrentBucketId == -1) {
             BufferForKeyAnsState.resize(KeyWidth);
             return BufferForKeyAnsState.data();
         }
 
-        return InMemoryProcessingState.Tongue;
+        return SpilledBuckets[CurrentBucketId].InMemoryProcessingState->Tongue;
     }
 
     bool TasteIt() {
+        if (GetMode() == EOperatingMode::InMemory) {
+            return InMemoryProcessingState.TasteIt();
+        }
+
+        MKQL_ENSURE(!BufferForKeyAnsState.empty(), "Internal logic error");
+        auto hash = Hasher(BufferForKeyAnsState.data());
+
+        MKQL_ENSURE(CurrentBucketId == -1, "Internal logic error");
+        CurrentBucketId = hash % SpilledBucketCount;
+
+        auto& bucket = SpilledBuckets[CurrentBucketId];
+
+        
         return InMemoryProcessingState.TasteIt();
     }
 
     bool IsImmediateProcessingAvaliable() const {
         if (GetMode() == EOperatingMode::InMemory) return true;
-        
+
+        MKQL_ENSURE(CurrentBucketId != -1, "Internal logic error");
+
+        return SpilledBuckets[CurrentBucketId].BucketState == TSpilledBucket::EBucketState::InMemory;
     }
 
 
@@ -733,6 +754,7 @@ private:
     THashFunc const Hasher;
     EOperatingMode Mode;
     bool RecoverState; //sub mode for ProcessSpilledData
+    i64 CurrentBucketId = -1;
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
@@ -1255,8 +1277,10 @@ public:
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                     case EFetchResult::One:
                         Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+
+                        bool isNew = ptr->TasteIt();
                         if (ptr->IsImmediateProcessingAvaliable()) {
-                            Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
+                            Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
                         }
                         
                         ptr->CheckMemoryConsumption();

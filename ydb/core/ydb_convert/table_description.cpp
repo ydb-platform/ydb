@@ -762,6 +762,44 @@ void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
 }
 
 template <typename TYdbProto>
+static void FillDefaultPartitioningSettings(TYdbProto& out) {
+    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure.
+    out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+    out.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+}
+
+template <typename TYdbProto>
+void FillPartitioningSettings(TYdbProto& out, const NKikimrSchemeOp::TPartitioningPolicy& policy) {
+    if (policy.HasSizeToSplit()) {
+        if (policy.GetSizeToSplit()) {
+            out.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
+            out.set_partition_size_mb(policy.GetSizeToSplit() / (1 << 20));
+        } else {
+            out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+        }
+    } else {
+        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure.
+        out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+    }
+
+    if (policy.HasSplitByLoadSettings()) {
+        bool enabled = policy.GetSplitByLoadSettings().GetEnabled();
+        out.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    } else {
+        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
+        out.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+    }
+
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount()) {
+        out.set_min_partitions_count(policy.GetMinPartitionsCount());
+    }
+
+    if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
+        out.set_max_partitions_count(policy.GetMaxPartitionsCount());
+    }
+}
+
+template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
@@ -1206,57 +1244,23 @@ void FillAttributes(Ydb::Table::CreateTableRequest& out,
 }
 
 template <typename TYdbProto>
-static void FillDefaultPartitioningSettings(TYdbProto& out) {
-    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure.
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-}
-
-template <typename TYdbProto>
 void FillPartitioningSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
+    auto& outPartSettings = *out.mutable_partitioning_settings();
+
     if (!in.HasPartitionConfig()) {
-        FillDefaultPartitioningSettings(out);
+        FillDefaultPartitioningSettings(outPartSettings);
         return;
     }
 
     const auto& partConfig = in.GetPartitionConfig();
     if (!partConfig.HasPartitioningPolicy()) {
-        FillDefaultPartitioningSettings(out);
+        FillDefaultPartitioningSettings(outPartSettings);
         return;
     }
 
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    const auto& inPartPolicy = partConfig.GetPartitioningPolicy();
-    if (inPartPolicy.HasSizeToSplit()) {
-        if (inPartPolicy.GetSizeToSplit()) {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-            outPartSettings.set_partition_size_mb(inPartPolicy.GetSizeToSplit() / (1 << 20));
-        } else {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-        }
-    } else {
-        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    }
-
-    if (inPartPolicy.HasSplitByLoadSettings()) {
-        bool enabled = inPartPolicy.GetSplitByLoadSettings().GetEnabled();
-        outPartSettings.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
-    } else {
-        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-    }
-
-    if (inPartPolicy.HasMinPartitionsCount() && inPartPolicy.GetMinPartitionsCount()) {
-        outPartSettings.set_min_partitions_count(inPartPolicy.GetMinPartitionsCount());
-    }
-
-    if (inPartPolicy.HasMaxPartitionsCount() && inPartPolicy.GetMaxPartitionsCount()) {
-        outPartSettings.set_max_partitions_count(inPartPolicy.GetMaxPartitionsCount());
-    }
+    FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
 }
 
 void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,

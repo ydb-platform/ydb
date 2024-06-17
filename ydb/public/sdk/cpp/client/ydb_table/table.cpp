@@ -251,6 +251,24 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
+template <typename TProto>
+TExplicitPartitions TExplicitPartitions::FromProto(const TProto& proto) {
+    TExplicitPartitions out;
+    for (const auto& splitPoint : proto.split_points()) {
+        TValue value(TType(splitPoint.type()), splitPoint.value());
+        out.AppendSplitPoints(value);
+    }
+    return out;
+}
+
+void TExplicitPartitions::SerializeTo(Ydb::Table::ExplicitPartitions& proto) const {
+    for (const auto& splitPoint : SplitPoints_) {
+        auto* boundary = proto.Addsplit_points();
+        boundary->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
+        boundary->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
+    }
+}
+
 class TTableDescription::TImpl {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -419,13 +437,7 @@ public:
                 break;
 
             case Ydb::Table::CreateTableRequest::kPartitionAtKeys: {
-                TExplicitPartitions partitionAtKeys;
-                for (const auto& splitPoint : request.partition_at_keys().split_points()) {
-                    TValue value(TType(splitPoint.type()), splitPoint.value());
-                    partitionAtKeys.AppendSplitPoints(value);
-                }
-
-                SetPartitionAtKeys(partitionAtKeys);
+                SetPartitionAtKeys(TExplicitPartitions::FromProto(request.partition_at_keys()));
                 break;
             }
 
@@ -921,12 +933,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
     }
 
     if (const auto& partitionAtKeys = Impl_->GetPartitionAtKeys()) {
-        auto* borders = request.mutable_partition_at_keys();
-        for (const auto& splitPoint : partitionAtKeys->SplitPoints_) {
-            auto* border = borders->Addsplit_points();
-            border->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
-            border->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
-        }
+        partitionAtKeys->SerializeTo(*request.mutable_partition_at_keys());
     } else if (Impl_->GetProto().shard_key_bounds_size()) {
         request.mutable_partition_at_keys()->mutable_split_points()->CopyFrom(Impl_->GetProto().shard_key_bounds());
     }
@@ -2203,16 +2210,22 @@ bool TRenameItem::ReplaceDestination() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TIndexDescription::TIndexDescription(const TString& name, EIndexType type,
-        const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : IndexName_(name)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    EIndexType type,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns
+)   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
 {}
 
-TIndexDescription::TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns
+)   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns)
 {}
 
 TIndexDescription::TIndexDescription(const Ydb::Table::TableIndex& tableIndex)

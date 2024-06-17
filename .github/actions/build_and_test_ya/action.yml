@@ -210,15 +210,15 @@ runs:
           if [ "$bytes_diff" -ge "0" ]; then
             if [ "$bytes_diff" -ge "200" ]; then
               printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^2] vs build [main:${main_github_sha:0:8}]($main_url)
-              [^2]:[main:${main_github_sha:0:8}]($main_url) build:
+        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
                   -binary size $main_size_bytes B 
                   -stripped binary size $main_size_stripped_bytes B
                 Current build:
                   -binary size $current_size_bytes B 
                   -stripped binary size $current_size_stripped_bytes B" | .github/scripts/tests/comment-pr.py --color red
             else
-              printf "Current build [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^2] vs build [main:${main_github_sha:0:8}]($main_url)
-                [^2]:[main:${main_github_sha:0:8}]($main_url) build:
+              printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^2] vs build [main:${main_github_sha:0:8}]($main_url)
+        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
                   -binary size $main_size_bytes B 
                   -stripped binary size $main_size_stripped_bytes B
                 Current build:
@@ -228,8 +228,8 @@ runs:
           else
             bytes_diff=$((bytes_diff*(-1)))
             human_readable_size_diff=`bytesToHumanIEC $bytes_diff`
-            printf "Current build [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **-$human_readable_size_diff**[^2] vs build  [main:${main_github_sha:0:8}]($main_url)
-              [^2]:[main:${main_github_sha:0:8}]($main_url) build:
+            printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **-$human_readable_size_diff**[^2] vs build  [main:${main_github_sha:0:8}]($main_url)
+        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
                   -binary size $main_size_bytes B 
                   -stripped binary size $main_size_stripped_bytes B
                 Current build:

@@ -228,6 +228,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
 
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
@@ -255,6 +256,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
     YQL_ENSURE(generateColumnsIfInsertNode);
@@ -277,6 +279,7 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("replace").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
@@ -294,6 +297,7 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("replace").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))

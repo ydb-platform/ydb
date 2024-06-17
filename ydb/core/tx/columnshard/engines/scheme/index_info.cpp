@@ -2,6 +2,7 @@
 #include "statistics/abstract/operator.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -23,7 +24,9 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
 TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
     , Name(name)
-{}
+{
+    CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+}
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(GetPrimaryKey())) {
@@ -105,7 +108,7 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
             return {};
         }
 
-        Y_ABORT_UNLESS(ci != Columns.end());
+        AFL_VERIFY(ci != Columns.end())("id", id);
         return ci->second.Name;
     }
 }
@@ -321,6 +324,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     {
         SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
         ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
+        if (schema.GetOptions().HasCompactionPlannerConstructor()) {
+            auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(schema.GetOptions().GetCompactionPlannerConstructor());
+            CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+        } else {
+            AFL_VERIFY(!!CompactionPlannerConstructor);
+        }
     }
 
     if (schema.HasDefaultCompression()) {
@@ -469,6 +478,11 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
         group->AddEntity(i);
     }
     return groups;
+}
+
+std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+    AFL_VERIFY(!!CompactionPlannerConstructor);
+    return CompactionPlannerConstructor;
 }
 
 } // namespace NKikimr::NOlap

@@ -1887,13 +1887,20 @@ TRuntimeNode TProgramBuilder::BuildWideTopOrSort(const std::string_view& callabl
 
 TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
+        const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
+        const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
+        const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
+            return NewTuple({keyExtractor(item), item});
+        };
 
-        return FlatMap(Condense1(flow,
+        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
                 [&](TRuntimeNode item) { return AsList(item); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
-                [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, item, ascending, keyExtractor); }
+                [&](TRuntimeNode item, TRuntimeNode state) {
+                    return KeepTop(count, state, item, ascending, getKey);
+                }
             ),
-            [&](TRuntimeNode list) { return Top(list, count, ascending, keyExtractor); }
+            [&](TRuntimeNode list) { return Map(Top(list, count, ascending, getKey), getItem); }
         );
     }
 
@@ -1902,14 +1909,20 @@ TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntim
 
 TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        return FlatMap(Condense1(flow,
+        const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
+        const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
+        const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
+            return NewTuple({keyExtractor(item), item});
+        };
+
+        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
                 [&](TRuntimeNode item) { return AsList(item); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                 [&](TRuntimeNode item, TRuntimeNode state) {
-                    return KeepTop(count, state, item, ascending, keyExtractor);
+                    return KeepTop(count, state, item, ascending, getKey);
                 }
             ),
-            [&](TRuntimeNode list) { return TopSort(list, count, ascending, keyExtractor); }
+            [&](TRuntimeNode list) { return Map(TopSort(list, count, ascending, getKey), getItem); }
         );
     }
 
@@ -4755,11 +4768,7 @@ TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, cons
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 29U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
+TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4797,7 +4806,7 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     tupleItems.reserve(output.size());
     std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewMultiType(tupleItems)));
+    TCallableBuilder callableBuilder(Env, funcName, NewFlowType(NewMultiType(tupleItems)));
     callableBuilder.Add(flow);
     callableBuilder.Add(NewDataLiteral(ui32(keyArgs.size())));
     callableBuilder.Add(NewDataLiteral(ui32(stateArgs.size())));
@@ -4811,6 +4820,22 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     std::for_each(finishStateArgs.cbegin(), finishStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 29U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
+    if constexpr (RuntimeVersion < 49U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {

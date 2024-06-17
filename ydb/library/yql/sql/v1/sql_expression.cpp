@@ -1299,7 +1299,7 @@ TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
         TSqlExpression condExpr(Ctx, Mode);
         branches.back().Pred = condExpr.Build(block.GetRule_expr2());
         if (caseExpr) {
-            branches.back().Pred = BuildBinaryOp(Ctx, Ctx.Pos(), "==", caseExpr, branches.back().Pred);
+            branches.back().Pred = BuildBinaryOp(Ctx, Ctx.Pos(), "==", caseExpr->Clone(), branches.back().Pred);
         }
         if (!branches.back().Pred) {
             return {};
@@ -1515,7 +1515,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
     args.clear();
     optionalArgumentsCount = 0;
     auto errMsg = TStringBuf("Invalid lambda arguments syntax. Lambda arguments should start with '$' as named value.");
-    auto tupleNodePtr = dynamic_cast<TTupleNode*>(node.Get());
+    auto tupleNodePtr = node->GetTupleNode();;
     if (!tupleNodePtr) {
         Ctx.Error(node->GetPos()) << errMsg;
         return false;
@@ -1998,7 +1998,7 @@ TSqlExpression::TCaseBranch TSqlExpression::ReduceCaseBranches(TVector<TCaseBran
     }
 
     TCaseBranch result;
-    result.Pred = new TCallNodeImpl(Ctx.Pos(), "Or", preds);
+    result.Pred = new TCallNodeImpl(Ctx.Pos(), "Or", CloneContainer(preds));
     result.Value = BuildBuiltinFunc(Ctx, Ctx.Pos(), "If", { left.Pred, left.Value, right.Value });
     return result;
 }

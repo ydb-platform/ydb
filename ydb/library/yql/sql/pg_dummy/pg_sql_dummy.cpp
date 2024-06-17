@@ -289,9 +289,9 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     return {};
 }
 
-TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
+ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
-    return Nothing();
+    throw yexception() << "PG types are not supported";
 }
 
 TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {

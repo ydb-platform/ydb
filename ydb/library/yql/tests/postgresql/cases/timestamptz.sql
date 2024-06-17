@@ -109,10 +109,23 @@ SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
        ('2018-11-02 12:34:56.78901'),
        ('2018-11-02 12:34:56.78901234')
    ) d(d);
+-- Check OF, TZH, TZM with various zone offsets, particularly fractional hours
+SET timezone = '00:00';
 SELECT to_char(now(), 'OF') as "OF", to_char(now(), 'TZH:TZM') as "TZH:TZM";
+SET timezone = '+02:00';
+SET timezone = '-13:00';
+SET timezone = '-00:30';
+SET timezone = '00:30';
+SET timezone = '-04:30';
+SET timezone = '04:30';
+SET timezone = '-04:15';
+SET timezone = '04:15';
+RESET timezone;
 CREATE TABLE TIMESTAMPTZ_TST (a int , b timestamptz);
 --Cleanup
 DROP TABLE TIMESTAMPTZ_TST;
+-- test timestamptz constructors
+set TimeZone to 'America/New_York';
 -- these should fail
 SELECT make_timestamptz(1973, 07, 15, 08, 15, 55.33, '2');
 SELECT make_timestamptz(2014, 12, 10, 10, 10, 10, '+16');
@@ -120,15 +133,24 @@ SELECT make_timestamptz(2014, 12, 10, 10, 10, 10, '-16');
 -- should be true
 SELECT make_timestamptz(1973, 07, 15, 08, 15, 55.33, '+2') = '1973-07-15 08:15:55.33+02'::timestamptz;
 SELECT make_timestamptz(1910, 12, 24, 0, 0, 0, 'Nehwon/Lankhmar');
+RESET TimeZone;
 -- errors
 select * from generate_series('2020-01-01 00:00'::timestamptz,
                               '2020-01-02 03:00'::timestamptz,
                               '0 hour'::interval);
+--
+-- Test behavior with a dynamic (time-varying) timezone abbreviation.
+-- These tests rely on the knowledge that MSK (Europe/Moscow standard time)
+-- moved forwards in Mar 2011 and backwards again in Oct 2014.
+--
+SET TimeZone to 'UTC';
 -- upper limit varies between integer and float timestamps, so hard to test
 -- nonfinite values
 SELECT to_timestamp(' Infinity'::float);
 SELECT to_timestamp('-Infinity'::float);
 SELECT to_timestamp('NaN'::float);
+SET TimeZone to 'Europe/Moscow';
+RESET TimeZone;
 --
 -- Test that AT TIME ZONE isn't misoptimized when using an index (bug #14504)
 --

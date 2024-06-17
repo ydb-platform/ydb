@@ -60,6 +60,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
     {"BlockEngineForce", &TContext::BlockEngineForce},
     {"UnorderedResult", &TContext::UnorderedResult},
+    {"CompactNamedExprs", &TContext::CompactNamedExprs},
+    {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -413,6 +415,9 @@ const TVector<std::pair<TString, TDeferredAtom>>& TScopedState::GetUsedClusters(
 TNodePtr TScopedState::WrapCluster(const TDeferredAtom& cluster, TContext& ctx) {
     auto node = cluster.Build();
     if (!cluster.GetLiteral()) {
+        if (ctx.CompactNamedExprs) {
+            return node->Y("EvaluateAtom", node);
+        }
         AddExprCluster(node, ctx);
         auto exprIt = Local.ExprClustersMap.find(node.Get());
         YQL_ENSURE(exprIt != Local.ExprClustersMap.end());

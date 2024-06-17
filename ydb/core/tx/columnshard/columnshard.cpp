@@ -69,7 +69,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
-    StoragesManager->Initialize();
+    StoragesManager->Initialize(Executor()->Generation());
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
         [selfActorId](const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");

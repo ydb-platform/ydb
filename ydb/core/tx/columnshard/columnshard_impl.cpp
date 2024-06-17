@@ -72,6 +72,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
+    , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
@@ -90,8 +91,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
-    NOlap::TNormalizationController::TInitContext initCtx(Info());
-    NormalizerController.InitNormalizers(initCtx);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -393,7 +392,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         tableVerProto.SetSchemaPresetId(preset.GetId());
 
         if (TablesManager.RegisterSchemaPreset(preset, db)) {
-            TablesManager.AddSchemaVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
+            TablesManager.AddSchemaVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db, Tiers);
         }
     } else {
         Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
@@ -442,7 +441,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
-        TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);
+        TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db, Tiers);
     } else if (alterProto.HasSchema()) {
         *tableVerProto.MutableSchema() = alterProto.GetSchema();
     }
@@ -501,7 +500,7 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         if (!TablesManager.HasPreset(presetProto.GetId())) {
             continue; // we don't update presets that we don't use
         }
-        TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
+        TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db, Tiers);
     }
 }
 
@@ -751,7 +750,6 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("path", i.first)("info", i.second.GetDebugString());
     }
 
-    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, DataLocksManager, memoryUsageLimit);
 
@@ -759,6 +757,8 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");
         return false;
     }
+
+    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
     for (auto&& i : indexChanges) {
         const TString externalTaskId = i->GetTaskIdentifier();
         const bool needWrites = i->NeedConstruction();
@@ -835,7 +835,11 @@ void TColumnShard::SetupGC() {
         return;
     }
     for (auto&& i : StoragesManager->GetStorages()) {
-        i.second->StartGC();
+        auto gcTask = i.second->CreateGC();
+        if (!gcTask) {
+            continue;
+        }
+        Execute(new TTxGarbageCollectionStart(this, gcTask, i.second), NActors::TActivationContext::AsActorContext());
     }
 }
 
@@ -1067,15 +1071,23 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 }
 
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
+    if (SharingSessionsManager->IsSharingInProgress()) {
+        ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
+            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)TabletID(),
+                NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress");
+        return;
+    }
+
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvDeleteSharedBlobs");
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvDeleteSharedBlobs");
-    auto removeAction = StoragesManager->GetOperator(ev->Get()->Record.GetStorageId())->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
+    NOlap::TTabletsByBlob blobs;
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
         auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
         AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
-        removeAction->DeclareRemove((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), *blobId);
+        AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
-    Execute(new TTxRemoveSharedBlobs(this, removeAction, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId())), ctx);
+    Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

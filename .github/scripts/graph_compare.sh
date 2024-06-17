@@ -10,12 +10,12 @@ echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_base
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...
 git checkout $2
 echo Build graph for head commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_head
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_head
 
 echo Generate lists of uids for base and head...
 cat $workdir/graph_base | jq '.uid' > $workdir/uid_base
@@ -45,8 +45,14 @@ cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."ta
 echo Number of modules:
 cat $workdir/modules | wc -l
 
+echo Filter only modules in ydb
+cat $workdir/modules | { grep "^ydb" || true; } > $workdir/modules2
+
+echo Number of modules:
+cat $workdir/modules2 | wc -l
+
 echo Append into ya.make RECURSE to all required modules...
-cat $workdir/modules | (echo 'RECURSE(';cat;echo ')') >> ya.make
+cat $workdir/modules2 | (echo 'RECURSE(';cat;echo ')') >> ya.make
 
 echo "ya.make content:"
 cat ya.make

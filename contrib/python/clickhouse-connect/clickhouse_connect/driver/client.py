@@ -41,6 +41,7 @@ class Client(ABC):
     database = None
     max_error_message = 0
     apply_server_timezone = False
+    show_clickhouse_errors = True
 
     def __init__(self,
                  database: str,
@@ -48,7 +49,8 @@ class Client(ABC):
                  uri: str,
                  query_retries: int,
                  server_host_name: Optional[str],
-                 apply_server_timezone: Optional[Union[str, bool]]):
+                 apply_server_timezone: Optional[Union[str, bool]],
+                 show_clickhouse_errors: Optional[bool]):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
@@ -57,6 +59,8 @@ class Client(ABC):
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
+        if show_clickhouse_errors is not None:
+            self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
@@ -72,7 +76,7 @@ class Client(ABC):
 
         if not self.apply_server_timezone and not tzutil.local_tz_dst_safe:
             logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
-                           'Summer Time differences', tzutil.local_tz.tzname())
+                           'Summer Time differences', tzutil.local_tz.tzname(None))
         readonly = 'readonly'
         if not self.min_version('19.17'):
             readonly = common.get_setting('readonly')

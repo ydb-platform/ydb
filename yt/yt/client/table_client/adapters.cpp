@@ -244,6 +244,24 @@ void PipeInputToOutput(
     output->Finish();
 }
 
+void PipeInputToOutput(
+    const NConcurrency::IAsyncZeroCopyInputStreamPtr& input,
+    IOutputStream* output)
+{
+    while (true) {
+        auto data = WaitFor(input->Read())
+            .ValueOrThrow();
+
+        if (!data) {
+            break;
+        }
+
+        output->Write(data.Begin(), data.Size());
+    }
+
+    output->Finish();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

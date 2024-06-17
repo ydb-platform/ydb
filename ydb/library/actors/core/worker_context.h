@@ -60,6 +60,11 @@ namespace NActors {
             statsCopy.Aggregate(*Stats);
         }
 
+        void SetCurrentActivationTime(ui32 activityType, i64 elapsed) {
+            RelaxedStore(&Stats->CurrentActivationTime.LastActivity, activityType);
+            RelaxedStore(&Stats->CurrentActivationTime.TimeUs, (elapsed > 0 ? elapsed : 0));
+        }
+
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
             if (Y_LIKELY(elapsed > 0)) {
                 Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
@@ -132,7 +137,7 @@ namespace NActors {
         }
 
         i64 AddEventProcessingStats(i64 deliveredTs, i64 processedTs, ui32 activityType, ui64 scheduled) {
-            i64 elapsed = processedTs - deliveredTs;
+            i64 elapsed = Max<i64>(0, processedTs - deliveredTs);
             ui64 usecElapsed = NHPTimer::GetSeconds(elapsed) * 1000000;
             activityType = (activityType >= Stats->MaxActivityType()) ? 0 : activityType;
             Stats->EventProcessingCountHistogram.Add(usecElapsed);
@@ -163,6 +168,7 @@ namespace NActors {
         }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}
+        void SetCurrentActivationTime(ui32, i64) {}
         inline void AddElapsedCycles(ui32, i64) {}
         inline void AddParkedCycles(i64) {}
         inline void AddBlockedCycles(i64) {}

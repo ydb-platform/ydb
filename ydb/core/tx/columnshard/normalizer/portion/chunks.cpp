@@ -8,12 +8,13 @@
 
 namespace NKikimr::NOlap {
 
-class TChunksNormalizer::TNormalizerResult : public INormalizerChanges {
+class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
-        : Chunks(std::move(chunks))
-    {}
+        : Chunks(std::move(chunks)) {
+    }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
@@ -28,9 +29,9 @@ public:
             const auto& key = chunkInfo.GetKey();
 
             db.Table<Schema::IndexColumns>().Key(key.GetIndex(), key.GetGranule(), key.GetColumnIdx(),
-            key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk()).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
-            );
+                key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk()).Update(
+                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
+                );
         }
         return true;
     }

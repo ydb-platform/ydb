@@ -147,15 +147,17 @@ struct TEvYdbCompute {
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
-        TEvFetchScriptResultRequest(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TString& fetchToken)
+        TEvFetchScriptResultRequest(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TString& fetchToken, uint64_t rowsLimit)
             : OperationId(operationId)
             , ResultSetId(resultSetId)
             , FetchToken(fetchToken)
+            , RowsLimit(rowsLimit)
         {}
 
         NKikimr::NOperationId::TOperationId OperationId;
         int64_t ResultSetId = 0;
         TString FetchToken;
+        uint64_t RowsLimit = 0;
     };
 
     struct TEvFetchScriptResultResponse : public NActors::TEventLocal<TEvFetchScriptResultResponse, EvFetchScriptResultResponse> {
@@ -486,10 +488,11 @@ struct TEvYdbCompute {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        TEvCpuQuotaResponse(NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
-            : Status(status), Issues(std::move(issues))
+        TEvCpuQuotaResponse(int32_t currentLoad = -1, NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
+            : CurrentLoad(currentLoad), Status(status),  Issues(std::move(issues))
         {}
 
+        int32_t CurrentLoad;
         NYdb::EStatus Status;
         NYql::TIssues Issues;
     };

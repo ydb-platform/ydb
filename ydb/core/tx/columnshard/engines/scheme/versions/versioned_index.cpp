@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-void TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     if (Snapshots.empty()) {
         PrimaryKey = indexInfo.GetPrimaryKey();
     } else {
@@ -27,6 +27,7 @@ void TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
     Y_ABORT_UNLESS(itSnap.second);
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
+    return &itSnap.first->second->GetIndexInfo();
 }
 
 bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {

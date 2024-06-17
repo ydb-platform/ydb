@@ -199,6 +199,7 @@
                                                 "ReadRanges": [
                                                     "id (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join3.test_plan/qb"
                                             }
                                         ],

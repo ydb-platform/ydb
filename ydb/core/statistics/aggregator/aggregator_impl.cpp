@@ -455,7 +455,7 @@ void TStatisticsAggregator::NextRange() {
     record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
     record.SetStartKey(StartKey.GetBuffer());
 
-    Send(MakePipePeNodeCacheID(false),
+    Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(request.release(), range.DataShardId, true),
         IEventHandle::FlagTrackDelivery);
 }

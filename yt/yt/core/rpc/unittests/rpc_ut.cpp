@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <random>
+
 namespace NYT::NRpc {
 namespace {
 
@@ -41,13 +43,13 @@ TString StringFromSharedRef(const TSharedRef& sharedRef)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotUdsTest = TTestBase<TImpl>;
+using TNotUdsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotGrpcTest = TTestBase<TImpl>;
+using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TGrpcTest = TTestBase<TImpl>;
+using TGrpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
@@ -787,12 +789,12 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 
     // Concurrency byte limit + queue byte size limit = 10 + 20 = 30.
     // First 30 requests must be successful, 31st request must be failed.
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         proxies.push_back(TTestProxy(this->CreateChannel()));
         proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
     }
 
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         auto req = proxies[i].SlowCall();
         futures.push_back(req->Invoke().AsVoid());
     }

@@ -88,6 +88,10 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
 
+    virtual TDuration GetOverridenGCPeriod(const TDuration def) const {
+        return def;
+    }
+
     virtual void OnSelectShardingFilter() {
     
     }
@@ -102,6 +106,10 @@ public:
 
     virtual TDuration GetRemovedPortionLivetime(const TDuration def) const {
         return def;
+    }
+
+    virtual TDuration GetActualizationTasksLag(const TDuration d) const {
+        return d;
     }
 
     virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
@@ -178,7 +186,7 @@ public:
         return def;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
-        return EOptimizerCompactionWeightControl::Default;
+        return EOptimizerCompactionWeightControl::Force;
     }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;

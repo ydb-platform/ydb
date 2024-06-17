@@ -38,6 +38,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , FuncRegistry_(std::move(options.FuncRegistry))
     , UserData_(std::move(options.UserData))
     , LLVMSettings_(std::move(options.LLVMSettings))
+    , BlockEngineMode_(options.BlockEngineMode)
     , CountersProvider_(options.CountersProvider_)
     , NativeYtTypeFlags_(options.NativeYtTypeFlags_)
     , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)
@@ -134,6 +135,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
+    typeContext->BlockEngineMode = BlockEngineMode_;
     auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);

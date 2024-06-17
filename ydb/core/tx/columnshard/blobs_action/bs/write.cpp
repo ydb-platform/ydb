@@ -3,7 +3,15 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    AFL_VERIFY(!!BlobBatch);
+    if (blobsWroteSuccessfully) {
+        Manager->SaveBlobBatchOnExecute(BlobBatch, dbBlobs);
+    }
+}
+
+void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
+    AFL_VERIFY(!!BlobBatch);
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {
@@ -11,10 +19,15 @@ void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBl
         self.IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
         //    self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
         self.IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
-        Manager->SaveBlobBatch(std::move(BlobBatch), dbBlobs);
+        Manager->SaveBlobBatchOnComplete(std::move(BlobBatch));
     } else {
         self.IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
     }
+}
+
+void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "write_blob")("blob_id", blobId.ToStringNew());
+    return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
 }
 
 }

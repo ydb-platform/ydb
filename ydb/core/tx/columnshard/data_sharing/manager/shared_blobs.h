@@ -66,7 +66,7 @@ public:
         return result;
     }
 
-    TBlobsCategories BuildRemoveCategories(TTabletsByBlob&& blobs) const {
+    TBlobsCategories BuildRemoveCategories(const TTabletsByBlob& blobs) const {
         TBlobsCategories result(SelfTabletId);
         for (auto it = blobs.GetIterator(); it.IsValid(); ++it) {
             CheckRemoveBlobId(it.GetTabletId(), it.GetBlobId(), result);
@@ -95,7 +95,7 @@ public:
                     shared = true;
                 }
             }
-            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)("b", borrowed)("d", direct)("s", shared);
+            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)("b", borrowed)("d", direct)("s", shared)("blob_id", i.ToStringNew());
         }
         return result;
     }
@@ -124,6 +124,9 @@ public:
 
     void AddBorrowedBlobs(const TTabletByBlob& blobIds) {
         for (auto&& i : blobIds) {
+            if (i.second == SelfTabletId) {
+                continue;
+            }
             auto infoInsert = BorrowedBlobIds.emplace(i.first, i.second);
             if (!infoInsert.second) {
                 AFL_VERIFY(infoInsert.first->second == i.second)("before", infoInsert.first->second)("after", i.second);
@@ -133,24 +136,14 @@ public:
 
     void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
-    void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
-        for (auto&& i : blobIds) {
-            auto it = BorrowedBlobIds.find(i);
-            AFL_VERIFY(it != BorrowedBlobIds.end());
-            AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
-            if (it->second == SelfTabletId) {
-                BorrowedBlobIds.erase(it);
-            } else {
-                it->second = tabletIdTo;
-            }
-        }
-    }
+    void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
     [[nodiscard]] bool UpsertSharedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
         return SharedBlobIds.Add(tabletId, blobId);
     }
 
     [[nodiscard]] bool UpsertBorrowedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
+        AFL_VERIFY(ownerTabletId != SelfTabletId);
         return BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
     }
 
@@ -167,11 +160,24 @@ class TSharedBlobsManager {
 private:
     const TTabletId SelfTabletId;
     THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
+    TAtomicCounter ExternalModificationsCount;
 public:
     TSharedBlobsManager(const TTabletId tabletId)
         : SelfTabletId(tabletId)
     {
 
+    }
+
+    void StartExternalModification() {
+        ExternalModificationsCount.Inc();
+    }
+
+    void FinishExternalModification() {
+        AFL_VERIFY(ExternalModificationsCount.Dec() >= 0);
+    }
+
+    bool HasExternalModifications() const {
+        return ExternalModificationsCount.Val();
     }
 
     bool IsTrivialLinks() const {

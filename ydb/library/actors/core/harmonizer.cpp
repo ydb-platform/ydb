@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "probes.h"
 
+#include "activity_guard.h"
 #include "actorsystem.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
@@ -294,7 +295,7 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
     }
     TVector<TExecutorThreadStats> sharedStats;
     if (Shared) {
-        Shared->GetSharedStats(Pool->PoolId, sharedStats);
+        Shared->GetSharedStatsForHarmonizer(Pool->PoolId, sharedStats);
     }
 
     for (ui32 sharedIdx = 0; sharedIdx < SharedInfo.size(); ++sharedIdx) {
@@ -475,16 +476,18 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         if (!pool.BasicPool) {
             continue;
         }
-        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
-            pool.BasicPool->CalcSpinPerThread(avgWakingUpConsumption);
-        } else if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
-            ui64 newSpinThreshold = pool.MovingWaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
-            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
-        } else {
-            ui64 newSpinThreshold = pool.WaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
-            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+        if (pool.BasicPool->ActorSystemProfile != EASProfile::Default) {
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                pool.BasicPool->CalcSpinPerThread(avgWakingUpConsumption);
+            } else if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                ui64 newSpinThreshold = pool.MovingWaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+                pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+            } else {
+                ui64 newSpinThreshold = pool.WaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+                pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+            }
+            pool.BasicPool->ClearWaitingStats();
         }
-        pool.BasicPool->ClearWaitingStats();
     }
 
     std::vector<bool> hasSharedThread(Pools.size());
@@ -758,12 +761,16 @@ void THarmonizer::Harmonize(ui64 ts) {
     ui64 previousNextHarmonizeTs = NextHarmonizeTs.exchange(ts + Us2Ts(1'000'000ull));
     LWPROBE(TryToHarmonizeSuccess, ts, NextHarmonizeTs, previousNextHarmonizeTs);
 
-    if (PriorityOrder.empty()) {
-        CalculatePriorityOrder();
-    }
+    {
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_HARMONIZER> activityGuard;
 
-    PullStats(ts);
-    HarmonizeImpl(ts);
+        if (PriorityOrder.empty()) {
+            CalculatePriorityOrder();
+        }
+
+        PullStats(ts);
+        HarmonizeImpl(ts);
+    }
 
     Lock.Release();
 }

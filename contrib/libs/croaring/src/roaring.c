@@ -199,7 +199,7 @@ roaring_bitmap_t *roaring_bitmap_of(size_t n_args, ...) {
     // todo: could be greatly optimized but we do not expect this call to ever
     // include long lists
     roaring_bitmap_t *answer = roaring_bitmap_create();
-    roaring_bulk_context_t context = {0};
+    roaring_bulk_context_t context = {0, 0, 0, 0};
     va_list ap;
     va_start(ap, n_args);
     for (size_t i = 0; i < n_args; i++) {
@@ -371,20 +371,6 @@ void roaring_bitmap_printf_describe(const roaring_bitmap_t *r) {
     printf("}");
 }
 
-typedef struct min_max_sum_s {
-    uint32_t min;
-    uint32_t max;
-    uint64_t sum;
-} min_max_sum_t;
-
-static bool min_max_sum_fnc(uint32_t value, void *param) {
-    min_max_sum_t *mms = (min_max_sum_t *)param;
-    if (value > mms->max) mms->max = value;
-    if (value < mms->min) mms->min = value;
-    mms->sum += value;
-    return true;  // we always process all data points
-}
-
 /**
  *  (For advanced users.)
  * Collect statistics about the bitmap
@@ -395,15 +381,8 @@ void roaring_bitmap_statistics(const roaring_bitmap_t *r,
 
     memset(stat, 0, sizeof(*stat));
     stat->n_containers = ra->size;
-    stat->cardinality = roaring_bitmap_get_cardinality(r);
-    min_max_sum_t mms;
-    mms.min = UINT32_C(0xFFFFFFFF);
-    mms.max = UINT32_C(0);
-    mms.sum = 0;
-    roaring_iterate(r, &min_max_sum_fnc, &mms);
-    stat->min_value = mms.min;
-    stat->max_value = mms.max;
-    stat->sum_value = mms.sum;
+    stat->min_value = roaring_bitmap_minimum(r);
+    stat->max_value = roaring_bitmap_maximum(r);
 
     for (int i = 0; i < ra->size; ++i) {
         uint8_t truetype =
@@ -412,6 +391,7 @@ void roaring_bitmap_statistics(const roaring_bitmap_t *r,
             container_get_cardinality(ra->containers[i], ra->typecodes[i]);
         uint32_t sbytes =
             container_size_in_bytes(ra->containers[i], ra->typecodes[i]);
+        stat->cardinality += card;
         switch (truetype) {
             case BITSET_CONTAINER_TYPE:
                 stat->n_bitset_containers++;
@@ -1561,7 +1541,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize(const void *buf) {
         if (bitmap == NULL) {
             return NULL;
         }
-        roaring_bulk_context_t context = {0};
+        roaring_bulk_context_t context = {0, 0, 0, 0};
         for (uint32_t i = 0; i < card; i++) {
             // elems may not be aligned, read with memcpy
             uint32_t elem;
@@ -1604,7 +1584,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize_safe(const void *buf,
         if (bitmap == NULL) {
             return NULL;
         }
-        roaring_bulk_context_t context = {0};
+        roaring_bulk_context_t context = {0, 0, 0, 0};
         for (uint32_t i = 0; i < card; i++) {
             // elems may not be aligned, read with memcpy
             uint32_t elem;

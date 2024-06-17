@@ -75,6 +75,7 @@ enum EQueryReplyFlags {
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
+    optional uint32 SupportivePartition = 3;
 }
 
 message TTopicOperationsResponse {
@@ -116,6 +117,7 @@ message TQueryRequest {
     optional string ApplicationName = 32;
     optional string UserSID = 33;
     optional uint64 OutputChunkMaxSize = 34;
+    optional string PoolId = 35;
 }
 
 message TKqpPathIdProto {

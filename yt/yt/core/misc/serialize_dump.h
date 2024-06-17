@@ -52,6 +52,11 @@ public:
     }
 
 
+    void SetFieldName(TStringBuf name)
+    {
+        FieldName_ = name;
+    }
+
     template <class... TArgs>
     void Write(const char* format, const TArgs&... args)
     {
@@ -60,8 +65,12 @@ public:
         }
 
         TStringBuilder builder;
-        builder.AppendString("DUMP ");
         builder.AppendChar(' ', IndentCount_ * 2);
+        if (FieldName_) {
+            builder.AppendString(FieldName_);
+            builder.AppendString(": ");
+            FieldName_ = {};
+        }
         builder.AppendFormat(format, args...);
         builder.AppendChar('\n');
         auto buffer = builder.GetBuffer();
@@ -72,6 +81,7 @@ private:
     bool Enabled_ = false;
     int IndentCount_ = 0;
     int SuspendCount_ = 0;
+    TStringBuf FieldName_;
 };
 
 class TSerializeDumpIndentGuard
@@ -174,7 +184,7 @@ struct TSerializationDumpPodWriter
     template <class C>
     static void Do(C& context, const T& value)
     {
-        if constexpr(TFormatTraits<T>::HasCustomFormatValue) {
+        if constexpr(CFormattable<T>) {
             SERIALIZATION_DUMP_WRITE(context, "pod %v", value);
         } else {
             SERIALIZATION_DUMP_WRITE(context, "pod[%v] %v", sizeof(T), DumpRangeToHex(TRef::FromPod(value)));

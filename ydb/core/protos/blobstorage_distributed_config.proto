@@ -236,3 +236,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TReassignStateStorageNode ReassignStateStorageNode = 9;
     }
 }
+
+message TEvNodeWardenDynamicConfigPush {
+    TStorageConfig Config = 1;
+}

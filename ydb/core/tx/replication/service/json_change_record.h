@@ -1,6 +1,8 @@
 #pragma once
 
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_sender_resolver.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -13,6 +15,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -48,6 +51,35 @@ public:
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
     TConstArrayRef<TCell> GetKey() const;
 
+    ui64 ResolvePartitionId(NChangeExchange::IChangeSenderResolver* const resolver) const override {
+        const auto& partitions = resolver->GetPartitions();
+        Y_ABORT_UNLESS(partitions);
+        const auto& schema = resolver->GetSchema();
+        const auto streamFormat = resolver->GetStreamFormat();
+        Y_ABORT_UNLESS(streamFormat == NKikimrSchemeOp::ECdcStreamFormatJson);
+
+        // MemoryPool.Clear();
+        const auto range = TTableRange(GetKey(/* MemoryPool */));
+        Y_ABORT_UNLESS(range.Point);
+
+        const auto it = LowerBound(
+            partitions.cbegin(), partitions.cend(), true,
+            [&](const auto& partition, bool) {
+                const int compares = CompareBorders<true, false>(
+                    partition.Range->EndKeyPrefix.GetCells(), range.From,
+                    partition.Range->IsInclusive || partition.Range->IsPoint,
+                    range.InclusiveFrom || range.Point, schema
+                );
+
+                return (compares < 0);
+            }
+        );
+
+        Y_ABORT_UNLESS(it != partitions.end());
+        return it->ShardId;
+    }
+
+    using TPtr = TIntrusivePtr<TChangeRecord>;
 private:
     TString SourceId;
     NJson::TJsonValue JsonBody;
@@ -82,6 +114,32 @@ public:
 
 }
 
+namespace NKikimr {
+
+template <>
+struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
+    : public TBaseChangeRecordContainer
+{
+    TChangeRecordContainer() = default;
+
+    explicit TChangeRecordContainer(TVector<NReplication::NService::TChangeRecord::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
+
+    TVector<NReplication::NService::TChangeRecord::TPtr> Records;
+
+    TString Out() override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
+};
+
+}
+
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TChangeRecord, out, value) {
     return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TChangeRecord::TPtr, out, value) {
+    return value->Out(out);
 }

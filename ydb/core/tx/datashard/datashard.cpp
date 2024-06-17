@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "datashard_locks_db.h"
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
@@ -36,6 +37,7 @@ bool gAllowLogBatchingDefaultValue = true;
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
+ui32 gDbStatsHistogramBucketsCount = 10;
 
 // The first byte is 0x01 so it would fail to parse as an internal tablet protobuf
 TStringBuf SnapshotTransferReadSetMagic("\x01SRS", 4);
@@ -102,7 +104,7 @@ public:
 TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new TDataShardMiniKQLFactory(this))
-    , PersistentPipeCache(MakePipePeNodeCacheID(EPipePeNodeCache::Persistent))
+    , PersistentPipeCache(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent))
     , SchemeShardPipeRetryPolicy({})
     , PathOwnerId(INVALID_TABLET_ID)
     , CurrentSchemeShardId(INVALID_TABLET_ID)
@@ -1705,7 +1707,9 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->StatsUpdateInProgress = false;
     newTableInfo->StatsNeedUpdate = true;
 
-    RemoveUserTable(prevId);
+    TDataShardLocksDb locksDb(*this, txc);
+
+    RemoveUserTable(prevId, &locksDb);
     AddUserTable(newId, newTableInfo);
 
     for (auto& [_, record] : ChangesQueue) {

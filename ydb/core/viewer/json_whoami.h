@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
+#include <library/cpp/yaml/as/tstring.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -70,7 +72,7 @@ public:
         json["IsViewerAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
         json["IsMonitoringAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
         json["IsAdministrationAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -82,67 +84,56 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonWhoAmI> {
-    static TString GetSchema() {
-        return R"___(
-            {
-                "type": "object",
-                "title": "WhoAmI",
-                "properties": {
-                    "UserSID": {
-                        "type": "string",
-                        "description": "User ID / name"
-                    },
-                    "GroupSID": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "User groups"
-                    },
-                    "OriginalUserToken": {
-                        "type": "string",
-                        "description": "User's token used to authenticate"
-                    },
-                    "AuthType": {
-                        "type": "string",
-                        "description": "Authentication type"
-                    },
-                    "IsViewerAllowed": {
-                        "type": "boolean",
-                        "description": "Is user allowed to view data"
-                    },
-                    "IsMonitoringAllowed": {
-                        "type": "boolean",
-                        "description": "Is user allowed to view deeper and make simple changes"
-                    },
-                    "IsAdministrationAllowed": {
-                        "type": "boolean",
-                        "description": "Is user allowed to do unrestricted changes in the system"
-                    }
-                }
-            }
-            )___";
+    static YAML::Node GetSchema() {
+        return YAML::Load(R"___(
+            type: object
+            title: WhoAmI
+            properties:
+                UserSID:
+                    type: string
+                    description: User ID / name
+                GroupSID:
+                    type: array
+                    items:
+                        type: string
+                    description: User groups
+                OriginalUserToken:
+                    type: string
+                    description: User's token used to authenticate
+                AuthType:
+                    type: string
+                    description: Authentication type
+                IsViewerAllowed:
+                    type: boolean
+                    description: Is user allowed to view data
+                IsMonitoringAllowed:
+                    type: boolean
+                    description: Is user allowed to view deeper and make simple changes
+                IsAdministrationAllowed:
+                    type: boolean
+                    description: Is user allowed to do unrestricted changes in the system
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonWhoAmI> {
-    static TString GetParameters() {
-        return "[]";
+    static YAML::Node GetParameters() {
+        return {};
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonWhoAmI> {
     static TString GetSummary() {
-        return "\"Information about current user\"";
+        return "Information about current user";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonWhoAmI> {
     static TString GetDescription() {
-        return "\"Returns information about user token\"";
+        return "Returns information about user token";
     }
 };
 

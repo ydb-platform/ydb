@@ -1,12 +1,12 @@
 Registering pre-existing tables
-	INT4_TBL
-	road
-	text_tbl
-	TEXT_TBL
-	int4_tbl
-	int8_tbl
 	onek
+	int4_tbl
+	INT4_TBL
 	tenk1
+	text_tbl
+	road
+	TEXT_TBL
+	int8_tbl
 <sql-statement>
 --
 -- SUBSELECT
@@ -212,7 +212,7 @@ from int8_tbl group by q1 order by q1;
 </sql-statement>
 -stdin-:<main>: Fatal: Optimization
 
-    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3565  ExpandPgSelectImpl(): requirement order failed
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3637  ExpandPgSelectImpl(): requirement order failed
     	select q1, float8(count(*)) / (select count(*) from int8_tbl)
 	^
     -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:727  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
@@ -1467,6 +1467,14 @@ select * from
     -stdin-:<main>:3:6: Error: SubLinks are not allowed in: VALUES
     	  (3 not in (select * from (values (1), (2)) ss1)),
 	     ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
 <sql-statement>
 --
 -- Check sane behavior with nested IN SubLinks
@@ -1606,9 +1614,9 @@ where b and f1 >= 0;
 --
 create temp sequence ts1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Pre type annotation
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 278
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
     	--
 	^
 <sql-statement>
@@ -1676,6 +1684,14 @@ select * from
     -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
     	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
 	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
 <sql-statement>
 -- if we pretend it's stable, we get different results:
 alter function tattle(x int, y int) stable;
@@ -1706,6 +1722,14 @@ select * from
     -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
     	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
 	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
 <sql-statement>
 -- although even a stable qual should not be pushed down if it references SRF
 explain (verbose, costs off)
@@ -1728,6 +1752,14 @@ select * from
     -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
     	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
 	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
 <sql-statement>
 drop function tattle(x int, y int);
 </sql-statement>
@@ -1944,11 +1976,10 @@ with recursive x(a) as
     where length(z.a || z1.a) < 5))
 select * from x;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>:1:1: Error: WithClause: recursion is not supported
-    	with recursive x(a) as
-	^
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.z
+    
 <sql-statement>
 explain (verbose, costs off)
 with recursive x(a) as
@@ -1973,11 +2004,10 @@ with recursive x(a) as
     where length(z.a || z.a) < 5))
 select * from x;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>:1:1: Error: WithClause: recursion is not supported
-    	with recursive x(a) as
-	^
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.z
+    
 <sql-statement>
 -- Check handling of outer references
 explain (verbose, costs off)

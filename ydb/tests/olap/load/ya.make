@@ -21,9 +21,9 @@ PY3TEST()
         library/python/testing/yatest_common
         ydb/public/sdk/python
     )
-    IF(OPENSOURCE != "yes")
+    IF(NOT OPENSOURCE)
         DATA (
-            sbr://6332216525
+            sbr://6481344827
         )
     ENDIF()
 

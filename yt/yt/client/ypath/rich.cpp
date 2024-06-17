@@ -206,6 +206,16 @@ void TRichYPath::SetForeign(bool value)
     Attributes().Set("foreign", value);
 }
 
+bool TRichYPath::GetReadViaExecNode() const
+{
+    return GetAttribute(*this, "read_via_exec_node", false);
+}
+
+void TRichYPath::SetReadViaExecNode(bool value)
+{
+    Attributes().Set("read_via_exec_node", value);
+}
+
 std::optional<std::vector<TString>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
@@ -234,8 +244,8 @@ std::vector<NChunkClient::TLegacyReadRange> TRichYPath::GetRanges() const
         return std::vector<TLegacyReadRange>({
             TLegacyReadRange(
                 optionalLowerLimit.value_or(TLegacyReadLimit()),
-                optionalUpperLimit.value_or(TLegacyReadLimit())
-            )});
+                optionalUpperLimit.value_or(TLegacyReadLimit())),
+            });
     } else {
         return optionalRanges.value_or(std::vector<TLegacyReadRange>({TLegacyReadRange()}));
     }
@@ -685,6 +695,11 @@ TString ToString(const TRichYPath& path)
     return ConvertToString(path, EYsonFormat::Text);
 }
 
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
+{
+    FormatValue(builder, ToString(path), spec);
+}
+
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths)
 {
     std::vector<TRichYPath> result;
@@ -768,6 +783,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "cluster",
         "clusters",
         "create",
+        "read_via_exec_node",
     };
     return WellKnownAttributes;
 }

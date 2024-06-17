@@ -23,7 +23,7 @@ private:
     }
 public:
     TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
-        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed(), task)
         , TabletActorId(tabletActorId)
         , GCTask(task)
     {

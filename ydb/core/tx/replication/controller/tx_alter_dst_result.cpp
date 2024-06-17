@@ -4,7 +4,6 @@ namespace NKikimr::NReplication::NController {
 
 class TController::TTxAlterDstResult: public TTxBase {
     TEvPrivate::TEvAlterDstResult::TPtr Ev;
-    TReplication::TPtr Replication;
 
 public:
     explicit TTxAlterDstResult(TController* self, TEvPrivate::TEvAlterDstResult::TPtr& ev)
@@ -23,14 +22,14 @@ public:
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
-        Replication = Self->Find(rid);
-        if (!Replication) {
+        auto replication = Self->Find(rid);
+        if (!replication) {
             CLOG_W(ctx, "Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
-        auto* target = Replication->FindTarget(tid);
+        auto* target = replication->FindTarget(tid);
         if (!target) {
             CLOG_W(ctx, "Unknown target"
                 << ": rid# " << rid
@@ -52,12 +51,20 @@ public:
             CLOG_N(ctx, "Target dst altered"
                 << ": rid# " << rid
                 << ", tid# " << tid);
+
+            if (replication->CheckAlterDone()) {
+                CLOG_N(ctx, "Replication altered"
+                    << ": rid# " << rid);
+                replication->SetState(TReplication::EState::Done);
+            }
         } else {
-            Replication->SetState(TReplication::EState::Error);
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Alter dst error"
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
+
+            replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             CLOG_E(ctx, "Alter dst error"
                 << ": rid# " << rid
@@ -68,7 +75,8 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
@@ -80,10 +88,6 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
-
-        if (Replication) {
-            Replication->Progress(ctx);
-        }
     }
 
 }; // TTxAlterDstResult

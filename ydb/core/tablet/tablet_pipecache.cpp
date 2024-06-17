@@ -9,8 +9,8 @@
 
 namespace NKikimr {
 
-class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
-    TIntrusiveConstPtr<TPipePeNodeCacheConfig> Config;
+class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
+    TIntrusiveConstPtr<TPipePerNodeCacheConfig> Config;
     NTabletPipe::TClientConfig PipeConfig;
 
     struct TCounters {
@@ -327,7 +327,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         // Don't create an empty tablet record that won't be used
         if (Y_UNLIKELY(!msg->Options.AutoConnect && !ByTablet.contains(tablet))) {
             if (subscribe) {
-                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
+                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
             }
             return;
         }
@@ -353,7 +353,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 // Note that this is not a typical use-case, implemented for completeness
                 clientState = tabletState->GetActive();
                 if (!clientState) {
-                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
+                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
                     return;
                 }
             } else {
@@ -503,7 +503,7 @@ public:
         return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
     }
 
-    TPipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config)
+    TPipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &config)
         : TActor(&TThis::StateWork)
         , Config(config)
         , PipeConfig(Config->PipeConfig)
@@ -525,7 +525,7 @@ public:
     }
 };
 
-NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPipeConfig() {
+NTabletPipe::TClientConfig TPipePerNodeCacheConfig::DefaultPipeConfig() {
     NTabletPipe::TClientConfig config;
     config.RetryPolicy = {
         .RetryLimitCount = 3,
@@ -533,7 +533,7 @@ NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPipeConfig() {
     return config;
 }
 
-NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPersistentPipeConfig() {
+NTabletPipe::TClientConfig TPipePerNodeCacheConfig::DefaultPersistentPipeConfig() {
     NTabletPipe::TClientConfig config;
     config.CheckAliveness = true;
     config.RetryPolicy = {
@@ -545,28 +545,28 @@ NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPersistentPipeConfig()
     return config;
 }
 
-IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config) {
-    return new TPipePeNodeCache(config);
+IActor* CreatePipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &config) {
+    return new TPipePerNodeCache(config);
 }
 
-TActorId MakePipePeNodeCacheID(EPipePeNodeCache kind) {
+TActorId MakePipePerNodeCacheID(EPipePerNodeCache kind) {
     char x[12] = "PipeCache";
     switch (kind) {
-        case EPipePeNodeCache::Leader:
+        case EPipePerNodeCache::Leader:
             x[9] = 'A';
             break;
-        case EPipePeNodeCache::Follower:
+        case EPipePerNodeCache::Follower:
             x[9] = 'F';
             break;
-        case EPipePeNodeCache::Persistent:
+        case EPipePerNodeCache::Persistent:
             x[9] = 'P';
             break;
     }
     return TActorId(0, TStringBuf(x, 12));
 }
 
-TActorId MakePipePeNodeCacheID(bool allowFollower) {
-    return MakePipePeNodeCacheID(allowFollower ? EPipePeNodeCache::Follower : EPipePeNodeCache::Leader);
+TActorId MakePipePerNodeCacheID(bool allowFollower) {
+    return MakePipePerNodeCacheID(allowFollower ? EPipePerNodeCache::Follower : EPipePerNodeCache::Leader);
 }
 
 }

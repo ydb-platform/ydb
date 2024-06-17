@@ -980,6 +980,9 @@ UdfAllocate;
 UdfFree;
 UdfAllocateWithSize;
 UdfFreeWithSize;
+UdfArrowAllocate;
+UdfArrowReallocate;
+UdfArrowFree;
 
 # UDF terminator
 UdfTerminate;

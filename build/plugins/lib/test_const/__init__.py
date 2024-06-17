@@ -54,6 +54,10 @@ CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
 MANDATORY_ENV_VAR_NAME = 'YA_MANDATORY_ENV_VARS'
 
+STYLE_CPP_SOURCE_EXTS = [".cpp", ".cxx", ".cc", ".c", ".C"]
+STYLE_CPP_HEADER_EXTS = [".h", ".H", ".hh", ".hpp", ".hxx", ".ipp"]
+STYLE_CPP_ALL_EXTS = STYLE_CPP_SOURCE_EXTS + STYLE_CPP_HEADER_EXTS
+
 BUILD_FLAGS_ALLOWED_IN_CONTEXT = {
     'AUTOCHECK',
     # Required for local test runs
@@ -378,6 +382,19 @@ class TestSize(Enum):
         if size in cls.MaxRequirements:
             return cls.MaxRequirements[size]
         raise Exception("Unknown test size '{}'".format(size))
+
+
+class ModuleLang(Enum):
+    ABSENT = "absent"
+    NUMEROUS = "numerous"
+    UNKNOWN = "unknown"
+    CPP = "cpp"
+    DOCS = "docs"
+    GO = "go"
+    JAVA = "java"
+    KOTLIN = "kotlin"
+    PY = "py"
+    TS = "ts"
 
 
 class TestRunExitCode(Enum):

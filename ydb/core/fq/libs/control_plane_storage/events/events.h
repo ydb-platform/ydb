@@ -797,7 +797,7 @@ struct TEvControlPlaneStorage {
     struct TEvFinalStatusReport : NActors::TEventLocal<TEvFinalStatusReport, EvFinalStatusReport> {
         TEvFinalStatusReport(
             const TString& queryId, const TString& jobId, const TString& cloudId, const TString& scope,
-            std::vector<std::pair<TString, ui64>>&& statistics, FederatedQuery::QueryMeta::ComputeStatus status,
+            std::vector<std::pair<TString, i64>>&& statistics, FederatedQuery::QueryMeta::ComputeStatus status,
             NYql::NDqProto::StatusIds::StatusCode statusCode, FederatedQuery::QueryContent::QueryType queryType,
             const NYql::TIssues& issues, const NYql::TIssues& transientIssues)
             : QueryId(queryId)
@@ -816,7 +816,7 @@ struct TEvControlPlaneStorage {
         TString JobId;
         TString CloudId;
         TString Scope;
-        std::vector<std::pair<TString, ui64>> Statistics;
+        std::vector<std::pair<TString, i64>> Statistics;
         FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
         NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
         FederatedQuery::QueryContent::QueryType QueryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED;

@@ -250,7 +250,7 @@ public:
         , UserToken(std::move(userToken))
         , MaxKeys(DEFAULT_MAX_KEYS)
         , SchemeCache(schemeCache)
-        , LeaderPipeCache(MakePipePeNodeCacheID(false))
+        , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout(TDuration::Seconds(DEFAULT_TIMEOUT_SEC))
         , WaitingResolveReply(false)
         , Finished(false)

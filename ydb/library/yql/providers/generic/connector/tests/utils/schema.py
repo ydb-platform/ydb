@@ -83,6 +83,8 @@ class Column:
                 return ydb_value.Type.BOOL
             case "Utf8":
                 return ydb_value.Type.UTF8
+            case "Json":
+                return ydb_value.Type.JSON
             case "String":
                 return ydb_value.Type.STRING
             case "Int8":
@@ -142,6 +144,10 @@ class Column:
             case ydb_value.Type.BOOL:
                 return value
             case ydb_value.Type.UTF8:
+                return value
+            case ydb_value.Type.JSON:
+                return value
+            case ydb_value.Type.JSON_DOCUMENT:
                 return value
             case ydb_value.Type.STRING:
                 return value

@@ -290,6 +290,7 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrComparePrimitive<TNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateNotEquals, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrNotEquals, TCompareArgsOpt>(registry, aggrName);

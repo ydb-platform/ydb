@@ -84,6 +84,7 @@ private:
         HFunc(TEvDqFailure, OnFailure);
         HFunc(TEvGraphFinished, OnGraphFinished);
         HFunc(TEvQueryResponse, OnQueryResponse);
+        HFunc(NYql::NDqs::TEvQueryStatus, OnQueryStatus);
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
@@ -99,9 +100,9 @@ private:
 
     Yql::DqsProto::TWorkerFilter GetPragmaFilter() {
         Yql::DqsProto::TWorkerFilter pragmaFilter;
-        if (Settings->WorkerFilter.Get()) {
+        if (const auto& filter = Settings->WorkerFilter.Get(); filter.Defined()) {
             try {
-                TStringInput inputStream1(Settings->WorkerFilter.Get().GetOrElse(""));
+                TStringInput inputStream1(*filter);
                 ParseFromTextFormat(inputStream1, pragmaFilter);
             } catch (...) {
                 YQL_CLOG(INFO, ProviderDq) << "Cannot parse filter pragma " << CurrentExceptionMessage();
@@ -255,6 +256,27 @@ private:
         }
     }
 
+    void OnQueryStatus(NYql::NDqs::TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        auto response = MakeHolder<NYql::NDqs::TEvQueryStatusResponse>();
+        auto* r = response->Record.MutableResponse();
+        for (auto& metric : LatestStats.GetMetric()) {
+            auto& responseMetric = *r->AddMetric();
+            responseMetric.SetName(metric.GetName());
+            responseMetric.SetSum(metric.GetSum());
+            responseMetric.SetMin(metric.GetMin());
+            responseMetric.SetMax(metric.GetMax());
+            responseMetric.SetAvg(metric.GetAvg());
+            responseMetric.SetCount(metric.GetCount());
+        }
+        if (ExecutionStart) {
+            r->SetStatus("Executing");
+        } else {
+            r->SetStatus("Uploading artifacts");
+        }
+        Send(ev->Sender, response.Release());
+    }
+
     void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)
     {
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " with status=" << static_cast<int>(statusCode) << " issues=" << Issues.ToString();
@@ -321,6 +343,7 @@ private:
     void OnDqStats(TEvDqStats::TPtr& ev) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        LatestStats = ev->Get()->Record;
         Send(PrinterId, ev->Release().Release());
     }
 
@@ -512,6 +535,7 @@ private:
     bool CreateTaskSuspended;
     bool Finished = false;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+    NYql::NDqProto::TDqStats LatestStats;
 };
 
 NActors::IActor* MakeDqExecuter(

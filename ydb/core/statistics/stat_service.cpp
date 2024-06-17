@@ -784,6 +784,7 @@ private:
             auto itPath = params.find("path");
             if (itPath == params.end()) {
                 Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+                return;
             }
             Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
             return;
@@ -802,6 +803,7 @@ private:
             auto itPath = params.find("path");
             if (itPath == params.end()) {
                 Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+                return;
             }
             Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
             return;

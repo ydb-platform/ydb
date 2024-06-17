@@ -12,6 +12,7 @@ add_library(core-testlib-actors)
 target_link_libraries(core-testlib-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
+  version_definition
   library-actors-testlib
   cpp-testing-unittest
   ydb-core-base

@@ -6,12 +6,14 @@ namespace NKikimr::NSchemeShard {
 void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
     indexSchema.SetId(Id);
     indexSchema.SetName(Name);
+    indexSchema.SetStorageId(StorageId);
     IndexMeta.SerializeToProto(indexSchema);
 }
 
 void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
+    StorageId = indexSchema.GetStorageId();
     AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
 }
 
@@ -21,6 +23,9 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
     if (upsert.GetIndexConstructor().GetClassName() != IndexMeta.GetClassName()) {
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
+    }
+    if (upsert.GetStorageId()) {
+        StorageId = *upsert.GetStorageId();
     }
     auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
     if (!object) {

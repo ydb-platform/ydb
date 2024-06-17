@@ -22,6 +22,7 @@ SRCS(
     blobstorage_vdisk_guids.h
     defs.h
     disk_part.h
+    vdisk_performance_params.cpp
     sublog.h
     vdisk_config.cpp
     vdisk_config.h

@@ -13,6 +13,7 @@ target_link_libraries(ydb-core-blobstorage-incrhuge-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  version_definition
   library-actors-protos
   ydb-core-blobstorage
   core-blobstorage-incrhuge

@@ -99,6 +99,4 @@ namespace NKikimr::NPersQueueTests {
         }
         return {};
     }
-
-
 }

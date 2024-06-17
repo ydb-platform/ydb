@@ -14,6 +14,7 @@ target_link_libraries(ydb-core-blobstorage-incrhuge-ut PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
+  version_definition
   library-actors-protos
   ydb-core-blobstorage
   core-blobstorage-incrhuge

@@ -4,24 +4,19 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 
 namespace NKikimr::NOlap {
 
-bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    if (!TBase::DoApplyChanges(self, context)) {
-        return false;
-    }
-    return true;
-}
-
-void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-    TBase::DoWriteIndex(self, context);
-    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
-    for (const auto& insertedData : DataToIndex) {
-        self.InsertTable->EraseCommitted(context.DBWrapper, insertedData, removing);
-    }
-    if (!DataToIndex.empty()) {
-        self.UpdateInsertTableCounters();
+void TInsertColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    TBase::DoWriteIndexOnExecute(self, context);
+    if (self) {
+        auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnExecute(context.DBWrapper, insertedData, removing);
+        }
     }
 }
 
@@ -30,16 +25,25 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_ABORT_UNLESS(DataToIndex.size());
     auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
     for (auto&& insertedData : DataToIndex) {
-        reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData().value_or(""));
+        reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData());
     }
 
     self.BackgroundController.StartIndexing(*this);
 }
 
-void TInsertColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-    self.IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (self) {
+        for (const auto& insertedData : DataToIndex) {
+            self->InsertTable->EraseCommittedOnComplete(insertedData);
+        }
+        if (!DataToIndex.empty()) {
+            self->UpdateInsertTableCounters();
+        }
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
+        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+    }
 }
 
 void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
@@ -73,12 +77,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         std::shared_ptr<arrow::RecordBatch> batch;
         {
-            auto itBlobData = Blobs.find(blobRange);
-            Y_ABORT_UNLESS(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
-            Y_ABORT_UNLESS(!itBlobData->second.empty(), "Blob data not present");
+            const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+            Y_ABORT_UNLESS(blobData.size(), "Blob data not present");
             // Prepare batch
-            batch = NArrow::DeserializeBatch(itBlobData->second, indexInfo.ArrowSchema());
-            Blobs.erase(itBlobData);
+            batch = NArrow::DeserializeBatch(blobData, indexInfo.ArrowSchema());
             AFL_VERIFY(batch)("event", "cannot_parse")
                 ("data_snapshot", TStringBuilder() << inserted.GetSnapshot())
                 ("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
@@ -91,10 +93,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
 
-    Y_ABORT_UNLESS(Blobs.empty());
+    Y_ABORT_UNLESS(Blobs.IsEmpty());
     const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
-        NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);
+        NArrow::NMerger::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false, IIndexInfo::GetSpecialColumnNames());
         THashMap<std::string, ui64> fieldSizes;
         ui64 rowsCount = 0;
         for (auto&& batch : batches) {
@@ -105,23 +107,24 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             rowsCount += batch->num_rows();
         }
 
-        NIndexedReader::TRecordBatchBuilder builder(resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()->fields(), rowsCount, fieldSizes);
+        NArrow::NMerger::TRecordBatchBuilder builder(resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()->fields(), rowsCount, fieldSizes);
         stream.SetPossibleSameVersion(true);
         stream.DrainAll(builder);
 
         auto itGranule = PathToGranule.find(pathId);
         AFL_VERIFY(itGranule != PathToGranule.end());
-        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NArrow::NMerger::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
         for (auto&& b : result) {
             if (!b) {
                 continue;
             }
+            std::optional<NArrow::NSerialization::TSerializerContainer> externalSaver;
             if (b->num_rows() < 100) {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
             } else {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
             }
-            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
+            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context, externalSaver);
             Y_ABORT_UNLESS(portions.size());
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));

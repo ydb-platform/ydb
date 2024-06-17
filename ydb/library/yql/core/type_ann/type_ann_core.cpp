@@ -9495,7 +9495,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             // somewhat ugly attempt to find SqlProject to obtain column order
             auto currInput = input->HeadPtr();
             TString path = ToString(input->Content());
-            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort"})) {
+            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort", "Take", "Skip"})) {
                 path = path + " -> " + ToString(currInput->Content());
                 currInput = currInput->HeadPtr();
             }
@@ -9510,7 +9510,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             for (const auto& item : currInput->Child(1)->ChildrenList()) {
                 if (!item->IsCallable("SqlProjectItem")) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Pos()),
-                        TStringBuilder() << "Failed to deduce column order for input - star / qualified star is prosent in projection"));
+                        TStringBuilder() << "Failed to deduce column order for input - star / qualified star is present in projection"));
                     return IGraphTransformer::TStatus::Error;
                 }
                 childColumnOrder->push_back(ToString(item->Child(1)->Content()));

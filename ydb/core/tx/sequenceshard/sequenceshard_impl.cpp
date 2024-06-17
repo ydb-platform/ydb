@@ -91,6 +91,7 @@ namespace NSequenceShard {
             HFunc(TEvSequenceShard::TEvFreezeSequence, Handle);
             HFunc(TEvSequenceShard::TEvRestoreSequence, Handle);
             HFunc(TEvSequenceShard::TEvRedirectSequence, Handle);
+            HFunc(TEvSequenceShard::TEvGetSequence, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

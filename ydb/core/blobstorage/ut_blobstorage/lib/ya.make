@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/testing/unittest
+    ydb/apps/version
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blobstorage/backpressure

@@ -249,17 +249,6 @@ private:
     const IExternalObjectsProvider& ExternalObjectsProvider;
 public:
 
-    bool RestartScanner(TShardState& state) {
-        StopScanner(state.TabletId, false);
-        state.ResetRetry();
-        static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
-        if (++state.TotalRetries >= MAX_SHARD_RETRIES) {
-            return false;
-        }
-        StartScanner(state);
-        return true;
-    }
-
     void AbortAllScanners(const TString& errorMessage) {
         for (auto&& itTablet : ShardScanners) {
             itTablet.second->Stop(true, errorMessage);

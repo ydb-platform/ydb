@@ -18,7 +18,7 @@ public:
         : IndexSchema(schema)
     {}
 
-    bool Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NKikimr::NEvWrite::IPayloadData& payload);
+    bool Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NKikimr::NEvWrite::IPayloadReader& payload);
     virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {

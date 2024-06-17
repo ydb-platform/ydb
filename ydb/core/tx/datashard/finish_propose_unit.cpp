@@ -99,8 +99,11 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         op->SetFinishProposeTs(DataShard.ConfirmReadOnlyLease());
     }
 
-    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op)))
+    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op))) {
+        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
+        op->SetProposeResultSentEarly();
         CompleteRequest(op, ctx);
+    }
 
     if (!DataShard.IsFollower())
         DataShard.PlanCleanup(ctx);
@@ -128,7 +131,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
 void TFinishProposeUnit::Complete(TOperation::TPtr op,
                                   const TActorContext &ctx)
 {
-    if (!op->HasResultSentFlag()) {
+    if (!op->HasResultSentFlag() && !op->IsProposeResultSentEarly()) {
         DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
 
         if (op->Result())

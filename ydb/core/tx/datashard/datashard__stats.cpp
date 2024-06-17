@@ -179,7 +179,6 @@ private:
             ctx.Send(ReplyTo, ev.Release());
 
             FinishTask(ctx);
-
             return Die(ctx);
         }
 
@@ -206,6 +205,8 @@ private:
         if (msg.Status != NKikimrProto::OK) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats build failed at datashard " << TabletId << ", for tableId " << TableId
                 << " requested pages but got " << msg.Status);
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, TDataShard::TEvPrivate::TEvTableStatsError::ECode::FETCH_PAGE_FAILED));
+            FinishTask(ctx);
             return Die(ctx);
         }
         
@@ -360,7 +361,9 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard " << TabletID() << ", for tableId " << tableId);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard " << TabletID() << ", for tableId " << tableId
+        << ": RowCount " << ev->Get()->Stats.RowCount << ", DataSize " << ev->Get()->Stats.DataSize.Size
+        << (ev->Get()->PartOwners.size() > 1 || ev->Get()->PartOwners.size() == 1 && *ev->Get()->PartOwners.begin() != TabletID() ? ", with borrowed parts" : ""));
 
     i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {
@@ -409,6 +412,21 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
+void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+    Actors.erase(ev->Sender);
+
+    auto msg = ev->Get();
+
+    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message 
+        << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
+
+    auto it = TableInfos.find(msg->TableId);
+    if (it != TableInfos.end()) {
+        it->second->StatsUpdateInProgress = false;
+        // if we have got an error, a compaction should have happened so restart build stats anyway
+        it->second->StatsNeedUpdate = true;
+    }
+}
 
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
@@ -425,9 +443,7 @@ public:
     void CheckIdleMemCompaction(const TUserTable& table, TTransactionContext& txc, const TActorContext& ctx) {
         // Note: we only care about changes in the main table
         auto lastTableChange = txc.DB.Head(table.LocalTid);
-        if (table.LastTableChange.Serial != lastTableChange.Serial ||
-            table.LastTableChange.Epoch != lastTableChange.Epoch)
-        {
+        if (table.LastTableChange != lastTableChange) {
             table.LastTableChange = lastTableChange;
             table.LastTableChangeTimestamp = ctx.Monotonic();
             return;

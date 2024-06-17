@@ -256,7 +256,7 @@ message TTableServiceConfig {
         CTV_OOB_PICKLE_1_0 = 1;
     }
 
-    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
+    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_UV_PICKLE_1_0];
 
     enum EIndexAutoChooseMode {
         DISABLED = 0;
@@ -273,4 +273,7 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
     optional bool EnableOlapSink = 55 [default = false];
+
+    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
+    optional bool OldLookupJoinBehaviour = 59 [default = true]; 
 };

@@ -10,8 +10,10 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvResumeScanDataForPlanning,
                 EvResumeScanDataForCopying,
                 EvTxComplete,
+                EvUpdateBytesCopiedQ,
             };
         };
 
@@ -42,6 +44,12 @@ namespace NKikimr::NBlobDepot {
         bool ActionInProgress = false;
         bool ResumeScanDataForCopyingInFlight = false;
 
+        std::optional<TLogoBlobID> LastPlanScannedKey;
+        bool PlanningComplete = false;
+        bool ResumeScanDataForPlanningInFlight = false;
+
+        std::deque<std::tuple<TMonotonic, ui64>> BytesCopiedQ;
+
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BLOB_DEPOT_ASSIMILATOR_ACTOR;
@@ -62,6 +70,8 @@ namespace NKikimr::NBlobDepot {
         void Action();
         void SendAssimilateRequest();
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
+        void ScanDataForPlanning();
+        void HandleResumeScanDataForPlanning();
         void ScanDataForCopying();
         void HandleResumeScanDataForCopying();
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
@@ -73,6 +83,8 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev);
         TString SerializeAssimilatorState() const;
+        void UpdateAssimilatorPosition() const;
+        void UpdateBytesCopiedQ();
     };
 
 } // NKikimrBlobDepot::NBlobDepot

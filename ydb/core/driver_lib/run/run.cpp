@@ -637,6 +637,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasImport = true;
         }
 
+        if (hasTableService || hasYql) {
+            hasQueryService = true;
+        }
+
         // Enable RL for all services if enabled list is empty
         if (rlServicesEnabled.empty()) {
             for (auto& [name, cfg] : names) {

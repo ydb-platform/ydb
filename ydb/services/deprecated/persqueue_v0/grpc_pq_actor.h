@@ -554,6 +554,8 @@ private:
     NPersQueue::TWriteRequest::TInit InitRequest;
 
     TActorId PartitionChooser;
+
+    bool SessionClosed = false;
 };
 
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {

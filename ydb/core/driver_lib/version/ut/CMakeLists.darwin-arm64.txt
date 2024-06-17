@@ -16,6 +16,7 @@ target_link_libraries(ydb-core-driver_lib-version-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   version
+  version_definition
 )
 target_link_options(ydb-core-driver_lib-version-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

@@ -47,8 +47,10 @@ public:
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
     bool EraseAborted(const TWriteId writeId);
+    bool HasAborted(const TWriteId writeId);
 
     bool EraseCommitted(const TInsertedData& data);
+    bool HasCommitted(const TInsertedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
     std::optional<TInsertedData> ExtractInserted(const TWriteId id);

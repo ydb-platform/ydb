@@ -19,6 +19,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  version_definition
   library-actors-core
   library-actors-interconnect
   library-grpc-client

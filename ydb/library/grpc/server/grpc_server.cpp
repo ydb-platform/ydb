@@ -210,13 +210,16 @@ void TGRpcServer::Stop() {
             break;
 
         auto spent = (TInstant::Now() - now).SecondsFloat();
-        if (attempt % 300 == 0) {
+        if ((attempt + 1) % 300 == 0) {
             // don't log too much
             Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl;
         }
 
-        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat())
+        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat()) {
+            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent << " sec"
+                 << Endl;
             break;
+        }
         Sleep(TDuration::MilliSeconds(10));
     }
 

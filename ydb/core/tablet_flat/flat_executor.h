@@ -483,6 +483,7 @@ class TExecutor
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
+    TControlWrapper MaxCommitRedoMB;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;

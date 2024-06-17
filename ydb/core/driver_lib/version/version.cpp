@@ -17,45 +17,14 @@ using EComponentId = NKikimrConfig::TCompatibilityRule;
 using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
 TCompatibilityInfo::TCompatibilityInfo() {
-    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
     using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
-    using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
     using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
 
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
 
-    auto current = TCurrentConstructor{
-        .Application = "ydb",
-        .Version = TVersionConstructor{
-            .Year = 24,
-            .Major = 1,
-        },
-        .CanLoadFrom = {
-            TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
-            },
-        },
-        .StoresReadableBy = {
-            TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
-            },
-        },
-        .CanConnectTo = {
-            TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
-            },
-            TCompatibilityRuleConstructor{
-                .Application = "nbs",
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
-            },
-        }
-    }.ToPB();
+    auto current = MakeCurrent();
 
     bool success = CompleteFromTag(current);
     Y_UNUSED(success);

@@ -174,6 +174,9 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
+
+        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
+
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         // issue initial report to whiteboard before creating actor to avoid races

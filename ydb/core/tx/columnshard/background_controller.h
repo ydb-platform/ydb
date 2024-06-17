@@ -8,52 +8,15 @@ class TColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
-class TBackgroundActivity {
-public:
-    enum EBackActivity : ui32 {
-        NONE = 0x00,
-        INDEX = 0x01,
-        COMPACT = 0x02,
-        CLEAN  = 0x04,
-        TTL = 0x08,
-        ALL = 0xffff
-    };
-
-    static TBackgroundActivity Indexation() { return TBackgroundActivity(INDEX); }
-    static TBackgroundActivity Compaction() { return TBackgroundActivity(COMPACT); }
-    static TBackgroundActivity Cleanup() { return TBackgroundActivity(CLEAN); }
-    static TBackgroundActivity Ttl() { return TBackgroundActivity(TTL); }
-    static TBackgroundActivity All() { return TBackgroundActivity(ALL); }
-    static TBackgroundActivity None() { return TBackgroundActivity(NONE); }
-
-    TBackgroundActivity() = default;
-
-    bool HasIndexation() const { return Activity & INDEX; }
-    bool HasCompaction() const { return Activity & COMPACT; }
-    bool HasCleanup() const { return Activity & CLEAN; }
-    bool HasTtl() const { return Activity & TTL; }
-    bool HasAll() const { return Activity == ALL; }
-
-    TString DebugString() const;
-
-private:
-    EBackActivity Activity = NONE;
-
-    TBackgroundActivity(EBackActivity activity)
-        : Activity(activity)
-    {}
-};
-
 class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, THashSet<NOlap::TPortionAddress>> CompactionInfoPortions;
 
-    bool ActiveCleanup = false;
-    THashSet<NOlap::TPortionAddress> TtlPortions;
+    bool ActiveCleanupPortions = false;
+    bool ActiveCleanupTables = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -62,10 +25,9 @@ public:
     void CheckDeadlines();
     void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
+    bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        Y_ABORT_UNLESS(CompactionInfoPortions.erase(info.GetPathId()));
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -81,25 +43,28 @@ public:
         return ActiveIndexationTasks.size();
     }
 
-    void StartCleanup() {
-        Y_ABORT_UNLESS(!ActiveCleanup);
-        ActiveCleanup = true;
+    void StartCleanupPortions() {
+        Y_ABORT_UNLESS(!ActiveCleanupPortions);
+        ActiveCleanupPortions = true;
     }
-    void FinishCleanup() {
-        Y_ABORT_UNLESS(ActiveCleanup);
-        ActiveCleanup = false;
+    void FinishCleanupPortions() {
+        Y_ABORT_UNLESS(ActiveCleanupPortions);
+        ActiveCleanupPortions = false;
     }
-    bool IsCleanupActive() const {
-        return ActiveCleanup;
+    bool IsCleanupPortionsActive() const {
+        return ActiveCleanupPortions;
     }
 
-    void StartTtl(const NOlap::TColumnEngineChanges& changes);
-    void FinishTtl() {
-        Y_ABORT_UNLESS(!TtlPortions.empty());
-        TtlPortions.clear();
+    void StartCleanupTables() {
+        Y_ABORT_UNLESS(!ActiveCleanupTables);
+        ActiveCleanupTables = true;
     }
-    bool IsTtlActive() const {
-        return !TtlPortions.empty();
+    void FinishCleanupTables() {
+        Y_ABORT_UNLESS(ActiveCleanupTables);
+        ActiveCleanupTables = false;
+    }
+    bool IsCleanupTablesActive() const {
+        return ActiveCleanupTables;
     }
 };
 

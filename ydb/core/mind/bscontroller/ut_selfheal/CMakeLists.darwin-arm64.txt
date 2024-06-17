@@ -15,6 +15,7 @@ target_link_libraries(ydb-core-mind-bscontroller-ut_selfheal PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  version_definition
   blobstorage-dsproxy-mock
   blobstorage-pdisk-mock
   core-mind-bscontroller

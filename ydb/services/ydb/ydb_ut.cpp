@@ -1264,7 +1264,6 @@ columns {
       }
     }
   }
-  not_null: false
 }
 columns {
   name: "Value"
@@ -1275,7 +1274,6 @@ columns {
       }
     }
   }
-  not_null: false
 }
 primary_key: "Key"
 partitioning_settings {
@@ -1603,7 +1601,6 @@ columns {
       }
     }
   }
-  not_null: false
 }
 columns {
   name: "IValue"
@@ -1614,7 +1611,6 @@ columns {
       }
     }
   }
-  not_null: false
 }
 primary_key: "Key"
 indexes {

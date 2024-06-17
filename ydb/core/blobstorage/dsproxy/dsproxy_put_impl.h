@@ -43,8 +43,6 @@ private:
     bool AtLeastOneResponseWasNotOk = false;
     bool EnableRequestMod3x3ForMinLatecy = false;
 
-    ui64 DoneBlobs = 0;
-
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
     struct TBlobInfo {
@@ -99,8 +97,6 @@ private:
 
     friend class TBlobStorageGroupPutRequest;
 
-    bool IsInitialized = false;
-
     friend void ::Out<TBlobInfo>(IOutputStream&, const TBlobInfo&);
 
 public:
@@ -109,7 +105,7 @@ public:
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId)
         : Deadline(ev->Deadline)
         , Info(info)
-        , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
+        , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
         , WrittenBeyondBarrier(1)
         , StatusFlags(0)
@@ -133,7 +129,7 @@ public:
             bool enableRequestMod3x3ForMinLatecy)
         : Deadline(TInstant::Zero())
         , Info(info)
-        , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
+        , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
         , WrittenBeyondBarrier(events.size())
         , StatusFlags(0)
@@ -175,46 +171,25 @@ public:
         Y_VERIFY_S(partSets.size() == Blobs.size(), "partSets.size# " << partSets.size()
                 << " Blobs.size# " << Blobs.size());
         const ui32 totalParts = Info->Type.TotalPartCount();
-        for (ui64 blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
+        for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
             TBlobInfo& blob = Blobs[blobIdx];
-            Blackboard.RegisterBlobForPut(blob.BlobId);
+            Blackboard.RegisterBlobForPut(blob.BlobId, blobIdx);
             for (ui32 i = 0; i < totalParts; ++i) {
                 if (Info->Type.PartSize(TLogoBlobID(blob.BlobId, i + 1))) {
                     Blackboard.AddPartToPut(blob.BlobId, i, TRope(partSets[blobIdx][i]));
                 }
             }
-            Blackboard.MarkBlobReadyToPut(blob.BlobId, blobIdx);
         }
-        IsInitialized = true;
     }
 
     void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
             TPutResultVec &outPutResults);
-    void PrepareReply(TLogContext &logCtx, TString errorReason, TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished,
-            TPutResultVec &outPutResults);
-    void PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID blobId, ui64 blobIdx, TLogContext &logCtx,
+    void PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
 
     ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
 
-    void Accelerate(TLogContext &logCtx) {
-        Blackboard.ChangeAll();
-        switch (Info->Type.GetErasure()) {
-            case TBlobStorageGroupType::ErasureMirror3dc:
-                Blackboard.RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy));
-                break;
-            case TBlobStorageGroupType::ErasureMirror3of4:
-                Blackboard.RunStrategy(logCtx, TPut3of4Strategy(Tactic, true));
-                break;
-            default:
-                Blackboard.RunStrategy(logCtx, TAcceleratePutStrategy());
-                break;
-        }
-    }
-
     TString DumpFullState() const;
-
-    bool MarkBlobAsSent(ui64 blobIdx);
 
     TString ToString() const;
 
@@ -226,8 +201,8 @@ public:
         Blackboard.ChangeAll();
     }
 
-    void Step(TLogContext &logCtx, TPutResultVec& putResults, const TBlobStorageGroupInfo::TGroupVDisks& expired) {
-        RunStrategies(logCtx, putResults, expired);
+    void Step(TLogContext &logCtx, TPutResultVec& putResults, const TBlobStorageGroupInfo::TGroupVDisks& expired, bool accelerate) {
+        RunStrategies(logCtx, putResults, expired, accelerate);
     }
 
     TDeque<TPutEvent> GeneratePutRequests() {
@@ -299,7 +274,8 @@ public:
     }
 
 protected:
-    void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired);
+    void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired,
+        bool accelerate);
     void RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults,
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
@@ -339,7 +315,7 @@ protected:
     void ProcessResponseCommonPart(TProtobuf& record) {
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_ABORT_UNLESS(status != NKikimrProto::BLOCKED && status != NKikimrProto::RACE && status != NKikimrProto::DEADLINE);
+        Y_ABORT_UNLESS(status != NKikimrProto::RACE);
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }

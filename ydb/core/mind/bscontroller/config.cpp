@@ -17,22 +17,21 @@ namespace NKikimr::NBsController {
                 , State(state)
             {}
 
-            void Execute(std::deque<std::unique_ptr<IEventHandle>>& outbox) {
+            void Execute() {
                 ApplyUpdates();
 
                 for (auto &pair : Services) {
                     const TNodeId &nodeId = pair.first;
 
-                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedCount) {
-                        auto event = MakeHolder<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedServerId) {
+                        auto event = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
                         auto& record = event->Record;
                         pair.second.Swap(&record);
                         record.SetStatus(NKikimrProto::OK);
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
-                        outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
-                            Self->SelfId(), event.Release()));
+                        State.Outbox.emplace_back(nodeId, std::move(event), 0);
                     }
                 }
             }
@@ -98,7 +97,7 @@ namespace NKikimr::NBsController {
                 }
                 pdisk->SetPDiskGuid(pdiskInfo.Guid);
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
-                pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
+                //pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
@@ -232,6 +231,18 @@ namespace NKikimr::NBsController {
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
                     SerializeGroupInfo(service->AddGroups(), groupInfo, storagePoolName, scopeId);
+                }
+
+                // push group state notification to NodeWhiteboard (for virtual groups only)
+                if (groupInfo.VirtualGroupState) {
+                    TBlobStorageGroupInfo::TDynamicInfo dynInfo(groupInfo.ID, groupInfo.Generation);
+                    for (const auto& vdisk : groupInfo.VDisksInGroup) {
+                        const auto& id = vdisk->VSlotId;
+                        dynInfo.PushBackActorId(MakeBlobStorageVDiskID(id.NodeId, id.PDiskId, id.VSlotId));
+                    }
+                    State.NodeWhiteboardOutbox.emplace_back(new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(
+                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
+                        scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
             }
 
@@ -448,7 +459,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            TNodeWardenUpdateNotifier(this, state).Execute(state.Outbox);
+            TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
             state.Commit();
@@ -460,7 +471,7 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {
-            auto ev = MakeHolder<TEvControllerNotifyGroupChange>();
+            auto ev = std::make_unique<TEvControllerNotifyGroupChange>();
             auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -500,7 +511,7 @@ namespace NKikimr::NBsController {
             }
 
             if (ev->Created || ev->Deleted) {
-                state.Outbox.push_back(std::make_unique<IEventHandle>(StatProcessorActorId, SelfId(), ev.Release()));
+                state.StatProcessorOutbox.push_back(std::move(ev));
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
@@ -590,8 +601,14 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& msg : Outbox) {
-                TActivationContext::Send(msg.release());
+            for (auto& [nodeId, ev, cookie] : Outbox) {
+                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            }
+            for (auto& ev : StatProcessorOutbox) {
+                Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
+            }
+            for (auto& ev : NodeWhiteboardOutbox) {
+                Self.SelfId().Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(Self.SelfId().NodeId()), ev.release());
             }
 
             if (UpdateSelfHealInfoMsg) {
@@ -894,8 +911,8 @@ namespace NKikimr::NBsController {
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
-            pb->SetExpectedSerial(pdisk.ExpectedSerial);
-            pb->SetLastSeenSerial(pdisk.LastSeenSerial);
+            //pb->SetExpectedSerial(pdisk.ExpectedSerial);
+            //pb->SetLastSeenSerial(pdisk.LastSeenSerial);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

@@ -459,7 +459,6 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             UNIT_ASSERT(!emitter.CanEmit().Defined());
         }
     }
-
 } // TSourceIdTests
 
 } // namespace NKikimr::NPQ

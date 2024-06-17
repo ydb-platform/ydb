@@ -46,7 +46,7 @@ namespace NFake {
             auto *types = NTable::NTest::DbgRegistry();
             auto *app = new TAppData(0, 0, 0, 0, { }, types, nullptr, nullptr, nullptr);
 
-            Env.Initialize({ app, nullptr, nullptr });
+            Env.Initialize({ app, nullptr, nullptr, {} });
             Env.SetDispatchTimeout(DEFAULT_DISPATCH_TIMEOUT);
             Env.SetLogPriority(NKikimrServices::FAKE_ENV, NActors::NLog::PRI_INFO);
 

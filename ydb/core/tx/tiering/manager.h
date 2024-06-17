@@ -1,7 +1,7 @@
 #pragma once
 #include "external_data.h"
 
-#include <functional>
+#include "abstract/manager.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
@@ -11,6 +11,8 @@
 #include <ydb/services/metadata/service.h>
 
 #include <ydb/library/accessor/accessor.h>
+
+#include <functional>
 
 namespace NKikimr::NColumnShard {
 namespace NTiers {
@@ -43,16 +45,16 @@ public:
 };
 }
 
-class TTiersManager {
+class TTiersManager: public ITiersManager {
 private:
     class TActor;
-    using TManagers = std::unordered_map<TString, NTiers::TManager>;
+    using TManagers = std::map<TString, NTiers::TManager>;
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
     TActor* Actor = nullptr;
     std::unordered_map<ui64, TString> PathIdTiering;
-    YDB_READONLY_DEF(TManagers, Managers);
+    TManagers Managers;
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     NMetadata::NFetcher::ISnapshot::TPtr Snapshot;
@@ -82,17 +84,13 @@ public:
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
-    const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
-    const NTiers::TManager* GetManagerOptional(const TString& tierId) const;
+    virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
+        AFL_VERIFY(IsReady());
+        return Managers;
+    }
+    virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
 
-    TManagers::const_iterator begin() const {
-        return Managers.begin();
-    }
-
-    TManagers::const_iterator end() const {
-        return Managers.end();
-    }
 };
 
 }

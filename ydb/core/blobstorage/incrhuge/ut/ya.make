@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/protos
     ydb/core/blobstorage
     ydb/core/blobstorage/incrhuge

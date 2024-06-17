@@ -402,11 +402,14 @@ public:
 
     bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
-    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
+    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable_; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
         MvccSnapshot = snapshot;
-        MvccSnapshotRepeatable = isRepeatable;
+        MvccSnapshotRepeatable_ = isRepeatable;
     }
+
+    bool IsProposeResultSentEarly() const { return ProposeResultSentEarly_; }
+    void SetProposeResultSentEarly(bool value = true) { ProposeResultSentEarly_ = value; }
 
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
@@ -429,7 +432,11 @@ protected:
 
     TSnapshotKey AcquiredSnapshotKey;
     TRowVersion MvccSnapshot = TRowVersion::Max();
-    bool MvccSnapshotRepeatable = false;
+
+private:
+    // Runtime flags
+    ui8 MvccSnapshotRepeatable_ : 1 = 0;
+    ui8 ProposeResultSentEarly_ : 1 = 0;
 };
 
 struct TRSData {
@@ -679,6 +686,7 @@ public:
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetSpecialDependencies() const { return SpecialDependencies; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetPlannedConflicts() const { return PlannedConflicts; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetImmediateConflicts() const { return ImmediateConflicts; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetRepeatableReadConflicts() const { return RepeatableReadConflicts; }
     const absl::flat_hash_set<ui64> &GetVolatileDependencies() const { return VolatileDependencies; }
     bool HasVolatileDependencies() const { return !VolatileDependencies.empty(); }
     bool GetVolatileDependenciesAborted() const { return VolatileDependenciesAborted; }
@@ -695,6 +703,10 @@ public:
     void ClearImmediateConflicts();
     void ClearSpecialDependents();
     void ClearSpecialDependencies();
+
+    void AddRepeatableReadConflict(const TOperation::TPtr &op);
+    void PromoteRepeatableReadConflicts();
+    void ClearRepeatableReadConflicts();
 
     void AddVolatileDependency(ui64 txId);
     void RemoveVolatileDependency(ui64 txId, bool success);
@@ -885,6 +897,7 @@ private:
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> SpecialDependencies;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> PlannedConflicts;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> ImmediateConflicts;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> RepeatableReadConflicts;
     absl::flat_hash_set<ui64> VolatileDependencies;
     bool VolatileDependenciesAborted = false;
     TVector<EExecutionUnitKind> ExecutionPlan;

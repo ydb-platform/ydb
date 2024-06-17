@@ -129,6 +129,7 @@ struct TTxState {
         item(TxCreateView, 83) \
         item(TxAlterView, 84) \
         item(TxDropView, 85) \
+        item(TxCopySequence, 86) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -193,6 +194,8 @@ struct TTxState {
         item(WaitShadowPathPublication, 136, "") \
         item(DeletePathBarrier, 137, "") \
         item(SyncHive, 138, "") \
+        item(CopyTableBarrier, 139, "") \
+        item(ProposedCopySequence, 140, "") \
         item(Done, 240, "") \
         item(Aborted, 250, "")
 
@@ -342,6 +345,7 @@ struct TTxState {
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
         case TxCreateView:
+        case TxCopySequence:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -472,6 +476,7 @@ struct TTxState {
         case TxCreateExternalTable:
         case TxCreateExternalDataSource:
         case TxCreateView:
+        case TxCopySequence:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -559,6 +564,7 @@ struct TTxState {
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
         case TxCreateSequence:
+        case TxCopySequence:
         case TxCreateReplication:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:

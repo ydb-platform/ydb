@@ -62,6 +62,7 @@ public:
     TPathInfoIndexPriority GetIndexationPriority() const;
 
     bool EraseCommitted(const TInsertedData& data);
+    bool HasCommitted(const TInsertedData& data);
 
     const TSet<TInsertedData>& GetCommitted() const {
         return Committed;

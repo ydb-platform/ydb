@@ -820,6 +820,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     TAppPrepare app;
 
     app.FeatureFlags = Extension.GetFeatureFlags();
+    app.ImmediateControlsConfig = Extension.GetImmediateControlsConfig();
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
@@ -853,7 +854,9 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         app.AddHive(i, Config.HiveId);
     }
 
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+    app.InitIcb(Config.Nodes.size());
+
+    for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetNodeId(i)),
                         TActorSetupCmd(new TFakeNodeWhiteboardService, TMailboxType::Simple, 0), i);
     }
@@ -1034,7 +1037,12 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 labels[label.GetName()] = label.GetValue();
             }
             labels.emplace("node_id", ToString(i));
-            auto aid = Register(CreateConfigsDispatcher(Extension, labels));
+            auto aid = Register(CreateConfigsDispatcher(
+                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                        .InitialConfig = Extension,
+                        .Labels = labels,
+                    }
+                ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
         }

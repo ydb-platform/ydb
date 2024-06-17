@@ -17,6 +17,7 @@ target_link_libraries(ydbd PUBLIC
   yutil
   library-cpp-cpuid_check
   hyperscan_udf
+  version_definition
   run
   ydb-core-protos
   ydb-core-security

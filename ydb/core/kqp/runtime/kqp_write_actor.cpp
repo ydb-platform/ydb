@@ -334,7 +334,7 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             inFlightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
             .AddDataToPayload(TString(inFlightBatch.Data));
 
         evWrite->AddOperation(

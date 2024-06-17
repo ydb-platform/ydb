@@ -49,6 +49,14 @@ public:
             return true;
         }
     }
+
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = TBase::GetDatabaseName(),
+        };
+    }
+
 private:
     TFuncCallback PassMethod;
     const TRequestAuxSettings AuxSettings;

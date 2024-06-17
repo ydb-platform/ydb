@@ -19,5 +19,6 @@
 #include <ydb/core/util/stlog.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/va_args.h>

@@ -7,5 +7,6 @@
 
 
 add_subdirectory(pgwire)
+add_subdirectory(version)
 add_subdirectory(ydb)
 add_subdirectory(ydbd)

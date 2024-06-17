@@ -1882,6 +1882,10 @@ message TTxVolatileDetails {
 
     // When true all preceding transactions are dependencies
     optional bool CommitOrdered = 8;
+
+    // When true marks an arbiter for other participants
+    // Arbiters hold outgoing readsets until the transaction is decided
+    optional bool IsArbiter = 9;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

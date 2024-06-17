@@ -13,6 +13,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   yutil
   cpp-digest-md5
   cpp-testing-unittest
+  version_definition
   ydb-core-base
   ydb-core-blob_depot
   core-blobstorage-backpressure

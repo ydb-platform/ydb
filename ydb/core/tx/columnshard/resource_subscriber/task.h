@@ -26,6 +26,7 @@ private:
     ui64 Memory;
     const ui32 Cpu;
     const TTaskContext Context;
+    const ui64 Priority;
 public:
     TString DebugString() const {
         return TStringBuilder() << "(mem=" << Memory << ";cpu=" << Cpu << ";)";

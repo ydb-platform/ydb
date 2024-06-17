@@ -17,6 +17,7 @@ target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   blobstorage-vdisk-syncer
+  version_definition
   library-cpp-getopt
   library-cpp-svnversion
   ydb-core-base

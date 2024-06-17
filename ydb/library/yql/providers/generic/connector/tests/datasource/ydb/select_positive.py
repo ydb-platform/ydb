@@ -504,12 +504,17 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_json',
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_json',
                     ydb_type=makeYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
                 ),
                 Column(
-                    name='col_json',
+                    name='col_02_json_nullable',
                     ydb_type=makeYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(ydb=types_ydb.Json()),
                 ),

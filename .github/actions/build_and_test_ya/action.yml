@@ -205,9 +205,13 @@ runs:
           human_readable_size=`bytesToHumanIEC $current_size_bytes`
           human_readable_size_diff=`bytesToHumanIEC bytes_diff`
           if [ "0" -ge "$bytes_diff" ]; then
-            echo "Current build [$current_size_bytes](https://datalens.yandex/cu6hzmpaki700):+$human_readable_size_diff than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color red
+            if [ "200" -ge "$bytes_diff" ]; then
+              printf "\nCurrent build [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+ $human_readable_size_diff** than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color red
+            else
+              printf "\nCurrent build [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+ $human_readable_size_diff** than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py
+            fi
           else
-            echo "Current build [$current_size_bytes](https://datalens.yandex/cu6hzmpaki700):$human_readable_size_diff than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color green
+            printf "\nCurrent build [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **- $human_readable_size_diff** than [main:${main_github_sha:0:8}]($main_url)" | .github/scripts/tests/comment-pr.py --color green
           fi
         else
           echo "Skipped build size difference"

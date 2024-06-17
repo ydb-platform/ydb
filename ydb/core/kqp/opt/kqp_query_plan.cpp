@@ -827,7 +827,7 @@ private:
         if (auto stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw())) {
             op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
             op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
-            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
+            // op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
 
         if (dqIntegration) {

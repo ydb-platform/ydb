@@ -140,7 +140,7 @@ void TLoader::StageParseMeta() noexcept
             << " " << Packs.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId 
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
-            << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].PageId : Max<TPageId>())
+            << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].GetPageId() : Max<TPageId>())
             << ", Blobs " << GlobsId << ", Small " << SmallId
             << ", Large " << LargeId << ", ByKey " << ByKeyId
             << ", Garbage " << GarbageStatsId

@@ -30,6 +30,7 @@ struct TOptions {
     TString Embedding;
     TString Distance;
     TString Data;
+    ui64 Rows = 0;
     ui64 TopK = 0;
 };
 

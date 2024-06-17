@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("primary_key", "primary key column").Required().RequiredArgument("PK").StoreResult(&options.PrimaryKey);
     opts.AddLongOption("embedding", "embedding column").Required().RequiredArgument("EMBEDDING").StoreResult(&options.Embedding);
     opts.AddLongOption("distance", "distance function").Required().RequiredArgument("DISTANCE").StoreResult(&options.Distance);
+    opts.AddLongOption("rows", "count of rows in table").Required().RequiredArgument("ROWS").StoreResult(&options.Rows);
     opts.AddLongOption("top_k", "count of top").Required().RequiredArgument("TOPK").StoreResult(&options.TopK);
     opts.AddLongOption("data", "list of columns to read").Required().RequiredArgument("DATA").StoreResult(&options.Data);
 

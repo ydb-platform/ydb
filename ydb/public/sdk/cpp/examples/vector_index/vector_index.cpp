@@ -109,8 +109,6 @@ static void CreateKMeans(TTableClient& client, const TOptions& options) {
 }
 
 static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
-    static constexpr ui64 DataSize = 500'000; // TODO Get size of table
-    static constexpr ui64 Rows = 5'000;
     TString query = std::format(R"(
         DECLARE $begin AS Uint64;
         DECLARE $rows AS Uint64;
@@ -125,10 +123,10 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
                                 options.PrimaryKey,
                                 options.Embedding);
     Cout << query << Endl;
-    for (ui64 i = 0; i < DataSize; i += Rows) {
+    for (ui64 i = 0; i < options.Rows; i += kBulkSize) {
         TParamsBuilder paramsBuilder;
         paramsBuilder.AddParam("$begin").Uint64(i).Build();
-        paramsBuilder.AddParam("$rows").Uint64(Rows).Build();
+        paramsBuilder.AddParam("$rows").Uint64(kBulkSize).Build();
         ThrowOnError(client.RetryOperationSync([&](TSession session) {
             return session.ExecuteDataQuery(query,
                                             TTxControl::BeginTx(TTxSettings::SerializableRW())
@@ -148,7 +146,7 @@ public:
     }
 
     ui64 Rows() const final {
-        return 500'000;
+        return Options.Rows;
     }
 
     void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) final {
@@ -179,11 +177,11 @@ public:
         }
     }
 
-    void Iterate(std::function<void(TRawEmbedding)> cb) final {
+    void Iterate(std::function<void(ui32, TRawEmbedding)> cb) final {
         IterateImpl<false>(cb);
     }
 
-    void Iterate(std::function<void(TId, TRawEmbedding)> cb) final {
+    void Iterate(std::function<void(ui32, TId, TRawEmbedding)> cb) final {
         IterateImpl<true>(cb);
     }
 
@@ -201,17 +199,22 @@ private:
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
+        // There is no possibility of parallel ReadNext, so we cannot prefetch :(
+        // At least we can start next read right after previous read finished
+        auto next = it.ReadNext();
         while (true) {
-            auto part = it.ReadNext().ExtractValueSync();
+            auto part = next.ExtractValueSync();
             if (!part.IsSuccess()) {
                 if (part.EOS()) {
                     return;
                 }
                 ythrow TVectorException{std::move(part)};
             }
+            next = it.ReadNext();
             TResultSetParser batch(part.ExtractPart());
+            ui32 rows = batch.RowsCount();
             if (!batch.TryNextRow()) {
-                break;
+                continue;
             }
             if constexpr (WithPK) {
                 Y_ASSERT(batch.ColumnsCount() == 2);
@@ -220,14 +223,14 @@ private:
                 auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
                 auto& embedding = batch.ColumnParser(embeddingIdx);
                 do {
-                    cb(*primaryKey.GetOptionalUint64(), *embedding.GetOptionalString());
+                    cb(rows, *primaryKey.GetOptionalUint32(), *embedding.GetOptionalString());
                 } while (batch.TryNextRow());
             } else {
                 Y_ASSERT(batch.ColumnsCount() == 1);
                 auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
                 auto& embedding = batch.ColumnParser(embeddingIdx);
                 do {
-                    cb(*embedding.GetOptionalString());
+                    cb(rows, *embedding.GetOptionalString());
                 } while (batch.TryNextRow());
             }
         }

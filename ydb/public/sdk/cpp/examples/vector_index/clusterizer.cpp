@@ -12,13 +12,14 @@ void TClusterizer::TProgress::Reset(ui64 rows) {
     Last = std::chrono::steady_clock::now();
 }
 
-void TClusterizer::TProgress::Report() {
+void TClusterizer::TProgress::Report(ui64 read) {
     if (auto now = std::chrono::steady_clock::now(); (now - Last) >= std::chrono::seconds{1}) {
         Cout << "Already read\t" << static_cast<ui64>(Curr / Rows * 100.0)
-             << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count() << " sec" << Endl;
+             << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count()
+             << " sec\t" << Curr << "\t" << Rows << Endl;
         Last = now;
     }
-    ++Curr;
+    Curr += read;
 }
 
 template <typename T>
@@ -111,9 +112,11 @@ void TClusterizer::ComputeBatch(Func&& func) {
         WaitIdle.notify_all();
     }
     lock.unlock();
+    Progress.Report(0);
     if (!ToFill.Empty()) {
         func();
         ToFill.Clear();
+        Progress.Report(0);
     }
 }
 
@@ -186,8 +189,8 @@ bool TClusterizer::Step(float neededDiff) {
             Update(ToFill.Min[i], embedding);
         }
     };
-    It.Iterate([&](TRawEmbedding rawEmbedding) {
-        Progress.Report();
+    It.Iterate([&]([[maybe_unused]] ui32 rows, TRawEmbedding rawEmbedding) {
+        Progress.Report(1);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));
         ToFill.Min.emplace_back();
         if (ToFill.RawData.size() == Threads.size() * kBatchSize) {
@@ -198,14 +201,29 @@ bool TClusterizer::Step(float neededDiff) {
     ComputeBatch(update); // wait tail
 
     float newMean = 0;
+    float zeroCount = 0;
+    float maxDistance = std::numeric_limits<float>::min();
     for (auto& cluster : NewClusters) {
+        if (cluster.Count == 0) {
+            It.RandomK(1, [&](TRawEmbedding rawEmbedding) {
+                auto embedding = GetArray<float>(rawEmbedding);
+                cluster.Coords.assign(embedding.begin(), embedding.end());
+            });
+            ++zeroCount;
+            continue;
+        }
         auto count = static_cast<float>(cluster.Count);
         for (auto& coord : cluster.Coords) {
             coord /= count;
         }
         cluster.Distance /= count;
+        if (cluster.Distance > maxDistance) {
+            maxDistance = cluster.Distance;
+        }
         newMean += cluster.Distance;
     }
+    newMean += zeroCount * maxDistance;
+    Progress.Report(0);
     Cout << "old mean: " << OldMean / NewClusters.size()
          << " new mean: " << newMean / NewClusters.size() << Endl;
     if (newMean > OldMean) {
@@ -233,8 +251,8 @@ void TClusterizer::Finalize() {
             Create(parentId, id, std::move(ToFill.RawData[i]));
         }
     };
-    It.Iterate([&](TId id, TRawEmbedding rawEmbedding) {
-        Progress.Report();
+    It.Iterate([&]([[maybe_unused]] ui32 rows, TId id, TRawEmbedding rawEmbedding) {
+        Progress.Report(1);
         ToFill.IdData.emplace_back(id);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));
         ToFill.Min.emplace_back();

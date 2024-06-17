@@ -14,8 +14,8 @@ class TDatasetIterator {
 public:
     virtual ui64 Rows() const = 0;
     virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(TRawEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(TId, TRawEmbedding)>) = 0;
+    virtual void Iterate(std::function<void(ui32, TRawEmbedding)>) = 0;
+    virtual void Iterate(std::function<void(ui32, TId, TRawEmbedding)>) = 0;
 };
 
 using TDistance = std::function<float(TEmbedding, TEmbedding)>;
@@ -76,7 +76,7 @@ private:
 
     struct TProgress {
         void Reset(ui64 rows);
-        void Report();
+        void Report(ui64 read);
 
     private:
         double Curr = 0;

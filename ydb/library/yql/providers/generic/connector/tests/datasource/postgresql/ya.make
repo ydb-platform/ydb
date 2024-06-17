@@ -35,6 +35,7 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
+    # YQ-3351: enabling python style checks only for opensource
     STYLE_PYTHON()
     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
     # which makes it impossible to run them during precommit checks on Github CI. 

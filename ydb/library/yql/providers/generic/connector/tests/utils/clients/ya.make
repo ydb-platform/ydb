@@ -1,9 +1,9 @@
 PY3_LIBRARY()
 
-IF (OPENSOURCE) {
+IF (OPENSOURCE) 
     # YQ-3351: enabling python style checks only for opensource
     STYLE_PYTHON()
-}
+ENDIF()
 
 PY_SRCS(
     clickhouse.py

@@ -138,6 +138,8 @@ public:
 
     template <typename TGetSize>
     bool Build(THistogram& histogram, ui64 statTotalSize) {
+        StackTopPtr = reinterpret_cast<size_t>(&statTotalSize);
+
         if (!HistogramBucketsCount) {
             return true;
         }
@@ -216,6 +218,7 @@ private:
     bool BuildHistogramRecursive(THistogram& histogram, TVector<TPartNodes>& parts, ui64 beginSize, ui64 endSize, ui32 depth) {
         const static ui32 MaxDepth = 100;
 
+        size_t usedStack = StackTopPtr - reinterpret_cast<size_t>(&depth);
         YieldHandler();
 
 #ifndef NDEBUG
@@ -229,8 +232,9 @@ private:
         }
 #endif
 
-        if (SafeDiff(endSize, beginSize) <= Resolution || depth > MaxDepth) {
+        if (SafeDiff(endSize, beginSize) <= Resolution || depth > MaxDepth || usedStack > gDbBuildStatsStackSize / 2) {
             Y_DEBUG_ABORT_UNLESS(depth <= MaxDepth, "Shouldn't normally happen");
+            Y_DEBUG_ABORT_UNLESS(usedStack <= gDbBuildStatsStackSize / 2, "Shouldn't normally happen");
             return true;
         }
 
@@ -250,6 +254,7 @@ private:
             }
         }
         TCellsIterable splitKey = biggestPart->GetCount() > 1
+                && biggestPart->GetSize() >= (endSize - beginSize) / 20 // useless to split it
             ? FindMedianPartKey(*biggestPart)
             : FindMedianTableKey(parts);
 
@@ -507,6 +512,7 @@ private:
     ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
     TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
+    size_t StackTopPtr;
 };
 
 }

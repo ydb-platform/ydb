@@ -34,4 +34,6 @@ void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {
     }
 }
 
+size_t gDbBuildStatsStackSize = 256 * 1024; // should be enough for depth = 100
+
 }}

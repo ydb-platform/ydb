@@ -43,7 +43,7 @@ public:
     TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
                             const TAutoPtr<TSubset> subset, ui64 memRowCount, ui64 memDataSize,
                             ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, ui64 searchHeight, TInstant statsUpdateTime)
-        : TActorCoroImpl(/* stackSize */ 64_KB, /* allowUnhandledDtor */ true)
+        : TActorCoroImpl(/* stackSize */ gDbBuildStatsStackSize, /* allowUnhandledDtor */ true)
         , ReplyTo(replyTo)
         , TabletId(tabletId)
         , TableId(tableId)

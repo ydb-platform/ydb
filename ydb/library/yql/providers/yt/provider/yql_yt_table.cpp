@@ -901,8 +901,24 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash, ctx)) {
+    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups, ctx)) {
         return false;
+    }
+
+    if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+        auto rowType = node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>();
+        const auto columnGroups = NYT::NodeFromYsonString(setting->Tail().Content());
+        for (const auto& grp: columnGroups.AsMap()) {
+            if (!grp.second.IsEntity()) {
+                for (const auto& col: grp.second.AsList()) {
+                    if (!rowType->FindItem(col.AsString())) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder()
+                            << "Column group " << grp.first.Quote() << " refers to unknown column " << col.AsString().Quote()));
+                        return false;
+                    }
+                }
+            }
+        }
     }
 
     return true;
@@ -963,6 +979,15 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
         }
     }
     return *this;
+}
+
+NYT::TNode TYtOutTableInfo::GetColumnGroups() const {
+    if (Settings) {
+        if (auto setting = NYql::GetSetting(Settings.Ref(), EYtSettingType::ColumnGroups)) {
+            return NYT::NodeFromYsonString(setting->Tail().Content());
+        }
+    }
+    return {};
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2859,7 +2884,7 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
             .Value(*AdditionalAttributes, TNodeFlags::MultilineContent)
         .Build();
     }
-    
+
     return pathBuilder.Done();
 }
 

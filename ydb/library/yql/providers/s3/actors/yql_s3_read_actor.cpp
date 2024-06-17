@@ -78,11 +78,12 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
@@ -160,7 +161,7 @@ struct TReadSpec {
     ui64 ParallelRowGroupCount = 0;
     bool RowGroupReordering = true;
     ui64 ParallelDownloadCount = 0;
-    std::unordered_map<TStringBuf, TType*, THash<TStringBuf>> RowSpec;
+    std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> RowSpec;
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
@@ -1186,7 +1187,7 @@ public:
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
-        const THolderFactory& holderFactory,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
         const TS3Credentials::TAuthInfo& authInfo,
         const TString& pattern,
@@ -1431,9 +1432,9 @@ public:
     static constexpr char ActorName[] = "S3_STREAM_READ_ACTOR";
 
 private:
-    class TBoxedBlock : public TComputationValue<TBoxedBlock> {
+    class TBoxedBlock : public NKikimr::NMiniKQL::TComputationValue<TBoxedBlock> {
     public:
-        TBoxedBlock(TMemoryUsageInfo* memInfo, NDB::Block& block)
+        TBoxedBlock(NKikimr::NMiniKQL::TMemoryUsageInfo* memInfo, NDB::Block& block)
             : TComputationValue(memInfo)
         {
             Block.swap(block);
@@ -1479,7 +1480,7 @@ private:
         return ReadSpec->Arrow ? NUdf::GetSizeOfArrowBatchInBytes(*block.Batch) : block.Block.bytes();
     }
 
-    i64 GetAsyncInputData(TUnboxedValueBatch& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
             const i64 s = GetBlockSize(Blocks.front());
@@ -1759,10 +1760,10 @@ private:
 
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
-    const THolderFactory& HolderFactory;
-    TPlainContainerCache ContainerCache;
-    TPlainContainerCache ArrowTupleContainerCache;
-    TPlainContainerCache ArrowRowContainerCache;
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
+    NKikimr::NMiniKQL::TPlainContainerCache ArrowTupleContainerCache;
+    NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache;
 
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;

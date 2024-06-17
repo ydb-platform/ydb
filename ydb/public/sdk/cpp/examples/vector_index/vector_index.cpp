@@ -150,6 +150,7 @@ public:
     }
 
     void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) final {
+        Y_ASSERT(k > 0);
         TString query = std::format(R"(
             SELECT {0} FROM {1}
                 WHERE RANDOM({0}) < {2}
@@ -157,7 +158,7 @@ public:
         )",
                                     Options.Embedding,
                                     Options.Table,
-                                    static_cast<double>(k * 10) / Rows(),
+                                    1.0 / (2 * k),
                                     k);
         Cout << query << Endl;
         auto values = Session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())

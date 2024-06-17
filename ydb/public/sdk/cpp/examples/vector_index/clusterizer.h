@@ -77,6 +77,7 @@ private:
     struct TProgress {
         void Reset(ui64 rows);
         void Report(ui64 read);
+        void ForceReport();
 
     private:
         double Curr = 0;

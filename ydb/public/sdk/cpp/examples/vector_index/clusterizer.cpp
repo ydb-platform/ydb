@@ -11,12 +11,17 @@ void TClusterizer::TProgress::Reset(ui64 rows) {
     Last = std::chrono::steady_clock::now();
 }
 
+void TClusterizer::TProgress::ForceReport() {
+    auto now = std::chrono::steady_clock::now();
+    Cout << "Already read\t" << static_cast<ui64>(Curr / Rows * 100.0)
+         << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count()
+         << " sec, " << Curr << " / " << Rows << " rows" << Endl;
+    Last = now;
+}
+
 void TClusterizer::TProgress::Report(ui64 read) {
     if (auto now = std::chrono::steady_clock::now(); (now - Last) >= std::chrono::seconds{1}) {
-        Cout << "Already read\t" << static_cast<ui64>(Curr / Rows * 100.0)
-             << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count()
-             << " sec\t" << Curr << "\t" << Rows << Endl;
-        Last = now;
+        ForceReport();
     }
     Curr += read;
 }
@@ -224,7 +229,7 @@ bool TClusterizer::Step(float neededDiff) {
         newMean += cluster.Distance;
     }
     newMean += zeroCount * maxDistance;
-    Progress.Report(0);
+    Progress.ForceReport();
     Cout << "old mean: " << OldMean / NewClusters.size()
          << " new mean: " << newMean / NewClusters.size() << Endl;
     if (newMean > OldMean) {
@@ -263,4 +268,5 @@ void TClusterizer::Finalize() {
     });
     ComputeBatch(update); // wait last and compute tail
     ComputeBatch(update); // wait tail
+    Progress.ForceReport();
 }

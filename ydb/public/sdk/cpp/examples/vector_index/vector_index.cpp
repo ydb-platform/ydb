@@ -45,7 +45,7 @@ ECommand Parse(std::string_view command) {
     return ECommand::None;
 }
 
-static void ThrowOnError(NYdb::TStatus status) {
+static void ThrowOnError(NYdb::TStatus&& status) {
     if (!status.IsSuccess()) {
         ythrow TVectorException{std::move(status)};
     }
@@ -77,9 +77,13 @@ static TString FullIndexName(const TOptions& options) {
 }
 
 static void DropIndex(TTableClient& client, const TOptions& options) {
-    ThrowOnError(client.RetryOperationSync([&](TSession session) {
+    auto status = client.RetryOperationSync([&](TSession session) {
+        TDropTableSettings settings;
         return session.DropTable(FullIndexName(options)).ExtractValueSync();
-    }));
+    });
+    if (status.GetStatus() != EStatus::SCHEME_ERROR) {
+        ThrowOnError(std::move(status));
+    }
 }
 
 static void CreateFlat(TTableClient& client, const TOptions& options) {

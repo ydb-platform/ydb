@@ -56,7 +56,7 @@ public:
         return NKikimrServices::TActivity::BACKUP_PQ_OFFLOAD_ACTOR;
     }
 
-    explicit TOffloadActor(TActorId parentTablet, ui32 partition, const NKikimrPQ::TOffloadConfig& config)
+    TOffloadActor(TActorId parentTablet, ui32 partition, const NKikimrPQ::TOffloadConfig& config)
         : ParentTablet(parentTablet)
         , Partition(partition)
         , Config(config)

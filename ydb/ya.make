@@ -1,3 +1,5 @@
+NO_LINT()
+
 RECURSE(
     apps
     core

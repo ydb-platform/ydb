@@ -7,6 +7,7 @@ import argparse
 import re
 import sys
 import os
+import itertools
 from pathlib import Path
 
 import cyson as yson
@@ -39,6 +40,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--blacklist-file', default=[], action='append', help='File with query name regexp that will be skipped for comparison')
     parser.add_argument('--verbose', '-v', action='count', default=0)
+    parser.add_argument('--by-side', action='store_true', default=False)
     parser.add_argument('resultdir', nargs='+', help='Directories for comparison')
 
     args = parser.parse_args()
@@ -68,15 +70,23 @@ code { white-space: pre; }
     print('<table border="1">')
 
     filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
-    print('<tr><th>' + ''.join('<th colspan="{}">'.format(5*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
+    if args.by_side:
+        assert len(set(map(len, filelists))) == 1, "All dirs must have same layout"
+        print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(5*len(rdirs), html.escape(name[len(rdirs[0]) + 1:])) for name in filelists[0]))
+    else:
+        print('<tr><th>' + ''.join('<th colspan="{}">'.format(5*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
     print('<tr><th>')
-    for dirname, filelist in zip(rdirs, filelists):
+    if args.by_side:
+        dirfiles = map(lambda x: [x[0], [x[1]]], itertools.chain(*map(lambda x: zip(rdirs, x), zip(*filelists))))
+    else:
+        dirfiles = zip(rdirs, filelists)
+    for dirname, filelist in dirfiles:
         for name in filelist:
             try:
                 with open(name) as f:
                     coldata = []
                     cmdline = f.readline()
-                    print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name[len(dirname) + 1:])))
+                    print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(dirname if args.by_side else name[len(dirname) + 1:])))
                     for line in f:
                         line = line.split('\t')
                         (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]

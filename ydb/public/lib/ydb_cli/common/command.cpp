@@ -279,6 +279,9 @@ void TClientCommand::RenderOneCommandDescription(
     const NColorizer::TColors& colors,
     RenderEntryType type
 ) {
+    if (Hidden) {
+        return;
+    }
     TString prefix;
     if (type == MIDDLE) {
         prefix = "├─ ";
@@ -308,6 +311,10 @@ void TClientCommand::RenderOneCommandDescription(
     stream << '\n';
 }
 
+void TClientCommand::Hide() {
+    Hidden = true;
+}
+
 TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TClientCommand(name, aliases, description)
     , SelectedCommand(nullptr)
@@ -321,6 +328,11 @@ void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
     }
     command->Parent = this;
     SubCommands[command->Name] = std::move(command);
+}
+
+void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> command) {
+    command->Hide();
+    AddCommand(std::move(command));
 }
 
 void TClientCommandTree::Config(TConfig& config) {

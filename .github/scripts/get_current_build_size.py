@@ -17,7 +17,6 @@ def main():
     if not os.path.exists(YDBD_PATH):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
         print("{} not exists, skipping".format(YDBD_PATH))
-        #print("sizes:9168733686:707679377")
         return 0
 
     binary_size_bytes = subprocess.check_output(

@@ -71,6 +71,7 @@ message TEvScanTable {
 }
 
 message TEvScanTableAccepted {
+    optional uint64 OperationId = 1;
 }
 
 message TEvScanTableResponse {

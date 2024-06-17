@@ -423,8 +423,8 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev) {
     if (ScanTableId.PathId == pathId) {
         outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS);
     } else {
-        auto it = ScanOperationsPathIds.find(pathId);
-        if (it != ScanOperationsPathIds.end()) {
+        auto it = ScanOperationsByPathId.find(pathId);
+        if (it != ScanOperationsByPathId.end()) {
             outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::ENQUEUED);
         } else {
             outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION);
@@ -520,13 +520,15 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 }
 
 void TStatisticsAggregator::ScheduleNextScan(NIceDb::TNiceDb& db) {
-    if (!ScanOperations.empty()) {
-        auto& operation = ScanOperations.front();
-        ReplyToActorId = operation.ReplyToActorId;
+    if (!ScanOperations.Empty()) {
+        auto* operation = ScanOperations.Front();
+        ReplyToActorIds.swap(operation->ReplyToActorIds);
 
-        StartScan(db, operation.PathId);
-        ScanOperationsPathIds.erase(operation.PathId);
-        ScanOperations.pop();
+        StartScan(db, operation->PathId);
+
+        db.Table<Schema::ScanOperations>().Key(operation->OperationId).Delete();
+        ScanOperations.PopFront();
+        ScanOperationsByPathId.erase(operation->PathId);
         return;
     }
     if (ScanTablesByTime.Empty()) {
@@ -597,7 +599,7 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     StartKey = TSerializedCellVec();
     PersistStartKey(db);
 
-    ReplyToActorId = TActorId();
+    ReplyToActorIds.clear();
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::Statistics>().Key(tag).Delete();

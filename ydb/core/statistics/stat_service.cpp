@@ -26,7 +26,7 @@ public:
     using TBase = TActorBootstrapped<THttpRequest>;
 
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::STAT_SERVICE;
+        return NKikimrServices::TActivity::STAT_SERVICE_HTTP_REQUEST;
     }
 
     void Bootstrap() {
@@ -772,36 +772,59 @@ private:
 
         if (method == HTTP_METHOD_POST) {
             auto& params = request.GetPostParams();
-            auto itPath = params.find("path");
-            if (itPath != params.end()) {
-                Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
+            auto itAction = params.find("action");
+            if (itAction == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
                 return;
             }
+            if (itAction->second != "analyze") {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
+                return;
+            }
+            auto itPath = params.find("path");
+            if (itPath == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+            }
+            Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
+            return;
+
         } else if (method == HTTP_METHOD_GET) {
             auto& params = request.GetParams();
-            auto itPath = params.find("path");
-            if (itPath != params.end()) {
-                Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
+            auto itAction = params.find("action");
+            if (itAction == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
                 return;
             }
+            if (itAction->second != "status") {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
+                return;
+            }
+            auto itPath = params.find("path");
+            if (itPath == params.end()) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+            }
+            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
+            return;
         }
 
         TStringStream str;
         HTML(str) {
             str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
+            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
             DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\">";
+                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
             }
             DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\">";
+                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
             }
             str << "</form>" << Endl;
             str << "<form method=\"get\" id=\"pathStatus\" name=\"pathStatus\" class=\"form-group\">" << Endl;
+            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
             DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\">";
+                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
             }
             DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\">";
+                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\"/>";
             }
             str << "</form>" << Endl;
         }

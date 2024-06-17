@@ -5,6 +5,7 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
+    std::unordered_set<TActorId> ReplyToActorIds;
 
     TTxSaveQueryResponse(TSelf* self)
         : TTxBase(self)
@@ -12,12 +13,10 @@ struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SAVE_QUERY_RESPONSE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Execute");
 
-        if (Self->ReplyToActorId) {
-            ctx.Send(Self->ReplyToActorId, new TEvStatistics::TEvScanTableResponse);
-        }
+        ReplyToActorIds.swap(Self->ReplyToActorIds);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->FinishScan(db);
@@ -25,8 +24,12 @@ struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Complete");
+
+        for (auto& id : ReplyToActorIds) {
+            ctx.Send(id, new TEvStatistics::TEvScanTableResponse);
+        }
     }
 };
 void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {

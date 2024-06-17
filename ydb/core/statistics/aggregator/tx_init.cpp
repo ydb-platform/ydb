@@ -175,8 +175,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         // ScanOperations
         {
-            std::queue<TScanOperation> emptyQueue;
-            Self->ScanOperations.swap(emptyQueue);
+            Self->ScanOperations.Clear();
+            Self->ScanOperationsByPathId.clear();
 
             auto rowset = db.Table<Schema::ScanOperations>().Range().Select();
             if (!rowset.IsReady()) {
@@ -190,12 +190,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
                 auto pathId = TPathId(ownerId, localPathId);
 
-                TScanOperation operation;
-                operation.OperationId = operationId;
+                TScanOperation& operation = Self->ScanOperationsByPathId[pathId];
                 operation.PathId = pathId;
-
-                Self->ScanOperations.push(operation);
-                Self->ScanOperationsPathIds.insert(pathId);
+                operation.OperationId = operationId;
+                Self->ScanOperations.PushBack(&operation);
 
                 if (!rowset.Next()) {
                     return false;
@@ -203,7 +201,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
 
             SA_LOG_D("[" << Self->TabletID() << "] Loading scan operations: "
-                << "table count# " << Self->ScanOperations.size());
+                << "table count# " << Self->ScanOperationsByPathId.size());
         }
 
         return true;

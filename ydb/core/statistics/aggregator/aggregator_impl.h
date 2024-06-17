@@ -19,6 +19,8 @@
 #include <ydb/core/util/count_min_sketch.h>
 #include <ydb/core/util/intrusive_heap.h>
 
+#include <util/generic/intrlist.h>
+
 #include <random>
 
 namespace NKikimr::NStat {
@@ -211,7 +213,7 @@ private:
     //
 
     TTableId ScanTableId; // stored in local db
-    TActorId ReplyToActorId;
+    std::unordered_set<TActorId> ReplyToActorIds;
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
@@ -261,13 +263,14 @@ private:
         TScanTableQueueByTime;
     TScanTableQueueByTime ScanTablesByTime;
 
-    struct TScanOperation {
+    struct TScanOperation : public TIntrusiveListItem<TScanOperation> {
         ui64 OperationId = 0;
         TPathId PathId;
-        TActorId ReplyToActorId;
+        std::unordered_set<TActorId> ReplyToActorIds;
     };
-    std::queue<TScanOperation> ScanOperations; // stored in local db
-    std::unordered_set<TPathId> ScanOperationsPathIds;
+    TIntrusiveList<TScanOperation> ScanOperations; // stored in local db
+    std::unordered_map<TPathId, TScanOperation> ScanOperationsByPathId;
+
     ui64 LastScanOperationId = 0; // stored in local db
 
     TInstant ScanStartTime;

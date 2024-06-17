@@ -493,14 +493,12 @@ public:
 
                     TVector<TRuntimeNode> strings;
                     for (auto& tableName: uniqueTables) {
-                        TStringBuf strippedTableName = tableName;
-                        if (!options.Prefix().Empty()) {
-                            strippedTableName.Skip(options.Prefix().Size() + 1);
-                        }
-                        if (!options.Suffix().Empty()) {
-                            strippedTableName.Chop(1 + options.Suffix().Size());
-                        }
-                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TString(strippedTableName)));
+                        auto stripped = TStringBuf(tableName);
+                        stripped.SkipPrefix(options.Prefix());
+                        stripped.SkipPrefix("/");
+                        stripped.ChopSuffix(options.Suffix());
+                        stripped.ChopSuffix("/");
+                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TString(stripped)));
                     }
 
                     auto inputNode = pgmBuilder.AsList(strings);

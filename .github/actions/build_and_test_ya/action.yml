@@ -170,8 +170,8 @@ runs:
         main_size_result_raw=`$main_size_script`
         current_size_result_raw=`$current_size_script`
 
-        orange_treshold=10240
-        red_treshold=1048576
+        orange_treshold=102400
+        red_treshold=2097152
 
         IFS=':'
         read -ra main_sizes_result <<< "$main_size_result_raw"
@@ -215,7 +215,7 @@ runs:
             if [ "$bytes_diff" -ge "$red_treshold" ]; then
               color="red"
             elif ["$bytes_diff" -ge "$orange_treshold" ]; then
-              color="orange"
+              color="yellow"
             else
               color="green"
             fi
@@ -224,19 +224,21 @@ runs:
             color="green"
           fi
 
-          comment="[Current:${current_pr_commit_sha}]($current_url) ydbd size $human_readable_size **$sign$human_readable_size_diff** ($diff_perc %) vs build [main:${main_github_sha:0:8}]($main_url)
-        <details><summary>YDB size compare details</summary>
+          comment="[Current:${current_pr_commit_sha}]($current_url) ydbd size $human_readable_size **$sign$human_readable_size_diff $diff_perc %%**  vs build [main:${main_github_sha:0:8}]($main_url)
+
+        <details><summary>YDBD build size details</summary><p>
 
         [main:${main_github_sha:0:8}]($main_url) ydbd build size:
-          - binary size $(format_number $main_size_bytes) Bytes 
-          - stripped binary size $(format_number $main_size_stripped_bytes) Bytes
-        [Current:${current_pr_commit_sha:0:8}]($current_url) ydbd build size:
-          - binary size $(format_number $current_size_bytes) Bytes 
-          - stripped binary size $(format_number $current_size_stripped_bytes) Bytes
+          - binary size **$(format_number $main_size_bytes)** Bytes 
+          - stripped binary size **$(format_number $main_size_stripped_bytes)** Bytes
+
+        [current:${current_pr_commit_sha:0:8}]($current_url) ydbd build size:
+          - binary size **$(format_number $current_size_bytes)** Bytes 
+          - stripped binary size **$(format_number $current_size_stripped_bytes)** Bytes
 
         [ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)  
 
-        </details>"
+        </p></details>"
         
           printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
         

@@ -932,8 +932,6 @@ namespace {
                     return false;
                 }
                 Types.StreamLookupJoin = name == "_EnableStreamLookupJoin";
-            } else if (name == "EnableNewQPlayer") {
-                return true;
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

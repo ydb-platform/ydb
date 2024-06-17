@@ -100,15 +100,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TAdvanceConsumerOptions
+struct TAdvanceQueueConsumerOptions
     : public TTabletWriteOptions
 { };
 
-class TAdvanceConsumerCommand
-    : public TTypedCommand<TAdvanceConsumerOptions>
+class TAdvanceQueueConsumerCommand
+    : public TTypedCommand<TAdvanceQueueConsumerOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TAdvanceConsumerCommand);
+    REGISTER_YSON_STRUCT_LITE(TAdvanceQueueConsumerCommand);
 
     static void Register(TRegistrar registrar);
 

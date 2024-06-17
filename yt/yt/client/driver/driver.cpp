@@ -353,7 +353,9 @@ public:
         // COMPAT(nadya73): for compatibility with old versions of clients.
         REGISTER    (TPullQueueConsumerCommand,            "pull_consumer",                   Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TPullQueueConsumerCommand,            "pull_queue_consumer",             Null,       Tabular,    false, true , ApiVersion4);
-        REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        // COMPAT(nadya73): for compatibility with old versions of clients.
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_queue_consumer",          Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Null,       Structured, true,  false, ApiVersion4);

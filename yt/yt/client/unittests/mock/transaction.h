@@ -199,14 +199,14 @@ public:
     MOCK_METHOD(void, SubscribeAborted, (const TAbortedHandler& callback), (override));
     MOCK_METHOD(void, UnsubscribeAborted, (const TAbortedHandler& callback), (override));
 
-    using TQueueTransactionMixin::AdvanceConsumer;
-    MOCK_METHOD(TFuture<void>, AdvanceConsumer, (
+    using TQueueTransactionMixin::AdvanceQueueConsumer;
+    MOCK_METHOD(TFuture<void>, AdvanceQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceConsumerOptions& options), (override));
+        const TAdvanceQueueConsumerOptions& options), (override));
 
     MOCK_METHOD(void, ModifyRows, (
         const NYPath::TYPath& path,

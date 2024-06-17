@@ -778,7 +778,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
 {
     auto proxy = CreateApiServiceProxy();
 
-    // Use PullConsumer (not PullQueueConsumer) for backward compatibility.
+    // COMPAT(nadya73): Use PullConsumer (not PullQueueConsumer) for compatibility with old clusters.
     auto req = proxy.PullConsumer();
     req->SetResponseHeavy(true);
     SetTimeoutOptions(*req, options);

@@ -85,7 +85,9 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
 
     // Queues
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceConsumer);
+    // COMPAT(nadya73): For compatability with old versions of clients.
+    DEFINE_RPC_PROXY_METHOD_GENERIC(AdvanceConsumer, NRpcProxy::NProto::TReqAdvanceQueueConsumer, NRpcProxy::NProto::TRspAdvanceQueueConsumer);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
     // COMPAT(nadya73): For compatability with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(PullConsumer, NRpcProxy::NProto::TReqPullQueueConsumer, NRpcProxy::NProto::TRspPullQueueConsumer);

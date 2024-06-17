@@ -644,7 +644,7 @@ message TRspSelectRows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqAdvanceConsumer
+message TReqAdvanceQueueConsumer
 {
     optional NYT.NProto.TGuid transaction_id = 1;
     optional string consumer_path = 2;
@@ -654,7 +654,7 @@ message TReqAdvanceConsumer
     optional int64 new_offset = 6;
 }
 
-message TRspAdvanceConsumer
+message TRspAdvanceQueueConsumer
 {
 }
 

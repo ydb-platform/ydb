@@ -244,7 +244,7 @@ void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TAdvanceConsumerCommand::Register(TRegistrar registrar)
+void TAdvanceQueueConsumerCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("consumer_path", &TThis::ConsumerPath);
     registrar.Parameter("queue_path", &TThis::QueuePath);
@@ -256,14 +256,14 @@ void TAdvanceConsumerCommand::Register(TRegistrar registrar)
         .Optional();
 }
 
-void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
+void TAdvanceQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = GetTransaction(context);
 
     if (ClientSide.value_or(false)) {
         transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
     } else {
-        WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
+        WaitFor(transaction->AdvanceQueueConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
             .ThrowOnError();
     }
 

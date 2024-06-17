@@ -493,18 +493,19 @@ void TTransaction::ModifyRows(
     }
 }
 
-TFuture<void> TTransaction::AdvanceConsumer(
+TFuture<void> TTransaction::AdvanceQueueConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,
     std::optional<i64> oldOffset,
     i64 newOffset,
-    const TAdvanceConsumerOptions& options)
+    const TAdvanceQueueConsumerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
     THROW_ERROR_EXCEPTION_IF(newOffset < 0, "Queue consumer offset %v cannot be negative", newOffset);
 
+    // COMPAT(nadya73): Use AdvaceConsumer (not AdvanceQueueConsumer) for compatibility with old clusters.
     auto req = Proxy_.AdvanceConsumer();
     SetTimeoutOptions(*req, options);
 

@@ -8,7 +8,7 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TAdvanceConsumerOptions
+struct TAdvanceQueueConsumerOptions
     : public TTimeoutOptions
 { };
 
@@ -70,13 +70,13 @@ struct IQueueTransaction
      *  If #oldOffset is specified, the current offset is read inside this transaction and compared with #oldOffset.
      *  If they are equal, the new offset is written, otherwise an exception is thrown.
      */
-    virtual TFuture<void> AdvanceConsumer(
+    virtual TFuture<void> AdvanceQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceConsumerOptions& options) = 0;
+        const TAdvanceQueueConsumerOptions& options) = 0;
 
     //! Write rows in the queue with checking their sequence number.
     /*!

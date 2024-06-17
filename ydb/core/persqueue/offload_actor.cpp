@@ -82,8 +82,8 @@ public:
     }
 };
 
-IActor* CreateOffloadActor(TActorId parentTablet, ui32 partition, const NKikimrPQ::TOffloadConfig& config) {
-    return new TOffloadActor(parentTablet, partition, config);
+IActor* CreateOffloadActor(TActorId parentTablet, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config) {
+    return new TOffloadActor(parentTablet, partition.OriginalPartitionId, config);
 }
 
 } // namespace NKikimr::NPQ

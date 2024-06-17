@@ -752,8 +752,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
         DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
     }
 
-    if (Config.HasOffloadConfig() && !OffloadActor) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, Partition.OriginalPartitionId, Config.GetOffloadConfig()));
+    if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
+        OffloadActor = Register(CreateOffloadActor(Tablet, Partition, Config.GetOffloadConfig()));
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);

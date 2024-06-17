@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_id.h"
+
 #include <util/system/types.h>
 
 namespace NActors {
@@ -17,6 +19,6 @@ class TOffloadConfig;
 
 namespace NKikimr::NPQ {
 
-NActors::IActor* CreateOffloadActor(NActors::TActorId parentTablet, ui32 partition, const NKikimrPQ::TOffloadConfig& config);
+NActors::IActor* CreateOffloadActor(NActors::TActorId parentTablet, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config);
 
 } // namespace NKikimr::NPQ

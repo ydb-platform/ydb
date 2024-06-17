@@ -2300,8 +2300,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         SchedulePartitionConfigChanged();
     }
 
-    if (Config.HasOffloadConfig() && !OffloadActor) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, Partition.OriginalPartitionId, Config.GetOffloadConfig()));
+    if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
+        OffloadActor = Register(CreateOffloadActor(Tablet, Partition, Config.GetOffloadConfig()));
     } else if (!Config.HasOffloadConfig() && OffloadActor) {
         Send(OffloadActor, new TEvents::TEvPoisonPill());
         OffloadActor = {};

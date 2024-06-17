@@ -147,7 +147,6 @@ TDqStage BuildInsertOnConflictUpdateInputStage(
         .Done();
 }
 
-// TODO: sink version
 TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeInsertOnConlictUpdate = node.Maybe<TKqlInsertOnConflictUpdateRows>();
     if (!maybeInsertOnConlictUpdate) {

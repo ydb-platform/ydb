@@ -719,7 +719,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 5, 6, ctx)) {
         return TStatus::Error;
     }
 

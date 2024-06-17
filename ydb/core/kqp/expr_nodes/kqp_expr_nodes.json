@@ -328,12 +328,18 @@
         {
             "Name": "TKqlInsertRows",
             "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"}
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"},
+            "Children": [
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlInsertRowsIndex",
             "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"},
+            "Children": [
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlExternalEffect",

@@ -315,6 +315,8 @@ TExprBase BuildInsertTable(const TKiWriteTable& write, bool abort, const TCoAtom
     const TCoAtomList& autoincrement, const bool isSink,
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
+    auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("insert").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     auto effect = Build<TKqlInsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
@@ -324,6 +326,7 @@ TExprBase BuildInsertTable(const TKiWriteTable& write, bool abort, const TCoAtom
         .OnConflict()
             .Value(abort ? "abort"sv : "revert"sv)
             .Build()
+        .Settings(settings)
         .Done();
 
     return effect;
@@ -333,6 +336,8 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
     const TCoAtomList& autoincrement, const bool isSink,
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
+    auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+    settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("insert").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     return Build<TKqlInsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
@@ -342,6 +347,7 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
         .OnConflict()
             .Value(abort ? "abort"sv : "revert"sv)
             .Build()
+        .Settings(settings)
         .Done();
 }
 

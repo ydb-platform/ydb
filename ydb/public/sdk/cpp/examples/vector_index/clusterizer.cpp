@@ -207,14 +207,10 @@ bool TClusterizer::Step(float neededDiff) {
     ComputeBatch(update); // wait tail
 
     float newMean = 0;
-    float zeroCount = 0;
+    ui64 zeroCount = 0;
     float maxDistance = std::numeric_limits<float>::min();
     for (auto& cluster : NewClusters) {
         if (cluster.Count == 0) {
-            It.RandomK(1, [&](TRawEmbedding rawEmbedding) {
-                auto embedding = GetArray<float>(rawEmbedding);
-                cluster.Coords.assign(embedding.begin(), embedding.end());
-            });
             ++zeroCount;
             continue;
         }
@@ -228,6 +224,15 @@ bool TClusterizer::Step(float neededDiff) {
         }
         newMean += cluster.Distance;
     }
+    auto it = NewClusters.begin();
+    It.RandomK(zeroCount, [&](TRawEmbedding rawEmbedding) {
+        for (; it != NewClusters.end(); ++it) {
+            if (it->Count == 0) {
+                auto embedding = GetArray<float>(rawEmbedding);
+                it->Coords.assign(embedding.begin(), embedding.end());
+            }
+        }
+    });
     newMean += zeroCount * maxDistance;
     Progress.ForceReport();
     Cout << "old mean: " << OldMean / NewClusters.size()

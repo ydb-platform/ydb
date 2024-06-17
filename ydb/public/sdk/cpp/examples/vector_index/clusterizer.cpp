@@ -2,7 +2,6 @@
 #include "util/stream/output.h"
 #include "util/system/yassert.h"
 
-static constexpr ui32 kBatchSize = 100;
 static ui64 gId = 1;
 
 void TClusterizer::TProgress::Reset(ui64 rows) {
@@ -67,8 +66,10 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
                 }
                 lock.unlock();
                 auto size = ToCompute.RawData.size();
-                auto start = i * kBatchSize;
-                auto len = start < size ? std::min<ui32>(size - start, kBatchSize) : 0;
+                auto threads = Threads.size();
+                auto batchSize = (size + threads - 1) / threads;
+                auto start = i * batchSize;
+                auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
                 std::span batch{ToCompute.RawData.data() + start, len};
                 for (const auto& rawEmbedding : batch) {
                     auto embedding = GetArray<float>(rawEmbedding);
@@ -193,7 +194,7 @@ bool TClusterizer::Step(float neededDiff) {
         Progress.Report(1);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));
         ToFill.Min.emplace_back();
-        if (ToFill.RawData.size() == Threads.size() * kBatchSize) {
+        if (ToFill.RawData.size() == rows) {
             ComputeBatch(update);
         }
     });
@@ -256,7 +257,7 @@ void TClusterizer::Finalize() {
         ToFill.IdData.emplace_back(id);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));
         ToFill.Min.emplace_back();
-        if (ToFill.RawData.size() == Threads.size() * kBatchSize) {
+        if (ToFill.RawData.size() == rows) {
             ComputeBatch(update);
         }
     });

@@ -3,8 +3,12 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/services/lib/sharding/sharding.h>
+
 
 namespace {
 
@@ -55,7 +59,9 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+            && NKikimr::NPQ::SplitMergeEnabled(*tabletConfig)
+            && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NKikimr::NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -64,6 +70,7 @@ public:
             errStr = "Split and merge operations disabled";
             return nullptr;
         }
+
         if (alter.SplitSize()) {
             for (const auto& split : alter.GetSplit()) {
                 if (!split.HasPartition()) {
@@ -168,6 +175,10 @@ public:
                 return nullptr;
             }
 
+            if (!alterConfig.HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(*tabletConfig->MutablePartitionStrategy());
+            }
+
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
             if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
                 auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
@@ -250,10 +261,42 @@ public:
             context.SS->PersistUpdateNextShardIdx(db);
         }
 
-        for (auto& shard : pqGroup->Shards) {
-            auto shardIdx = shard.first;
-            for (const auto& pqInfo : shard.second->Partitions) {
-                context.SS->PersistPersQueue(db, item->PathId, shardIdx, *pqInfo.Get());
+        if (pqGroup->AlterData->SplitMergeWasEnabled) {
+            auto partitions = pqGroup->GetPartitions();
+
+            TString prevBound;
+            for (size_t i = 0; i < partitions.size(); ++i) {
+                auto* newPartitionInfo = partitions[i].second;
+                if (i) {
+                    newPartitionInfo->KeyRange.ConstructInPlace();
+                    newPartitionInfo->KeyRange->FromBound = prevBound;
+                }
+                if (i != (partitions.size() - 1)) {
+                    if (!newPartitionInfo->KeyRange) {
+                        newPartitionInfo->KeyRange.ConstructInPlace();
+                    }
+                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
+                    prevBound = NPQ::AsKeyBound(range.End);
+                    newPartitionInfo->KeyRange->ToBound = prevBound;
+                }
+
+                context.SS->PersistPersQueue(db, item->PathId, partitions[i].first, *newPartitionInfo);
+            }
+        } else {
+            for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
+                for (const auto& partitionInfo : tabletInfo->Partitions) {
+                    if (pqGroup->AlterData->SplitMergeWasDisabled) {
+                        // clear all splitmerge fields
+                        TTopicTabletInfo::TTopicPartitionInfo newPartitionInfo;
+                        newPartitionInfo.PqId = partitionInfo->PqId;
+                        newPartitionInfo.GroupId = partitionInfo->GroupId;
+                        newPartitionInfo.AlterVersion = partitionInfo->AlterVersion;
+                        newPartitionInfo.CreateVersion = partitionInfo->CreateVersion;
+                        context.SS->PersistPersQueue(db, item->PathId, shardIdx, newPartitionInfo);
+                    } else {
+                        context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
+                    }
+                }
             }
         }
 
@@ -524,9 +567,15 @@ public:
             return result;
         }
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
-        if (splitMergeEnabled) {
+        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+                && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+        alterData->SplitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+        alterData->SplitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
+        if (splitMergeEnabled) {
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
             };

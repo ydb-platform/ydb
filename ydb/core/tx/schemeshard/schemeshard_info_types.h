@@ -14,6 +14,9 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
@@ -550,7 +553,7 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
-        bool datetime64TypesEnabled,        
+        bool datetime64TypesEnabled,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -1108,6 +1111,8 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 NextPartitionId = 0;
     THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
+    bool SplitMergeWasDisabled = false;
+    bool SplitMergeWasEnabled = false;
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
@@ -1183,6 +1188,23 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         return Shards.size();
     }
 
+    TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> GetPartitions() {
+        TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> partitions;
+        partitions.reserve(TotalPartitionCount);
+
+        for (auto& [shardIdx, tabletInfo] : Shards) {
+            for (const auto& partitionInfo : tabletInfo->Partitions) {
+                partitions.push_back({shardIdx, partitionInfo.Get()});
+            }
+        }
+
+        std::sort(partitions.begin(), partitions.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second->PqId < rhs.second->PqId;
+        });
+
+        return partitions;
+    }
+
     void PrepareAlter(TTopicInfo::TPtr alterData) {
         Y_ABORT_UNLESS(alterData, "No alter data at Alter prepare");
         alterData->AlterVersion = AlterVersion + 1;
@@ -1211,14 +1233,43 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         KeySchema = AlterData->KeySchema;
         BalancerTabletID = AlterData->BalancerTabletID;
         BalancerShardIdx = AlterData->BalancerShardIdx;
-        AlterData.Reset();
 
         Partitions.clear();
-        for (const auto& [_, shard] : Shards) {
-            for (auto& partition : shard->Partitions) {
-                Partitions[partition->PqId] = partition.Get();
+        if (AlterData->SplitMergeWasEnabled) {
+            auto partitions = GetPartitions();
+
+            TString prevBound;
+            for (size_t i = 0; i < partitions.size(); ++i) {
+                auto* partitionInfo = partitions[i].second;
+                Partitions[partitionInfo->PqId] = partitionInfo;
+                if (i) {
+                    partitionInfo->KeyRange.ConstructInPlace();
+                    partitionInfo->KeyRange->FromBound = prevBound;
+                }
+                if (i != (partitions.size() - 1)) {
+                    if (!partitionInfo->KeyRange) {
+                        partitionInfo->KeyRange.ConstructInPlace();
+                    }
+                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
+                    prevBound = NPQ::AsKeyBound(range.End);
+                    partitionInfo->KeyRange->ToBound = prevBound;
+                }
+            }
+        } else {
+            for (const auto& [_, shard] : Shards) {
+                for (auto& partition : shard->Partitions) {
+                    Partitions[partition->PqId] = partition.Get();
+                    if (AlterData->SplitMergeWasDisabled) {
+                        partition.Get()->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+                        partition.Get()->KeyRange.Clear();
+                        partition.Get()->ChildPartitionIds.clear();
+                        partition.Get()->ParentPartitionIds.clear();
+                    }
+                }
             }
         }
+
+        AlterData.Reset();
 
         InitSplitMergeGraph();
     }

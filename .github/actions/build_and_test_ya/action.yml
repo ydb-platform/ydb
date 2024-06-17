@@ -182,6 +182,9 @@ runs:
             done
             echo "$b$d ${S[$s]}"
         }
+        format_number() {
+          echo "$1" | rev | sed 's/\(...\)/\1 /g' | rev
+        }
 
         if [[ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]]; then
 
@@ -197,45 +200,47 @@ runs:
 
           current_size_bytes=${current_sizes_result[1]}
           current_size_stripped_bytes=${current_sizes_result[2]}
+          current_pr_commit_sha=${{github.event.pull_request.head.sha}}
 
           echo current_size_bytes $current_size_bytes
           echo current_size_stripped_bytes $current_size_stripped_bytes
 
           bytes_diff=$((current_size_bytes-main_size_bytes))
           main_url="https://github.com/ydb-platform/ydb/commit/"$main_github_sha
+          current_url="https://github.com/ydb-platform/ydb/commit/"$current_pr_commit_sha
 
           human_readable_size=`bytesToHumanIEC $current_size_bytes`
           human_readable_size_diff=`bytesToHumanIEC $bytes_diff`
 
           if [ "$bytes_diff" -ge "0" ]; then
-            if [ "$bytes_diff" -ge "200" ]; then
-              printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^2] vs build [main:${main_github_sha:0:8}]($main_url)
-        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
-                  -binary size $main_size_bytes B 
-                  -stripped binary size $main_size_stripped_bytes B
-                Current build:
-                  -binary size $current_size_bytes B 
-                  -stripped binary size $current_size_stripped_bytes B" | .github/scripts/tests/comment-pr.py --color red
+            if [ "$bytes_diff" -ge "1024" ]; then
+              sign="+"
+              color="red"
             else
-              printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^2] vs build [main:${main_github_sha:0:8}]($main_url)
-        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
-                  -binary size $main_size_bytes B 
-                  -stripped binary size $main_size_stripped_bytes B
-                Current build:
-                  -binary size $current_size_bytes B 
-                  -stripped binary size $current_size_stripped_bytes B" | .github/scripts/tests/comment-pr.py
+              sign="+"
+              color="orange"
             fi
           else
-            bytes_diff=$((bytes_diff*(-1)))
-            human_readable_size_diff=`bytesToHumanIEC $bytes_diff`
-            printf "Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **-$human_readable_size_diff**[^2] vs build  [main:${main_github_sha:0:8}]($main_url)
-        [^2]:[main:${main_github_sha:0:8}]($main_url) build:
-                  -binary size $main_size_bytes B 
-                  -stripped binary size $main_size_stripped_bytes B
-                Current build:
-                  -binary size $current_size_bytes B 
-                  -stripped binary size $current_size_stripped_bytes B" | .github/scripts/tests/comment-pr.py --color green
+            sign="-"
+            color="green"
           fi
+
+          comment="[Current:${current_pr_commit_sha}]($current_url) ydbd size [$human_readable_size] **$sign$human_readable_size_diff** vs build [main:${main_github_sha:0:8}]($main_url)
+        <details><summary>YDB size compare details</summary>
+
+        [main:${main_github_sha:0:8}]($main_url) ydbd build size:
+          - binary size $(format_number $main_size_bytes) B 
+          - stripped binary size $(format_number $main_size_stripped_bytes) B
+        [Current:${current_pr_commit_sha:0:8}]($current_url) ydbd build size:
+          - binary size $(format_number $current_size_bytes) B 
+          - stripped binary size $(format_number $current_size_stripped_bytes) B
+
+        [ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)  
+
+        </details>"
+        
+          printf $printf | .github/scripts/tests/comment-pr.py --color $color
+        
         else
           echo "Skipped build size difference"
         fi

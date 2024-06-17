@@ -223,7 +223,7 @@ private:
                 auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
                 auto& embedding = batch.ColumnParser(embeddingIdx);
                 do {
-                    cb(rows, *primaryKey.GetOptionalUint32(), *embedding.GetOptionalString());
+                    cb(rows, *primaryKey.GetOptionalUint64(), *embedding.GetOptionalString());
                 } while (batch.TryNextRow());
             } else {
                 Y_ASSERT(batch.ColumnsCount() == 1);

@@ -494,10 +494,8 @@ public:
                     TVector<TRuntimeNode> strings;
                     for (auto& tableName: uniqueTables) {
                         auto stripped = TStringBuf(tableName);
-                        stripped.SkipPrefix(options.Prefix());
-                        stripped.SkipPrefix("/");
-                        stripped.ChopSuffix(options.Suffix());
-                        stripped.ChopSuffix("/");
+                        stripped.SkipPrefix(fullPrefix);
+                        stripped.ChopSuffix(fullSuffix);
                         strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TString(stripped)));
                     }
 
@@ -518,12 +516,8 @@ public:
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
                         TString tableName = TString(current.AsStringRef());
-                        if (!options.Prefix().Empty()) {
-                            tableName = TString(options.Prefix()).append('/').append(tableName);
-                        }
-                        if (!options.Suffix().Empty()) {
-                            tableName = TString(tableName).append('/').append(options.Suffix());
-                        }
+                        tableName.prepend(fullPrefix);
+                        tableName.append(fullSuffix);
                         res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
                 }

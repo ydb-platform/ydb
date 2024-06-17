@@ -94,6 +94,7 @@ public:
             auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
             pingCounters->InFly->Inc();
             Fq::Private::PingTaskRequest pingTaskRequest;
+            pingTaskRequest.set_current_load(response.CurrentLoad);
             *pingTaskRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
             Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
         } else {

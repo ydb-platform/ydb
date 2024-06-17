@@ -4,6 +4,8 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"
 
+#include <ydb/core/ydb_convert/table_settings.h>
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -214,7 +216,9 @@ private:
         }
 
         if (settings.has_index()) {
-            switch (settings.index().type_case()) {
+            const auto& index = settings.index();
+
+            switch (index.type_case()) {
             case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
                 break;
@@ -229,9 +233,14 @@ private:
                 return false;
             };
 
-            buildInfo->IndexName = settings.index().name();
-            buildInfo->IndexColumns.assign(settings.index().index_columns().begin(), settings.index().index_columns().end());
-            buildInfo->DataColumns.assign(settings.index().data_columns().begin(), settings.index().data_columns().end());
+            buildInfo->IndexName = index.name();
+            buildInfo->IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
+            buildInfo->DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+
+            Ydb::StatusIds::StatusCode status;
+            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescription, index, status, explain)) {
+                return false;
+            } 
         }
         return true;
     }

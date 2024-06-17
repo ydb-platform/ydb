@@ -2887,6 +2887,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
+    NKikimrSchemeOp::TTableDescription ImplTableDescription;
 
     EState State = EState::Invalid;
     TString Issue;

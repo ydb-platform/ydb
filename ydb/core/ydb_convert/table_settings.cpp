@@ -404,4 +404,49 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     return true;
 }
 
+bool FillIndexTablePartitioning(
+    NKikimrSchemeOp::TTableDescription& out,
+    const Ydb::Table::TableIndex& index,
+    Ydb::StatusIds::StatusCode& code, TString& error
+) {
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings) {
+        if (settings.has_partitioning_settings()) {
+            if (!FillPartitioningPolicy(*out.MutablePartitionConfig(), settings, code, error)) {
+                return false;
+            }
+        }
+        if (settings.partitions_case() != Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
+            if (!FillPartitions(out, settings, code, error)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    switch (index.type_case()) {
+    case Ydb::Table::TableIndex::kGlobalIndex:
+        if (!fillIndexPartitioning(index.global_index().settings())) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        if (!fillIndexPartitioning(index.global_async_index().settings())) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        if (!fillIndexPartitioning(index.global_unique_index().settings())) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::TYPE_NOT_SET:
+      break;
+    }
+
+    return true;
+}
+
 } // namespace NKikimr

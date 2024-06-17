@@ -1630,6 +1630,14 @@ indexes {
   name: "IndexedValue"
   index_columns: "IValue"
   global_index {
+    settings {
+      partitioning_settings {
+        partitioning_by_size: ENABLED
+        partition_size_mb: 2048
+        partitioning_by_load: DISABLED
+        min_partitions_count: 1
+      }
+    }
   }
   status: STATUS_READY
 }

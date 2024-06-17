@@ -862,6 +862,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
         }
 
+        if (!FillIndexTablePartitioning(*indexDesc->MutableIndexImplTableDescription(), index, status, error)) {
+            return false;
+        }
+
         //Disabled for a while. Probably we need to allow set this profile to user
 /*
         auto indexTableDesc = indexDesc->MutableIndexImplTableDescription();

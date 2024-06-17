@@ -95,7 +95,7 @@ bool TKikimrSettings::SystemColumnsEnabled() const {
 }
 
 bool TKikimrSettings::SpillingEnabled() const {
-    return GetFlagValue(_KqpEnableSpilling.Get());
+    return true;// GetFlagValue(_KqpEnableSpilling.Get());
 }
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {

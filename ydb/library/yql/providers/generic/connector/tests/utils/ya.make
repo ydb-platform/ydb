@@ -14,6 +14,7 @@ PY_SRCS(
 )
 
 IF (OPENSOURCE) {
+    # YQ-3351: enabling python style checks only for opensource
     STYLE_PYTHON()
 }
 

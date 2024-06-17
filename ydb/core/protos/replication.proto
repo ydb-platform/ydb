@@ -58,6 +58,7 @@ message TReplicationConfig {
 
 message TReplicationState {
     message TStandBy {
+        optional uint32 LagMilliSeconds = 1;
     }
 
     message TPaused {
@@ -222,10 +223,12 @@ message TEvWorkerStatus {
         REASON_UNSPECIFIED = 0;
         REASON_ACK = 1;
         REASON_ERROR = 2;
+        REASON_INFO = 3;
     }
 
     optional TWorkerIdentity Worker = 1;
     optional EStatus Status = 2;
     optional EReason Reason = 3;
     optional string ErrorDescription = 4;
+    optional uint32 LagMilliSeconds = 5;
 }

@@ -323,7 +323,7 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
                 .Done());
     }
 
-    if (Mode != "") {
+    if (!Mode.empty()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(ModeSettingName)

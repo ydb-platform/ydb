@@ -30,8 +30,20 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken());
-        TBase::SetRequireAdminAccess(true);
+        const auto& token = request.GetSecurityToken();
+        if (!token.empty()) {
+            TBase::SetSecurityToken(token);
+        } else {
+            const auto& clientCertificates = msg.FindClientCert();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            }
+        }
+        // Don`t require admin access for GetNodeConfigRequest
+        if (Request.GetRequestCase() != NKikimrClient::TConsoleRequest::kGetNodeConfigRequest) {
+            TBase::SetRequireAdminAccess(true);
+        }
+
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -120,6 +132,10 @@ public:
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
+            if (!CheckAccessGetNodeConfig()) {
+                ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
+                return;
+            }
             auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
@@ -346,6 +362,21 @@ public:
                    ev->GetTypeRewrite(),
                    ev->ToString().data());
         }
+    }
+
+    bool CheckAccessGetNodeConfig() const {
+        const auto serializedToken = TBase::GetSerializedToken();
+        // Empty serializedToken means token is not required. Checked in secure_request.h
+        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            NACLib::TUserToken token(serializedToken);
+            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
+                if (token.IsExist(sid)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
     }
 
 private:

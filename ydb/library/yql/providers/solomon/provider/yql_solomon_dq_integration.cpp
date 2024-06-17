@@ -211,6 +211,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
+                    .Project(soReadObject.Object().Project())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -250,7 +251,7 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
         NSo::NProto::TDqSolomonSource source;
         source.SetEndpoint(clusterDesc->GetCluster());
-        source.SetProject("yq");
+        source.SetProject(settings.Project().StringValue());
 
         source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
         source.SetUseSsl(clusterDesc->GetUseSsl());

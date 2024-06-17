@@ -126,9 +126,26 @@ public:
                     return node;
                 }
 
-                const auto& object = read.Arg(2).Ref();
-                YQL_ENSURE(object.IsCallable("MrTableConcat"));
+                auto& object = read.Arg(2).Ref();
+                if (!object.IsCallable("MrTableConcat")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Expected MrTableConcat"));
+                    return {};
+                }
 
+                const auto maybeKey = TMaybeNode<TCoKey>(&object.Head());
+                if (!maybeKey) {
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Expected Key"));
+                    return {};
+                }
+
+                const auto& keyArg = maybeKey.Cast().Ref().Head();
+                if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U
+                    || !keyArg.Head().IsAtom("table") || !keyArg.Tail().IsCallable(TCoString::CallableName())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), TStringBuilder() << "Expected single table name"));
+                    return {};
+                }
+
+                const auto project = TString(keyArg.Tail().Head().Content());
                 auto cluster = read.DataSource().Cluster().StringValue();
                 if (!this->State_->Configuration->_EnableReading.Get().GetOrElse(false)) {
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Reading is disabled for monitoring cluster " << cluster));
@@ -145,6 +162,7 @@ public:
                                     .Done();
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
+                                  .Project<TCoAtom>().Build(project)
                                   .Settings(newSettings)
                                 .Done();
                 

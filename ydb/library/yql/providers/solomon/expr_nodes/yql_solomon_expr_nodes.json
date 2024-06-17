@@ -48,17 +48,18 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SoSourceSettings"},
             "Children": [
-                {"Index": 0, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 1, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 2, "Name": "SystemColumns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "From", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "To", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "Program", "Type": "TCoAtom"},
-                {"Index": 7, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
-                {"Index": 8, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "DownsamplingFill", "Type": "TCoAtom"},
-                {"Index": 10, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
+                {"Index": 0, "Name": "Project", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 2, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "From", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "To", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 9, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 11, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
             ]
         },
         {
@@ -66,7 +67,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SoObject"},
             "Children": [
-                {"Index": 0, "Name": "Settings", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Project", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TExprBase"}
             ]
         },
         {

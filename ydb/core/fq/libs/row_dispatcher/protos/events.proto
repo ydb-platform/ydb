@@ -26,10 +26,12 @@ message TEvStartSession {
     uint32 PartitionId = 2;
     string Token = 3;
     bool AddBearerToToken = 4;
-    uint64 Offset = 5;
+    optional uint64 Offset = 5;
 }
 
 message TEvSessionData {
-
+    repeated string Blob = 1;
+    uint32 PartitionId = 2;
+    uint64 LastOffset = 3;
 }
 

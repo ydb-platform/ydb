@@ -195,7 +195,7 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
-                bool useRowDispatcher = false;
+                [[maybe_unused]] bool useRowDispatcher = false;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);
@@ -234,7 +234,8 @@ public:
                 }
 
                 protoSettings.PackFrom(srcDesc);
-                sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
+                sourceType = useRowDispatcher ? "PqSource" : "PqRdSource";
+              //  sourceType = "PqSource";
             }
         }
     }

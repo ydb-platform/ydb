@@ -37,6 +37,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <queue>
 #include <variant>
@@ -92,12 +93,12 @@ public:
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
 private:
+ //   NKikimr::NMiniKQL::TScopedAlloc Alloc;
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
-    //const THolderFactory& HolderFactory;
+    [[maybe_unused]] const THolderFactory& HolderFactory;
     const TString LogPrefix;
-    NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const NPq::NProto::TDqPqTopicSource SourceParams;
     const NPq::NProto::TDqReadTaskParams ReadParams;
@@ -113,11 +114,26 @@ private:
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory2;
     const TString Token;
     bool AddBearerToToken;
+    TMaybe<NActors::TActorId> CoordinatorActorId;
+   // TMap<ui64, NActors::TActorId> RowDispatcherByPartitionId;
 
-    struct Session {
-        TActorId ActorId;
+
+    struct SessionInfo {
+
+        enum class ESessionStatus {
+            NoSession,
+            Starting,
+
+        };
+        TActorId RowDispatcherActorId;
+        ESessionStatus Status = ESessionStatus::NoSession;
+        TMaybe<ui64> Offset;
+
+        //TVector<TString> Data;
+        TUnboxedValueVector Data;
     };
-    TMap<ui32, Session> Sessions;
+    
+    TMap<ui64, SessionInfo> Sessions;
 
 public:
     TDqPqRdReadActor(
@@ -128,21 +144,30 @@ public:
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
-        NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory2,
         const TString& token,
         bool addBearerToToken);
 
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
 
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev);
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherResult, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
+        
+        hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionData, Handle);
+
         // hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         // hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         // hFunc(TEvents::TEvUndelivered, Handle);
@@ -159,6 +184,10 @@ public:
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     std::vector<ui64> GetPartitionsToRead() const;
+    bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace);
+    std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const TString& data);
+    void ProcessState();
+    void Stop(const TString& message);
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -166,20 +195,19 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
         ui64 taskId,
-        const THolderFactory& /*holderFactory*/,
+        const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
-        NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory2,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory2,
         const TString& token,
         bool addBearerToToken)
+       // : Alloc(__LOCATION__)
         : InputIndex(inputIndex)
         , TxId(txId)
-        //, HolderFactory(holderFactory)
+        , HolderFactory(holderFactory)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
-        , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , SourceParams(std::move(sourceParams))
         , ReadParams(std::move(readParams))
@@ -189,6 +217,8 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Token(token)
         , AddBearerToToken(addBearerToToken)
 {
+    std::cerr << "TDqPqRdReadActor::TDqPqRdReadActor " << std::this_thread::get_id() << std::endl;
+
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
     for (const auto& fieldName : SourceParams.GetMetadataFields()) {
@@ -199,15 +229,47 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     SRC_LOG_D("TDqPqRdReadActor");
 }
 
+void TDqPqRdReadActor::ProcessState() {
+    if (!CoordinatorActorId) {
+        Send(NFq::RowDispatcherServiceActorId(), new NFq::TEvRowDispatcher::TEvRowDispatcherRequest());
+        return;
+    }
+    if (Sessions.empty()) {
+        Send(*CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
+        return;
+    }
+
+    for (const auto& [partitionId, sessionInfo] : Sessions) {
+
+        if (sessionInfo.Status == SessionInfo::ESessionStatus::NoSession) {
+            TMaybe<ui64> readOffset;
+            TPartitionKey partitionKey{TString{}, partitionId};
+            const auto offsetIt = PartitionToOffset.find(partitionKey);
+            if (offsetIt != PartitionToOffset.end()) {
+                readOffset = offsetIt->second;
+            }
+
+            auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
+            event->Record.MutableSource()->CopyFrom(SourceParams);
+            event->Record.SetPartitionId(partitionId);
+            event->Record.SetToken(Token);
+            event->Record.SetAddBearerToToken(AddBearerToToken);
+            if (readOffset) {
+                event->Record.SetOffset(*readOffset);
+            }
+            Send(sessionInfo.RowDispatcherActorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        }
+    }
+
+}
+
 void TDqPqRdReadActor::Bootstrap() {
+    std::cerr << "TDqPqRdReadActor::Bootstrap " << std::this_thread::get_id() << std::endl;
     Become(&TDqPqRdReadActor::StateFunc);
     SRC_LOG_D("TDqPqRdReadActor::Bootstrap");
+    [[maybe_unused]] auto [item, size] = CreateItem("asdasd");
 
-    //NFq::NConfig::TRowDispatcherCoordinatorConfig config;
-    //config.Set
-
-    Send(NFq::RowDispatcherServiceActorId(), new NFq::TEvRowDispatcher::TEvRowDispatcherRequest());
-  //  Register(NFq::NewLeaderDetector(SelfId(), config, CredentialsProviderFactory2, Driver).release());
+    ProcessState();
 }
 
 void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) {
@@ -247,7 +309,7 @@ void TDqPqRdReadActor::LoadState(const TSourceState& state) {
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
         if (data.Version == StateVersion) { // Current version
-            NPq::NProto::TDqPqTopicSourceState stateProto;
+        NPq::NProto::TDqPqTopicSourceState stateProto;
             YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
             YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
             PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
@@ -293,15 +355,69 @@ const TDqAsyncStats& TDqPqRdReadActor::GetIngressStats() const {
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 
+    // TODO
     TActorBootstrapped<TDqPqRdReadActor>::PassAway();
 }
 
-i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& /*buffer*/, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
+i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) {
     SRC_LOG_D("SessionId: " << " GetAsyncInputData freeSpace = " << freeSpace);
 
-
+    i64 usedSpace = 0;
+    if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
+        return usedSpace;
+    }
     return 0;
 }
+
+bool TDqPqRdReadActor::MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, i64& /*usedSpace*/) {
+
+    buffer.clear();
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        if (sessionInfo.Data.empty())
+            continue;
+        std::move(sessionInfo.Data.begin(), sessionInfo.Data.end(), std::back_inserter(buffer));
+        
+        sessionInfo.Data.clear();
+        return true;
+
+      //  usedSpace = readyBatch.UsedSpace;
+      
+    }
+    return false;
+
+//     if (ReadyBuffer.empty()) {
+//         SubscribeOnNextEvent();
+//         return false;
+//     }
+
+//     auto& readyBatch = ReadyBuffer.front();
+//     buffer.clear();
+//     std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
+//    // watermark = readyBatch.Watermark;
+//     usedSpace = readyBatch.UsedSpace;
+
+//     for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
+//         for (const auto& [start, end] : ranges) {
+//             CurrentDeferredCommit.Add(PartitionSession, start, end);
+//         }
+//         PartitionToOffset[MakePartitionKey(PartitionSession)] = ranges.back().second;
+//     }
+
+//     ReadyBuffer.pop();
+
+//     if (ReadyBuffer.empty()) {
+//         SubscribeOnNextEvent();
+//     } else {
+//         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+//     }
+
+//     SRC_LOG_T("SessionId: " << GetSessionId() << " Return ready batch."
+//         << " DataCount = " << buffer.RowCount()
+//        // << " Watermark = " << (watermark ? ToString(*watermark) : "none")
+//         << " Used space = " << usedSpace);
+//     return true;
+}
+
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
@@ -317,11 +433,24 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev) {
     SRC_LOG_D("TEvRowDispatcherResult = " << ev->Get()->CoordinatorActorId);
-    if (!ev->Get()->CoordinatorActorId) {
-        return;     // TODO
+
+    if (CoordinatorActorId
+        && CoordinatorActorId != ev->Get()->CoordinatorActorId)  
+    {
+        SRC_LOG_W("Coordinator changed, pass away");
+        Stop("Coordinator changed, pass away");
+        // TODO
+        return;
     }
 
-    Send(*ev->Get()->CoordinatorActorId, new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()));
+    CoordinatorActorId = ev->Get()->CoordinatorActorId;
+    ProcessState();
+}
+
+void TDqPqRdReadActor::Stop(const TString& message) {
+    NYql::TIssues issues;
+    issues.AddIssue(NYql::TIssue{message});
+    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {
@@ -331,21 +460,71 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
         SRC_LOG_D("   rowDispatcherActorId:" << rowDispatcherActorId);
 
         for (auto& partitionId : p.GetPartitionId()) {
-             SRC_LOG_D("   partitionId:" << partitionId);
-
-            TMaybe<ui64> readOffset;
-            TPartitionKey partitionKey{TString{}, partitionId};
-
-            const auto offsetIt = PartitionToOffset.find(partitionKey);
-            if (offsetIt != PartitionToOffset.end()) {
-                readOffset = offsetIt->second;
-            }
-
-            auto actorId = Register(NewPqSession(SourceParams, partitionId, rowDispatcherActorId, Token, AddBearerToToken, readOffset).release());
-            Sessions.emplace(partitionId, actorId);
+            SRC_LOG_D("   partitionId:" << partitionId);
+            Sessions[partitionId].RowDispatcherActorId = rowDispatcherActorId;
         }
     }
+    ProcessState();
 }
+
+void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+    SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
+}
+
+void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    SRC_LOG_D("TEvNodeDisconnected " << ev->Get()->NodeId);
+    for (const auto& [partitionId, sessionInfo] : Sessions) {
+        if (!sessionInfo.RowDispatcherActorId 
+            || sessionInfo.RowDispatcherActorId.NodeId() != ev->Get()->NodeId) {
+                continue;
+        }
+        Stop("TEvNodeDisconnected");
+    }
+}
+
+void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+    SRC_LOG_D("TEvUndelivered, ev: " << ev->Get()->ToString());
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
+    SRC_LOG_D("TEvSessionData, ev: " << ev->Sender);
+    std::cerr << "TDqPqRdReadActor::TEvSessionData " << std::this_thread::get_id() << std::endl;
+
+
+    ui64 partitionId = ev->Get()->Record.GetPartitionId();
+    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
+
+    auto& sessionInfo = Sessions[partitionId];
+    SRC_LOG_D("TEvSessionData, size " << ev->Get()->Record.BlobSize());
+    for (auto& blob : ev->Get()->Record.GetBlob()) {
+        SRC_LOG_D("data: " << blob);
+        auto [item, size] = CreateItem(blob);
+        sessionInfo.Data.emplace_back(std::move(item));
+        //sessionInfo.Data.push_back(blob);
+    }
+}
+std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
+    i64 usedSpace = 0;
+    NUdf::TUnboxedValuePod item;
+    if (MetadataFields.empty()) {
+        item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+        usedSpace += data.Size();
+    } else {
+  /*      NUdf::TUnboxedValue* itemPtr;
+        item = HolderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
+        *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+        usedSpace += data.Size();
+
+        for (const auto& [name, extractor] : MetadataFields) {
+            auto [ub, size] = extractor(data);
+            *(itemPtr++) = std::move(ub);
+            usedSpace += size;
+        }*/
+    }
+
+    return std::make_pair(item, usedSpace);
+}
+
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -355,11 +534,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
 {
     auto taskParamsIt = taskParams.find("pq");
     YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
@@ -371,6 +549,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
 
+    std::cerr << "new TDqPqRdReadActor" << std::endl;
+
     TDqPqRdReadActor* actor = new TDqPqRdReadActor(
         inputIndex,
         statsLevel,
@@ -379,7 +559,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         holderFactory,
         std::move(settings),
         std::move(readTaskParamsMsg),
-        std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         credentialsProviderFactory,
@@ -392,11 +571,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
 
 void RegisterDqPqRdReadActorFactory(
     TDqAsyncIoFactory& factory,
-    NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), credentialsProviderFactory = std::move(credentialsProviderFactory)](
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
+        [credentialsFactory = std::move(credentialsFactory), credentialsProviderFactory = std::move(credentialsProviderFactory)](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -409,7 +587,6 @@ void RegisterDqPqRdReadActorFactory(
             args.TaskId,
             args.SecureParams,
             args.TaskParams,
-            driver,
             credentialsFactory,
             args.ComputeActorId,
             args.HolderFactory,

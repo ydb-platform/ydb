@@ -94,7 +94,7 @@ TRowDispatcher::TRowDispatcher(
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
-    , LogPrefix("TLeaderElection: ")  {
+    , LogPrefix("TRowDispatcher: ")  {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -155,7 +155,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
     }
-    Register(NewTopicSession(
+    auto actorId = Register(NewTopicSession(
         ev->Get()->Record.GetSource(),
         ev->Get()->Record.GetPartitionId(),
         readOffset,
@@ -164,6 +164,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
             CredentialsFactory,
             ev->Get()->Record.GetToken(),
             ev->Get()->Record.GetAddBearerToToken())).release());
+
+    auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
+    event->ConsumerActorId = ev->Sender;
+    Send(actorId, event.release());
 }
 
 } // namespace

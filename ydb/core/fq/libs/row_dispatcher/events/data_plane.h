@@ -17,12 +17,14 @@ struct TEvRowDispatcher {
         EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorChanged,
         EvStartSession,
-        EvCoordinatorInfo,
+        EvSessionData,
 
         EvRowDispatcherRequest,
         EvRowDispatcherResult,
         EvCoordinatorRequest,
         EvCoordinatorResult,
+
+        EvSessionAddConsumer,
 
         EvEnd,
     };
@@ -80,10 +82,20 @@ struct TEvRowDispatcher {
     //  Read actor <-> row_dispatcher : 
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
-        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvCoordinatorResult> {
+        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
         TEvStartSession() = default;
     };
 
+    struct TEvSessionData : public NActors::TEventPB<TEvSessionData,
+        NFq::NRowDispatcherProto::TEvSessionData, EEv::EvSessionData> {
+        TEvSessionData() = default;
+    };
+
+
+     //  Row_dispatcher  <->  session: 
+    struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
+        NActors::TActorId ConsumerActorId;
+    };
 };
 
 } // namespace NFq

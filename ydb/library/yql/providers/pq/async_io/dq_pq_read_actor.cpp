@@ -283,6 +283,7 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
+        std::cerr << "GetAsyncInputData " << std::this_thread::get_id() << std::endl;
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
@@ -304,7 +305,6 @@ private:
                     batchItemsEstimatedCount += val->GetMessages().size();
                 }
             }
-
             for (auto& event : events) {
                 std::visit(TTopicEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
             }
@@ -660,7 +660,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
 }
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)

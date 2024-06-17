@@ -231,7 +231,7 @@ void Init(
         }
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterDqPqRdReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, NKikimr::CreateYdbCredentialsProviderFactory);
+        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory, NKikimr::CreateYdbCredentialsProviderFactory);
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));

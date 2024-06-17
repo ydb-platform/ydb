@@ -2,6 +2,7 @@
 #include <util/system/align.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <tuple>
+#include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 namespace NKikimr {
 
@@ -142,11 +143,16 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 }
 
 void TScopedAlloc::Acquire() {
+
     if (!AttachedCount_) {
         if (PrevState_) {
             PgReleaseThreadContext(PrevState_->MainContext);
         }
         PrevState_ = TlsAllocState;
+        std::cerr << "TScopedAlloc::Acquire " << std::this_thread::get_id() << std::endl;
+
+      //  NYql::NBacktrace::KikimrBackTrace();
+
         TlsAllocState = &MyState_;
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
@@ -161,6 +167,8 @@ void TScopedAlloc::Release() {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
         PgReleaseThreadContext(MyState_.MainContext);
         TlsAllocState = PrevState_;
+        std::cerr << "TScopedAlloc::Release " << std::this_thread::get_id() << std::endl;
+
         if (PrevState_) {
             PgAcquireThreadContext(PrevState_->MainContext);
         }

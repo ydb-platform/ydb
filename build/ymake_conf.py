@@ -1926,7 +1926,8 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
             self.platform_projects.append('build/internal/platform/msvc')
-            self.platform_projects.append('build/platform/wine')
+            if tc.under_wine_compiler or tc.under_wine_tools:
+                self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
         super(MSVCToolchain, self).print_toolchain()

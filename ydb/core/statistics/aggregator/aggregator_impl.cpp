@@ -56,6 +56,7 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
     if (config.HasFeatureFlags()) {
         const auto& featureFlags = config.GetFeatureFlags();
         EnableStatistics = featureFlags.GetEnableStatistics();
+        EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
     }
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);

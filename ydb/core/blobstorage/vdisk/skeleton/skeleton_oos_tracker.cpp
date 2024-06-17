@@ -96,7 +96,9 @@ namespace NKikimr {
             if (msg->NumSlots > 0) {
                 ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;
-                VCtx->CostTracker->SetTimeAvailable(timeAvailable);
+                if (VCtx->CostTracker) {
+                    VCtx->CostTracker->SetTimeAvailable(timeAvailable);
+                }
             }
 
             Become(&TThis::WaitFunc);

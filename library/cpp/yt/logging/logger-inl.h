@@ -24,7 +24,7 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& position) const
 template <class... TArgs>
 void TLogger::AddTag(const char* format, TArgs&&... args)
 {
-    AddRawTag(Format(format, std::forward<TArgs>(args)...));
+    AddRawTag(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...));
 }
 
 template <class TType>
@@ -277,6 +277,7 @@ inline void LogEventImpl(
     const TLogger& logger,
     ELogLevel level,
     ::TSourceLocation sourceLocation,
+    TLoggingAnchor* anchor,
     TSharedRef message)
 {
     auto event = CreateLogEvent(loggingContext, logger, level);
@@ -285,6 +286,7 @@ inline void LogEventImpl(
     event.Family = ELogFamily::PlainText;
     event.SourceFile = sourceLocation.File;
     event.SourceLine = sourceLocation.Line;
+    event.Anchor = anchor;
     logger.Write(std::move(event));
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
         OnCriticalLogEvent(logger, event);

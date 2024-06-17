@@ -35,7 +35,8 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp, 
+    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp
+        || slot == NUdf::EDataSlot::TzDate32 || slot == NUdf::EDataSlot::TzDatetime64 || slot == NUdf::EDataSlot::TzTimestamp64,
         "Expected tz date type slot");
 
     if constexpr (slot == NUdf::EDataSlot::TzDate) {
@@ -47,13 +48,22 @@ std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
     if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
         return arrow::uint64();
     }
+    if constexpr (slot == NUdf::EDataSlot::TzDate32) {
+        return arrow::int32();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzDatetime64) {
+        return arrow::int64();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzTimestamp64) {
+        return arrow::int64();
+    }
 }
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
     std::vector<std::shared_ptr<arrow::Field>> fields {
-        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>()),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16()),
+        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>(), false),
+        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
     };
     return std::make_shared<arrow::StructType>(fields);
 }

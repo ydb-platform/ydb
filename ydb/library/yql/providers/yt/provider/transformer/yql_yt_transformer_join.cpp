@@ -329,7 +329,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
 
     const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
         && equiJoin.Input().Size() > 2
-        && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner")
         && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
     const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;

@@ -78,7 +78,7 @@ TClient::TClient(
         &CreateTableMountCache,
         Connection_->GetConfig()->TableMountCache,
         RetryingChannel_,
-        RpcProxyClientLogger,
+        RpcProxyClientLogger(),
         Connection_->GetConfig()->RpcTimeout))
     , TimestampProvider_(BIND(&TClient::CreateTimestampProvider, Unretained(this)))
 { }
@@ -768,16 +768,17 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     }));
 }
 
-TFuture<IQueueRowsetPtr> TClient::PullConsumer(
+TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
     std::optional<i64> offset,
     int partitionIndex,
     const TQueueRowBatchReadOptions& rowBatchReadOptions,
-    const TPullConsumerOptions& options)
+    const TPullQueueConsumerOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
+    // Use PullConsumer (not PullQueueConsumer) for backward compatibility.
     auto req = proxy.PullConsumer();
     req->SetResponseHeavy(true);
     SetTimeoutOptions(*req, options);
@@ -792,7 +793,7 @@ TFuture<IQueueRowsetPtr> TClient::PullConsumer(
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullConsumerPtr& rsp) -> IQueueRowsetPtr {
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueueConsumerPtr& rsp) -> IQueueRowsetPtr {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
@@ -871,6 +872,57 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
         }
         return result;
     }));
+}
+
+TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
+    const TRichYPath& producerPath,
+    const TRichYPath& queuePath,
+    const TString& sessionId,
+    const std::optional<TYsonString>& userMeta,
+    const TCreateQueueProducerSessionOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateQueueProducerSession();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+    ToProto(req->mutable_session_id(), sessionId);
+    if (userMeta) {
+        ToProto(req->mutable_user_meta(), userMeta->AsStringBuf());
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
+        std::optional<TYsonString> userMeta;
+        if (rsp->has_user_meta()) {
+            userMeta = TYsonString(FromProto<TString>(rsp->user_meta()));
+        }
+
+        return TCreateQueueProducerSessionResult{
+            .SequenceNumber = FromProto<ui64>(rsp->sequence_number()),
+            .Epoch = FromProto<ui64>(rsp->epoch()),
+            .UserMeta = std::move(userMeta),
+        };
+    }));
+}
+
+TFuture<void> TClient::RemoveQueueProducerSession(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TString& sessionId,
+    const TRemoveQueueProducerSessionOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RemoveQueueProducerSession();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+    ToProto(req->mutable_session_id(), sessionId);
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::AddMember(
@@ -1948,7 +2000,7 @@ TFuture<void> TClient::SuspendChaosCells(
     auto req = proxy.SuspendChaosCells();
     ToProto(req->mutable_cell_ids(), cellIds);
 
-    return req->Invoke().As<void>();
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::ResumeChaosCells(
@@ -1960,21 +2012,31 @@ TFuture<void> TClient::ResumeChaosCells(
     auto req = proxy.ResumeChaosCells();
     ToProto(req->mutable_cell_ids(), cellIds);
 
-    return req->Invoke().As<void>();
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::SuspendTabletCells(
-    const std::vector<TCellId>& /*cellIds*/,
+    const std::vector<TCellId>& cellIds,
     const TSuspendTabletCellsOptions& /*options*/)
 {
-    ThrowUnimplemented("SuspendTabletCells");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SuspendTabletCells();
+    ToProto(req->mutable_cell_ids(), cellIds);
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::ResumeTabletCells(
-    const std::vector<TCellId>& /*cellIds*/,
+    const std::vector<TCellId>& cellIds,
     const TResumeTabletCellsOptions& /*options*/)
 {
-    ThrowUnimplemented("ResumeTabletCells");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ResumeTabletCells();
+    ToProto(req->mutable_cell_ids(), cellIds);
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
@@ -2474,6 +2536,26 @@ TFuture<TPipelineStatus> TClient::GetPipelineStatus(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
         return TPipelineStatus{
             .State = FromProto<NFlow::EPipelineState>(rsp->state()),
+        };
+    }));
+}
+
+TFuture<TGetFlowViewResult> TClient::GetFlowView(
+    const NYPath::TYPath& pipelinePath,
+    const NYPath::TYPath& viewPath,
+    const TGetFlowViewOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetFlowView();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_view_path(viewPath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
+        return TGetFlowViewResult{
+            .FlowViewPart = TYsonString(rsp->flow_view_part()),
         };
     }));
 }

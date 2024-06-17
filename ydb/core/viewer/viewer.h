@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -173,6 +174,15 @@ public:
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) = 0;
     virtual TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) = 0;
+    virtual bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) = 0;
+    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual TString MakeForward(const NMon::TEvHttpInfo* request, const std::vector<ui32>& nodes) = 0;
+
+    virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
+    virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
+    virtual TActorId FindRunningQuery(const TString& queryId) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
@@ -263,6 +273,8 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag);
+
 
 } // NViewer
 } // NKikimr

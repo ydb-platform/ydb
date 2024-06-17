@@ -1,6 +1,5 @@
 #include "auto_config_initializer.h"
 #include "run.h"
-#include "cert_auth_props.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
@@ -227,6 +226,11 @@ public:
             if (allUsersGroup) {
                 appData->AllAuthenticatedUsers = allUsersGroup;
             }
+        }
+        if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
+            TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
 
         appData->FeatureFlags = Config.GetFeatureFlags();
@@ -699,9 +703,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLegacy) {
             // start legacy service
             auto grpcService = new NGRpcProxy::TGRpcService();
-            if (!opts.SslData.Empty()) {
-                grpcService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {
@@ -813,19 +814,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasDiscovery) {
-            auto discoveryService = new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed());
-            if (!opts.SslData.Empty()) {
-                discoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
-            server.AddService(discoveryService);
+            server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
         }
 
         if (hasLocalDiscovery) {
-            auto localDiscoveryService = new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxies[0]);
-            if (!opts.SslData.Empty()) {
-                localDiscoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
-            }
-            server.AddService(localDiscoveryService);
+            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasRateLimiter) {
@@ -935,7 +928,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             sslData.Root = ReadFile(pathToCaFile);
             sslData.Cert = ReadFile(pathToCertificateFile);
             sslData.Key = ReadFile(pathToPrivateKeyFile);
-            sslData.DoRequestClientCertificate = appConfig.GetFeatureFlags().GetEnableDynamicNodeAuthorization() && appConfig.GetClientCertificateAuthorization().HasDynamicNodeAuthorization();
+            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
             sslOpts.SetSslData(sslData);
 
             GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts) });
@@ -1114,8 +1107,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
-        AppData->SharedCacheConfigPtr = std::make_unique<NKikimrSharedCache::TSharedCacheConfig>();
-        AppData->SharedCacheConfigPtr->CopyFrom(runConfig.AppConfig.GetSharedCacheConfig());
+        AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
     }
 
     if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
@@ -1128,6 +1120,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasGraphConfig()) {
         AppData->GraphConfig.CopyFrom(runConfig.AppConfig.GetGraphConfig());
+    }
+
+    if (runConfig.AppConfig.HasMetadataCacheConfig()) {
+        AppData->MetadataCacheConfig.CopyFrom(runConfig.AppConfig.GetMetadataCacheConfig());
     }
 
     // setup resource profiles
@@ -1564,10 +1560,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableInsertConveyor) {
         sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableBackgroundTasks) {
-        sil->AddServiceInitializer(new TBackgroundTasksInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

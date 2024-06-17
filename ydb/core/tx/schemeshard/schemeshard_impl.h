@@ -61,8 +61,6 @@
 
 #include <ydb/library/login/login.h>
 
-#include <ydb/services/bg_tasks/service.h>
-
 #include <util/generic/ptr.h>
 
 namespace NKikimr::NSchemeShard::NBackground {
@@ -315,6 +313,7 @@ public:
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;
     bool EnableTempTables = false;
+    bool EnableTableDatetime64 = false;
 
     TShardDeleter ShardDeleter;
 
@@ -1041,7 +1040,6 @@ public:
     void Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr &ev, const TActorContext &ctx);

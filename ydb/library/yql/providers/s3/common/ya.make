@@ -10,7 +10,6 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    source_context.cpp
     util.cpp
 )
 
@@ -21,5 +20,17 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
 )
+
+IF (CLANG AND NOT WITH_VALGRIND)
+
+    CFLAGS (
+        -DARCADIA_BUILD -DUSE_PARQUET
+    )
+
+    SRCS(
+        source_context.cpp
+    )
+
+ENDIF()
 
 END()

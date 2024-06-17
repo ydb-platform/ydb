@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/string.h>
+#include <util/generic/hash_set.h>
 
 #include <optional>
 #include <memory>
@@ -19,8 +20,8 @@ private:
     YDB_READONLY_DEF(TString, LockName);
     YDB_READONLY_FLAG(ReadOnly, false);
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const = 0;
-    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const = 0;
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const = 0;
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks = {}) const = 0;
     virtual bool DoIsEmpty() const = 0;
 public:
     ILock(const TString& lockName, const bool isReadOnly = false)
@@ -32,17 +33,17 @@ public:
 
     virtual ~ILock() = default;
 
-    std::optional<TString> IsLocked(const TPortionInfo& portion, const bool readOnly = false) const {
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
         if (IsReadOnly() && readOnly) {
             return {};
         }
-        return DoIsLocked(portion);
+        return DoIsLocked(portion, excludedLocks);
     }
-    std::optional<TString> IsLocked(const TGranuleMeta& g, const bool readOnly = false) const {
+    std::optional<TString> IsLocked(const TGranuleMeta& g, const THashSet<TString>& excludedLocks = {}, const bool readOnly = false) const {
         if (IsReadOnly() && readOnly) {
             return {};
         }
-        return DoIsLocked(g);
+        return DoIsLocked(g, excludedLocks);
     }
     bool IsEmpty() const {
         return DoIsEmpty();

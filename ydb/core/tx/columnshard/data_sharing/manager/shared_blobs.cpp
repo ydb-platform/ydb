@@ -87,12 +87,28 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
     NIceDb::TNiceDb db(txc.DB);
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
-        AFL_VERIFY(it != BorrowedBlobIds.end())("blob_id", i.ToStringNew());
-        AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
         if (tabletIdTo == SelfTabletId) {
+            AFL_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
         } else {
+            AFL_VERIFY(it != BorrowedBlobIds.end())("blob_id", i.ToStringNew());
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
+        }
+    }
+}
+
+void TStorageSharedBlobsManager::CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+    for (auto&& i : blobIds) {
+        auto it = BorrowedBlobIds.find(i);
+        if (tabletIdTo == SelfTabletId) {
+            AFL_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
+            if (it != BorrowedBlobIds.end()) {
+                BorrowedBlobIds.erase(it);
+            }
+        } else {
+            AFL_VERIFY(it != BorrowedBlobIds.end());
+            AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
+            it->second = tabletIdTo;
         }
     }
 }

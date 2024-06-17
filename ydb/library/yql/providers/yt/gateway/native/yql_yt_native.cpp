@@ -1930,7 +1930,7 @@ private:
         }
 
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        
+
         return rangeRes;
     }
 
@@ -1996,7 +1996,7 @@ private:
         }
 
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        
+
         return rangeRes;
     }
 
@@ -5001,7 +5001,8 @@ private:
 
         if (createTable) {
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
+            const bool useColumnGroups = execCtx->Options_.Config()->ColumnGroupMode.Get(cluster).GetOrElse(EColumnGroupMode::Disable) == EColumnGroupMode::Single;
+            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, useColumnGroups).ToNode();
         }
     }
 

@@ -277,6 +277,9 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
             Cancel(connectTimeoutContext);
             return false;
         }
+        if (Processor) {
+            Processor->Cancel();
+        }
         Processor = nullptr;
         WaitingReadResponse = false;
         ServerMessage = std::make_shared<TServerMessage<UseMigrationProtocol>>();

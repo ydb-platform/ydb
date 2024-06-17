@@ -26,17 +26,98 @@ private:
 };
 
 template<typename TRpc, typename TCbWrapper>
-class TLocalRpcCtx : public NGRpcService::IRequestOpCtx {
+class TLocalRpcCtxImplData {
+protected:
+    TCbWrapper CbWrapper;
+    NYql::TIssueManager IssueManager;
+    std::unique_ptr<Ydb::CostInfo> CostInfo;
+
+    template<typename TCb>
+    TLocalRpcCtxImplData(TCb&& cb)
+        : CbWrapper(std::forward<TCb>(cb))
+    {}
+};
+
+template<typename TRpc, typename TCbWrapper, bool IsOperation>
+class TLocalRpcCtxImpl;
+
+template<typename TRpc, typename TCbWrapper>
+class TLocalRpcCtxImpl<TRpc, TCbWrapper, false> : public NGRpcService::IRequestNoOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
+protected:
+    using TBase = TLocalRpcCtxImplData<TRpc, TCbWrapper>;
+
+    template<typename TCb>
+    TLocalRpcCtxImpl(TCb&& cb)
+        : TBase(std::forward<TCb>(cb))
+    {}
+};
+
+template<typename TRpc, typename TCbWrapper>
+class TLocalRpcCtxImpl<TRpc, TCbWrapper, true> : public NGRpcService::IRequestOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
+protected:
+    using TBase = TLocalRpcCtxImplData<TRpc, TCbWrapper>;
+
+    template<typename TCb>
+    TLocalRpcCtxImpl(TCb&& cb)
+        : TBase(std::forward<TCb>(cb))
+    {}
+
 public:
     using TResp = typename TRpc::TResponse;
+
+    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
+        TResp resp;
+        auto deferred = resp.mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(status);
+        if (TBase::CostInfo) {
+            deferred->mutable_cost_info()->CopyFrom(*TBase::CostInfo);
+        }
+        NYql::IssuesToMessage(TBase::IssueManager.GetIssues(), deferred->mutable_issues());
+        auto data = deferred->mutable_result();
+        data->PackFrom(result);
+        TBase::CbWrapper(resp);
+    }
+
+    void SendResult(const google::protobuf::Message& result,
+        Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override {
+        TResp resp;
+        auto deferred = resp.mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(status);
+        deferred->mutable_issues()->MergeFrom(message);
+        if (TBase::CostInfo) {
+            deferred->mutable_cost_info()->CopyFrom(*TBase::CostInfo);
+        }
+        auto data = deferred->mutable_result();
+        data->PackFrom(result);
+        TBase::CbWrapper(resp);
+    }
+
+    void SendOperation(const Ydb::Operations::Operation& operation) override {
+        TResp resp;
+        resp.mutable_operation()->CopyFrom(operation);
+        TBase::CbWrapper(resp);
+    }
+};
+
+template<typename TRpc, typename TCbWrapper, bool IsOperation = TRpc::IsOp>
+class TLocalRpcCtx : public TLocalRpcCtxImpl<TRpc, TCbWrapper, IsOperation> {
+public:
+    static constexpr bool IsOp = IsOperation;
+    using TBase = TLocalRpcCtxImpl<TRpc, TCbWrapper, IsOperation>;
+    using TResp = typename TRpc::TResponse;
+    using EStreamCtrl = NYdbGrpc::IRequestContextBase::EStreamCtrl;
+
     template<typename TProto, typename TCb>
     TLocalRpcCtx(TProto&& req, TCb&& cb,
             const TString& databaseName,
             const TMaybe<TString>& token,
             const TMaybe<TString>& requestType,
             bool internalCall)
-        : Request(std::forward<TProto>(req))
-        , CbWrapper(std::forward<TCb>(cb))
+        : TBase(std::forward<TCb>(cb))
+        , Request(std::forward<TProto>(req))
         , DatabaseName(databaseName)
         , RequestType(requestType)
         , InternalCall(internalCall)
@@ -78,8 +159,8 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResp resp;
-        NGRpcService::TCommonResponseFiller<TResp, true>::Fill(resp, IssueManager.GetIssues(), CostInfo.get(), status);
-        CbWrapper(resp);
+        NGRpcService::TCommonResponseFiller<TResp, IsOp>::Fill(resp, TBase::IssueManager.GetIssues(), TBase::CostInfo.get(), status);
+        TBase::CbWrapper(resp);
     }
 
     TString GetPeerName() const override {
@@ -90,49 +171,12 @@ public:
         return TRpc::TRequest::descriptor()->name();
     }
 
-    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
-        TResp resp;
-        auto deferred = resp.mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        if (CostInfo) {
-            deferred->mutable_cost_info()->CopyFrom(*CostInfo);
-        }
-        NYql::IssuesToMessage(IssueManager.GetIssues(), deferred->mutable_issues());
-        auto data = deferred->mutable_result();
-        data->PackFrom(result);
-        CbWrapper(resp);
-    }
-
-    void SendResult(const google::protobuf::Message& result,
-        Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override
-    {
-        TResp resp;
-        auto deferred = resp.mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        deferred->mutable_issues()->MergeFrom(message);
-        if (CostInfo) {
-            deferred->mutable_cost_info()->CopyFrom(*CostInfo);
-        }
-        auto data = deferred->mutable_result();
-        data->PackFrom(result);
-        CbWrapper(resp);
-    }
-
-    void SendOperation(const Ydb::Operations::Operation& operation) override {
-        TResp resp;
-        resp.mutable_operation()->CopyFrom(operation);
-        CbWrapper(resp);
-    }
-
     void RaiseIssue(const NYql::TIssue& issue) override {
-        IssueManager.RaiseIssue(issue);
+        TBase::IssueManager.RaiseIssue(issue);
     }
 
     void RaiseIssues(const NYql::TIssues& issues) override {
-        IssueManager.RaiseIssues(issues);
+        TBase::IssueManager.RaiseIssues(issues);
     }
 
     google::protobuf::Arena* GetArena() override {
@@ -189,8 +233,8 @@ public:
     }
 
     void SetCostInfo(float consumed_units) override {
-        CostInfo = std::make_unique<Ydb::CostInfo>();
-        CostInfo->set_consumed_units(consumed_units);
+        TBase::CostInfo = std::make_unique<Ydb::CostInfo>();
+        TBase::CostInfo->set_consumed_units(consumed_units);
     }
 
     bool GetDiskQuotaExceeded() const override {
@@ -220,21 +264,17 @@ private:
     void Reply(NProtoBuf::Message *r, ui32) override {
         TResp* resp = dynamic_cast<TResp*>(r);
         Y_ABORT_UNLESS(resp);
-        CbWrapper(*resp);
+        TBase::CbWrapper(*resp);
     }
 
 private:
     typename TRpc::TRequest Request;
-    TCbWrapper CbWrapper;
     const TString DatabaseName;
     const TMaybe<TString> RequestType;
     const bool InternalCall;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
     const TString EmptySerializedTokenMessage_;
-
-    NYql::TIssueManager IssueManager;
     google::protobuf::Arena Arena;
-    std::unique_ptr<Ydb::CostInfo> CostInfo;
 };
 
 template<class TRequest>

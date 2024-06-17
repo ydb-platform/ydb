@@ -9,10 +9,6 @@ ADDINCL(
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
-    events.cpp
-)
-
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
@@ -22,5 +18,17 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/udfs/common/clickhouse/client
 )
+
+IF (CLANG AND NOT WITH_VALGRIND)
+
+    CFLAGS (
+        -DARCADIA_BUILD -DUSE_PARQUET
+    )
+
+    SRCS(
+        events.cpp
+    )
+
+ENDIF()
 
 END()

@@ -4395,6 +4395,16 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Error;
     }
 
+    IGraphTransformer::TStatus VersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NKikimr::NUdf::EDataSlot::String));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus WidenIntegralWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12315,6 +12325,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RowNumber"] = &WinRowNumberWrapper;
         Functions["Rank"] = &WinRankWrapper;
         Functions["DenseRank"] = &WinRankWrapper;
+        Functions["PercentRank"] = &WinRankWrapper;
+        Functions["CumeDist"] = &WinCumeDistWrapper;
+        Functions["NTile"] = &WinNTileWrapper;
         Functions["Ascending"] = &PresortWrapper;
         Functions["Descending"] = &PresortWrapper;
         Functions["IsKeySwitch"] = &IsKeySwitchWrapper;
@@ -12644,6 +12657,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
+        ExtFunctions["Version"] = &VersionWrapper;
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;

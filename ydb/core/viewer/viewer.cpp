@@ -42,6 +42,8 @@ using namespace NNodeWhiteboard;
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -107,7 +109,6 @@ public:
                 }
             }
             mon->RegisterActorPage({
-                .Title = "Viewer (classic)",
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -140,7 +141,6 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
-                .Title = "VDisk",
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -148,12 +148,25 @@ public:
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
-                .Title = "PDisk",
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "operation",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "scheme",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = viewerAllowedSIDs,
             });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
@@ -164,6 +177,8 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
+            InitOperationJsonHandlers(JsonHandlers);
+            InitSchemeJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths
@@ -197,6 +212,137 @@ public:
     TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
     TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) override;
+    TString GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) override;
+
+    bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) override {
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || request->UserToken.empty()) {
+                return true;
+            }
+        }
+        if (request->UserToken.empty()) {
+            return false;
+        }
+        auto token = std::make_unique<NACLib::TUserToken>(request->UserToken);
+        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
+            if (token->IsExist(allowedSID)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool IsStaticGroup(ui32 groupId) {
+        return groupId & 0x80000000 == 0;
+    }
+
+    TString GetGroupList(const auto& groups) {
+        std::vector<ui32> groupIds;
+        for (auto group : groups) {
+            groupIds.push_back(group);
+        }
+        std::sort(groupIds.begin(), groupIds.end());
+        TStringBuilder result;
+        if (groups.empty()) {
+            return result << "something";
+        }
+        result << "at least " << groups.size();
+        if (groups.size() > 1) {
+            result << " groups (";
+        } else {
+            result << " group (";
+        }
+        auto was_groups = 0;
+        auto max_groups = 3;
+        for (auto group : groupIds) {
+            if (was_groups > 0) {
+                result << ", ";
+            }
+            if (was_groups >= max_groups) {
+                result << "...";
+            }
+            if (IsStaticGroup(group)) {
+                result << "static ";
+            }
+            result << group;
+            ++was_groups;
+        }
+        result << ")";
+        return result;
+    }
+
+    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) override {
+        forceRetryPossible = false;
+        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
+            bscError = TStringBuilder() << "Calling this operation could cause " << GetGroupList(response.GetGroupsGetDisintegratedByExpectedStatus()) << " to go into a dead state";
+        } else if (response.GroupsGetDisintegratedSize()) {
+            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to go into a dead state";
+        } else if (response.GroupsGetDegradedSize()) {
+            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to go into a degraded state";
+            forceRetryPossible = true;
+        } else if (response.StatusSize()) {
+            const auto& lastStatus = response.GetStatus(response.StatusSize() - 1);
+            TVector<ui32> groups;
+            for (auto& failParam: lastStatus.GetFailParam()) {
+                if (failParam.HasGroupId()) {
+                    groups.emplace_back(failParam.GetGroupId());
+                }
+            }
+            if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
+                bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(groups) << " to go into a degraded state";
+                forceRetryPossible = true;
+            } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
+                bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+            }
+        }
+        if (bscError.empty()) {
+            bscError = response.GetErrorDescription();
+        }
+    }
+
+    TString MakeForward(const NMon::TEvHttpInfo* request, const std::vector<ui32>& nodes) override {
+        if (nodes.empty()) {
+            return GetHTTPINTERNALERROR(request, "text/plain", "Couldn't resolve database nodes");
+        }
+        if (request->Request.GetUri().StartsWith("/node/")) {
+            return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
+        }
+        // we expect that nodes order is the same for all requests
+        ui64 hash = std::hash<TString>()(request->Request.GetRemoteAddr());
+        auto it = std::next(nodes.begin(), hash % nodes.size());
+
+        TStringBuilder redirect;
+        redirect << "/node/";
+        redirect << *it;
+        redirect << request->Request.GetUri();
+        return GetHTTPFORWARD(request, redirect);
+    }
+
+    std::unordered_map<TString, TActorId> RunningQueries;
+    std::mutex RunningQueriesMutex;
+
+    void AddRunningQuery(const TString& queryId, const TActorId& actorId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        RunningQueries[queryId] = actorId;
+    }
+
+    void EndRunningQuery(const TString& queryId, const TActorId& actorId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        auto it = RunningQueries.find(queryId);
+        if (it != RunningQueries.end() && it->second == actorId) {
+            RunningQueries.erase(it);
+        }
+    }
+
+    TActorId FindRunningQuery(const TString& queryId) override {
+        std::lock_guard guard(RunningQueriesMutex);
+        auto it = RunningQueries.find(queryId);
+        if (it != RunningQueries.end()) {
+            return it->second;
+        }
+        return {};
+    }
 
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
@@ -584,6 +730,31 @@ TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType
     return res;
 }
 
+TString TViewer::GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 500 Internal Server Error\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
+    if (response) {
+        res << "Content-Type: " << contentType << "\r\n";
+        res << "Content-Length: " << response.size() << "\r\n";
+    }
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
+}
+
+TString TViewer::GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) {
+    TStringBuilder res;
+    res << "HTTP/1.1 307 Temporary Redirect\r\n"
+        << "Location: " << location << "\r\n";
+    res << GetCORS(request);
+    res << "\r\n";
+    return res;
+}
+
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (state) {
@@ -831,6 +1002,26 @@ NKikimrViewer::EFlag GetBSGroupOverallFlag(
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
         const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
     return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
+}
+
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag) {
+    switch (flag) {
+    case Ydb::Monitoring::StatusFlag::GREY:
+    case Ydb::Monitoring::StatusFlag::UNSPECIFIED:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MAX_SENTINEL_DO_NOT_USE_:
+        return NKikimrViewer::EFlag::Grey;
+    case Ydb::Monitoring::StatusFlag::GREEN:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::BLUE:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::YELLOW:
+        return NKikimrViewer::EFlag::Yellow;
+    case Ydb::Monitoring::StatusFlag::ORANGE:
+        return NKikimrViewer::EFlag::Orange;
+    case Ydb::Monitoring::StatusFlag::RED:
+        return NKikimrViewer::EFlag::Red;
+    }
 }
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag) {

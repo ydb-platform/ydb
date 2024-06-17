@@ -11,7 +11,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoAlterPqPart(const TOperationId& opId, const TPath& topicPath, TTopicInfo::TPtr topic, TVector<ISubOperation::TPtr>& result)
+void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath& topicPath, TTopicInfo::TPtr topic, TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(topicPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     // outTx.SetFailOnExist(!acceptExisted);
@@ -30,7 +30,8 @@ void DoAlterPqPart(const TOperationId& opId, const TPath& topicPath, TTopicInfo:
     auto& pqConfig = *desc.MutablePQTabletConfig();
     pqConfig.CopyFrom(tabletConfig);
     pqConfig.ClearPartitionKeySchema();
-    pqConfig.MutableOffloadConfig();
+    auto& ib = *pqConfig.MutableOffloadConfig()->MutableIncrementalBackup();
+    ib.SetDstPath(tablePath.PathString());
 
     result.push_back(CreateAlterPQ(NextPartId(opId, result), outTx));
 }
@@ -45,7 +46,14 @@ void DoCreateIncBackupTable(const TOperationId& opId, const TPath& dst, NKikimrS
     desc.CopyFrom(tableDesc);
     desc.SetName(dst.LeafName());
 
-    auto col = desc.AddColumns();
+    auto& replicationConfig = *desc.MutableReplicationConfig();
+    replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+
+    // TODO: remove NotNull from all columns for correct deletion writing
+    // TODO: cleanup all sequences
+
+    auto* col = desc.AddColumns();
     col->SetName("__incrBackupImpl_deleted");
     col->SetType("Bool");
 
@@ -107,7 +115,7 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
         DoCreateIncBackupTable(opId, backupTablePath, schema, result);
-        DoAlterPqPart(opId, topicPath, topic, result);
+        DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
     }
 
     return result;

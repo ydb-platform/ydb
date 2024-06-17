@@ -199,7 +199,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 // TInitInternalFieldsStep
 //
 TInitInternalFieldsStep::TInitInternalFieldsStep(TInitializer* initializer)
-    : TInitializerStep(initializer, "TInitializerStep", false) {
+    : TInitializerStep(initializer, "TInitInternalFieldsStep", false) {
 }
 
 void TInitInternalFieldsStep::Execute(const TActorContext &ctx) {
@@ -495,7 +495,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         auto pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        TKey k(pair.GetKey());
+        TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
             if (k.GetPartNo() > 0) ++startOffset;

@@ -509,7 +509,7 @@ struct save_array_type
         );
         boost::serialization::collection_size_type count(c);
         ar << BOOST_SERIALIZATION_NVP(count);
-        // explict template arguments to pass intel C++ compiler
+        // explicit template arguments to pass intel C++ compiler
         ar << serialization::make_array<
             const value_type,
             boost::serialization::collection_size_type

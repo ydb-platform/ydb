@@ -671,23 +671,7 @@ private:
                 columns.AppendValue(col.Value());
             }
 
-            auto settings = NYql::TKqpReadTableSettings::Parse(sourceSettings.Settings());
-            if (settings.ItemsLimit && !readInfo.Limit) {
-                auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
-                if (auto maybeResultBinding = ContainResultBinding(limit)) {
-                    const auto [txId, resId] = *maybeResultBinding;
-                    if (auto result = GetResult(txId, resId)) {
-                        limit = result->GetDataText();
-                    }
-                }
-
-                readInfo.Limit = limit;
-                op.Properties["ReadLimit"] = limit;
-            }
-            if (settings.Reverse) {
-                readInfo.Reverse = true;
-                op.Properties["Reverse"] = true;
-            }
+            AddReadTableSettings(op, sourceSettings.Settings(), readInfo);
 
             AddOptimizerEstimates(op, sourceSettings);
 
@@ -772,23 +756,7 @@ private:
                 columns.AppendValue(col.Value());
             }
 
-            auto settings = NYql::TKqpReadTableSettings::Parse(sourceSettings.Settings());
-            if (settings.ItemsLimit && !readInfo.Limit) {
-                auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
-                if (auto maybeResultBinding = ContainResultBinding(limit)) {
-                    const auto [txId, resId] = *maybeResultBinding;
-                    if (auto result = GetResult(txId, resId)) {
-                        limit = result->GetDataText();
-                    }
-                }
-
-                readInfo.Limit = limit;
-                op.Properties["ReadLimit"] = limit;
-            }
-            if (settings.Reverse) {
-                readInfo.Reverse = true;
-                op.Properties["Reverse"] = true;
-            }
+            AddReadTableSettings(op, sourceSettings.Settings(), readInfo);
 
             AddOptimizerEstimates(op, sourceSettings);
 
@@ -852,6 +820,12 @@ private:
             op.Properties["Name"] = TStringBuilder() << "Read " << dataSource;
         } else {
             op.Properties["Name"] = "Read from external data source";
+        }
+
+        if (auto stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw())) {
+            op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
+            op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
+            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
 
         if (dqIntegration) {
@@ -1614,23 +1588,7 @@ private:
             columns.AppendValue(col.Value());
         }
 
-        auto settings = NYql::TKqpReadTableSettings::Parse(read);
-        if (settings.ItemsLimit && !readInfo.Limit) {
-            auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
-            if (auto maybeResultBinding = ContainResultBinding(limit)) {
-                const auto [txId, resId] = *maybeResultBinding;
-                if (auto result = GetResult(txId, resId)) {
-                    limit = result->GetDataText();
-                }
-            }
-
-            readInfo.Limit = limit;
-            op.Properties["ReadLimit"] = limit;
-        }
-        if (settings.Reverse) {
-            readInfo.Reverse = true;
-            op.Properties["Reverse"] = true;
-        }
+        AddReadTableSettings(op, read, readInfo);
 
         if (read.Maybe<TKqpReadOlapTableRangesBase>()) {
             op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(table, planNode.StageProto);
@@ -1750,7 +1708,26 @@ private:
             columns.AppendValue(col.Value());
         }
 
-        auto settings = NYql::TKqpReadTableSettings::Parse(read);
+        AddReadTableSettings(op, read, readInfo);
+
+        SerializerCtx.Tables[table].Reads.push_back(readInfo);
+
+        AddOptimizerEstimates(op, read);
+
+        auto readName = GetNameByReadType(readInfo.Type);
+        op.Properties["Name"] = readName;
+        ui32 operatorId = AddOperator(planNode, readName, std::move(op));
+
+        return operatorId;
+    }
+
+    template <typename TReadTableSettings>
+    void AddReadTableSettings(
+        TOperator& op, 
+        const TReadTableSettings& readTableSettings, 
+        TTableRead& readInfo
+    ) {
+        auto settings = NYql::TKqpReadTableSettings::Parse(readTableSettings);
         if (settings.ItemsLimit && !readInfo.Limit) {
             auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
             if (auto maybeResultBinding = ContainResultBinding(limit)) {
@@ -1768,16 +1745,13 @@ private:
             op.Properties["Reverse"] = true;
         }
 
-        SerializerCtx.Tables[table].Reads.push_back(readInfo);
-
-        AddOptimizerEstimates(op, read);
-
-        auto readName = GetNameByReadType(readInfo.Type);
-        op.Properties["Name"] = readName;
-        ui32 operatorId = AddOperator(planNode, readName, std::move(op));
-
-        return operatorId;
+        if (settings.SequentialInFlight) {
+            op.Properties["Scan"] = "Sequential"; 
+        } else {
+            op.Properties["Scan"] = "Parallel"; 
+        }
     }
+
 
 private:
     TSerializerCtx& SerializerCtx;

@@ -223,9 +223,19 @@ public:
         if (ItemToIndex_.contains(crp)) {
             return false;
         }
+        for (int i = 0; i < crp.second; ++i) {
+            auto item = std::pair{Hasher_(crp.first, i), i};
+            if (PlacedItemsInRing_.contains(item)) {
+                return false;
+            }
+        }
 
         ItemToIndex_[crp] = Items_.size();
         Items_.push_back(crp);
+
+        for (int i = 0; i < crp.second; ++i) {
+            PlacedItemsInRing_.insert({Hasher_(crp.first, i), i});
+        }
         return true;
     }
 
@@ -235,6 +245,10 @@ public:
         auto deleteItem = Items_[deleteIndex];
         ItemToIndex_[Items_.back()] = deleteIndex;
         ItemToIndex_.erase(deleteItem);
+
+        for (int i = 0; i < deleteItem.second; ++i) {
+            PlacedItemsInRing_.erase({Hasher_(deleteItem.first, i), i});
+        }
 
         std::swap(Items_.back(), Items_[deleteIndex]);
         Items_.pop_back();
@@ -259,6 +273,9 @@ public:
 private:
     std::vector<TCrpItemWithToken> Items_;
     THashMap<TCrpItemWithToken, size_t> ItemToIndex_;
+
+    THashSet<std::pair<ui64, int>> PlacedItemsInRing_; // To avoid adding the same item twice.
+    TStringHasher Hasher_;
 };
 
 template <typename GS, typename GF, typename GQ>

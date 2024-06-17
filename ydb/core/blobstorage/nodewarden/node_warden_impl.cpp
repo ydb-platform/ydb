@@ -5,6 +5,7 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
 
+#include <ydb/core/protos/key.pb.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -178,6 +179,19 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
+
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsHDD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsSSD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
+                "VDiskControls.BurstThresholdNsNVME");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleHDD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleSSD");
+        icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
+                "VDiskControls.DiskTimeAvailableScaleNVME");
     }
 
     // start replication broker
@@ -321,7 +335,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
             } else {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk, TDuration::Zero()); // restart actor after successful wiping
+                StartLocalVDiskActor(vdisk); // restart actor after successful wiping
                 SendDiskMetrics(false);
             }
             break;

@@ -78,6 +78,7 @@ SRCS(
     mailbox_queue_simple.h
     mon.cpp
     mon.h
+    mon_stats.cpp
     mon_stats.h
     monotonic.cpp
     monotonic.h
@@ -109,7 +110,6 @@ PEERDIR(
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util
-    ydb/library/actors/queues
     ydb/library/services
     library/cpp/execprofile
     library/cpp/json/writer

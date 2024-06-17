@@ -88,6 +88,7 @@ TTopicSdkTestSetup CreateSetup() {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
+    //ff.SetEnableTopicServiceTx(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
@@ -97,6 +98,7 @@ TTopicSdkTestSetup CreateSetup() {
     setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);
 
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
@@ -105,10 +107,13 @@ TTopicSdkTestSetup CreateSetup() {
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic) {
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
     auto writeSettings = TWriteSessionSettings()
                     .Path(topic)
                     .ProducerId(producer);
+    if (!useCodec) {
+        writeSettings.Codec(ECodec::RAW);
+    }
     if (partition) {
         writeSettings.PartitionId(*partition);
     } else {
@@ -218,6 +223,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
 }
 
 void TTestReadSession::WaitAllMessages() {
+    Cerr << ">>>>> " << Impl->Name << " WaitAllMessages " << Endl << Flush;
     Impl->DataPromise.GetFuture().GetValue(TDuration::Seconds(5));
 }
 

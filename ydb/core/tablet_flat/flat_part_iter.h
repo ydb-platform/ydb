@@ -923,7 +923,8 @@ namespace NTable {
 
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
-                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                                NTable::ITransactionObserverSimplePtr transactionObserver,
+                                const NTable::ITransactionSet& decidedTransactions) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
 
@@ -948,6 +949,7 @@ namespace NTable {
                             transactionObserver.OnSkipCommitted(Part->MinRowVersion);
                         }
                         stats.InvisibleRowSkips++;
+                        stats.UncertainErase = true;
                     }
                     return EReady::Gone;
                 }
@@ -964,15 +966,27 @@ namespace NTable {
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         // Already committed and correct version
+                        if (!decidedTransactions.Contains(txId)) {
+                            // This change may rollback and change the iteration result
+                            stats.UncertainErase = true;
+                        }
                         return EReady::Data;
                     }
                     if (commitVersion) {
                         // Skipping a newer committed delta
                         transactionObserver.OnSkipCommitted(*commitVersion, txId);
                         stats.InvisibleRowSkips++;
+                        if (data->GetRop() != ERowOp::Erase) {
+                            // Skipping non-erase delta, so any erase below cannot be trusted
+                            stats.UncertainErase = true;
+                        }
                     } else {
                         // Skipping an uncommitted delta
                         transactionObserver.OnSkipUncommitted(txId);
+                        if (data->GetRop() != ERowOp::Erase && !decidedTransactions.Contains(txId)) {
+                            // This change may commit and change the iteration result
+                            stats.UncertainErase = true;
+                        }
                     }
                     data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                     if (!data) {
@@ -991,6 +1005,7 @@ namespace NTable {
                     SkipEraseVersion = true;
                     transactionObserver.OnSkipCommitted(current);
                     stats.InvisibleRowSkips++;
+                    stats.UncertainErase = true;
                 }
 
                 TRowVersion current = data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
@@ -1001,6 +1016,7 @@ namespace NTable {
 
                 transactionObserver.OnSkipCommitted(current);
                 stats.InvisibleRowSkips++;
+                stats.UncertainErase = true;
 
                 if (!data->HasHistory()) {
                     // There is no history, reset
@@ -1661,10 +1677,11 @@ namespace NTable {
 
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
-                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                                NTable::ITransactionObserverSimplePtr transactionObserver,
+                                const NTable::ITransactionSet& decidedTransactions) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
-            auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver);
+            auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver, decidedTransactions);
             return ready;
         }
 

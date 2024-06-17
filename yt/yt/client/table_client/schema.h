@@ -422,9 +422,6 @@ DEFINE_REFCOUNTED_TYPE(TTableSchema)
 void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
-TString ToString(const TTableSchema& schema);
-TString ToString(const TTableSchemaPtr& schema);
-
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
 TString SerializeToWireProto(const TTableSchemaPtr& schema);
 

@@ -10,6 +10,29 @@
 #undef GetMessage
 #endif
 
+void TProtoToYaml::FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor, const TEnumSettings& enumSettings) {
+    auto enm = property["enum"];
+    auto valueCount = enumDescriptor->value_count();
+    TString defaultValue;
+    for (int i = 0; i < valueCount; ++i) {
+        auto enumValueDescriptor = enumDescriptor->value(i);
+        auto enumName = enumValueDescriptor->name();
+        if (enumSettings.ConvertToLowerCase) {
+            enumName = to_lower(enumName);
+        }
+        if (!defaultValue) {
+            defaultValue = enumName;
+            if (enumSettings.SkipDefaultValue) {
+                continue;
+            }
+        }
+        enm.push_back(enumName);
+    }
+    if (defaultValue && !enumSettings.SkipDefaultValue) {
+        property["default"] = defaultValue;
+    }
+}
+
 YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor* descriptor, std::unordered_set<const ::google::protobuf::Descriptor*>& descriptors) {
     using namespace ::google::protobuf;
     if (descriptor == nullptr) {
@@ -90,20 +113,7 @@ YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor*
                 }
 
                 if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_ENUM) {
-                    auto enm = property["enum"];
-                    auto enumDescriptor = fieldDescriptor->enum_type();
-                    auto valueCount = enumDescriptor->value_count();
-                    TString defaultValue;
-                    for (int i = 0; i < valueCount; ++i) {
-                        auto enumValueDescriptor = enumDescriptor->value(i);
-                        enm.push_back(enumValueDescriptor->name());
-                        if (!defaultValue) {
-                            defaultValue = enumValueDescriptor->name();
-                        }
-                    }
-                    if (defaultValue) {
-                        property["default"] = defaultValue;
-                    }
+                    FillEnum(property, fieldDescriptor->enum_type());
                 }
             }
         }

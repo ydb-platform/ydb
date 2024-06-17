@@ -1,2 +1,12 @@
 service: frontend_build_platform
-title: Frontend build platform lib/nots
+title: Frontend build platform build/plugins/lib/nots
+
+arcanum:
+  review:
+    auto_assign: true
+    rules:
+      - reviewers:
+          name: developer
+          # мы хотим автоматом назначать всю команду
+          assign: 3
+          ship: 1

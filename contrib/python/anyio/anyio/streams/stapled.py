@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Mapping, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
 
 from ..abc import (
     ByteReceiveStream,
@@ -23,8 +24,8 @@ class StapledByteStream(ByteStream):
     """
     Combines two byte streams into a single, bidirectional byte stream.
 
-    Extra attributes will be provided from both streams, with the receive stream providing the
-    values in case of a conflict.
+    Extra attributes will be provided from both streams, with the receive stream
+    providing the values in case of a conflict.
 
     :param ByteSendStream send_stream: the sending byte stream
     :param ByteReceiveStream receive_stream: the receiving byte stream
@@ -59,8 +60,8 @@ class StapledObjectStream(Generic[T_Item], ObjectStream[T_Item]):
     """
     Combines two object streams into a single, bidirectional object stream.
 
-    Extra attributes will be provided from both streams, with the receive stream providing the
-    values in case of a conflict.
+    Extra attributes will be provided from both streams, with the receive stream
+    providing the values in case of a conflict.
 
     :param ObjectSendStream send_stream: the sending object stream
     :param ObjectReceiveStream receive_stream: the receiving object stream
@@ -95,11 +96,11 @@ class MultiListener(Generic[T_Stream], Listener[T_Stream]):
     """
     Combines multiple listeners into one, serving connections from all of them at once.
 
-    Any MultiListeners in the given collection of listeners will have their listeners moved into
-    this one.
+    Any MultiListeners in the given collection of listeners will have their listeners
+    moved into this one.
 
-    Extra attributes are provided from each listener, with each successive listener overriding any
-    conflicting attributes from the previous one.
+    Extra attributes are provided from each listener, with each successive listener
+    overriding any conflicting attributes from the previous one.
 
     :param listeners: listeners to serve
     :type listeners: Sequence[Listener[T_Stream]]

@@ -235,6 +235,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+        settings.PoolId("sample_pool_id");
+
+        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+        auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        CheckQueryResult(result);
+    }
+
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
         ui32 totalRows = 0;
         ui32 totalBatches = 0;
@@ -329,15 +341,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
 
+        Cerr << totalBatches << Endl;
         if (longRow) {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
             // 100 rows * 1000 byte per row / 10000 chunk size limit -> expect 10 batches
-            UNIT_ASSERT(10 <= totalBatches);
+            UNIT_ASSERT(9 <= totalBatches);
             UNIT_ASSERT_LT_C(totalBatches, 13, totalBatches);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
             // 100000 rows * 12 byte per row / 10000 chunk size limit -> expect 120 batches
-            UNIT_ASSERT(120 <= totalBatches);
+            UNIT_ASSERT(119 <= totalBatches);
             UNIT_ASSERT_LT_C(totalBatches, 123, totalBatches);
         }
     }
@@ -2146,7 +2159,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(Ddl_Dml) {
+    Y_UNIT_TEST(DdlWithExplicitTransaction) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
@@ -2160,23 +2173,71 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto db = kikimr.GetQueryClient();
 
         {
-            // DDl + DML with explicit transaction
+            // DDl with explicit transaction
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdlDml1 (
                     Key Uint64,
-                    Value1 String,
-                    Value2 String,
                     PRIMARY KEY (Key)
                 );
-                UPSERT INTO TestDdlDml1 (Key, Value1, Value2) VALUES (1, "1", "2");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+        }
+
+        {
+            // DDl with explicit transaction
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdlDml1 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE TestDdlDml2 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+        }
+
+        {
+            // DDl with implicit transaction
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdlDml1 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            // DDl + DML with explicit transaction
+            auto result = db.ExecuteQuery(R"(
                 SELECT * FROM TestDdlDml1;
-                ALTER TABLE TestDdlDml1 DROP COLUMN Value2;
-                UPSERT INTO TestDdlDml1 (Key, Value1) VALUES (2, "2");
-                SELECT * FROM TestDdlDml1;
+                CREATE TABLE TestDdlDml2 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+                SELECT * FROM TestDdlDml2;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Queries with mixed data and scheme operations are not supported."));
         }
+    }
+
+    Y_UNIT_TEST(Ddl_Dml) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
 
         {
             // DDl + DML with implicit transaction

@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = QueueClientLogger;
+static constexpr auto& Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -542,7 +542,7 @@ private:
             QueueClusterClient_,
             std::move(tabletAndRowIndices),
             params,
-            Logger));
+            Logger()));
 
         if (!partitionRowInfosOrError.IsOK()) {
             YT_LOG_DEBUG(partitionRowInfosOrError, "Failed to get partition row infos (Path: %v)",

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.18.1)
+VERSION(3.19.0)
 
-ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-3.18.1.tar.gz)
+ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-3.19.0.tar.gz)
 
 PEERDIR(
     contrib/libs/protobuf

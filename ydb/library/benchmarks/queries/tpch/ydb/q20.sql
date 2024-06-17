@@ -23,7 +23,7 @@ select
 from
     `{path}part`
 where
-    StartsWith(p_name, 'maroon')
+    p_name like 'maroon%'
 );
 
 $join1 = (

@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
 
 namespace NYdb {
@@ -58,6 +59,15 @@ const TOAuthCredentials& TConnectionParams::GetOAuthCredentials() const {
     return std::get<TOAuthCredentials>(Credentials_);
 }
 
+TRunningState::TRunningState(const std::optional<TDuration>& lag)
+    : Lag_(lag)
+{
+}
+
+const std::optional<TDuration>& TRunningState::GetLag() const {
+    return Lag_;
+}
+
 class TErrorState::TImpl {
 public:
     NYql::TIssues Issues;
@@ -77,6 +87,10 @@ const NYql::TIssues& TErrorState::GetIssues() const {
     return Impl_->Issues;
 }
 
+TDuration DurationToDuration(const google::protobuf::Duration& value) {
+    return TDuration::MilliSeconds(google::protobuf::util::TimeUtil::DurationToMilliseconds(value));
+}
+
 template <typename T>
 NYql::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<T>& message) {
     NYql::TIssues issues;
@@ -90,6 +104,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{
+            .Id = item.id(),
             .SrcPath = item.source_path(),
             .DstPath = item.destination_path(),
             .SrcChangefeedName = item.has_source_changefeed_name()
@@ -99,7 +114,8 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
 
     switch (desc.state_case()) {
     case Ydb::Replication::DescribeReplicationResult::kRunning:
-        State_ = TRunningState();
+        State_ = TRunningState(desc.running().has_lag()
+            ? std::make_optional(DurationToDuration(desc.running().lag())) : std::nullopt);
         break;
 
     case Ydb::Replication::DescribeReplicationResult::kError:

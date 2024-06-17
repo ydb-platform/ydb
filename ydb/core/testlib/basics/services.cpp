@@ -34,6 +34,8 @@
 
 #include <util/system/env.h>
 
+#include <ydb/core/protos/key.pb.h>
+
 static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(10), TDuration::Seconds(20));
 
 namespace NKikimr {

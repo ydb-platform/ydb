@@ -4,7 +4,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr {
 
 namespace NKeyValue {

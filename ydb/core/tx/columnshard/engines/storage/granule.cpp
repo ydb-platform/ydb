@@ -1,6 +1,7 @@
 #include "granule.h"
 #include "storage.h"
-#include "optimizer/lbuckets/optimizer.h"
+#include "optimizer/lbuckets/planner/optimizer.h"
+#include "optimizer/sbuckets/optimizer/optimizer.h"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -145,8 +146,11 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, con
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
+    , StoragesManager(owner.GetStoragesManager())
 {
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
+    OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+    AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }
@@ -159,12 +163,29 @@ std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& p
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
-    if (context.GetActualInstant() - LastActualizations < actualizationLag) {
+    if (context.GetActualInstant() < NextActualizations) {
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
     ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-    LastActualizations = context.GetActualInstant();
+    NextActualizations = context.GetActualInstant() + actualizationLag;
+}
+
+void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
+        return;
+    }
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
+    OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
+    AFL_VERIFY(!!OptimizerPlanner);
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+    for (auto&& i : Portions) {
+        if (i.second->HasRemoveSnapshot()) {
+            continue;
+        }
+        portions.emplace(i.first, i.second);
+    }
+    OptimizerPlanner->ModifyPortions(portions, {});
 }
 
 } // namespace NKikimr::NOlap

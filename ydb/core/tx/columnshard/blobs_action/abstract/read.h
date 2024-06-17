@@ -58,6 +58,18 @@ public:
         AFL_VERIFY(Blobs.emplace(range, std::move(data)).second);
     }
 
+    bool Contains(const TBlobRange& bRange) const {
+        return Blobs.contains(bRange);
+    }
+
+    std::optional<TString> GetBlobRangeOptional(const TBlobRange& bRange) const {
+        auto it = Blobs.find(bRange);
+        if (it == Blobs.end()) {
+            return {};
+        }
+        return it->second;
+    }
+
     TString Extract(const TBlobRange& bRange) {
         auto it = Blobs.find(bRange);
         AFL_VERIFY(it != Blobs.end());

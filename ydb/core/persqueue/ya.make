@@ -13,6 +13,7 @@ SRCS(
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
+    offload_actor.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp

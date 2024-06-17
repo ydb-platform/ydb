@@ -753,7 +753,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor) {
-        OffloadActor = Register(new TOffloadActor(Tablet, Partition.OriginalPartitionId, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(Tablet, Partition.OriginalPartitionId, Config.GetOffloadConfig()));
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);

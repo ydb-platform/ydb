@@ -13,6 +13,10 @@ PY_SRCS(
     sql.py
 )
 
+IF (OPENSOURCE) {
+    STYLE_PYTHON()
+}
+
 PEERDIR(
     contrib/python/PyYAML
     ydb/library/yql/providers/generic/connector/api/common

@@ -1,6 +1,8 @@
 PY3_LIBRARY()
 
-STYLE_PYTHON()
+IF (OPENSOURCE) {
+    STYLE_PYTHON()
+}
 
 PY_SRCS(
     dqrun.py

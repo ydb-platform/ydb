@@ -43,6 +43,7 @@ extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -160,6 +161,13 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
+            mon->RegisterActorPage({
+                .RelPath = "scheme",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = viewerAllowedSIDs,
+            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -170,6 +178,7 @@ public:
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
+            InitSchemeJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths

@@ -234,7 +234,13 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
     std::vector<const TColumnDesc *> block_fallback;
     std::queue<const TColumnDesc *> next_cols;
 
-    size_t fixed_cols_left = KeyColumnsFixedNum;
+    size_t fixed_cols_left =
+        KeyColumnsFixedNum +
+        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0ul,
+                        [](size_t prev, const auto &col) {
+                            return prev +
+                                   (col.SizeType == EColumnSizeType::Fixed);
+                        });
 
     size_t prev_tuple_size;
     size_t curr_tuple_size = 0;

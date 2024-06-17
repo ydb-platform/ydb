@@ -56,6 +56,9 @@ public:
         case TReplication::EState::Ready:
         case TReplication::EState::Removing:
             state.MutableStandBy();
+            if (const auto lag = replication->GetLag()) {
+                state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
+            }
             break;
         case TReplication::EState::Done:
             state.MutableDone();

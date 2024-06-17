@@ -402,7 +402,11 @@ class TLocalTableWriter
         KeyDesc = std::move(entry.KeyDescription);
         CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
 
-        Send(Worker, new TEvWorker::TEvHandshake());
+        if (!Initialized) {
+            Send(Worker, new TEvWorker::TEvHandshake());
+            Initialized = true;
+        }
+
         Resolving = false;
     }
 
@@ -529,6 +533,7 @@ private:
     THolder<TKeyDesc> KeyDesc;
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
+    bool Initialized = false;
 
     TMap<ui64, NReplication::NService::TChangeRecord::TPtr> PendingRecords;
 

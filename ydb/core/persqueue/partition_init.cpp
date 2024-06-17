@@ -483,18 +483,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
-{
-    TKey t(s);
-    return TKey(t.GetType(),
-                partition,
-                t.GetOffset(),
-                t.GetPartNo(),
-                t.GetCount(),
-                t.GetInternalPartsCount(),
-                t.IsHead());
-}
-
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;

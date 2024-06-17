@@ -928,8 +928,7 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
 }
 
 void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
-                                                const TActorContext& ctx,
-                                                bool newPartition)
+                                                const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
@@ -961,7 +960,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
         TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
 
         AddSupportivePartition(shadowPartitionId);
-        CreateSupportivePartitionActor(shadowPartitionId, ctx, false);
+        CreateSupportivePartitionActor(shadowPartitionId, ctx);
         SubscribeWriteId(writeId, ctx);
 
         NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
@@ -3435,7 +3434,7 @@ void TPersQueue::UnsubscribeWriteId(ui64 writeId,
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
     for (auto& partitionId : PendingSupportivePartitions) {
-        CreateSupportivePartitionActor(partitionId, ctx, true);
+        CreateSupportivePartitionActor(partitionId, ctx);
     }
 
     PendingSupportivePartitions.clear();

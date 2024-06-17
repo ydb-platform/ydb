@@ -1420,16 +1420,6 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
     }
 }
 
-void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
-{
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
-    runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
-
-    Sleep(TDuration::Seconds(2));
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
 {
     for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {

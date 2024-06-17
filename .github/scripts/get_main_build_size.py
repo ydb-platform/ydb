@@ -24,7 +24,6 @@ def main():
     # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
     # So, set up it locally
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-    #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]= "~/.ydb/my-robot-key.json"
 
     sql = f"""
         --!syntax_v1
@@ -33,10 +32,6 @@ def main():
     order by git_commit_time desc
     limit 1;    
     """
-    #select git_commit_time,size_bytes,size_stripped_bytes,build_preset from binary_size 
-    #where github_workflow="PR-check" and github_sha="{github_sha}" and build_preset="{build_preset}"
-    #order by git_commit_time desc
-    #limit 1;
 
     with ydb.Driver(
          

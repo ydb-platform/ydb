@@ -273,6 +273,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropView);
     DROP_BY_PATH_ID_HELPERS(DropView);
 
+    // resource pool
+    GENERIC_HELPERS(CreateResourcePool);
+    GENERIC_HELPERS(DropResourcePool);
+    DROP_BY_PATH_ID_HELPERS(DropResourcePool);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

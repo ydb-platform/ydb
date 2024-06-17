@@ -825,6 +825,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
             create.MutableCreateView()->SetName(name);
             break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+            create.MutableCreateResourcePool()->SetPoolId(name);
+            break;
         default:
             Y_UNREACHABLE();
         }

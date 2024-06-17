@@ -104,6 +104,7 @@ SRCS(
     schemeshard__operation_common.h
     schemeshard__operation_common_external_data_source.cpp
     schemeshard__operation_common_external_table.cpp
+    schemeshard__operation_common_resource_pool.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_sequence.cpp

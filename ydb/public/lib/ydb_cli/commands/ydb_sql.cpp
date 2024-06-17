@@ -105,14 +105,12 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (!Syntax.Empty()) {
-        if (Syntax == "pg") {
-            settings.Syntax(NQuery::ESyntax::Pg);
-        } else if (Syntax == "yql") {
-            settings.Syntax(NQuery::ESyntax::YqlV1);
-        } else {
-            throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
-        }
+    if (Syntax == "yql") {
+        settings.Syntax(NQuery::ESyntax::YqlV1);
+    } else if (Syntax == "pg") {
+        settings.Syntax(NQuery::ESyntax::Pg);
+    } else {
+        throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
     // Execute query without parameters
     auto asyncResult = client.StreamExecuteQuery(

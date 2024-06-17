@@ -144,6 +144,15 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
     case NUdf::EDataSlot::TzTimestamp:
         return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NUdf::GetTimezones().size();
 
+    case NUdf::EDataSlot::TzDate32:
+        return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+
+    case NUdf::EDataSlot::TzDatetime64:
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+
+    case NUdf::EDataSlot::TzTimestamp64:
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+
     case NUdf::EDataSlot::Utf8:
         return bool(value) && IsUtf8(value.AsStringRef());
     case NUdf::EDataSlot::Yson:
@@ -2278,6 +2287,9 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::TzDate:
     case NUdf::EDataSlot::TzDatetime:
     case NUdf::EDataSlot::TzTimestamp:
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64:
     case NUdf::EDataSlot::Decimal:
     case NUdf::EDataSlot::Uuid:
     case NUdf::EDataSlot::DyNumber:
@@ -2436,6 +2448,87 @@ bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId) {
     timestamp = ReadUnaligned<ui64>(buf.data());
     timestamp = SwapBytes(timestamp);
     if (timestamp >= NUdf::MAX_TIMESTAMP) {
+        return false;
+    }
+
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(timestamp));
+    tzId = SwapBytes(tzId);
+    if (!IsValidTimezoneId(tzId)) {
+        return false;
+    }
+
+    return true;
+}
+
+void SerializeTzDate32(i32 date, ui16 tzId, IOutputStream& out) {
+    date = SwapBytes(date);
+    tzId = SwapBytes(tzId);
+    out.Write(&date, sizeof(date));
+    out.Write(&tzId, sizeof(tzId));
+}
+
+void SerializeTzDatetime64(i64 datetime, ui16 tzId, IOutputStream& out) {
+    datetime = SwapBytes(datetime);
+    tzId = SwapBytes(tzId);
+    out.Write(&datetime, sizeof(datetime));
+    out.Write(&tzId, sizeof(tzId));
+}
+
+void SerializeTzTimestamp64(i64 timestamp, ui16 tzId, IOutputStream& out) {
+    timestamp = SwapBytes(timestamp);
+    tzId = SwapBytes(tzId);
+    out.Write(&timestamp, sizeof(timestamp));
+    out.Write(&tzId, sizeof(tzId));
+}
+
+bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId) {
+    if (buf.size() != sizeof(i32) + sizeof(ui16)) {
+        return false;
+    }
+
+    date = ReadUnaligned<i32>(buf.data());
+    date = SwapBytes(date);
+    if (date < NUdf::MIN_DATE32 || date > NUdf::MAX_DATE32) {
+        return false;
+    }
+
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(date));
+    tzId = SwapBytes(tzId);
+    if (!IsValidTimezoneId(tzId)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId) {
+    if (buf.size() != sizeof(i64) + sizeof(ui16)) {
+        return false;
+    }
+
+    datetime = ReadUnaligned<i64>(buf.data());
+    datetime = SwapBytes(datetime);
+    if (datetime < NUdf::MIN_DATETIME64 || datetime > NUdf::MAX_DATETIME64) {
+        return false;
+    }
+
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(datetime));
+    tzId = SwapBytes(tzId);
+    if (!IsValidTimezoneId(tzId)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
+    if (buf.size() != sizeof(i64) + sizeof(ui16)) {
+        return false;
+    }
+
+    timestamp = ReadUnaligned<i64>(buf.data());
+    timestamp = SwapBytes(timestamp);
+    if (timestamp < NUdf::MIN_TIMESTAMP64 || timestamp > NUdf::MAX_TIMESTAMP64) {
         return false;
     }
 

@@ -5,6 +5,7 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <google/protobuf/stubs/status.h>
+#include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/util/json_util.h>
 
 namespace Ydb {
@@ -31,6 +32,8 @@ public:
     const TOperationId& Id() const;
     bool Ready() const;
     const TStatus& Status() const;
+    TInstant StartTime() const;
+    TInstant EndTime() const;
 
     TString ToString() const;
     TString ToJsonString() const;
@@ -45,6 +48,8 @@ private:
 };
 
 using TAsyncOperation = NThreading::TFuture<TOperation>;
+
+TInstant ProtoTimestampToInstant(const NProtoBuf::Timestamp& timestamp);
 
 } // namespace NYdb
 

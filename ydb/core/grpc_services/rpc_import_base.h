@@ -41,6 +41,13 @@ struct TImportConv {
             operation.mutable_issues()->CopyFrom(import.GetIssues());
         }
 
+        if (import.HasStartTime()) {
+            *operation.mutable_start_time() = import.GetStartTime();
+        }
+        if (import.HasEndTime()) {
+            *operation.mutable_end_time() = import.GetEndTime();
+        }
+
         using namespace Ydb::Import;
         switch (import.GetSettingsCase()) {
         case NKikimrImport::TImport::kImportFromS3Settings:

@@ -48,7 +48,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     import.SetId(importInfo->Id);
     import.SetStatus(Ydb::StatusIds::SUCCESS);
 
-    *import.MutableStartTime() = SecondsToProtoTimeStamp(importInfo->StartTime.Seconds());
+    if (importInfo->StartTime != TInstant::Zero()) {
+        *import.MutableStartTime() = SecondsToProtoTimeStamp(importInfo->StartTime.Seconds());
+    }
     if (importInfo->EndTime != TInstant::Zero()) {
         *import.MutableEndTime() = SecondsToProtoTimeStamp(importInfo->EndTime.Seconds());
     }

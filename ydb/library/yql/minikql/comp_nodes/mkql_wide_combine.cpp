@@ -342,14 +342,12 @@ public:
         ProcessSpilled
     };
     TSpillingSupportState(
-        TMemoryUsageInfo* memInfo,
-        const TCombinerNodes& nodes, size_t wideFieldsIndex,
+        TMemoryUsageInfo* memInfo, size_t wideFieldsIndex,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth,
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
-        , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
@@ -392,6 +390,31 @@ public:
             }
         }
     }
+
+    NUdf::TUnboxedValuePod* GetThroat() const {
+        return InMemoryProcessingState.Throat;
+    }
+
+    // TODO make const
+    NUdf::TUnboxedValuePod* GetTongue() {
+        if (GetMode() == EOperatingMode::Spilling) {
+            BufferForKeyAnsState.resize(KeyWidth);
+            return BufferForKeyAnsState.data();
+        }
+
+        return InMemoryProcessingState.Tongue;
+    }
+
+    bool TasteIt() {
+        return InMemoryProcessingState.TasteIt();
+    }
+
+    bool IsImmediateProcessingAvaliable() const {
+        if (GetMode() == EOperatingMode::InMemory) return true;
+        
+    }
+
+
 
     bool FlushSpillingBuffersAndWait() {
         if (GetMode() != EOperatingMode::Spilling || InputStatus != EFetchResult::Finish) return false;
@@ -478,16 +501,7 @@ private:
         InMemoryProcessingState.ReadMore<false>();
     }
 
-    void DoCalculateInMemory() {
-        auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-
-        Nodes.ExtractKey(Ctx, fields, static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue));
-        const bool isNew = InMemoryProcessingState.TasteIt();
-        Nodes.ProcessItem(
-            Ctx,
-            isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
-            static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
-        );
+    void CheckMemoryConsumption() {
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
@@ -712,7 +726,6 @@ private:
 private:
     ui64 NextBucketToSpill = 0;
     TState InMemoryProcessingState;
-    const TCombinerNodes& Nodes;
     const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
@@ -1241,7 +1254,12 @@ public:
 
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                     case EFetchResult::One:
-                        ptr->DoCalculate();
+                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+                        if (ptr->IsImmediateProcessingAvaliable()) {
+                            Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
+                        }
+                        
+                        ptr->CheckMemoryConsumption();
                         continue;
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -1498,7 +1516,7 @@ private:
     }
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, bool allowSpilling) const {
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(Nodes, WideFieldsIndex,
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(WideFieldsIndex,
             UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             TMyValueHasher(KeyTypes),

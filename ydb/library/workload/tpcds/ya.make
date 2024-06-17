@@ -112,10 +112,8 @@ RESOURCE(
 )
 
 PEERDIR(
-#    contrib/libs/fmt
     ydb/library/accessor
     library/cpp/resource
-#    ydb/library/benchmarks/gen/tpch-dbgen
     ydb/library/workload/benchmark_base
 )
 

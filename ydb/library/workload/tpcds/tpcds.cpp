@@ -1,5 +1,4 @@
 #include "tpcds.h"
-//#include "data_generator.h"
 
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
@@ -125,7 +124,7 @@ THolder<IWorkloadQueryGenerator> TTpcdsWorkloadParams::CreateGenerator() const {
 }
 
 TString TTpcdsWorkloadParams::GetWorkloadName() const {
-    return "TPC-H";
+    return "TPC-DS";
 }
 /*
 TWorkloadDataInitializer::TList TTpcdsWorkloadParams::CreateDataInitializers() const {

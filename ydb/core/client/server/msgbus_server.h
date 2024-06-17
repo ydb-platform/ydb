@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>
@@ -298,7 +297,7 @@ IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
-IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg, const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
+IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);

@@ -224,7 +224,7 @@ runs:
             color="green"
           fi
 
-          comment="[Current:${current_pr_commit_sha}]($current_url) ydbd size $human_readable_size **$sign$human_readable_size_diff $diff_perc %%**  vs build [main:${main_github_sha:0:8}]($main_url)
+          comment="[Current:${current_pr_commit_sha:0:8}]($current_url) ydbd size $human_readable_size **$sign$human_readable_size_diff $diff_perc %%**  vs build [main:${main_github_sha:0:8}]($main_url)
 
         <details><summary>YDBD build size details</summary><p>
 

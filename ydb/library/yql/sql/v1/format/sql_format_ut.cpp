@@ -1581,4 +1581,22 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(ResourcePoolOperations) {
+        TCases cases = {
+            {"creAte reSourCe poOl naMe With (a = \"b\")",
+             "CREATE RESOURCE POOL naMe WITH (a = \"b\");\n"},
+             {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
+             "CREATE RESOURCE POOL eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
+             {"alTer reSOurcE poOl naMe sEt a tRue, resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL naMe\n\tSET a TRUE,\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alter resource pool eds reset (a), set (x=y)",
+             "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y);\n"},
+            {"dRop reSourCe poOl naMe",
+             "DROP RESOURCE POOL naMe;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

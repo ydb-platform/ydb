@@ -1843,7 +1843,7 @@ void TPartition::RunPersist() {
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag
-            if (InputTimeLag) {
+            if (InputTimeLag && writeInfo->InputLags) {
                 writeInfo->InputLags->UpdateTimestamp(ctx.Now().MilliSeconds());
                 for (const auto& values : writeInfo->InputLags->GetValues()) {
                     if (values.second)

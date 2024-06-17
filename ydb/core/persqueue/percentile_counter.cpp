@@ -276,9 +276,12 @@ void TMultiBucketCounter::Insert(i64 value, ui64 count) noexcept {
     InsertWithHint((ui64)value, count, begin);
 }
 
-TVector<std::pair<double, ui64>> TMultiBucketCounter::GetValues() const noexcept {
+TVector<std::pair<double, ui64>> TMultiBucketCounter::GetValues(bool allowZeroes) const noexcept {
     TVector<std::pair<double, ui64>> result;
     for (const auto b: Buckets) {
+        if (!allowZeroes && b.ValuesCount == 0) {
+            continue;
+        }
         result.push_back(std::make_pair(b.AvgValue, b.ValuesCount));
     }
     return result;

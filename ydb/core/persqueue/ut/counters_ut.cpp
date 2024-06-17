@@ -604,12 +604,11 @@ Y_UNIT_TEST(ManyCounters) {
     }
     counter.Insert(1, 1);
 
-    const auto& values = counter.GetValues();
+    const auto& values = counter.GetValues(true);
     ui64 prev = 0;
     for (auto i = 0u; i < buckets.size(); i++) {
         ui64 sum = 0u;
         for (auto j = 0u; j < multiplier; j++) {
-            Cerr << "Sub bucket: " << values[i * multiplier + j].first << " elems count: " << values[i * multiplier + j].second << Endl;
             sum += values[i * multiplier + j].second;
         }
         Cerr << "Bucket: " << buckets[i] << " elems count: " << sum << Endl;

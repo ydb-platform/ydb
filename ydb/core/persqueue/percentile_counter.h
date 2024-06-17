@@ -124,7 +124,7 @@ public:
     TMultiBucketCounter(const TVector<ui64>& buckets, ui64 multiplier, ui64 timeRef);
     void UpdateTimestamp(ui64 newTimeReference);
     void Insert(i64 value, ui64 count) noexcept;
-    TVector<std::pair<double, ui64>> GetValues() const noexcept;
+    TVector<std::pair<double, ui64>> GetValues(bool allowZeroes = false) const noexcept;
 
 };
 

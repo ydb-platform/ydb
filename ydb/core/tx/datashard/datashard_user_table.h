@@ -352,6 +352,7 @@ struct TUserTable : public TThrRefBase {
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
+        ui32 HistogramBucketsCount = 0;
         ui64 BackgroundCompactionRequests = 0;
         ui64 BackgroundCompactionCount = 0;
         ui64 CompactBorrowedCount = 0;

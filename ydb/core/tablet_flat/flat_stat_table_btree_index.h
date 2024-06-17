@@ -196,7 +196,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
 }
 
-inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     stats.Clear();
 
     bool ready = true;
@@ -209,7 +209,7 @@ inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowC
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler);
+    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);
 
     return ready;
 }

@@ -224,9 +224,8 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                 RunStreamQuery(sql, &params, Value.Size() * 10);
             }
 
-            void OnStreamResult(i64 resultSetId, NYdb::TResultSet&& resultSet) override {
+            void OnStreamResult(NYdb::TResultSet&& resultSet) override {
                 UNIT_ASSERT_C(ResultExpected, "Query was cancelled, results are not expected");
-                UNIT_ASSERT_VALUES_EQUAL_C(resultSetId, 0, "Invalid result set id");
 
                 NYdb::TResultSetParser result(resultSet);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.ColumnsCount(), 1, "Invalid number of columns");

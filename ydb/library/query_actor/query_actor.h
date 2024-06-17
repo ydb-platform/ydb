@@ -15,7 +15,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
@@ -45,7 +44,7 @@ protected:
     };
 
     using TQueryResultHandler = void (TQueryBase::*)();
-    using TStreamResultHandler = void (TQueryBase::*)(i64, NYdb::TResultSet&&);
+    using TStreamResultHandler = void (TQueryBase::*)(NYdb::TResultSet&&);
 
 private:
     struct TEvQueryBasePrivate {
@@ -75,11 +74,10 @@ private:
         };
 
         struct TEvStreamQueryResultPart : public NActors::TEventLocal<TEvStreamQueryResultPart, EvStreamQueryResultPart> {
-            TEvStreamQueryResultPart(Ydb::Query::ExecuteQueryResponsePart&& response);
+            TEvStreamQueryResultPart(Ydb::Table::ExecuteScanQueryPartialResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
-            const i64 ResultSetId;
             Ydb::ResultSet ResultSet;
         };
 
@@ -152,7 +150,7 @@ private:
     // Methods for implementing in derived classes.
     virtual void OnRunQuery() = 0;
     virtual void OnQueryResult() {} // Must either run next query or finish
-    virtual void OnStreamResult(i64, NYdb::TResultSet&&) {}
+    virtual void OnStreamResult(NYdb::TResultSet&&) {}
     virtual void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) = 0;
 
 private:
@@ -192,7 +190,7 @@ private:
 
     void ReadNextStreamPart();
     void FinishStreamRequest();
-    void CallOnStreamResult(i64 resultSetId, NYdb::TResultSet&& resultSet);
+    void CallOnStreamResult(NYdb::TResultSet&& resultSet);
 
     TString LogPrefix() const;
 
@@ -221,7 +219,7 @@ protected:
 private:
     TQueryResultHandler QueryResultHandler = &TQueryBase::CallOnQueryResult;
     TStreamResultHandler StreamResultHandler = &TQueryBase::CallOnStreamResult;
-    NRpcService::TStreamReadProcessorPtr<Ydb::Query::ExecuteQueryResponsePart> StreamQueryProcessor;
+    NRpcService::TStreamReadProcessorPtr<Ydb::Table::ExecuteScanQueryPartialResponse> StreamQueryProcessor;
 
     NMonitoring::TDynamicCounters::TCounterPtr FinishOk;
     NMonitoring::TDynamicCounters::TCounterPtr FinishError;

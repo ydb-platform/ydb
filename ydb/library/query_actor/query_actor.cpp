@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/query/service_query.h>
+#include <ydb/core/grpc_services/service_table.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -67,11 +67,10 @@ TQueryBase::TEvQueryBasePrivate::TEvDataQueryResult::TEvDataQueryResult(Table::E
     response.operation().result().UnpackTo(&Result);
 }
 
-TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultPart(Query::ExecuteQueryResponsePart&& response)
+TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultPart(Table::ExecuteScanQueryPartialResponse&& response)
     : Status(response.status())
     , Issues(IssuesFromProtoMessage(response))
-    , ResultSetId(response.result_set_index())
-    , ResultSet(std::move(*response.mutable_result_set()))
+    , ResultSet(std::move(*response.mutable_result()->mutable_result_set()))
 {}
 
 TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(Table::CreateSessionResponse&& response)
@@ -252,21 +251,21 @@ void TQueryBase::CallOnQueryResult() {
 //// TQueryBase stream query operations
 
 void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params, ui64 channelBufferSize) {
-    using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Query::ExecuteQueryRequest, Query::ExecuteQueryResponsePart>;
+    using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
     LOG_D("RunStreamQuery: " << sql);
 
-    Query::ExecuteQueryRequest request;
-    request.set_exec_mode(Query::EXEC_MODE_EXECUTE);
-    request.mutable_query_content()->set_text(sql);
+    Table::ExecuteScanQueryRequest request;
+    request.set_mode(Table::ExecuteScanQueryRequest::MODE_EXEC);
+    request.mutable_query()->set_yql_text(sql);
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
     auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), channelBufferSize);
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &NQuery::DoExecuteQuery, true);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &DoExecuteScanQueryRequest, true);
     ReadNextStreamPart();
 }
 
@@ -277,7 +276,7 @@ void TQueryBase::ReadNextStreamPart() {
     RunningQuery = true;
     LOG_D("Start read next stream part");
 
-    StreamQueryProcessor->Read(GetOperationCallback<Query::ExecuteQueryResponsePart, TEvQueryBasePrivate::TEvStreamQueryResultPart>());
+    StreamQueryProcessor->Read(GetOperationCallback<Table::ExecuteScanQueryPartialResponse, TEvQueryBasePrivate::TEvStreamQueryResultPart>());
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev) {
@@ -290,7 +289,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
 
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         try {
-            (this->*StreamResultHandler)(ev->Get()->ResultSetId, std::move(ev->Get()->ResultSet));
+            (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
         } catch (const std::exception& ex) {
             Finish(StatusIds::INTERNAL_ERROR, ex.what());
             return;
@@ -306,8 +305,8 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     }
 }
 
-void TQueryBase::CallOnStreamResult(i64 resultSetId, NYdb::TResultSet&& resultSet) {
-    OnStreamResult(resultSetId, std::move(resultSet));
+void TQueryBase::CallOnStreamResult(NYdb::TResultSet&& resultSet) {
+    OnStreamResult(std::move(resultSet));
 }
 
 void TQueryBase::CancelStreamQuery() {

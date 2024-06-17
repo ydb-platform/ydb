@@ -2096,12 +2096,7 @@ public:
         SetQueryResultHandler(&TGetScriptExecutionResultQueryActor::OnQueryResult, TStringBuilder() << "Fetch results for offset " << Offset);
     }
 
-    void OnStreamResult(i64 resultSetId, NYdb::TResultSet&& resultSet) override {
-        if (resultSetId != 0) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
-            return;
-        }
-
+    void OnStreamResult(NYdb::TResultSet&& resultSet) override {
         NYdb::TResultSetParser result(resultSet);
         while (result.TryNextRow()) {
             const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();

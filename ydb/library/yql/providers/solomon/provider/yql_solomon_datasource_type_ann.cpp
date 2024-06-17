@@ -10,29 +10,10 @@ using namespace NNodes;
 
 namespace {
 
-bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TExprContext& ctx, TStringBuf& settingValue) {
-    if (value.IsAtom()) {
-        settingValue = value.Content();
-        return true;
-    }
-
-    if (!value.IsCallable({ "String", "Utf8" })) {
-        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << settingName << " must be literal value"));
-        return false;
-    }
-    settingValue = value.Head().Content();
-    return true;
-}
-
-bool ValidateDatetimeFormat(const TExprNode& value, TStringBuf settingName, TExprContext& ctx) {
-    TStringBuf settingValue;
-    if (!ExtractSettingValue(value, settingName, ctx, settingValue)) {
-        return false;
-    }
-
+bool ValidateDatetimeFormat(TStringBuf settingName, const TExprNode& settingValue, TExprContext& ctx) {
     TInstant unused;
-    if (!TInstant::TryParseIso8601(settingValue, unused)) {
-        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << settingName << " must be correct datetime, e.g. 2010-03-27T21:27:00Z, but has " << settingValue));
+    if (!TInstant::TryParseIso8601(settingValue.Content(), unused)) {
+        ctx.AddError(TIssue(ctx.GetPosition(settingValue.Pos()), TStringBuilder() << settingName << " must be correct datetime, e.g. 2010-03-27T21:27:00Z, but has " << settingValue.Content()));
         return false;
     }
     return true;
@@ -78,12 +59,12 @@ public:
         }
         
         auto& from = *input->Child(TSoSourceSettings::idx_From);
-        if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat(from, "from"sv, ctx)) {
+        if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from"sv, from, ctx)) {
             return TStatus::Error;
         }
 
         auto& to = *input->Child(TSoSourceSettings::idx_To);
-        if (!EnsureAtom(to, ctx) || !ValidateDatetimeFormat(to, "to"sv, ctx)) {
+        if (!EnsureAtom(to, ctx) || !ValidateDatetimeFormat("to"sv, to, ctx)) {
             return TStatus::Error;
         }
 

@@ -163,6 +163,7 @@ public:
     ui64 ReadId;
     TPathId PathId;
     std::vector<NTable::TTag> Columns;
+    std::vector<NTable::TTag> KeyColumns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
     ui64 LockId = 0;
@@ -212,6 +213,11 @@ public:
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
+
+    // Everything regarding external blobs
+    bool ExternalBlobsReadMode = false;
+    bool LookingForKeys = true;
+    TVector<TString> CurrentKeys;
 
     // Orbit used for tracking progress
     NLWTrace::TOrbit Orbit;

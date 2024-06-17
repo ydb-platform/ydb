@@ -1301,6 +1301,8 @@ namespace NTable {
             } else if (op == ELargeObj::Extern || op == ELargeObj::Outer) {
                 const auto ref = data->Cell(info).AsValue<ui64>();
 
+                row.AddExternalBlobSize(Env->PageSize(Part, ref, op));
+
                 if (ref >> (sizeof(ui32) * 8))
                     Y_ABORT("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {

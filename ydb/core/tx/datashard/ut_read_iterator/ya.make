@@ -31,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_read_iterator.cpp
+    datashard_ut_read_iterator_ext_blobs.cpp
 )
 
 REQUIREMENTS(ram:32)

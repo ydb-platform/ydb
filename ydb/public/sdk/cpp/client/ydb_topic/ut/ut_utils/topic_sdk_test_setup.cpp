@@ -22,6 +22,10 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikim
     }
 }
 
+void TTopicSdkTestSetup::CreateTopicWithAutoscale(const TString& path, const TString& consumer, size_t partitionCount, size_t maxPartitionCount) {
+    CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+}
+
 void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
 {
     TTopicClient client(MakeDriver());

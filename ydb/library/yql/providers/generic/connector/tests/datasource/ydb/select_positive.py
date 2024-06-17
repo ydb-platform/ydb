@@ -525,20 +525,21 @@ class Factory:
 
         data_in = [
             [
+                1,
                 '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                 '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
             ],
-            ['{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
-            [None, None],
+            [2, '{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
+            [3, '{}', None],
         ]
 
         data_out_1 = [
-            ['{"age":35,"name":"James Holden"}', '{"age":35,"name":"James Holden"}'],
-            [None, None],
-            [None, None],
+            ['{"age":35,"name":"James Holden"}'],
+            [None],
+            [None],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+        data_source_kind = EDataSourceKind.YDB
 
         test_case_name = 'json'
 
@@ -548,7 +549,7 @@ class Factory:
                 data_in=data_in,
                 data_out_=data_out_1,
                 protocol=EProtocol.NATIVE,
-                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
+                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_01_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),

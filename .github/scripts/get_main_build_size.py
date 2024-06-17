@@ -29,7 +29,7 @@ def main():
     sql = f"""
         --!syntax_v1
     select git_commit_time,github_sha,size_bytes,size_stripped_bytes,build_preset from binary_size 
-    where github_workflow="Postcommit_{build_preset}" and build_preset="{build_preset}"
+    where github_workflow like "Postcommit%" and build_preset="{build_preset}"
     order by git_commit_time desc
     limit 1;    
     """

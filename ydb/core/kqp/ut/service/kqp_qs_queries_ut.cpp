@@ -3257,11 +3257,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
+            std::cerr << "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt" << std::endl;
+
             auto setNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNull`
                 ALTER COLUMN val SET NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+
+            std::cerr << "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt" << std::endl;
         }
 
         {

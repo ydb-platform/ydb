@@ -2664,6 +2664,11 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             Y_ABORT_UNLESS(columnType.TypeInfo->SerializeToString(&typeData));
         }
         if (pathId.OwnerId == TabletID()) {
+            std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
+            std::cerr << cinfo.Name << std::endl;
+            std::cerr << cinfo.NotNull << std::endl;
+            std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
+            std::cerr << "SHARD STARTS" << std::endl;
             db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::Columns::ColName>(cinfo.Name),
                 NIceDb::TUpdate<Schema::Columns::ColType>((ui32)columnType.TypeId),
@@ -2676,6 +2681,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull),
                 NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+
+            std::cerr << "SHARD ENDS" << std::endl;
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {
@@ -2723,6 +2730,7 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
         if (columnType.TypeInfo) {
             Y_ABORT_UNLESS(columnType.TypeInfo->SerializeToString(&typeData));
         }
+
         if (pathId.OwnerId == TabletID()) {
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::ColumnAlters::ColName>(cinfo.Name),
@@ -6661,11 +6669,6 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 break;
             }
 
-            case NKikimrSchemeOp::EPathTypeTable: {
-                // TODO: move BackupImplTable under special scheme element
-                break;
-            }
-
             default:
                 Y_FAIL_S("Unexpected table's child"
                     << ": tableId# " << tableId
@@ -6928,7 +6931,6 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
-            nullptr,
             appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit()
         );
     }
@@ -7191,18 +7193,6 @@ void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
 }
 
-void TSchemeShard::AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) {
-    if (storageType == EUserFacingStorageType::Ssd) {
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD].Add(data);
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD].Add(index);
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD].Add(data + index);
-    } else if (storageType == EUserFacingStorageType::Hdd) {
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD].Add(data);
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD].Add(index);
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD].Add(data + index);
-    }
-}
-
 void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
@@ -7217,14 +7207,6 @@ void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
 
 void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES].Add(delta);
-}
-
-void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) {
-    if (storageType == EUserFacingStorageType::Ssd) {
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD].Add(addend);
-    } else if (storageType == EUserFacingStorageType::Hdd) {
-        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
-    }
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {

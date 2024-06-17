@@ -363,6 +363,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+
         table->FinishAlter();
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);

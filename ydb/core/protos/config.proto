@@ -230,6 +230,7 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
 
         message TUser {
             optional string Name = 1;
@@ -1733,12 +1734,16 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
-    message TDynamicNodeDefinition {
+    message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
+        repeated string MemberGroups = 3;
+        optional bool RequireSameIssuer = 4 [default = true];
     }
 
-    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+    repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
+    optional bool RequestClientCertificate = 2 [default = false];
+    optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
 message TLocalPgWireConfig {

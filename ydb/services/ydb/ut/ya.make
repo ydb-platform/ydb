@@ -42,6 +42,8 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/core/security
+    ydb/core/wrappers/ut_helpers
+    ydb/library/backup
     ydb/library/yql/minikql/dom
     ydb/library/yql/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
@@ -50,6 +52,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_export

@@ -9,8 +9,6 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <ydb/core/kqp/common/kqp_tx.h>
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 

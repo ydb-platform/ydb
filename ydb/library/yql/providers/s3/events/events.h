@@ -11,8 +11,6 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
 
-#include <ydb/core/kqp/common/kqp_tx.h>
-
 #include <arrow/api.h>
 
 namespace NYql::NDq {

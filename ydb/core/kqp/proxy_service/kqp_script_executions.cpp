@@ -839,11 +839,6 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
-            SELECT MAX(result_set_id) AS max_result_set_id, MAX(row_id) AS max_row_id
-            FROM `.metadata/result_sets`
-            WHERE database = $database AND execution_id = $execution_id AND
-                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
-
             DELETE
             FROM `.metadata/script_execution_leases`
             WHERE database = $database AND execution_id = $execution_id;
@@ -859,7 +854,34 @@ public:
                 .Build();
 
         RunDataQuery(sql, &params);
-        SetQueryResultHandler(&TForgetScriptExecutionOperationQueryActor::OnGetResultsInfo, "Forget script execution operation");
+        SetQueryResultHandler(&TForgetScriptExecutionOperationQueryActor::OnOperationDeleted, "Forget script execution operation");
+    }
+
+    void OnOperationDeleted() {
+        SendResponse(Ydb::StatusIds::SUCCESS, {});
+
+        TString sql = R"(
+            -- TForgetScriptExecutionOperationQueryActor::OnOperationDeleted
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            SELECT MAX(result_set_id) AS max_result_set_id, MAX(row_id) AS max_row_id
+            FROM `.metadata/result_sets`
+            WHERE database = $database AND execution_id = $execution_id AND
+                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+
+        RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TForgetScriptExecutionOperationQueryActor::OnGetResultsInfo, "Get results info");
     }
 
     void OnGetResultsInfo() {
@@ -889,16 +911,6 @@ public:
             return;
         }
         MaxRowId = *maxRowId;
-
-        if (MaxRowId >= NumberRowsInBatch) {
-            TStringBuilder message = TStringBuilder() << "Query result rows count is " << MaxRowId + 1;
-            if (*maxResultSetId > 0) {
-                message << " in " << *maxResultSetId + 1 << " result sets";
-            }
-            NYql::TIssue issue(message << ", that is larger than allowed limit " << MAX_NUMBER_ROWS_IN_BATCH << " rows for one time forget, results will be forgotten in the background process");
-            issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-            SendResponse(Ydb::StatusIds::SUCCESS, {issue});
-        }
 
         DeleteScriptResults();
     }

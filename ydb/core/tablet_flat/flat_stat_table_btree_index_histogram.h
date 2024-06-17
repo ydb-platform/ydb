@@ -263,7 +263,7 @@ private:
         }
 
         ui64 leftSize = 0, middleSize = 0, rightSize = 0;
-        TVector<TPartNodes> leftParts, middleParts, rightParts;
+        TVector<TPartNodes> leftParts(::Reserve(parts.size())), middleParts(::Reserve(parts.size())), rightParts(::Reserve(parts.size()));
 
         for (auto& part : parts) {
             auto& leftNodes = PushNextPartNodes(part, leftParts);

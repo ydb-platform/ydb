@@ -62,6 +62,11 @@ void DoRemoveDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityP
     f.RegisterActor(new TRemoveDirectoryRPC(p.release()));
 }
 
+template<>
+IActor* TEvRemoveDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TRemoveDirectoryRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr
 

@@ -208,7 +208,7 @@ runs:
           human_readable_size_diff=`bytesToHumanIEC $bytes_diff`
 
           if [ "$bytes_diff" -ge "0" ]; then
-            if [ "$bytes_diff" -ge "200"  ]; then
+            if [ "$bytes_diff" -ge "200" ]; then
               printf "
               Current build size [$human_readable_size](https://datalens.yandex/cu6hzmpaki700) **+$human_readable_size_diff**[^1] vs build [main:${main_github_sha:0:8}]($main_url)
               [^1]:[main:${main_github_sha:0:8}]($main_url) build:

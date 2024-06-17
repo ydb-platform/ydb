@@ -187,7 +187,7 @@ runs:
             echo "$b$d ${S[$s]}"
         }
         format_number() {
-          echo "$1" | rev | sed 's/\(...\)/\1 /g' | rev
+          echo "$1" | rev | sed 's/\(...\)/\1 /g' | rev | xargs
         }
 
         if [[ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]]; then
@@ -220,7 +220,7 @@ runs:
               color="green"
             fi
           else
-            sign="-"
+            sign=""
             color="green"
           fi
 

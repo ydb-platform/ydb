@@ -169,7 +169,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    return true;
+    Cerr << "TEST " << hasSourceRead << " " << hasSinkWrite << Endl;
+    //return true;
     if (hasSourceRead && hasSinkWrite) {
         return true;
     }

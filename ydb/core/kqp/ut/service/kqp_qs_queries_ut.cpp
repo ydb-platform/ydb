@@ -3076,6 +3076,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
+        { 
+            auto it = client.ExecuteQuery(R"(
+                DELETE FROM `/Root/DataShard` WHERE Col3 == 'not found';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;

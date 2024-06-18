@@ -148,12 +148,11 @@ TClusterizer::~TClusterizer() {
 
 TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     Y_ASSERT(!options.normalize); // normalize not supported
-    const auto rows = It.Rows();
-    const ui64 clusters = std::sqrt(rows);
-    if (clusters < 128) {
+    const ui64 clusters = std::min<ui64>(options.maxK, 1000);
+    if (clusters < 8) {
         return {};
     }
-    Init(std::min<ui64>(clusters, options.maxK));
+    Init(clusters);
     for (size_t i = 0; i < options.maxIterations;) {
         Cout << "Start step: " << ++i << " / " << options.maxIterations << Endl;
         if (!Step(1.25)) {
@@ -171,6 +170,7 @@ void TClusterizer::Init(ui64 k) {
     Clusters.Coords.clear();
     Clusters.Ids.clear();
     Clusters.Ids.resize(k, 0);
+    Clusters.Count.resize(k, 0);
     Clusters.Coords.reserve(k);
     It.RandomK(k, [&](TRawEmbedding rawEmbedding) {
         auto embedding = GetArray<float>(rawEmbedding);
@@ -255,6 +255,7 @@ void TClusterizer::Finalize() {
     auto update = [&] {
         for (size_t i = 0; i != ToFill.RawData.size(); ++i) {
             auto& parentId = Clusters.Ids[ToFill.Min[i].Pos];
+            Clusters.Count[ToFill.Min[i].Pos]++;
             auto id = ToFill.IdData[i];
             if (Y_UNLIKELY(!parentId))
                 parentId = ++gId;

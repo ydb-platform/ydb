@@ -146,11 +146,20 @@ public:
     TTableIterator(const TOptions& options, TTableClient& client)
         : Options{options}
         , Client{client}
+        , Table{FullName(options, options.Table)}
+        , RowsCount{options.Rows}
     {
     }
 
+    void Reset(TId parentId, ui64 rows) {
+        Y_ASSERT(parentId != 0);
+        RowsCount = rows;
+        ParentId = parentId;
+        Table = FullIndexName(Options);
+    }
+
     ui64 Rows() const final {
-        return Options.Rows;
+        return RowsCount;
     }
 
     void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) final {
@@ -158,7 +167,7 @@ public:
             return;
         }
         TString query = std::format(R"(
-            SELECT {0} FROM {1}
+            SELECT {0} FROM `{1}`
                 WHERE RANDOM({0}) < {2}
                 LIMIT {3}
         )",
@@ -255,6 +264,9 @@ private:
 
     const TOptions& Options;
     TTableClient& Client;
+    TString Table;
+    ui64 RowsCount = 0;
+    TId ParentId = 0;
 };
 
 static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
@@ -342,26 +354,36 @@ private:
 };
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
-    TClusterizer::TClusters clusters;
     TTableIterator it{options, client};
     TBulkWriter writer{options, client, it.Rows()};
     TClusterizer clusterizer{it, CosineDistance,
                              [&](TId parentId, TId id, TRawEmbedding embedding) {
                                  writer(parentId, id, std::move(embedding));
                              }};
-    clusters = clusterizer.Run({
-        .maxIterations = 5,
-        .maxK = 1000,
-    });
-    for (size_t i = 0; auto id : clusters.Ids) {
-        if (id) {
-            writer(0, id, clusters.Coords[i++]);
+    std::function<void(TId)> runLevel = [&](TId parentId) {
+        auto clusters = clusterizer.Run({
+            .maxIterations = 5,
+            .maxK = 80,
+        });
+        for (size_t i = 0; auto id : clusters.Ids) {
+            if (id) {
+                writer(parentId, id, clusters.Coords[i]);
+            }
+            ++i;
         }
-    }
-    if (writer.Count != 0) {
-        writer.Send();
-    }
-    writer.Wait();
+        if (writer.Count != 0) {
+            writer.Send();
+        }
+        writer.Wait();
+        for (size_t i = 0; auto id : clusters.Ids) {
+            if (id) {
+                it.Reset(parentId, clusters.Count[i]);
+                runLevel(id);
+            }
+            ++i;
+        }
+    };
+    runLevel(0);
 }
 
 static void TopKFlatBit(TTableClient& client, const TOptions& options) {

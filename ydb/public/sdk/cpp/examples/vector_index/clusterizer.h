@@ -28,14 +28,13 @@ public:
 
     struct TOptions {
         ui32 maxIterations = 10;
-        ui32 maxK = 1000;
-        ui32 minClusterSize = 1;
-        ui32 maxClusterSize = 1 << 13;
+        ui32 maxK = 10;
         bool normalize = false;
     };
 
     struct TClusters {
         std::vector<TId> Ids;
+        std::vector<ui64> Count;
         std::vector<std::vector<float>> Coords;
     };
 

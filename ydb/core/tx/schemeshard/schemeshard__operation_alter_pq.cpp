@@ -60,8 +60,8 @@ public:
             TString& errStr)
     {
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
-            && NKikimr::NPQ::SplitMergeEnabled(*tabletConfig)
-            && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NKikimr::NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
+            && NPQ::SplitMergeEnabled(*tabletConfig)
+            && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -112,7 +112,7 @@ public:
                 params->TotalGroupCount = totalGroupCount;
             }
         }
-        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
+        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy() && NPQ::SplitMergeEnabled(alter.GetPQTabletConfig())) {
             const auto strategy = alter.GetPQTabletConfig().GetPartitionStrategy();
             if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
@@ -177,10 +177,10 @@ public:
 
             if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
                 && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
-                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 1 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
+                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 0 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
                     errStr = TStringBuilder() << "Can`t disable autoscaling. Disabling autoscaling is a destructive operation, "
                             << "after which all partitions will become active and the message order guarantee will be violated. "
-                            << "If you are sure of this, then set max_active_partitions to 1.";
+                            << "If you are sure of this, then set max_active_partitions to 0.";
                     return nullptr;
                 }
             }

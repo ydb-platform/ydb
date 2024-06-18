@@ -730,7 +730,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
             {
                 auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
                 partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
-                partitionStrategy->SetMaxPartitionCount(1);
+                partitionStrategy->SetMaxPartitionCount(0);
             }
         });
 

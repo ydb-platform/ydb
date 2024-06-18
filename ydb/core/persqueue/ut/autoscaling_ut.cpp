@@ -692,6 +692,57 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
     }
 
+    Y_UNIT_TEST(ControlPlane_DisableAutoPartitioning) {
+        auto topicName = "autoscalit-topic";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(1)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::ScaleUp)
+                    .EndConfigureAutoscalingSettings()
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .BeginAlterAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::Disabled)
+                    .EndAlterAutoscalingSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse max-partition is not 0");
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MaxActivePartitions(0)
+                    .BeginAlterAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::Disabled)
+                    .EndAlterAutoscalingSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
+    }
+
     Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
         auto autoscalingTestTopic = "autoscalit-topic";
         TTopicSdkTestSetup setup = CreateSetup();

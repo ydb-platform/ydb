@@ -7,14 +7,14 @@ import ydb
 import uuid
 import subprocess
 
-dir=os.path.dirname(__file__)
-config = configparser.ConfigParser() 
-config_file_path=f'{dir}/../config/ydb_qa_db.ini'
-config.read(config_file_path)  
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../config/ydb_qa_db.ini"
+config.read(config_file_path)
 
 YDBD_PATH = config["YDBD"]["YDBD_PATH"]
-DATABASE_ENDPOINT=config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH=config["QA_DB"]["DATABASE_PATH"]
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 FROM_ENV_COLUMNS = [
     "github_head_ref",

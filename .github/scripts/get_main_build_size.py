@@ -5,16 +5,17 @@ import os
 import ydb
 
 
-dir=os.path.dirname(__file__)
-config = configparser.ConfigParser() 
-config_file_path=f'{dir}/../config/ydb_qa_db.ini'
-config.read(config_file_path)  
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../config/ydb_qa_db.ini"
+config.read(config_file_path)
 
-build_preset = (os.environ.get("build_preset"))
-branch = (os.environ.get("branch_to_compare"))
+build_preset = os.environ.get("build_preset")
+branch = os.environ.get("branch_to_compare")
 
-DATABASE_ENDPOINT=config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH=config["QA_DB"]["DATABASE_PATH"]
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+
 
 def get_build_size():
     #os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="~/.ydb/my-robot-key.json"
@@ -38,34 +39,39 @@ def get_build_size():
     """
 
     with ydb.Driver(
-         
-            endpoint=DATABASE_ENDPOINT,
-            database=DATABASE_PATH,
-            credentials=ydb.credentials_from_env_variables()
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=10, fail_fast=True)
+        session = ydb.retry_operation_sync(
+            lambda: driver.table_client.session().create()
+        )
+        with session.transaction() as transaction:
+            result = transaction.execute(sql, commit_tx=True)
+            for row in result[0].rows:
+                main_data = {}
+                for field in row:
+                    main_data[field] = (
+                        row[field]
+                        if type(row[field]) != bytes
+                        else row[field].decode("utf-8")
+                    )
 
-        ) as driver:
-            driver.wait(timeout=10, fail_fast=True)
-            session = ydb.retry_operation_sync(
-                lambda: driver.table_client.session().create()
-            )
-            with session.transaction() as transaction:   
-                result = transaction.execute(sql, commit_tx=True)
-                for row in result[0].rows:
-                    main_data={}
-                    for field in row:
-                        main_data[field]=row[field] if type(row[field])!=bytes else row[field].decode("utf-8") 
-                 
-                try:
-                    main_data
-                except NameError :
-                    print(f'Error: Cant get binary size in var for main (undefined)')
-                    return 0
+            try:
+                main_data
+            except NameError:
+                print(f"Error: Cant get binary size in var for main (undefined)")
+                return 0
 
-            #print( f'main sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
-            return {"github_sha": main_data["github_sha"],
-                    "git_commit_time": str(main_data["git_commit_time"]),
-                    "size_bytes": str(main_data["size_bytes"]),
-                    "size_stripped_bytes": str(main_data["size_stripped_bytes"])}
+        # print( f'main sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
+        return {
+            "github_sha": main_data["github_sha"],
+            "git_commit_time": str(main_data["git_commit_time"]),
+            "size_bytes": str(main_data["size_bytes"]),
+            "size_stripped_bytes": str(main_data["size_stripped_bytes"]),
+        }
+
 
 if __name__ == "__main__":
     get_build_size()

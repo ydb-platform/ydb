@@ -11,6 +11,7 @@ RECURSE(
     json
     json2
     math
+    knn
     pire
     protobuf
     re2

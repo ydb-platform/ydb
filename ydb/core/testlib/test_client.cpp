@@ -241,6 +241,7 @@ namespace Tests {
             appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
             appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
             appData.EnforceUserTokenRequirement = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            appData.EnforceUserTokenCheckRequirement = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement();
             appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
             appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();

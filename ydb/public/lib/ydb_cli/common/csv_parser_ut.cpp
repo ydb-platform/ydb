@@ -106,6 +106,10 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Double(1.183).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().DyNumber("1.183").Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Decimal(TString("1.183")).Build()}});
+        CommonTestParams("name", "inf", {{"$name", TValueBuilder().Decimal(TString("inf")).Build()}});
+        CommonTestParams("name", "-inf", {{"$name", TValueBuilder().Decimal(TString("-inf")).Build()}});
+        CommonTestParams("name", "nan", {{"$name", TValueBuilder().Decimal(TString("nan")).Build()}});
+        CommonTestParams("name", "-nan", {{"$name", TValueBuilder().Decimal(TString("-nan")).Build()}});
         CommonTestParams("name", "550e8400-e29b-41d4-a716-446655440000", {{"$name", TValueBuilder().Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440000")).Build()}});
         CommonTestParams("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", {{"$name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()}});
         CommonTestParams("name", "строка", {{"$name", TValueBuilder().OptionalUtf8("строка").Build()}});

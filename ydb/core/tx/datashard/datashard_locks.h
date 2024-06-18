@@ -601,7 +601,7 @@ public:
     }
 
     void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
-    void RemoveSchema(const TPathId& tableId);
+    void RemoveSchema(const TPathId& tableId, ILocksDb* db);
     bool ForceShardLock(const TPathId& tableId) const;
     bool ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const;
 
@@ -840,8 +840,8 @@ public:
         Locker.UpdateSchema(tableId, tableInfo);
     }
 
-    void RemoveSchema(const TPathId& tableId) {
-        Locker.RemoveSchema(tableId);
+    void RemoveSchema(const TPathId& tableId, ILocksDb* db) {
+        Locker.RemoveSchema(tableId, db);
     }
 
     TVector<TLock> ApplyLocks();

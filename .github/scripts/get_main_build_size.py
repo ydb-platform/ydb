@@ -18,14 +18,18 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def get_build_size():
-    #os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="~/.ydb/my-robot-key.json"
+    # os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="~/.ydb/my-robot-key.json"
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        print(
+            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
+        )
         return 0
     else:
-    # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
-    # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
+        # So, set up it locally
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+        ]
 
     sql = f"""
     --!syntax_v1
@@ -49,22 +53,21 @@ def get_build_size():
         )
         with session.transaction() as transaction:
             result = transaction.execute(sql, commit_tx=True)
-            for row in result[0].rows:
-                main_data = {}
-                for field in row:
-                    main_data[field] = (
-                        row[field]
-                        if type(row[field]) != bytes
-                        else row[field].decode("utf-8")
-                    )
-
-            try:
-                main_data
-            except NameError:
-                print(f"Error: Cant get binary size in var for main (undefined)")
+            if result[0].rows:
+                for row in result[0].rows:
+                    main_data = {}
+                    for field in row:
+                        main_data[field] = (
+                            row[field]
+                            if type(row[field]) != bytes
+                            else row[field].decode("utf-8")
+                        )
+            else:
+                print(
+                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}'"
+                )
                 return 0
 
-        # print( f'main sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
         return {
             "github_sha": main_data["github_sha"],
             "git_commit_time": str(main_data["git_commit_time"]),

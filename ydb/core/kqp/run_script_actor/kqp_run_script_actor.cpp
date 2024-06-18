@@ -289,8 +289,7 @@ private:
     }
 
     void SaveResult(size_t resultSetId) {
-        auto resultSetInfo = ResultSetInfos[resultSetId];
-        if (SaveResultInflight || resultSetInfo.PendingResult.rows_size() == 0) {
+        if (SaveResultInflight) {
             return;
         }
 
@@ -298,6 +297,7 @@ private:
             ExpireAt = TInstant::Now() + ResultsTtl;
         }
 
+        auto resultSetInfo = ResultSetInfos[resultSetId];
         Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetId, ExpireAt, resultSetInfo.FirstRowId, resultSetInfo.AccumulatedSize, std::move(resultSetInfo.PendingResult)));
         SaveResultInflight++;
         PendingResultSetsSize -= resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;
@@ -598,10 +598,10 @@ private:
     }
 
     static bool ShouldSaveResult(TResultSetInfo& resultInfo) {
-        if (resultInfo.Truncated && resultInfo.PendingResult.rows_size()) {
-            return true;
+        if (!resultInfo.PendingResult.rows_size()) {
+            return false;
         }
-        return resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
+        return resultInfo.Truncated || resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
     }
 
 private:

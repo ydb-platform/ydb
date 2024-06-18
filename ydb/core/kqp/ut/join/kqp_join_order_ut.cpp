@@ -308,25 +308,25 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_TWIN(OverrideStatsTPCH2, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
-            "queries/tpch2.sql", "stats/tpch1000s.json", "correct_join_order/tpch2_1000s", StreamLookupJoin
+            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s", StreamLookupJoin
         );
     }
 
     Y_UNIT_TEST_TWIN(OverrideStatsTPCH9, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
-            "queries/tpch9.sql", "stats/tpch1000s.json", "correct_join_order/tpch9_1000s", StreamLookupJoin
+            "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", StreamLookupJoin
         );
     }
 
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
-            "queries/tpcds64.sql", "stats/tpcds1000s.json", "correct_join_order/tpcds64_1000s", StreamLookupJoin
+            "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
         );
     }
 
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS78, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
-            "queries/tpcds78.sql", "stats/tpcds1000s.json", "correct_join_order/tpcds78_1000s", StreamLookupJoin
+            "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin
         );
     }
 }

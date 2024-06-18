@@ -166,7 +166,7 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 
-        export branch_to_compare="main" 
+        export branch_to_compare="$GITHUB_REF_NAME" 
         export yellow_treshold=102400
         export red_treshold=2097152 
         export commit_git_sha="$(git rev-parse HEAD)"

@@ -219,6 +219,7 @@ private:
         const static ui32 MaxDepth = 100;
 
         size_t usedStack = StackTopPtr - reinterpret_cast<size_t>(&depth);
+        Cerr << "recursive " << depth << " " << usedStack << Endl;
         YieldHandler();
 
 #ifndef NDEBUG

@@ -432,6 +432,8 @@ message TInterconnectConfig {
     optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
+
+    optional uint64 EventDelayMicrosec = 49;
 }
 
 message TChannelProfileConfig {

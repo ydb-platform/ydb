@@ -2664,11 +2664,6 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             Y_ABORT_UNLESS(columnType.TypeInfo->SerializeToString(&typeData));
         }
         if (pathId.OwnerId == TabletID()) {
-            std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
-            std::cerr << cinfo.Name << std::endl;
-            std::cerr << cinfo.NotNull << std::endl;
-            std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
-            std::cerr << "SHARD STARTS" << std::endl;
             db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::Columns::ColName>(cinfo.Name),
                 NIceDb::TUpdate<Schema::Columns::ColType>((ui32)columnType.TypeId),
@@ -2681,8 +2676,6 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull),
                 NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
-
-            std::cerr << "SHARD ENDS" << std::endl;
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {

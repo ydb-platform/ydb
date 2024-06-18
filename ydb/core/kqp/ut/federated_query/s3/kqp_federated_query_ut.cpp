@@ -1756,10 +1756,29 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
 
-        const size_t forgetRowsLimit = 100000;
-        if (numberRows > forgetRowsLimit) {
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), TStringBuilder() << "Info: Query result rows count is " << numberRows << ", that is larger than allowed limit " << forgetRowsLimit << " rows for one time forget, results will be forgotten in the background process");
+        const TString countResultsQuery = fmt::format(R"(
+                SELECT COUNT(*)
+                FROM `.metadata/result_sets`
+                WHERE execution_id = "{execution_id}" AND expire_at > CurrentUtcTimestamp();
+            )", "execution_id"_a=readyOp.Metadata().ExecutionId);
+
+        TInstant forgetChecksStart = TInstant::Now();
+        while (TInstant::Now() - forgetChecksStart <= TDuration::Minutes(5)) {
+            NYdb::NTable::TDataQueryResult result = session.ExecuteDataQuery(countResultsQuery, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSetParser(0);
+            resultSet.TryNextRow();
+
+            ui64 numberRows = resultSet.ColumnParser(0).GetUint64();
+            if (!numberRows) {
+                return;
+            }
+
+            Cerr << "Rows remains: " << numberRows << ", elapsed time: " << TInstant::Now() - forgetChecksStart << "\n";
+            Sleep(TDuration::Seconds(1));
         }
+        UNIT_ASSERT_C(false, "Results removing timeout");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

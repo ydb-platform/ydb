@@ -453,18 +453,26 @@ public:
         auto pos = options.Pos();
         try {
             TSession* session = GetSession(options);
+            
             TSet<TString> uniqueTables;
-            if (options.Prefix().empty() && options.Suffix().empty()) {
-                for (auto& x : Services_->GetTablesMapping()) {
-                    TVector<TString> parts;
-                    Split(x.first, ".", parts);
-                    if (parts.size() > 2 && parts[0] == YtProviderName) {
-                        if (!parts[2].StartsWith(TStringBuf("Input"))) {
-                            continue;
-                        }
-                        uniqueTables.insert(parts[2]);
-                    }
+            const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
+            const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
+            for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
+                TVector<TString> parts;
+                Split(tableName, ".", parts);
+                if (parts.size() != 3) {
+                    continue;
                 }
+                if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
+                    continue;
+                }
+                if (!parts[2].StartsWith(fullPrefix)) {
+                    continue;
+                }
+                if (!parts[2].EndsWith(fullSuffix)) {
+                    continue;
+                }
+                uniqueTables.insert(parts[2]);
             }
 
             TTableRangeResult res;
@@ -484,8 +492,11 @@ public:
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
-                    for (auto& x: uniqueTables) {
-                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(x));
+                    for (auto& tableName: uniqueTables) {
+                        auto stripped = TStringBuf(tableName);
+                        stripped.SkipPrefix(fullPrefix);
+                        stripped.ChopSuffix(fullSuffix);
+                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TString(stripped)));
                     }
 
                     auto inputNode = pgmBuilder.AsList(strings);
@@ -504,7 +515,10 @@ public:
                     const auto& value = compGraph->GetValue();
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
-                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, Nothing()});
+                        TString tableName = TString(current.AsStringRef());
+                        tableName.prepend(fullPrefix);
+                        tableName.append(fullSuffix);
+                        res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
                 }
                 else {
@@ -527,17 +541,20 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            if (options.Prefix().empty()) {
-                for (auto& x : Services_->GetTablesMapping()) {
-                    TVector<TString> parts;
-                    Split(x.first, ".", parts);
-                    if (parts.size() > 2 && parts[0] == YtProviderName) {
-                        if (!parts[2].StartsWith(TStringBuf("Input"))) {
-                            continue;
-                        }
-                        uniqueTables.insert(parts[2]);
-                    }
+            const auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
+                TVector<TString> parts;
+                Split(tableName, ".", parts);
+                if (parts.size() != 3) {
+                    continue;
                 }
+                if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
+                    continue;
+                }
+                if (!parts[2].StartsWith(fullPrefix)) {
+                    continue;
+                }
+                uniqueTables.insert(parts[2]);
             }
 
             TVector<TFolderResult::TFolderItem> items;

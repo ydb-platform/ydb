@@ -30,8 +30,9 @@ void InitMonService(THolder<TMonSrvc>& monSrvc, int monPort)
 using TTracer = NTracing::TMPMCRingQueueBadPathTracer;
 template <ui32 SIZE_BITS>
 using TCasesWithTracer = TBenchCasesWithDurationAndThreads<TMPMCRingQueue<SIZE_BITS, TTracer>, TAdaptiveQueue<SIZE_BITS, TTracer>>;
+template <ui32 SIZE_BITS>
+using TCasesWithTracerV2 = TBenchCasesWithDurationAndThreads<TMPMCRingQueueV2<SIZE_BITS, TTracer>, TIdAdaptor<TMPMCRingQueueV2<SIZE_BITS, TTracer>>>;
 using ICaseWithCollector = IBenchCaseWithDurationAndThreads<NTracing::TStatsCollector>;
-
 
 
 using TDegradator = NTracing::TMPMCRingQueueDegradatorAndTracer<1024, 1, 60'000'000>;
@@ -42,44 +43,32 @@ template <>
 std::atomic_uint64_t TDegradator::TDegradator::InFlight = 0;
     
 template <ui32 SIZE_BITS>
-using TCasesWithDegradator = TBenchCasesWithDurationAndThreads<TMPMCRingQueue<SIZE_BITS, TTracer>, TAdaptiveQueue<SIZE_BITS, TTracer>>;
+using TCasesWithDegradator = TBenchCasesWithDurationAndThreads<TMPMCRingQueue<SIZE_BITS, TDegradator>, TAdaptiveQueue<SIZE_BITS, TDegradator>>;
+template <ui32 SIZE_BITS>
+using TCasesWithDegradatorV2 = TBenchCasesWithDurationAndThreads<TMPMCRingQueueV2<SIZE_BITS, TDegradator>, TIdAdaptor<TMPMCRingQueueV2<SIZE_BITS, TDegradator>>>;
 
+template <typename TCases, bool Sleep>
+THashMap<TString,ICaseWithCollector*> MakeTests() {
+    return {
+        {"Basic", static_cast<ICaseWithCollector*>(new TCases::template TBasicPushPop<NTracing::TStatsCollector, Sleep>)},
+        {"Producer1Consumer1", static_cast<ICaseWithCollector*>(new TCases::template TBasicProducingConsuming<NTracing::TStatsCollector, 1, 1, Sleep>)},
+        {"Producer1Consumer2", static_cast<ICaseWithCollector*>(new TCases::template TBasicProducingConsuming<NTracing::TStatsCollector, 1, 2, Sleep>)},
+        {"Producer2Consumer1", static_cast<ICaseWithCollector*>(new TCases::template TBasicProducingConsuming<NTracing::TStatsCollector, 2, 1, Sleep>)},
+        {"SingleProducer", static_cast<ICaseWithCollector*>(new TCases::template TSingleProducer<NTracing::TStatsCollector, Sleep>)},
+        {"SingleConsumer", static_cast<ICaseWithCollector*>(new TCases::template TSingleConsumer<NTracing::TStatsCollector, Sleep>)},
+    };
+}
 
-THashMap<TString,ICaseWithCollector*> Tests {
-    {"Basic", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicPushPop<NTracing::TStatsCollector, false>)},
-    {"Producer1Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 1, false>)},
-    {"Producer1Consumer2", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 2, false>)},
-    {"Producer2Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 2, 1, false>)},
-    {"SingleProducer", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TSingleProducer<NTracing::TStatsCollector, false>)},
-    {"SingleConsumer", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TSingleConsumer<NTracing::TStatsCollector, false>)},
-};
+THashMap<TString,ICaseWithCollector*> Tests = MakeTests<TCasesWithTracer<20>, false>();
+THashMap<TString,ICaseWithCollector*> TestsWithSleep1Us = MakeTests<TCasesWithTracer<20>, true>();
+THashMap<TString,ICaseWithCollector*> TestsWithBlockedThread = MakeTests<TCasesWithDegradator<20>, false>();
+THashMap<TString,ICaseWithCollector*> TestsWithSleep1UsAndBlockedThread = MakeTests<TCasesWithDegradator<20>, true>();
 
-THashMap<TString,ICaseWithCollector*> TestsWithSleep1Us {
-    {"Basic", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicPushPop<NTracing::TStatsCollector, true>)},
-    {"Producer1Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 1, true>)},
-    {"Producer1Consumer2", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 2, true>)},
-    {"Producer2Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 2, 1, true>)},
-    {"SingleProducer", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TSingleProducer<NTracing::TStatsCollector, true>)},
-    {"SingleConsumer", static_cast<ICaseWithCollector*>(new TCasesWithTracer<20>::TSingleConsumer<NTracing::TStatsCollector, true>)},
-};
+THashMap<TString,ICaseWithCollector*> TestsV2 = MakeTests<TCasesWithTracerV2<20>, false>();
+THashMap<TString,ICaseWithCollector*> TestsWithSleep1UsV2 = MakeTests<TCasesWithTracerV2<20>, true>();
+THashMap<TString,ICaseWithCollector*> TestsWithBlockedThreadV2 = MakeTests<TCasesWithDegradatorV2<20>, false>();
+THashMap<TString,ICaseWithCollector*> TestsWithSleep1UsAndBlockedThreadV2 = MakeTests<TCasesWithDegradatorV2<20>, true>();
 
-THashMap<TString,ICaseWithCollector*> TestsWithBlockedThread {
-    {"Basic", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicPushPop<NTracing::TStatsCollector, false>)},
-    {"Producer1Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 1, false>)},
-    {"Producer1Consumer2", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 2, false>)},
-    {"Producer2Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 2, 1, false>)},
-    {"SingleProducer", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TSingleProducer<NTracing::TStatsCollector, false>)},
-    {"SingleConsumer", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TSingleConsumer<NTracing::TStatsCollector, false>)},
-};
-
-THashMap<TString,ICaseWithCollector*> TestsWithSleep1UsAndBlockedThread {
-    {"Basic", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicPushPop<NTracing::TStatsCollector, true>)},
-    {"Producer1Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 1, true>)},
-    {"Producer1Consumer2", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 1, 2, true>)},
-    {"Producer2Consumer1", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TBasicProducingConsuming<NTracing::TStatsCollector, 2, 1, true>)},
-    {"SingleProducer", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TSingleProducer<NTracing::TStatsCollector, true>)},
-    {"SingleConsumer", static_cast<ICaseWithCollector*>(new TCasesWithDegradator<20>::TSingleConsumer<NTracing::TStatsCollector, true>)},
-};
 
 
 int main(int argc, char* argv[]) {
@@ -93,6 +82,7 @@ int main(int argc, char* argv[]) {
     bool shortOutput = false;
     bool sleep1us = false;
     bool blockThread = false;
+    bool queueV2 = false;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption(0, "mon-port", "port of monitoring service")
@@ -120,6 +110,9 @@ int main(int argc, char* argv[]) {
     opts.AddLongOption("block-thread", "every time one thread will sleep 1 minute")
         .NoArgument()
         .SetFlag(&blockThread);
+    opts.AddLongOption("queue-v2", "use second version of mpmc-ring-queue")
+        .NoArgument()
+        .SetFlag(&queueV2);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
     THolder<TMonSrvc> monSrvc;
@@ -148,7 +141,16 @@ int main(int argc, char* argv[]) {
     }
 
     auto *tests = &Tests;
-    if (blockThread && sleep1us) {
+    if (queueV2) {
+        tests = &TestsV2;
+        if (blockThread && sleep1us) {
+            tests = &TestsWithSleep1UsAndBlockedThreadV2;
+        } else if (blockThread) {
+            tests = &TestsWithBlockedThreadV2;
+        } else if (sleep1us) {
+            tests = &TestsWithSleep1UsV2;
+        }
+    } else if (blockThread && sleep1us) {
         tests = &TestsWithSleep1UsAndBlockedThread;
     } else if (blockThread) {
         tests = &TestsWithBlockedThread;

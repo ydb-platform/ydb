@@ -15,7 +15,6 @@ END()
 
 RECURSE(
     compute
-    protos
     spilling
     task_runner
 )

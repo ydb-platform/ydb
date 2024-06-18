@@ -24,7 +24,6 @@ RECURSE(
     mock
     pretty_printers
     private_client
-    protos
     quota_manager
     rate_limiter
     read_rule

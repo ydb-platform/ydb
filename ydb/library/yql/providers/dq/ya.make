@@ -1,8 +1,6 @@
 RECURSE(
     actors
-    api
     common
-    config
     counters
     expr_nodes
     scheduler

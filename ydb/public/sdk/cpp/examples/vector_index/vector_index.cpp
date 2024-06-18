@@ -89,7 +89,7 @@ static void DropIndex(TTableClient& client, const TOptions& options) {
 static void CreateFlat(TTableClient& client, const TOptions& options) {
     ThrowOnError(client.RetryOperationSync([&](TSession session) {
         auto desc = TTableBuilder()
-                        .AddNonNullableColumn(options.PrimaryKey, EPrimitiveType::Uint64)
+                        .AddNonNullableColumn(options.PrimaryKey, EPrimitiveType::Uint32)
                         .AddNullableColumn(options.Embedding, EPrimitiveType::String)
                         .SetPrimaryKeyColumn(options.PrimaryKey)
                         .Build();
@@ -103,7 +103,7 @@ static void CreateKMeans(TTableClient& client, const TOptions& options) {
     ThrowOnError(client.RetryOperationSync([&](TSession session) {
         auto desc = TTableBuilder()
                         .AddNonNullableColumn(parentPK, EPrimitiveType::Uint32)
-                        .AddNonNullableColumn(options.PrimaryKey, EPrimitiveType::Uint64)
+                        .AddNonNullableColumn(options.PrimaryKey, EPrimitiveType::Uint32)
                         .AddNullableColumn(options.Embedding, EPrimitiveType::String)
                         .SetPrimaryKeyColumns({parentPK, options.PrimaryKey})
                         .Build();
@@ -143,9 +143,9 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
 
 class TTableIterator final: public TDatasetIterator {
 public:
-    TTableIterator(const TOptions& options, TSession& session)
+    TTableIterator(const TOptions& options, TTableClient& client)
         : Options{options}
-        , Session{session}
+        , Client{client}
     {
     }
 
@@ -167,21 +167,24 @@ public:
                                     std::max(1.0 / (2 * k), static_cast<double>(k * 10) / Rows()),
                                     k);
         Cout << query << Endl;
-        auto values = Session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
-                                                          .CommitTx())
-                          .ExtractValueSync();
-        if (!values.IsSuccess()) {
-            ythrow TVectorException{std::move(values)};
-        }
-        for (auto& part : values.GetResultSets()) {
-            TResultSetParser batch(part);
-            Y_ASSERT(batch.ColumnsCount() == 1);
-            auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
-            auto& embedding = batch.ColumnParser(embeddingIdx);
-            while (batch.TryNextRow()) {
-                cb(*embedding.GetOptionalString());
+        ThrowOnError(Client.RetryOperationSync([&](TSession session) {
+            auto values = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
+                                                              .CommitTx())
+                              .ExtractValueSync();
+            for (auto& part : values.GetResultSets()) {
+                TResultSetParser batch(part);
+                Y_ASSERT(batch.ColumnsCount() == 1);
+                auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+                auto& embedding = batch.ColumnParser(embeddingIdx);
+                while (batch.TryNextRow()) {
+                    cb(*embedding.GetOptionalString());
+                }
             }
-        }
+            if (!values.IsSuccess()) {
+                ythrow TVectorException{std::move(values)};
+            }
+            return TStatus{EStatus::SUCCESS, {}};
+        }));
     }
 
     void Iterate(std::function<void(ui32, TRawEmbedding)> cb) final {
@@ -201,8 +204,15 @@ private:
             settings.AppendColumns(Options.PrimaryKey);
         }
         settings.AppendColumns(Options.Embedding);
-        auto fit = Session.ReadTable(FullName(Options, Options.Table), settings);
-        auto it = fit.ExtractValueSync();
+        ThrowOnError(Client.RetryOperationSync([&](TSession session) {
+            auto fit = session.ReadTable(FullName(Options, Options.Table), settings);
+            ReadImpl<WithPK>(fit.ExtractValueSync(), cb);
+            return TStatus{EStatus::SUCCESS, {}};
+        }));
+    }
+
+    template <bool WithPK>
+    void ReadImpl(TTablePartIterator it, auto&& cb) {
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
@@ -244,7 +254,7 @@ private:
     }
 
     const TOptions& Options;
-    TSession& Session;
+    TTableClient& Client;
 };
 
 static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
@@ -264,9 +274,9 @@ static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
 }
 
 struct TBulkWriter {
-    TBulkWriter(TTableClient& client, const TOptions& options, ui64 rows)
-        : Client{client}
-        , Options{options}
+    TBulkWriter(const TOptions& options, TTableClient& client, ui64 rows)
+        : Options{options}
+        , Client{client}
         , Table{FullIndexName(options)}
     {
         Futures.reserve((rows + kBulkSize - 1) / kBulkSize);
@@ -280,7 +290,7 @@ struct TBulkWriter {
             .AddMember("parent_" + Options.PrimaryKey)
             .Uint32(static_cast<ui32>(parentId))
             .AddMember(Options.PrimaryKey)
-            .Uint64(id)
+            .Uint32(static_cast<ui32>(id))
             .AddMember(Options.Embedding)
             .String(std::move(rawEmbedding))
             .EndStruct();
@@ -318,13 +328,14 @@ struct TBulkWriter {
         for (auto& f : Futures) {
             ThrowOnError(f.ExtractValueSync());
         }
+        Futures.clear();
     }
 
     size_t Count = 0;
 
 private:
-    TTableClient& Client;
     const TOptions& Options;
+    TTableClient& Client;
     TString Table;
     NYdb::TValueBuilder Rows;
     std::vector<TAsyncStatus> Futures;
@@ -332,28 +343,25 @@ private:
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     TClusterizer::TClusters clusters;
-    ThrowOnError(client.RetryOperationSync([&](TSession session) {
-        TTableIterator it{options, session};
-        TBulkWriter writer{client, options, it.Rows()};
-        TClusterizer clusterizer{it, CosineDistance,
-                                 [&](TId parentId, TId id, TRawEmbedding embedding) {
-                                     writer(parentId, id, std::move(embedding));
-                                 }};
-        clusters = clusterizer.Run({
-            .maxIterations = 5,
-            .maxK = 1000,
-        });
-        for (size_t i = 0; auto id : clusters.Ids) {
-            if (id) {
-                writer(0, id, clusters.Coords[i++]);
-            }
+    TTableIterator it{options, client};
+    TBulkWriter writer{options, client, it.Rows()};
+    TClusterizer clusterizer{it, CosineDistance,
+                             [&](TId parentId, TId id, TRawEmbedding embedding) {
+                                 writer(parentId, id, std::move(embedding));
+                             }};
+    clusters = clusterizer.Run({
+        .maxIterations = 5,
+        .maxK = 1000,
+    });
+    for (size_t i = 0; auto id : clusters.Ids) {
+        if (id) {
+            writer(0, id, clusters.Coords[i++]);
         }
-        if (writer.Count != 0) {
-            writer.Send();
-        }
-        writer.Wait();
-        return TStatus{EStatus::SUCCESS, {}};
-    }));
+    }
+    if (writer.Count != 0) {
+        writer.Send();
+    }
+    writer.Wait();
 }
 
 static void TopKFlatBit(TTableClient& client, const TOptions& options) {

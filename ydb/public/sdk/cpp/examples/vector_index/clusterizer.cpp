@@ -153,8 +153,6 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     if (clusters < 128) {
         return {};
     }
-    // const auto minClustersCount = size / options.maxClusterSize;
-    // const auto maxClustersCount = size / options.minClusterSize;
     Init(std::min<ui64>(clusters, options.maxK));
     for (size_t i = 0; i < options.maxIterations;) {
         Cout << "Start step: " << ++i << " / " << options.maxIterations << Endl;
@@ -168,6 +166,7 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
 
 void TClusterizer::Init(ui64 k) {
     Cout << "Start init" << Endl;
+    // TODO kmeans++, kmeans||?
     Y_ASSERT(k > 0);
     Clusters.Coords.clear();
     Clusters.Ids.clear();
@@ -177,7 +176,7 @@ void TClusterizer::Init(ui64 k) {
         auto embedding = GetArray<float>(rawEmbedding);
         Clusters.Coords.emplace_back(embedding.begin(), embedding.end());
     });
-    Cout << k << " " << Clusters.Coords.size() << Endl;
+    // TODO check distance between vectors in initial set
     Y_ASSERT(Clusters.Coords.size() == k);
     auto dims = Clusters.Coords.front().size();
     NewClusters.resize(k);
@@ -195,7 +194,7 @@ bool TClusterizer::Step(float neededDiff) {
             Update(ToFill.Min[i], embedding);
         }
     };
-    It.Iterate([&]([[maybe_unused]] ui32 rows, TRawEmbedding rawEmbedding) {
+    It.Iterate([&](ui32 rows, TRawEmbedding rawEmbedding) {
         Progress.Report(1);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));
         ToFill.Min.emplace_back();
@@ -262,7 +261,7 @@ void TClusterizer::Finalize() {
             Create(parentId, id, std::move(ToFill.RawData[i]));
         }
     };
-    It.Iterate([&]([[maybe_unused]] ui32 rows, TId id, TRawEmbedding rawEmbedding) {
+    It.Iterate([&](ui32 rows, TId id, TRawEmbedding rawEmbedding) {
         Progress.Report(1);
         ToFill.IdData.emplace_back(id);
         ToFill.RawData.emplace_back(std::move(rawEmbedding));

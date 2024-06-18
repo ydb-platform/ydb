@@ -26,14 +26,12 @@ TTaskResourceEstimation BuildInitialTaskResources(const TDqTask& task) {
 void EstimateTaskResources(const TTableServiceConfig::TResourceManager& config,
     TTaskResourceEstimation& ret, const ui32 tasksCount)
 {
+    ui64 totalChannels = std::max(tasksCount, (ui32)1) * std::max(ret.ChannelBuffersCount, (ui32)1);
+    ui64 optimalChannelBufferSizeEstimation = totalChannels * config.GetChannelBufferSize();
 
-    ui64 channelBuffersSize = ret.ChannelBuffersCount * config.GetChannelBufferSize();
-    if (channelBuffersSize > config.GetMaxTotalChannelBuffersSize()) {
-        ret.ChannelBufferMemoryLimit = std::max(config.GetMinChannelBufferSize(),
-                                                config.GetMaxTotalChannelBuffersSize() / ret.ChannelBuffersCount);
-    } else {
-        ret.ChannelBufferMemoryLimit = config.GetChannelBufferSize();
-    }
+    optimalChannelBufferSizeEstimation = std::min(optimalChannelBufferSizeEstimation, config.GetMaxTotalChannelBuffersSize());
+
+    ret.ChannelBufferMemoryLimit = std::max(config.GetMinChannelBufferSize(), optimalChannelBufferSizeEstimation / totalChannels);
 
     if (ret.HeavyProgram) {
         ret.MkqlProgramMemoryLimit = config.GetMkqlHeavyProgramMemoryLimit() / tasksCount;

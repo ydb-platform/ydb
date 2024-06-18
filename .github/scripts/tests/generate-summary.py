@@ -202,6 +202,8 @@ class TestSummary:
         if add_footnote:
             result.append("")
             result.append(f"[^1]: All mute rules are defined [here]({footnote_url}).")
+            
+        result.append("")
         return result
 
 

@@ -2206,7 +2206,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                 matchedAliasInput = matchedAliasInputI;
             }
 
-            if (matchedAliasInput && 0) {
+            if (matchedAliasInput) {
                 return ctx.Expr.Builder(node->Pos())
                     .Callable("PgToRecord")
                         .Callable(0, "DivePrefixMembers")

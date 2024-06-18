@@ -479,7 +479,7 @@ public:
             return;
         }
 
-        LOG_D("continue request, queue id: " << QueryState->UserRequestContext->PoolId);
+        LOG_D("continue request, pool id: " << QueryState->UserRequestContext->PoolId);
         CompileQuery();
     }
 

@@ -218,8 +218,8 @@ private:
     bool BuildHistogramRecursive(THistogram& histogram, TVector<TPartNodes>& parts, ui64 beginSize, ui64 endSize, ui32 depth) {
         const static ui32 MaxDepth = 100;
 
-        size_t usedStack = StackTopPtr - reinterpret_cast<size_t>(&depth);
-        Cerr << "recursive " << depth << " " << usedStack << Endl;
+        // Note: doesn't work with some sanitizers
+        size_t usedStack = SafeDiff(StackTopPtr, reinterpret_cast<size_t>(&depth));
         YieldHandler();
 
 #ifndef NDEBUG
@@ -500,7 +500,8 @@ private:
         return static_cast<ui64>(std::abs(static_cast<i64>(a) - static_cast<i64>(b)));
     }
 
-    ui64 SafeDiff(ui64 a, ui64 b) const {
+    template <typename T>
+    T SafeDiff(T a, T b) const {
         return a - Min(a, b);
     }
 

@@ -1935,6 +1935,17 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
+                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
+                for (auto i : xrange(pages.size())) {
+                    if (i != 0) logl << ", ";
+                    logl << pages[i] << " " << pageCollectionInfo->PageCollection->Page(pages[i]).Type;
+                }
+                logl << "]";
+            }
+            
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;

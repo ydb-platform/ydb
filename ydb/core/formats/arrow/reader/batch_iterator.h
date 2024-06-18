@@ -7,8 +7,8 @@ namespace NKikimr::NArrow::NMerger {
 class TBatchIterator {
 private:
     bool ControlPointFlag;
-    TSortableBatchPosition KeyColumns;
-    TSortableBatchPosition VersionColumns;
+    TRWSortableBatchPosition KeyColumns;
+    TRWSortableBatchPosition VersionColumns;
     i64 RecordsCount;
     int ReverseSortKff;
 
@@ -34,17 +34,17 @@ public:
         return ControlPointFlag;
     }
 
-    const TSortableBatchPosition& GetKeyColumns() const {
+    const TRWSortableBatchPosition& GetKeyColumns() const {
         return KeyColumns;
     }
 
-    const TSortableBatchPosition& GetVersionColumns() const {
+    const TRWSortableBatchPosition& GetVersionColumns() const {
         return VersionColumns;
     }
 
-    TBatchIterator(const TSortableBatchPosition& keyColumns)
+    TBatchIterator(TRWSortableBatchPosition&& keyColumns)
         : ControlPointFlag(true)
-        , KeyColumns(keyColumns) {
+        , KeyColumns(std::move(keyColumns)) {
 
     }
 

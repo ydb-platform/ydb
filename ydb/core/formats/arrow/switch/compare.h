@@ -7,8 +7,7 @@ namespace NKikimr::NArrow {
 class TComparator {
 public:
     template <bool notNull>
-    static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
-        arrow::Type::type typeId = lhs.type_id();
+    static std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
         switch (typeId) {
             case arrow::Type::NA:
             case arrow::Type::BOOL:
@@ -52,7 +51,9 @@ public:
             case arrow::Type::DURATION:
                 return CompareView<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DECIMAL256:
+                return CompareView<arrow::Decimal256Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DECIMAL:
+                return CompareView<arrow::Decimal128Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DENSE_UNION:
             case arrow::Type::DICTIONARY:
             case arrow::Type::EXTENSION:
@@ -71,6 +72,11 @@ public:
                 break;
         }
         return std::partial_ordering::equivalent;
+    }
+
+    template <bool notNull>
+    static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
+        return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos);
     }
 
     template <typename T, bool notNull>

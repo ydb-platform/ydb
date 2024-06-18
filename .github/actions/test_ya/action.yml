@@ -54,10 +54,8 @@ runs:
         echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
         echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
-        echo "TESTMO_TOKEN=${{ inputs.testman_token }}" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
-        echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
         echo "YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
@@ -87,6 +85,7 @@ runs:
       shell: bash
       env:
         PR_NUMBER: ${{ github.event.number }}
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
         RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -211,8 +210,8 @@ runs:
         echo "::debug::get version"
         ./ya --version
         
-        echo "Tests are running..." | .github/scripts/tests/comment-pr.py
-
+        echo "Tests are running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        
         ./ya test ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
           --no-dir-outputs \
@@ -261,6 +260,8 @@ runs:
     - name: Unit test history upload results
       if: inputs.testman_token
       shell: bash
+      env:
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
         PROXY_ADDR=127.0.0.1:8888
@@ -287,6 +288,8 @@ runs:
     - name: Test history run complete
       if: always() && inputs.testman_token
       shell: bash
+      env:
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
 
@@ -302,6 +305,8 @@ runs:
     - name: write tests summary
       shell: bash
       if: always()
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
         mkdir $ARTIFACTS_DIR/summary/
@@ -311,7 +316,7 @@ runs:
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
-          --test-history-url $TEST_HISTORY_URL \
+          --test-history-url "$TEST_HISTORY_URL" \
           --test-log-url="$YA_TEST_LOG_URL" \
           --build-preset "$BUILD_PRESET" \
           --status-report-file statusrep.txt \

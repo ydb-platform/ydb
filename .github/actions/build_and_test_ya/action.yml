@@ -126,7 +126,7 @@ runs:
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}

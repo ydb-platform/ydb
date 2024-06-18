@@ -243,7 +243,7 @@ public:
         ));
         QueryState->PlacedInWorkloadPool = true;
 
-        Become(&TKqpSessionActor::QueuedState);
+        Become(&TKqpSessionActor::ExecuteState);
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -461,7 +461,7 @@ public:
         CompileQuery();
     }
 
-    void HandleQueued(NWorkload::TEvContinueRequest::TPtr& ev) {
+    void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
@@ -2266,42 +2266,6 @@ public:
         }
     }
 
-    STFUNC(QueuedState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                // common event handles for all states.
-                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
-                hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(TEvKqp::TEvQueryRequest, Handle);
-
-                hFunc(NWorkload::TEvContinueRequest, HandleQueued);
-
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
-                hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
-                hFunc(NGRpcService::TEvClientLost, HandleClientLost);
-                hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
-
-                // forgotten messages from previous aborted request
-                hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
-                hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
-                hFunc(TEvents::TEvUndelivered, HandleNoop);
-            default:
-                UnexpectedEvent("QueuedState", ev);
-            }
-        } catch (const TRequestFail& ex) {
-            ReplyQueryError(ex.Status, ex.what(), ex.Issues);
-        } catch (const yexception& ex) {
-            InternalError(ex.what());
-        } catch (const TMemoryLimitExceededException&) {
-            ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR,
-                BuildMemoryLimitExceptionMessage());
-        }
-    }
-
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -2312,6 +2276,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
 
+                hFunc(NWorkload::TEvContinueRequest, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
 
@@ -2330,7 +2295,6 @@ public:
                 hFunc(TEvKqp::TEvSplitResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
-                hFunc(NWorkload::TEvContinueRequest, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);

@@ -154,13 +154,15 @@ runs:
         set -x
         export build_preset="${{ inputs.build_preset }}" 
         export commit_git_sha="$(git rev-parse HEAD)"
-        
+
         python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
 
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 

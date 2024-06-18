@@ -2031,6 +2031,15 @@ bool TPipeline::CheckInflightLimit() const {
     return true;
 }
 
+TPipeline::TWaitingDataTxOp::TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev)
+    : Event(std::move(ev))
+{
+    if (Event->TraceId) {
+        Span = NWilson::TSpan(15, std::move(Event->TraceId), "DataShard.WaitSnapshot");
+        Event->TraceId = Span.GetTraceId();
+    }
+}
+
 bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     if (!CheckInflightLimit())
         return false;
@@ -2090,7 +2099,8 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = it->first;
                 break;
             }
-            ctx.Send(it->second.Release());
+            it->second.Span.EndOk();
+            ctx.Send(it->second.Event.Release());
             it = WaitingDataTxOps.erase(it);
             activated = true;
         }
@@ -2100,7 +2110,8 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = Min(minWait, it->first);
                 break;
             }
-            ctx.Send(it->second.Release());
+            it->second.Span.EndOk();
+            ctx.Send(it->second.Event.Release());
             it = WaitingDataReadIterators.erase(it);
             activated = true;
         }
@@ -2128,6 +2139,15 @@ void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
 }
 
+TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev)
+    : Event(std::move(ev))
+{
+    if (Event->TraceId) {
+        Span = NWilson::TSpan(15, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
+        Event->TraceId = Span.GetTraceId();
+    }
+}
+
 void TPipeline::AddWaitingReadIterator(
     const TRowVersion& version,
     TEvDataShard::TEvRead::TPtr ev,
@@ -2138,7 +2158,7 @@ void TPipeline::AddWaitingReadIterator(
 
     if (Y_UNLIKELY(Self->MvccSwitchState == TSwitchState::SWITCHING)) {
         // postpone tx processing till mvcc state switch is finished
-        WaitingDataReadIterators.emplace(TRowVersion::Min(), ev);
+        WaitingDataReadIterators.emplace(TRowVersion::Min(), std::move(ev));
         return;
     }
 

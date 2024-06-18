@@ -24,7 +24,7 @@ def main():
     branch = (os.environ.get("branch_to_compare"))
     github_srv = os.environ.get("GITHUB_SERVER_URL")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
-    current_pr_commit_sha = os.environ.get("git_hash")
+    current_pr_commit_sha = os.environ.get("GITHUB_SHA")
 
     current_sizes_result = get_current_build_size.get_build_size()
     main_sizes_result = get_main_build_size.get_build_size()

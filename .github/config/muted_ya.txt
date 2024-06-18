@@ -30,9 +30,13 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
+ydb/core/persqueue/ut [37/40] chunk chunk
+ydb/core/persqueue/ut [38/40] chunk chunk
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_AutosplitByLoad
+ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
+ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
+ydb/core/persqueue/ut TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
@@ -46,7 +50,8 @@ ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
-ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [9/10] chunk chunk
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead

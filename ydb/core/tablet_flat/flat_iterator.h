@@ -322,11 +322,6 @@ public:
     TDbTupleRef GetKey() const noexcept;
     TDbTupleRef GetValues() const noexcept;
 
-    ui64 GetExternalBlobsSize() const noexcept
-    {
-        return State.ExternalBlobsSize();
-    }
-
     const TRowState& Row() const noexcept
     {
         return State;

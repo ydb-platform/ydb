@@ -1011,6 +1011,8 @@ private:
 
         bool precharging = false;
 
+        ui64 prechargedSize = 0;
+
         for (auto& key : Keys) {
             TSerializedCellVec keyVec(key);
 
@@ -1022,9 +1024,11 @@ private:
                 keyAccessSampler->AddSample(TableId, rowKey.Cells());
 
                 if (precharging) {
+                    prechargedSize += iter->Row().ExternalBlobSize();
+
                     // We are only precharging, meaning that data will be out of order.
                     // Let's add it to ResultSet on the next iteration
-                    if (ShouldStopPrecharging(iter->GetExternalBlobsSize())) {
+                    if (ShouldStopPrecharging(prechargedSize)) {
                         break;
                     }
                     continue;
@@ -1047,7 +1051,9 @@ private:
                 }
             } else {
                 precharging = true;
-                if (ShouldStopPrecharging(iter->GetExternalBlobsSize())) {
+                prechargedSize += iter->Row().ExternalBlobSize();
+
+                if (ShouldStopPrecharging(prechargedSize)) {
                     break;
                 }
                 continue;
@@ -1107,7 +1113,6 @@ private:
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
 
-        // ######TODO: LastProcessedKeyInKeyReading
         auto lastKey = iter->GetKey().Cells();
         if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
             LastProcessedKey = TSerializedCellVec::Serialize(lastKey);

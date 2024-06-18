@@ -12,14 +12,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-TString ArcadiaSourceRoot() {
-    if (const auto& sourceRoot = NPrivate::GetTestEnv().SourceRoot) {
-        return sourceRoot;
-    } else {
-        return GetArcadiaSourcePath();
-    }
-}
-
 TString GetStatic(const TString& filePath) {
     TString fullPath = SRC_("data/" + filePath);
 

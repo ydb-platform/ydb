@@ -161,6 +161,7 @@ runs:
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
+      if: always()
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |

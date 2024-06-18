@@ -113,7 +113,7 @@ VALUES
             )
 
             build_preset = os.environ.get("build_preset", None)
-            github_sha = os.environ.get("GITHUB_SHA", None)
+            github_sha = os.environ.get("commit_git_sha", None)
 
             if github_sha is not None:
                 git_commit_time_bytes = subprocess.check_output(

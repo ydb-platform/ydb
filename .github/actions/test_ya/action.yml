@@ -85,12 +85,12 @@ runs:
       shell: bash
       env:
         PR_NUMBER: ${{ github.event.number }}
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
         RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        export TESTMO_TOKEN="${{ inputs.testman_token }}"
         
         case "$BUILD_PRESET" in
           relwithdebinfo)
@@ -260,10 +260,11 @@ runs:
     - name: Unit test history upload results
       if: inputs.testman_token
       shell: bash
+      env:
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
         PROXY_ADDR=127.0.0.1:8888
-        export TESTMO_TOKEN="${{ inputs.testman_token }}"
 
         openssl req -x509 -newkey rsa:2048 \
           -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
@@ -287,8 +288,9 @@ runs:
     - name: Test history run complete
       if: always() && inputs.testman_token
       shell: bash
+      env:
+        TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
-        export TESTMO_TOKEN="${{ inputs.testman_token }}"
         testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
 
     - name: sync logs results to s3

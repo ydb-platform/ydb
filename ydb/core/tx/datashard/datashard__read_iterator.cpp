@@ -153,12 +153,6 @@ struct TShortTableInfo {
         // note that we don't have column names here, but
         // for cellvec we will not need them at all
         for (const auto& col: schema.Cols) {
-            // bool canHaveExternalBlobs = false;
-
-            // if (col.Group < schema.Families.size()) {
-            //     schema.Families[col.Group];
-            // }
-
             Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, "", col.IsKey(), false));
         }
     }

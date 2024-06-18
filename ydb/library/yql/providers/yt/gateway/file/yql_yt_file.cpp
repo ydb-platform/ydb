@@ -1290,7 +1290,7 @@ private:
     }
 
     TVector<std::pair<TString, TYtTableStatInfo::TPtr>> ExecuteTouch(const TYtSettings::TConstPtr& config, TSession& session, const TYtTouch& op) const {
-        auto cluster = op.DataSink().Cluster().Value();
+        auto cluster = op.DataSink().Cluster().StringValue();
         TVector<std::pair<TString, TYtTableStatInfo::TPtr>> outStat;
         for (auto table: op.Output()) {
             TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session.RandomProvider_->GenGuid());
@@ -1341,7 +1341,7 @@ private:
         NFs::Remove(path + ".attr");
     }
 
-    void WriteOutTables(TLambdaBuilder& builder, const TYtSettings::TConstPtr& config, TSession& session, TStringBuf cluster,
+    void WriteOutTables(TLambdaBuilder& builder, const TYtSettings::TConstPtr& config, TSession& session, const TString& cluster,
         const TVector<TYtOutTableInfo>& outTableInfos, IComputationGraph* compGraph) const
     {
         NYT::TNode outSpec = NYT::TNode::CreateList();
@@ -1363,11 +1363,11 @@ private:
         }
     }
 
-    void WriteOutTable(const TYtSettings::TConstPtr& config, TSession& session, TStringBuf cluster,
+    void WriteOutTable(const TYtSettings::TConstPtr& config, TSession& session, const TString& cluster,
         const TYtOutTableInfo& outTableInfo, TStringBuf binaryYson) const
     {
         auto outPath = Services_->GetTablePath(cluster, outTableInfo.Name, true);
-        session.DeleteAtFinalize(config, TString{cluster}, outPath);
+        session.DeleteAtFinalize(config, cluster, outPath);
         if (binaryYson) {
             TMemoryInput in(binaryYson);
             TOFStream of(outPath);
@@ -1384,12 +1384,14 @@ private:
             for (auto& a: outTableInfo.Meta->Attrs) {
                 attrs[a.first] = a.second;
             }
-            const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
+            const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
+            const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
             outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
-            attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
+
+            attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility, optimizeForScan ? outTableInfo.GetColumnGroups() : NYT::TNode{}).ToNode();
             TOFStream ofAttr(outPath + ".attr");
             NYson::TYsonWriter writer(&ofAttr, NYson::EYsonFormat::Pretty, ::NYson::EYsonType::Node);
             NYT::TNodeVisitor visitor(&writer);

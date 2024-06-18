@@ -481,10 +481,19 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
     RequestPoolsInformation();
+    std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            node.Ping();
+            if (node.GetTabletsTotal() > 0) {
+                node.Ping();
+            } else {
+                unimportantNodes.push_back(&node);
+            }
         }
+    }
+    for (auto* node : unimportantNodes) {
+        node->Ping();
     }
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;

@@ -21,7 +21,7 @@ TString ArcadiaSourceRoot() {
 }
 
 TString GetStatic(const TString& filePath) {
-    TString fullPath = ArcadiaSourceRoot() + "/ydb/core/kqp/ut/join/data/" + filePath;
+    TString fullPath = SRC_("data/" + filePath);
 
     std::ifstream file(fullPath);
     
@@ -180,11 +180,11 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    // Y_UNIT_TEST(Chain65Nodes) {
-    //     TChainConstructor chain(65);
-    //     chain.CreateTables();
-    //     chain.JoinTables();
-    // }
+    Y_UNIT_TEST(Chain65Nodes) {
+        TChainConstructor chain(65);
+        chain.CreateTables();
+        chain.JoinTables();
+    }
 
     Y_UNIT_TEST_TWIN(FiveWayJoin, StreamLookupJoin) {
         ExecuteJoinOrderTestDataQuery("queries/five_way_join.sql", StreamLookupJoin);

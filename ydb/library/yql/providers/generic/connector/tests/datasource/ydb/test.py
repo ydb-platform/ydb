@@ -39,6 +39,7 @@ class OneTimeWaiter:
         start = datetime.now()
 
         timeout = 60
+        # timeout = 120
         # timeout = 600
         while (datetime.now() - start).total_seconds() < timeout:
             self.actual_tables = set(self.docker_compose_helper.list_ydb_tables())
@@ -68,7 +69,6 @@ one_time_waiter = OneTimeWaiter(
         "count_NATIVE",
         "pushdown_NATIVE",
         "unsupported_types_NATIVE",
-        "json_NATIVE",
     ]
 )
 

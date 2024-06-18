@@ -150,18 +150,6 @@ set -ex
       (1, DATE("2024-01-01") - DATE("2023-01-01")),
       (2, DATE("2022-01-01") - DATE("2023-01-01"));
     COMMIT;
-
-    CREATE TABLE json_NATIVE (col_00_id Int32 NOT NULL, col_01_json Json NOT NULL, col_02_json_nullable Json, PRIMARY KEY (col_00_id));
-    COMMIT;
-    INSERT INTO json_NATIVE (col_00_id, col_01_json, col_02_json_nullable) VALUES
-      (
-        1, 
-        @@{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@, 
-        CAST(@@{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@ AS Json)
-      ),
-      (2, @@{ "TODO": "unicode" }@@, CAST(@@{ "TODO": "unicode" }@@AS Json)),
-      (3, @@{ }@@, NULL);
-    COMMIT;
   '
 
 echo $(date +"%T.%6N") "SUCCESS"

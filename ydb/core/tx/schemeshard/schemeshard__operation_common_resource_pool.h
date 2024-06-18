@@ -20,6 +20,8 @@ bool Validate(const NKikimrSchemeOp::TResourcePoolDescription& description, TStr
 
 TResourcePoolInfo::TPtr CreateResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, ui64 alterVersion);
 
+TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, const TResourcePoolInfo::TPtr oldResourcePoolInfo);
+
 }  // namespace NResourcePool
 
 class TResourcePoolSubOperation : public TSubOperation {
@@ -40,7 +42,7 @@ protected:
     void RegisterParentPathDependencies(const TOperationContext& context, const TPath& parentPath) const;
 
     void AdvanceTransactionStateToPropose(const TOperationContext& context, NIceDb::TNiceDb& db) const;
-    void PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) const;
+    void PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acll) const;
 };
 
 }  // namespace NKikimr::NSchemeShard

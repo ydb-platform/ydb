@@ -17,33 +17,29 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathExist);
     }
-/*
+
     Y_UNIT_TEST(CreateResourcePoolWithProperties) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, txId++, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "PostgreSQL"
-                Location: "localhost:5432"
-                Auth {
-                    Basic {
-                        Login: "my_login",
-                        PasswordSecretName: "password_secret"
-                    }
-                }
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
+                PoolId: ".resource_pools/MyResourcePool"
                 Properties {
                     Properties {
-                        key: "mdb_cluster_id",
-                        value: "id"
+                        key: "concurrent_query_limit",
+                        value: "10"
+                    }
+                    Properties {
+                        key: "query_cancel_after_seconds",
+                        value: "60"
                     }
                 }
             )", {NKikimrScheme::StatusAccepted});
 
-        env.TestWaitNotification(runtime, 100);
+        env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyResourcePool", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathExist);
     }
 
     Y_UNIT_TEST(DropResourcePool) {
@@ -51,24 +47,18 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, txId++, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
+                PoolId: ".resource_pools/MyResourcePool"
             )",{NKikimrScheme::StatusAccepted});
 
-        env.TestWaitNotification(runtime, 100);
-
-        TestLs(runtime, "/MyRoot/MyResourcePool", false, NLs::PathExist);
-
-        TestDropResourcePool(runtime, ++txId, "/MyRoot", "MyResourcePool");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyResourcePool", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathExist);
+
+        TestDropResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", "MyResourcePool");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathNotExist);
     }
 
     using TRuntimeTxFn = std::function<void(TTestBasicRuntime&, ui64)>;
@@ -99,24 +89,18 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         });
     }
 
-    Y_UNIT_TEST(DropTableTwice) {
+    Y_UNIT_TEST(DropResourcePoolTwice) {
         auto createFn = [](TTestBasicRuntime& runtime, ui64 txId) {
             TestCreateResourcePool(runtime, txId, "/MyRoot", R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+                PoolId: ".resource_pools/MyResourcePool"
             )");
         };
 
         auto dropFn = [](TTestBasicRuntime& runtime, ui64 txId) {
-            AsyncDropResourcePool(runtime, txId, "/MyRoot", "MyResourcePool");
+            AsyncDropResourcePool(runtime, txId, "/MyRoot/.resource_pools", "MyResourcePool");
         };
 
-        DropTwice("/MyRoot/MyResourcePool", createFn, dropFn);
+        DropTwice("/MyRoot/.resource_pools/MyResourcePool", createFn, dropFn);
     }
 
     Y_UNIT_TEST(ParallelCreateResourcePool) {
@@ -124,24 +108,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/DirA",R"(
-                Name: "MyResourcePool1"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        AsyncMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
+                PoolId: "MyResourcePool1"
             )");
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/DirA", R"(
-                Name: "MyResourcePool2"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                PoolId: "MyResourcePool2"
             )");
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
@@ -149,14 +121,14 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
 
-        TestDescribe(runtime, "/MyRoot/DirA/MyResourcePool1");
-        TestDescribe(runtime, "/MyRoot/DirA/MyResourcePool2");
+        TestDescribe(runtime, "/MyRoot/.resource_pools/MyResourcePool1");
+        TestDescribe(runtime, "/MyRoot/.resource_pools/MyResourcePool2");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools"),
                            {NLs::PathVersionEqual(7)});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/MyResourcePool1"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool1"),
                            {NLs::PathVersionEqual(2)});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/MyResourcePool2"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool2"),
                            {NLs::PathVersionEqual(2)});
     }
 
@@ -167,19 +139,13 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        TString dataSourceConfig = R"(
-                Name: "NilNoviSubLuna"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        TString resourcePoolConfig = R"(
+                PoolId: ".resource_pools/NilNoviSubLuna"
             )";
 
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", dataSourceConfig);
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", dataSourceConfig);
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", dataSourceConfig);
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
 
         ui64 sts[3];
         sts[0] = TestModificationResults(runtime, txId-2, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
@@ -188,13 +154,13 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         for (ui32 i=0; i<3; ++i) {
             if (sts[i] == ESts::StatusAlreadyExists) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/NilNoviSubLuna"),
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/NilNoviSubLuna"),
                                    {NLs::Finished,
                                     NLs::IsResourcePool});
             }
 
             if (sts[i] == ESts::StatusMultipleModifications) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/NilNoviSubLuna"),
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/NilNoviSubLuna"),
                                    {NLs::Finished,
                                     NLs::IsResourcePool});
             }
@@ -202,15 +168,13 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/NilNoviSubLuna"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/NilNoviSubLuna"),
                            {NLs::Finished,
                             NLs::IsResourcePool,
                             NLs::PathVersionEqual(2)});
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", dataSourceConfig, {ESts::StatusAlreadyExists});
-
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig, {ESts::StatusAlreadyExists});
     }
-
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
@@ -218,15 +182,10 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
+                PoolId: ".resource_pools/MyResourcePool"
             )");
+
         // Set ReadOnly
         SetSchemeshardReadOnlyMode(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
@@ -238,20 +197,14 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         // Check that describe works
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SubDirA"),
                            {NLs::Finished});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/MyResourcePool"),
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool"),
                            {NLs::Finished,
                             NLs::IsResourcePool});
 
         // Check that new modifications fail
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", {NKikimrScheme::StatusReadOnly});
         TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool2"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+                PoolId: ".resource_pools/MyResourcePool2"
             )", {NKikimrScheme::StatusReadOnly});
 
         // Disable ReadOnly
@@ -268,289 +221,105 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/DirA",R"(
-                Name: "MyResourcePool"
-                SourceType: "DataStream"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-            )", {{NKikimrScheme::StatusSchemeError, "External source with type DataStream was not found"}});
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/DirA",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-            )", {{NKikimrScheme::StatusSchemeError, "Authorization method isn't specified"}});
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/DirA", Sprintf(R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "%s"
-                Auth {
-                    None {
-                    }
-                }
-            )", TString{1001, 'a'}.c_str()), {{NKikimrScheme::StatusSchemeError, "Maximum length of location must be less or equal equal to 1000 but got 1001"}});
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/DirA", Sprintf(R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Installation: "%s"
-                Auth {
-                    None {
-                    }
-                }
-            )", TString{1001, 'a'}.c_str()), {{NKikimrScheme::StatusSchemeError, "Maximum length of installation must be less or equal equal to 1000 but got 1001"}});
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/DirA",R"(
-                Name: ""
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
+                PoolId: "AnotherDir/MyResourcePool"
+            )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.resource_pools"}});
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
+                PoolId: "AnotherDir/MyResourcePool"
+            )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.resource_pools"}});
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
+                PoolId: ""
             )", {{NKikimrScheme::StatusSchemeError, "error: path part shouldn't be empty"}});
     }
 
-    Y_UNIT_TEST(PreventDeletionOfDependentDataSources) {
+    Y_UNIT_TEST(AlterResourcePool) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, txId++, "/MyRoot",R"(
-                Name: "ResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
+                PoolId: ".resource_pools/MyResourcePool"
+                Properties {
+                    Properties {
+                        key: "concurrent_query_limit",
+                        value: "10"
+                    }
+                    Properties {
+                        key: "query_count_limit",
+                        value: "50"
                     }
                 }
-            )", {NKikimrScheme::StatusAccepted});
-
-        env.TestWaitNotification(runtime, 100);
-
-        TestLs(runtime, "/MyRoot/ResourcePool", false, NLs::PathExist);
-
-        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
-                Name: "ExternalTable"
-                SourceType: "General"
-                DataSourcePath: "/MyRoot/ResourcePool"
-                Location: "/"
-                Columns { Name: "key" Type: "Uint64" }
-            )", {NKikimrScheme::StatusAccepted});
-
-        env.TestWaitNotification(runtime, txId - 1);
-
-        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
-
-
-        TestDropResourcePool(runtime, ++txId, "/MyRoot", "ResourcePool",
-                {{NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: /MyRoot/ExternalTable"}});
-        env.TestWaitNotification(runtime, txId);
-
-        TestLs(runtime, "/MyRoot/ResourcePool", false, NLs::PathExist);
-    }
-
-    Y_UNIT_TEST(RemovingReferencesFromDataSources) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateResourcePool(runtime, txId++, "/MyRoot",R"(
-                Name: "ResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-            )", {NKikimrScheme::StatusAccepted});
-
-        env.TestWaitNotification(runtime, 100);
-
-        TestLs(runtime, "/MyRoot/ResourcePool", false, NLs::PathExist);
-
-        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
-                Name: "ExternalTable"
-                SourceType: "General"
-                DataSourcePath: "/MyRoot/ResourcePool"
-                Location: "/"
-                Columns { Name: "key" Type: "Uint64" }
-            )", {NKikimrScheme::StatusAccepted});
-
-        env.TestWaitNotification(runtime, txId - 1);
-
-        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
-
-        TestDropExternalTable(runtime, ++txId, "/MyRoot", "ExternalTable",
-            {NKikimrScheme::StatusAccepted});
-
-        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
-
-        TestDropResourcePool(runtime, ++txId, "/MyRoot", "ResourcePool",
-                {NKikimrScheme::StatusAccepted});
-        env.TestWaitNotification(runtime, txId);
-
-        TestLs(runtime, "/MyRoot/ResourcePool", false, NLs::PathNotExist);
-    }
-
-    Y_UNIT_TEST(ReplaceResourcePoolIfNotExists) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
-        ui64 txId = 100;
-
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-                ReplaceIfExists: true
             )",{NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
+        NKikimrSchemeOp::TResourcePoolProperties properties;
+        properties.MutableProperties()->insert({"concurrent_query_limit", "10"});
+        properties.MutableProperties()->insert({"query_count_limit", "50"});
+
         {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/MyResourcePool");
+            auto describeResult =  DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool");
             TestDescribeResult(describeResult, {NLs::PathExist});
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetPoolId(), "MyResourcePool");
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
-            UNIT_ASSERT_EQUAL(resourcePoolDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
         }
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_new_bucket"
-                Auth {
-                    None {
+        TestAlterResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                PoolId: "MyResourcePool"
+                Properties {
+                    Properties {
+                        key: "concurrent_query_limit",
+                        value: "20"
+                    }
+                    Properties {
+                        key: "query_cancel_after_seconds",
+                        value: "60"
                     }
                 }
-                ReplaceIfExists: true
             )",{NKikimrScheme::StatusAccepted});
+
         env.TestWaitNotification(runtime, txId);
 
+        properties.MutableProperties()->find("concurrent_query_limit")->second = "20";
+        properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+
         {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/MyResourcePool");
+            auto describeResult =  DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool");
             TestDescribeResult(describeResult, {NLs::PathExist});
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetPoolId(), "MyResourcePool");
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetLocation(), "https://s3.cloud.net/my_new_bucket");
-            UNIT_ASSERT_EQUAL(resourcePoolDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
         }
     }
 
-    Y_UNIT_TEST(CreateResourcePoolShouldFailIfSuchEntityAlreadyExists) {
+    Y_UNIT_TEST(AlterResourcePoolShouldFailIfSuchEntityNotExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-            )",{NKikimrScheme::StatusAccepted});
-
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
         env.TestWaitNotification(runtime, txId);
 
-        {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/MyResourcePool");
-            TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
-            const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetSourceType(), "ObjectStorage");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
-            UNIT_ASSERT_EQUAL(resourcePoolDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
-        }
-
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_new_bucket"
-                Auth {
-                    None {
+        TestAlterResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                PoolId: "MyResourcePool"
+                Properties {
+                    Properties {
+                        key: "concurrent_query_limit",
+                        value: "20"
                     }
                 }
-            )",{NKikimrScheme::StatusAlreadyExists});
-        env.TestWaitNotification(runtime, txId);
-
-        {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/MyResourcePool");
-            TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
-            const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetSourceType(), "ObjectStorage");
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
-            UNIT_ASSERT_EQUAL(resourcePoolDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
-        }
-    }
-
-    Y_UNIT_TEST(ReplaceExternalDataStoreShouldFailIfEntityOfAnotherTypeWithSameNameExists) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
-        ui64 txId = 100;
-
-        TestCreateView(runtime, ++txId, "/MyRoot", R"(
-                Name: "UniqueName"
-                QueryText: "Some query"
-            )", {NKikimrScheme::StatusAccepted}
-        );
-        env.TestWaitNotification(runtime, txId);
-
-        TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
-
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "UniqueName"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-                ReplaceIfExists: true
-            )",{{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
+            )",{NKikimrScheme::StatusPathDoesNotExist});
 
         env.TestWaitNotification(runtime, txId);
     }
-
-    Y_UNIT_TEST(ReplaceResourcePoolIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
-        ui64 txId = 100;
-
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                Name: "MyResourcePool"
-                SourceType: "ObjectStorage"
-                Location: "https://s3.cloud.net/my_bucket"
-                Auth {
-                    None {
-                    }
-                }
-                ReplaceIfExists: true
-            )",{{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
-
-        env.TestWaitNotification(runtime, txId);
-
-        TestLs(runtime, "/MyRoot/MyResourcePool", false, NLs::PathNotExist);
-    }
-*/
 }

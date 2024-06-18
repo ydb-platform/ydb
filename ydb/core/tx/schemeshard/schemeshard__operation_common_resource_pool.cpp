@@ -38,7 +38,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
     const TString& resourcePoolsDir = JoinPath({parentPath.GetDomainPathString(), ".resource_pools"});
     if (parentPath.PathString() != resourcePoolsDir) {
-        result->SetError(NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder() << "Resource pools shoud be placed in " << resourcePoolsDir);
+        result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Resource pools shoud be placed in " << resourcePoolsDir);
         return false;
     }
 
@@ -59,6 +59,19 @@ TResourcePoolInfo::TPtr CreateResourcePool(const NKikimrSchemeOp::TResourcePoolD
     externalDataSoureInfo->AlterVersion = alterVersion;
     externalDataSoureInfo->Properties.CopyFrom(description.GetProperties());
     return externalDataSoureInfo;
+}
+
+TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, const TResourcePoolInfo::TPtr oldResourcePoolInfo) {
+    TResourcePoolInfo::TPtr resourcePoolInfo = CreateResourcePool(description, oldResourcePoolInfo->AlterVersion + 1);
+
+    auto& properties = *resourcePoolInfo->Properties.MutableProperties();
+    for (const auto& [property, value] : oldResourcePoolInfo->Properties.GetProperties()) {
+        if (!properties.contains(property)) {
+            properties.insert({property, value});
+        }
+    }
+
+    return resourcePoolInfo;
 }
 
 }  // namespace NResourcePool
@@ -137,6 +150,9 @@ void TResourcePoolSubOperation::AdvanceTransactionStateToPropose(const TOperatio
 void TResourcePoolSubOperation::PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) const {
     const auto& resourcePoolPathId = resourcePoolPath->PathId;
 
+    if (!context.SS->ResourcePools.contains(resourcePoolPathId)) {
+        context.SS->IncrementPathDbRefCount(resourcePoolPathId);
+    }
     context.SS->ResourcePools[resourcePoolPathId] = resourcePoolInfo;
 
     if (!acl.empty()) {

@@ -122,7 +122,7 @@ public:
 
         const auto& oldResourcePoolInfo = context.SS->ResourcePools.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldResourcePoolInfo);
-        const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, oldResourcePoolInfo->AlterVersion + 1);
+        const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::ModifyResourcePool(resourcePoolDescription, oldResourcePoolInfo);
         Y_ABORT_UNLESS(resourcePoolInfo);
 
         AddPathInSchemeShard(result, dstPath);

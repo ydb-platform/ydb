@@ -917,6 +917,7 @@ namespace NSchemeShardUT_Private {
 
     // resource pool
     GENERIC_HELPERS(CreateResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableCreateResourcePool)
+    GENERIC_HELPERS(AlterResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableCreateResourcePool)
     GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 

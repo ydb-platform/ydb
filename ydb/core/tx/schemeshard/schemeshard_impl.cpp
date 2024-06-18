@@ -2969,6 +2969,7 @@ void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, cons
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ResourcePool::AlterVersion>{resourcePool->AlterVersion},
         NIceDb::TUpdate<Schema::ResourcePool::Properties>{resourcePool->Properties.SerializeAsString()}
     );
 }

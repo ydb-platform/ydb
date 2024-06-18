@@ -275,6 +275,7 @@ namespace NSchemeShardUT_Private {
 
     // resource pool
     GENERIC_HELPERS(CreateResourcePool);
+    GENERIC_HELPERS(AlterResourcePool);
     GENERIC_HELPERS(DropResourcePool);
     DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 

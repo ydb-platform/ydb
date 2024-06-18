@@ -133,7 +133,7 @@ private:
     }
 
     void CreateTransaction(const TOperationContext& context, const TPathId& resourcePoolPathId) const {
-        TTxState& txState = TBase::CreateTransaction(context, resourcePoolPathId, TTxState::TxDropExternalDataSource);
+        TTxState& txState = TBase::CreateTransaction(context, resourcePoolPathId, TTxState::TxDropResourcePool);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
     }
@@ -183,8 +183,8 @@ public:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         auto guard = context.DbGuard();
-        CreateTransaction(context, dstPath.Base()->PathId);
         PersistDropResourcePool(context, dstPath);
+        CreateTransaction(context, dstPath.Base()->PathId);
         DropResourcePoolPathElement(dstPath);
 
         context.OnComplete.ActivateTx(OperationId);

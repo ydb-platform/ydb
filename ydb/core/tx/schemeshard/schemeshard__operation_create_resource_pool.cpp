@@ -119,11 +119,6 @@ private:
         return resourcePool;
     }
 
-    void PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) const {
-        TBase::PersistResourcePool(context, db, resourcePoolPath, resourcePoolInfo, acl);
-        context.SS->IncrementPathDbRefCount(resourcePoolPath->PathId);
-    }
-
     static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
         dstPath.DomainInfo()->IncPathsInside();
         parentPath.Base()->IncAliveChildren();

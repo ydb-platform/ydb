@@ -165,6 +165,7 @@ runs:
         export branch_to_compare="main" 
         export yellow_treshold=102400
         export red_treshold=2097152 
+        export commit_git_sha="$(git rev-parse HEAD)"
 
         python3 -m pip install ydb ydb[yc] humanize
 

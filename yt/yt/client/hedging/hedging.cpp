@@ -6,6 +6,7 @@
 #include "rpc.h"
 
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/queue_transaction.h>
 
 #include <yt/yt/client/misc/method_helpers.h>
 
@@ -171,6 +172,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
     UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortJob, (NJobTrackerClient::TJobId, const TAbortJobOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, DumpJobProxyLog, (NJobTrackerClient::TJobId, NJobTrackerClient::TOperationId, const NYPath::TYPath&, const TDumpJobProxyLogOptions&));
     UNSUPPORTED_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (const TGetClusterMetaOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, CheckClusterLiveness, (const TCheckClusterLivenessOptions&));
     UNSUPPORTED_METHOD(TFuture<int>, BuildSnapshot, (const TBuildSnapshotOptions&));
@@ -224,7 +226,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, StartPipeline, (const TYPath&, const TStartPipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, StopPipeline, (const TYPath&, const TStopPipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
-    UNSUPPORTED_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (const TYPath&, const TGetPipelineStatusOptions&));
+    UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
 
 private:

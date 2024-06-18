@@ -60,18 +60,13 @@ void SetCurrentAuthenticationIdentity(const TAuthenticationIdentity* identity)
     *GetCurrentAuthenticationIdentityPtr() = identity;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TAuthenticationIdentity& value, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TAuthenticationIdentity& value, TStringBuf /*spec*/)
 {
     builder->AppendFormat("{User: %v", value.User);
     if (!value.UserTag.Empty() && value.UserTag != value.User) {
         builder->AppendFormat(", UserTag: %v", value.UserTag);
     }
     builder->AppendChar('}');
-}
-
-TString ToString(const TAuthenticationIdentity& value)
-{
-    return ToStringViaBuilder(value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

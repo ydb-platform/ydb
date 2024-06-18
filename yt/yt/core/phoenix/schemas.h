@@ -13,8 +13,6 @@ struct TFieldSchema
 {
     TString Name;
     TFieldTag Tag;
-    int MinVersion;
-    int MaxVersion;
     bool Deprecated;
 
     REGISTER_YSON_STRUCT(TFieldSchema);

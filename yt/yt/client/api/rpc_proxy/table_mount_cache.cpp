@@ -57,6 +57,7 @@ private:
                 auto primarySchema = NYT::FromProto<NTableClient::TTableSchemaPtr>(rsp->schema());
                 tableInfo->Schemas[ETableSchemaKind::Primary] = primarySchema;
                 tableInfo->Schemas[ETableSchemaKind::Write] = primarySchema->ToWrite();
+                tableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer] = primarySchema->ToWriteViaQueueProducer();
                 tableInfo->Schemas[ETableSchemaKind::VersionedWrite] = primarySchema->ToVersionedWrite();
                 tableInfo->Schemas[ETableSchemaKind::Delete] = primarySchema->ToDelete();
                 tableInfo->Schemas[ETableSchemaKind::Query] = primarySchema->ToQuery();

@@ -22,6 +22,7 @@ using namespace NCypressClient;
 using namespace NApi;
 using namespace NYTree;
 using namespace NYPath;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -492,18 +493,19 @@ void TTransaction::ModifyRows(
     }
 }
 
-TFuture<void> TTransaction::AdvanceConsumer(
+TFuture<void> TTransaction::AdvanceQueueConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,
     std::optional<i64> oldOffset,
     i64 newOffset,
-    const TAdvanceConsumerOptions& options)
+    const TAdvanceQueueConsumerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
     THROW_ERROR_EXCEPTION_IF(newOffset < 0, "Queue consumer offset %v cannot be negative", newOffset);
 
+    // COMPAT(nadya73): Use AdvaceConsumer (not AdvanceQueueConsumer) for compatibility with old clusters.
     auto req = Proxy_.AdvanceConsumer();
     SetTimeoutOptions(*req, options);
 
@@ -523,6 +525,60 @@ TFuture<void> TTransaction::AdvanceConsumer(
     req->set_new_offset(newOffset);
 
     return req->Invoke().As<void>();
+}
+
+TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TString& sessionId,
+    i64 epoch,
+    NTableClient::TNameTablePtr nameTable,
+    TSharedRange<NTableClient::TUnversionedRow> rows,
+    const TPushQueueProducerOptions& options)
+{
+    ValidateTabletTransactionId(GetId());
+
+    THROW_ERROR_EXCEPTION_IF(epoch < 0,
+        "Epoch number %v cannot be negative", epoch);
+    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && *options.SequenceNumber < 0,
+        "Sequence number %v cannot be negative", *options.SequenceNumber);
+
+    auto req = Proxy_.PushQueueProducer();
+    SetTimeoutOptions(*req, options);
+    if (options.SequenceNumber) {
+        req->set_sequence_number(*options.SequenceNumber);
+    }
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.producer_path", ToString(producerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+        req->TracingTags().emplace_back("yt.session_id", ToString(sessionId));
+        req->TracingTags().emplace_back("yt.epoch", ToString(epoch));
+    }
+
+    ToProto(req->mutable_transaction_id(), GetId());
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+
+    ToProto(req->mutable_session_id(), sessionId);
+    req->set_epoch(epoch);
+
+    if (options.UserMeta) {
+        ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
+    }
+
+    req->Attachments() = SerializeRowset(
+        nameTable,
+        MakeRange(rows),
+        req->mutable_rowset_descriptor());
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
+        return TPushQueueProducerResult{
+            .LastSequenceNumber = rsp->last_sequence_number(),
+            .SkippedRowCount = rsp->skipped_row_count(),
+        };
+    }));
 }
 
 TFuture<ITransactionPtr> TTransaction::StartTransaction(

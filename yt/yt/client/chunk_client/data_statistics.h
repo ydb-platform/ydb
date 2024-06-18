@@ -33,7 +33,6 @@ void SetDataStatisticsField(TDataStatistics& statistics, TStringBuf key, i64 val
 
 void FormatValue(TStringBuilderBase* builder, const TDataStatistics& statistics, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics, TStringBuf spec);
-TString ToString(const TDataStatistics& statistics);
 
 } // namespace NProto
 

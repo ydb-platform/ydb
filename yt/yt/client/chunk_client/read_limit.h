@@ -80,7 +80,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLegacyReadLimit& limit);
 void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf spec);
 
 bool IsTrivial(const TLegacyReadLimit& limit);
@@ -180,7 +179,6 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TReadLimit& readLimit);
 void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf spec);
 
 void ToProto(NProto::TReadLimit* protoReadLimit, const TReadLimit& readLimit);

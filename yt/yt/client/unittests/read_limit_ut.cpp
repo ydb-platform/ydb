@@ -61,7 +61,7 @@ TEST(TLegacyReadRangeTest, Simple2)
 TEST(TReadLimitTest, ProtobufConversion)
 {
     TReadLimit readLimit;
-    auto keyBound = TOwningKeyBound::FromRow(/* prefix */MakeRow({1, 42}), /* isUpper */true, /* isInclusive */true);
+    auto keyBound = TOwningKeyBound::FromRow(/* prefix */ MakeRow({1, 42}), /* isUpper */ true, /* isInclusive */ true);
     readLimit.KeyBound() = keyBound;
     readLimit.SetRowIndex(1);
     readLimit.SetOffset(2);
@@ -71,7 +71,7 @@ TEST(TReadLimitTest, ProtobufConversion)
     NProto::TReadLimit protoReadLimit;
     ToProto(&protoReadLimit, readLimit);
 
-    TReadLimit newReadLimit(protoReadLimit, /* isUpper */true);
+    TReadLimit newReadLimit(protoReadLimit, /* isUpper */ true);
 
     EXPECT_EQ(newReadLimit.KeyBound(), keyBound);
     EXPECT_EQ(newReadLimit.GetRowIndex(), 1);
@@ -83,7 +83,7 @@ TEST(TReadLimitTest, ProtobufConversion)
 TEST(TReadLimitTest, LegacyKey)
 {
     TReadLimit readLimit;
-    auto keyBound = TOwningKeyBound::FromRow(/* prefix */MakeRow({1, 42}), /* isInclusive */true, /* isUpper */true);
+    auto keyBound = TOwningKeyBound::FromRow(/* prefix */ MakeRow({1, 42}), /* isInclusive */ true, /* isUpper */ true);
     readLimit.KeyBound() = keyBound;
     readLimit.SetRowIndex(1);
     readLimit.SetOffset(2);
@@ -96,7 +96,7 @@ TEST(TReadLimitTest, LegacyKey)
     protoReadLimit.clear_key_bound_prefix();
     protoReadLimit.clear_key_bound_is_inclusive();
 
-    TReadLimit newReadLimit(protoReadLimit, /* isUpper */true, /* keyLength */2);
+    TReadLimit newReadLimit(protoReadLimit, /* isUpper */ true, /* keyLength */ 2);
 
     EXPECT_EQ(newReadLimit.KeyBound(), keyBound);
     EXPECT_EQ(newReadLimit.GetRowIndex(), 1);
@@ -149,17 +149,17 @@ TEST(TReadLimitTest, Trivial)
     NProto::TReadLimit protoReadLimit;
     ToProto(&protoReadLimit, readLimit);
 
-    TReadLimit newReadLimit(protoReadLimit, /* isUpper */true);
+    TReadLimit newReadLimit(protoReadLimit, /* isUpper */ true);
     EXPECT_TRUE(newReadLimit.IsTrivial());
 }
 
 TEST(TReadRangeTest, ProtobufConversion)
 {
     TReadRange readRange;
-    auto lowerKeyBound = TOwningKeyBound::FromRow(/* prefix */MakeRow({1, 42}), /* isInclusive */true,  /* isUpper */false);
+    auto lowerKeyBound = TOwningKeyBound::FromRow(/* prefix */ MakeRow({1, 42}), /* isInclusive */ true,  /* isUpper */ false);
     readRange.LowerLimit().KeyBound() = lowerKeyBound;
     readRange.LowerLimit().SetRowIndex(1);
-    auto upperKeyBound = TOwningKeyBound::FromRow(/* prefix */MakeRow({12, 13}), /* isInclusive */true, /* isUpper */true);
+    auto upperKeyBound = TOwningKeyBound::FromRow(/* prefix */ MakeRow({12, 13}), /* isInclusive */ true, /* isUpper */ true);
     readRange.UpperLimit().KeyBound() = upperKeyBound;
     readRange.UpperLimit().SetRowIndex(2);
 

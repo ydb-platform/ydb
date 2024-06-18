@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <vector>
 
 namespace NYT::NProfiling {
@@ -219,7 +221,7 @@ struct TSensorOptions
     bool IsCompatibleWith(const TSensorOptions& other) const;
 };
 
-TString ToString(const TSensorOptions& options);
+void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

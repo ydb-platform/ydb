@@ -28,11 +28,6 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCardCacheKey& ke
         key.FetchOptions);
 }
 
-TString ToString(const TReplicationCardCacheKey& key)
-{
-    return ToStringViaBuilder(key);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

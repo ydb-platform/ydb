@@ -1758,6 +1758,27 @@ TEST(TYsonStructTest, TestOptionalNoInit)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestNonLiteralStruct
+{
+    TTestNonLiteralStruct()
+    { }
+};
+
+class TTestNonLiteralStructSerializer
+    : public virtual TExternalizedYsonStruct
+{
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestNonLiteralStruct, TTestNonLiteralStructSerializer);
+
+    static void Register(TRegistrar)
+    { }
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestNonLiteralStruct, TTestNonLiteralStructSerializer);
+
+static_assert(CExternallySerializable<TTestNonLiteralStruct>);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTestTraitConfig
 {
     int Field1;

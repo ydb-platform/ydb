@@ -11,11 +11,10 @@ PY3_LIBRARY()
     PEERDIR(
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
-        contrib/python/PyJWT
         contrib/python/requests
         library/python/testing/yatest_common
         ydb/public/sdk/python
-        ydb/public/api/client/yc_public/iam
+        ydb/tests/oss/ydb_sdk_import
     )
 
 END()

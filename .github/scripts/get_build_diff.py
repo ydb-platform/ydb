@@ -61,14 +61,14 @@ def main():
             color = "green"
 
         comment = (
-            f"[merge:{current_pr_commit_sha[:8]}]({current_url}) ydbd size {human_readable_size} **{sign}{human_readable_size_diff} {diff_perc}%%**  vs build [{branch}:{main_github_sha[:8]}]({main_url})\n\n"
+            f"merge: {current_pr_commit_sha} ydbd size {human_readable_size} **{sign}{human_readable_size_diff} {sign}{diff_perc}%%** vs build {branch}: {main_github_sha}\n\n"
             "<details><summary>Build size details</summary><p>\n\n"
-            f"{branch}:{main_github_sha[:8]} ydbd build size:\n"
-            f"  - binary size {format_number(main_size_bytes)} Bytes \n"
-            f"  - stripped binary size {format_number(main_size_stripped_bytes)} Bytes\n\n"
-            f"merge:{current_pr_commit_sha[:8]} ydbd build size:\n"
-            f"  - binary size {format_number(current_size_bytes)} Bytes \n"
-            f"  - stripped binary size {format_number(current_size_stripped_bytes)} Bytes\n\n"
+            f"{branch}: {main_github_sha} ydbd build size:\n"
+            f"  - binary size **{format_number(main_size_bytes)}** Bytes \n"
+            f"  - stripped binary size **{format_number(main_size_stripped_bytes)}** Bytes\n\n"
+            f"merge: {current_pr_commit_sha} ydbd build size:\n"
+            f"  - binary size **{format_number(current_size_bytes)}** Bytes \n"
+            f"  - stripped binary size **{format_number(current_size_stripped_bytes)}** Bytes\n\n"
             "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n\n"
             "</p></details>"
         )

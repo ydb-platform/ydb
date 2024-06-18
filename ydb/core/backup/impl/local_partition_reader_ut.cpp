@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             auto* readResponse = new TEvPersQueue::TEvResponse;
             readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-            auto& cmdReadResult = *getOffsetResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
+            auto& cmdReadResult = *readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
             auto& readResult1 = *cmdReadResult.AddResult();
             NKikimrPQClient::TDataChunk msg1;
             msg1.SetData(Sprintf("1-%d", i));

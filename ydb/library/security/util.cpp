@@ -7,45 +7,39 @@
 
 namespace NKikimr {
 
-namespace {
-TString MaskString(TStringBuf str) {
+TString MaskTicket(TStringBuf token) {
     TStringBuilder mask;
-    if (str.size() >= 16) {
-        mask << str.substr(0, 4);
+    if (token.size() >= 16) {
+        mask << token.substr(0, 4);
         mask << "****";
-        mask << str.substr(str.size() - 4, 4);
+        mask << token.substr(token.size() - 4, 4);
     } else {
         mask << "****";
     }
     mask << " (";
-    mask << Sprintf("%08X", Crc32c(str.data(), str.size()));
+    mask << Sprintf("%08X", Crc32c(token.data(), token.size()));
     mask << ")";
     return mask;
-}
-}
-
-TString MaskTicket(TStringBuf token) {
-    return MaskString(token);
 }
 
 TString MaskTicket(const TString& token) {
     return MaskTicket(TStringBuf(token));
 }
 
-TString MaskCertificate(TStringBuf certificate) {
-    size_t beginCertificateContent = 0;
-    if (size_t pos = certificate.find('\n'); pos != TStringBuf::npos) {
-        beginCertificateContent = pos + 1;
+TString PrintCertificateSuffix(TStringBuf certificate) {
+    size_t endPos = certificate.rfind("\n-----END");
+    if (endPos != TStringBuf::npos && endPos > 0) {
+        size_t startPos = certificate.rfind("\n", endPos - 1);
+        if (startPos != TStringBuf::npos) {
+            size_t len = std::min(endPos - startPos - 1, 16UL);
+            return TString(certificate.substr(endPos - len, len));
+        }
     }
-    size_t endCertificateContent = beginCertificateContent;
-    if (size_t pos = certificate.rfind("\n-----END"); pos != TStringBuf::npos) {
-        endCertificateContent = pos;
-    }
-    return MaskString(certificate.substr(beginCertificateContent, endCertificateContent - beginCertificateContent));
+    return "certificate";
 }
 
-TString MaskCertificate(const TString& token) {
-    return MaskCertificate(TStringBuf(token));
+TString PrintCertificateSuffix(const TString& certificate) {
+    return PrintCertificateSuffix(TStringBuf(certificate));
 }
 
 } // namespace NKikimr

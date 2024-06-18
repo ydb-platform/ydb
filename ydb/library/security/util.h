@@ -7,8 +7,8 @@ namespace NKikimr {
     TString MaskTicket(TStringBuf token);
     TString MaskTicket(const TString& token);
 
-    TString MaskCertificate(const TString& certificate);
-    TString MaskCertificate(TStringBuf certificate);
+    TString PrintCertificateSuffix(const TString& certificate);
+    TString PrintCertificateSuffix(TStringBuf certificate);
 
     // copy-pasted from <robot/library/utils/time_convert.h>
     template<typename Rep, typename Period>

@@ -36,7 +36,7 @@ The main role of database nodes is to run various [tablets](#tablet) and [actors
 
 #### Hybrid node {#hybrid-mode}
 
-A **hybrid node** is a process that simultaneously serves both roles of a [database](#database-node) and [storage](#storage-node) node. They are rarely used in production environments.
+A **hybrid node** is a process that simultaneously serves both roles of a [database](#database-node) and [storage](#storage-node) node. Hybrid nodes are often used for development purposes. For instance, you can run a container with a full-featured {{ ydb-short-name }} containing only one process, `ydbd`, in hybrid mode. They are rarely used in production environments.
 
 #### Static node {#static-node}
 
@@ -76,7 +76,9 @@ In {{ ydb-short-name }}, actors with the reliably persisted state are called [ta
 
 ### Tablet {#tablet}
 
-A **tablet** is one of {{ ydb-short-name }}'s primary building blocks and abstractions. It is an entity responsible for a relatively small (up to single-digit gigabytes) segment of user or system data. For example, a row-oriented user table is managed by one or more tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
+A **tablet** is one of {{ ydb-short-name }}'s primary building blocks and abstractions. It is an entity responsible for a relatively small segment of user or system data. Typically, a tablet manages up to single-digit gigabytes of data, but some kinds of tablets can handle more.
+
+For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#datashard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
 
 End users sending queries to a {{ ydb-short-name }} cluster aren't expected to know much about tablets, their kinds, or how they work, but it might still be helpful, for example, for performance optimizations.
 
@@ -97,7 +99,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Multi-version concurrency control {#mvcc}
 
-**Multi-version concurrency control** or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
+[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
 
 ### Topology {#topology}
 
@@ -189,7 +191,7 @@ A few terms related to federated queries are listed below. How {{ ydb-short-name
 
 #### External data source {#external-data-source}
 
-An **external data source** or **external connection** is a piece of metadata that describes how to connect to a supported external system for federated query execution.
+An **external data source** or **external connection** is a piece of metadata that describes how to connect to a supported external system for [federated query execution](#federated-queries).
 
 #### External table {#external-table}
 
@@ -197,7 +199,7 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 #### Secret {#secret}
 
-A **secret** is a sensitive piece of metadata that requires special handling. Typically, secrets are used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
+A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
 ### Folder {#folder}
 
@@ -512,4 +514,4 @@ MiniKQL is a low-level language. The system's end users only see queries in the 
 
 ### KiKiMR {#kikimr}
 
-**KiKiMR** is the legacy name of {{ ydb-short-name }} that was used before it became an [open-source product](https://github.com/ydb-platform/ydb). It can still be occasionally found in the source code, old articles and videos, etc.
+**KiKiMR** is the legacy name of {{ ydb-short-name }} that was used long before it became an [open-source product](https://github.com/ydb-platform/ydb). It can still be occasionally found in the source code, old articles and videos, etc.

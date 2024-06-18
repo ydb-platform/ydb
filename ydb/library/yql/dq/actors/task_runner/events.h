@@ -28,12 +28,12 @@ struct TTaskRunnerEvents {
 
         EvOutputChannelDataRequest,
         EvOutputChannelData,
-        
+
         EvInputChannelData,
         EvInputChannelDataAck,
-        
+
         // EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
-        EvContinueRun, 
+        EvContinueRun,
         EvRunFinished,
 
         EvSourceDataAck,

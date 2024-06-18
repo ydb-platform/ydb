@@ -369,4 +369,3 @@ protected:
 };
 
 } //namespace NYql::NDq
-

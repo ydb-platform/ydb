@@ -266,6 +266,7 @@ public:
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IMemoryQuotaManager::TPtr MemoryQuotaManager;

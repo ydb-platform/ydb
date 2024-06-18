@@ -27,7 +27,7 @@ TKqpScanComputeActor::TKqpScanComputeActor(const TActorId& executerId, ui64 txId
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-    : TBase(executerId, txId, task, std::move(asyncIoFactory), settings,
+    : TBase(executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
 {
@@ -180,7 +180,7 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 void TKqpScanComputeActor::DoBootstrap() {
     CA_LOG_D("EVLOGKQP START");
     NDq::TDqTaskRunnerContext execCtx;
-    execCtx.FuncRegistry = AppData()->FunctionRegistry;
+    execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;
     execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx, std::nullopt);
     execCtx.RandomProvider = TAppData::RandomProvider.Get();

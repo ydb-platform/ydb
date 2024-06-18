@@ -10,25 +10,29 @@ config = configparser.ConfigParser()
 config_file_path=f'{dir}/../config/ydb_qa_db.ini'
 config.read(config_file_path)  
 
-build_preset = os.environ.get("build_preset", "relwithdebinfo")
+build_preset = (os.environ.get("build_preset"))
+branch = (os.environ.get("branch_to_compare"))
 
 DATABASE_ENDPOINT=config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH=config["QA_DB"]["DATABASE_PATH"]
 
-def main():
-
+def get_build_size():
+    #os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="~/.ydb/my-robot-key.json"
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-        return 1
-    
+        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 0
+    else:
     # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
     # So, set up it locally
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
     sql = f"""
-        --!syntax_v1
+    --!syntax_v1
     select git_commit_time,github_sha,size_bytes,size_stripped_bytes,build_preset from binary_size 
-    where github_workflow like "Postcommit%" and build_preset="{build_preset}"
+    where 
+    github_workflow like "Postcommit%" and 
+    github_ref_name="{branch}" and 
+    build_preset="{build_preset}"
     order by git_commit_time desc
     limit 1;    
     """
@@ -54,11 +58,14 @@ def main():
                 try:
                     main_data
                 except NameError :
-                    print(f'Cant get binary size in var for main (undefined)')
-                    return 1
+                    print(f'Error: Cant get binary size in var for main (undefined)')
+                    return 0
 
-            print( f'sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
-            return 0
+            #print( f'main sizes:{main_data["github_sha"]}:{str(main_data["git_commit_time"])}:{str(main_data["size_bytes"])}:{str(main_data["size_stripped_bytes"])}')
+            return {"github_sha": main_data["github_sha"],
+                    "git_commit_time": str(main_data["git_commit_time"]),
+                    "size_bytes": str(main_data["size_bytes"]),
+                    "size_stripped_bytes": str(main_data["size_stripped_bytes"])}
 
 if __name__ == "__main__":
-    main()
+    get_build_size()

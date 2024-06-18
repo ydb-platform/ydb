@@ -12,11 +12,11 @@ config.read(config_file_path)
 
 YDBD_PATH = config["YDBD"]["YDBD_PATH"]
 
-def main():
+def get_build_size():
   
     if not os.path.exists(YDBD_PATH):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
-        print("{} not exists, skipping".format(YDBD_PATH))
+        print("Error: {} not exists, skipping".format(YDBD_PATH))
         return 0
 
     binary_size_bytes = subprocess.check_output(
@@ -29,11 +29,11 @@ def main():
     size_stripped_bytes=int(binary_size_stripped_bytes.decode("utf-8"))
     size_bytes=int(binary_size_bytes.decode("utf-8"))
     if binary_size_bytes and binary_size_stripped_bytes:
-        print(f'sizes:{size_bytes}:{size_stripped_bytes}')
-        return 0
+        return {"size_bytes":size_bytes,"size_stripped_bytes":size_stripped_bytes}
     else:
-        print(f'Cant get build size')
+        print(f'Error: Cant get build size')
         return 1
+ 
 
 if __name__ == "__main__":
-    exit(main())
+    get_build_size()

@@ -145,7 +145,10 @@ VALUES
             for column in FROM_ENV_COLUMNS:
                 value = os.environ.get(column.upper(), None)
                 parameters["$" + column] = sanitize_str(value)
-
+            
+            #workaround for https://github.com/ydb-platform/ydb/issues/5294
+            parameters["$github_sha"] = github_sha
+            
             print("Executing query:\n{}".format(text_query))
             print("With parameters:")
             for k, v in parameters.items():

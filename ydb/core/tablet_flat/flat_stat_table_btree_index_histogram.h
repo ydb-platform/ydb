@@ -46,7 +46,7 @@ public:
 
     struct TGetRowCount {
         static ui64 Get(const TChild& child) noexcept {
-            return child.RowCount;
+            return child.GetRowCount();
         }
     };
 
@@ -153,7 +153,7 @@ public:
             auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), index);
-            LoadedStateNodes.emplace_back(meta.PageId, meta.LevelCount, 0, meta.RowCount, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
+            LoadedStateNodes.emplace_back(meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
             ready &= SlicePart<TGetSize>(parts.back(), *part.Slices, LoadedStateNodes.back());
             endSize += parts.back().GetSize();
         }
@@ -446,8 +446,8 @@ private:
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
             auto& child = bTreeNode.GetChild(pos);
 
-            LoadedStateNodes.emplace_back(child.PageId, parent.Level - 1,
-                pos ? bTreeNode.GetChild(pos - 1).RowCount : parent.BeginRowId, child.RowCount,
+            LoadedStateNodes.emplace_back(child.GetPageId(), parent.Level - 1,
+                pos ? bTreeNode.GetChild(pos - 1).GetRowCount() : parent.BeginRowId, child.GetRowCount(),
                 pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
                 pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey,
                 pos ? TGetSize::Get(bTreeNode.GetChild(pos - 1)) : parent.BeginSize, TGetSize::Get(child));

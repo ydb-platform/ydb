@@ -73,3 +73,4 @@ Below is a correspondence table between PostgreSQL and {{ ydb-short-name }} type
 | `character` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html), string padded with spaces to the required length. |
 | `character varying` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html). |
 | `text` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html). |
+|`json`|`Optional<Json>`||

@@ -721,8 +721,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
 
         ModifyTopic(runtime, env, txId, [&](auto& scheme) {
             {
-                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
-                    ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+                partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+            }
+        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
+                partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                partitionStrategy->SetMaxPartitionCount(1);
             }
         });
 

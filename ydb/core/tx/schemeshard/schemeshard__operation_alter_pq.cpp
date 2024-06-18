@@ -175,6 +175,16 @@ public:
                 return nullptr;
             }
 
+            if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
+                && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
+                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 1 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
+                    errStr = TStringBuilder() << "Can`t disable autoscaling. Disabling autoscaling is a destructive operation, "
+                            << "after which all partitions will become active and the message order guarantee will be violated. "
+                            << "If you are sure of this, then set max_active_partitions to 1.";
+                    return nullptr;
+                }
+            }
+
             if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
                 alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
             }

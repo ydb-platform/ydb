@@ -34,7 +34,12 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 11U, ctx)) {
+        if (!EnsureArgsCount(*input, 12U, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& project = *input->Child(TSoSourceSettings::idx_Project);
+        if (!EnsureAtom(project, ctx)) {
             return TStatus::Error;
         }
 
@@ -59,12 +64,12 @@ public:
         }
         
         auto& from = *input->Child(TSoSourceSettings::idx_From);
-        if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from"sv, from, ctx)) {
+        if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from", from, ctx)) {
             return TStatus::Error;
         }
 
         auto& to = *input->Child(TSoSourceSettings::idx_To);
-        if (!EnsureAtom(to, ctx) || !ValidateDatetimeFormat("to"sv, to, ctx)) {
+        if (!EnsureAtom(to, ctx) || !ValidateDatetimeFormat("to", to, ctx)) {
             return TStatus::Error;
         }
 
@@ -106,11 +111,15 @@ public:
     }
 
     TStatus HandleSoObject(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 1U, ctx)) {
+        if (!EnsureArgsCount(*input, 2U, ctx)) {
             return TStatus::Error;
         }
 
-        // todo: check settings
+        auto& project = *input->Child(TSoObject::idx_Project);
+        if (!EnsureAtom(project, ctx)) {
+            return TStatus::Error;
+        }
+
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }

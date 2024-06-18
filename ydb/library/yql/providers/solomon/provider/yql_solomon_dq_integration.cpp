@@ -131,7 +131,7 @@ public:
             for (auto i = 0U; i < settingsRef.ChildrenSize(); ++i) {
                 if (settingsRef.Child(i)->Head().IsAtom("from"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "from"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
 
@@ -140,7 +140,7 @@ public:
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "to"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
 
@@ -149,7 +149,7 @@ public:
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "program"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
 
@@ -158,19 +158,22 @@ public:
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.disabled"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    downsamplingDisabled = FromString<bool>(value);
+                    if (!TryFromString<bool>(value, downsamplingDisabled)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.disabled must be true or false, but has " << value));
+                        return {};
+                    }
                     continue;
                 }
-                if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridaggregation"sv)) {
+                if (settingsRef.Child(i)->Head().IsAtom("downsampling.aggregation"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridaggregation"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
                     if (!IsIn({ "AVG"sv, "COUNT"sv, "DEFAULT_AGGREGATION"sv, "LAST"sv, "MAX"sv, "MIN"sv, "SUM"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has " << value));
                         return {};
                     }
                     downsamplingAggregation = value;
@@ -178,11 +181,11 @@ public:
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.fill"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.fill"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
                     if (!IsIn({ "NONE"sv, "NULL"sv, "PREVIOUS"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_fill must be one of NONE, NULL, PREVIOUS, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.fill must be one of NONE, NULL, PREVIOUS, but has " << value));
                         return {};
                     }
                     downsamplingFill = value;
@@ -190,7 +193,7 @@ public:
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.gridinterval"sv)) {
                     TStringBuf value;
-                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.gridinterval"sv, ctx, value)) {
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), "downsampling.grid_interval"sv, ctx, value)) {
                         return {};
                     }
                     ui32 intValue = 0;
@@ -201,10 +204,14 @@ public:
                     downsamplingGridSec = intValue;
                     continue;
                 }
+
+                ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "Unknown setting " << settingsRef.Child(i)->Head().Content()));
+                return {};
             }
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
+                    .Project(soReadObject.Object().Project())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -244,7 +251,7 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
         NSo::NProto::TDqSolomonSource source;
         source.SetEndpoint(clusterDesc->GetCluster());
-        source.SetProject("yq");
+        source.SetProject(settings.Project().StringValue());
 
         source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
         source.SetUseSsl(clusterDesc->GetUseSsl());

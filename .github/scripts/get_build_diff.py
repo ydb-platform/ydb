@@ -22,8 +22,6 @@ def main():
     red_treshold = int(os.environ.get("red_treshold"))
 
     branch = os.environ.get("branch_to_compare")
-    github_srv = os.environ.get("GITHUB_SERVER_URL")
-    repo_name = os.environ.get("GITHUB_REPOSITORY")
     current_pr_commit_sha = os.environ.get("commit_git_sha")
 
     current_sizes_result = get_current_build_size.get_build_size()
@@ -41,9 +39,6 @@ def main():
         diff_perc = Decimal(bytes_diff * 100 / main_size_bytes).quantize(
             Decimal(".001"), rounding=ROUND_HALF_UP
         )
-
-        main_url = f"{github_srv}/{repo_name}/commit/{main_github_sha}"
-        current_url = f"{github_srv}/{repo_name}/commit/{current_pr_commit_sha}"
 
         human_readable_size = bytes_to_human_iec(current_size_bytes)
         human_readable_size_diff = bytes_to_human_iec(bytes_diff)

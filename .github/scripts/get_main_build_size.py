@@ -18,7 +18,6 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def get_build_size():
-    # os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="~/.ydb/my-robot-key.json"
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"

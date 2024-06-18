@@ -423,6 +423,12 @@ public:
 
         auto& bucket = SpilledBuckets[CurrentBucketId];
 
+        for (size_t i = 0; i < KeyWidth; ++i) {
+            //jumping into unsafe world, refusing ownership
+            static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+        }
+        BufferForKeyAnsState.resize(0);
+
         
         return InMemoryProcessingState.TasteIt();
     }

@@ -202,7 +202,7 @@ namespace NKikimr {
 #ifdef UNPACK_LOCALSYNCDATA
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
                             parentId, std::move(msg)));
-                    return TSjOutcome::Actor(actor.Release(), true);
+                    return TSjOutcome::Actor(std::move(actor), true);
 #else
                     Y_UNUSED(parentId);
                     return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));
@@ -348,7 +348,7 @@ namespace NKikimr {
 #ifdef UNPACK_LOCALSYNCDATA
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
                             parentId, std::move(msg)));
-                    return TSjOutcome::Actor(actor.Release(), true);
+                    return TSjOutcome::Actor(std::move(actor), true);
 #else
                     Y_UNUSED(parentId);
                     return TSjOutcome::Event(Ctx->SyncerCtx->SkeletonId, std::move(msg));

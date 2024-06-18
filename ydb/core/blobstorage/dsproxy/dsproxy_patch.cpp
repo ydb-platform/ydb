@@ -582,9 +582,9 @@ public:
             GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
             if (worstNs * 2 > nextToWorstNs) {
                 SlowFlags[worstSubGroubIdx] = true;
-                Schedule(TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier / 1000), new TEvents::TEvWakeup(MovedPatchTag));
-                movedPatchDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier * 0.9 / 1000);
             }
+            Schedule(TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier / 1000), new TEvents::TEvWakeup(MovedPatchTag));
+            movedPatchDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier * 0.9 / 1000);
 
             if (HasSlowVDisk) {
                 TStackVec<ui32, TypicalDisksInSubring> goodDisks;
@@ -656,9 +656,9 @@ public:
         GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::GetFastRead, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
         if (worstNs * 2 > nextToWorstNs) {
             SlowFlags[worstSubGroubIdx] = true;
-            Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchStartWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchStartTag));
-            vpatchStartDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * VPatchStartWaitingMultiplier * 0.9 / 1000);
         }
+        Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchStartWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchStartTag));
+        vpatchStartDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * (VPatchStartWaitingMultiplier + VPatchDiffWaitingMultiplier) * 0.9 / 1000);
 
         for (ui32 idx = 0; idx < VDisks.size(); ++idx) {
             if (!SlowFlags[idx]) {
@@ -776,9 +776,9 @@ public:
         GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::GetFastRead, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
         if (worstNs * 2 > nextToWorstNs) {
             SlowFlags[worstSubGroubIdx] = true;
-            Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchDiffTag));
-            VPatchDiffDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier * 0.9 / 1000);
         }
+        Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchDiffTag));
+        VPatchDiffDeadline = Min(Deadline, TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier * 0.9 / 1000));
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
             return ContinueVPatchForMirror3dc();

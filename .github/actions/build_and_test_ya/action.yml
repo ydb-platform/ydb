@@ -162,88 +162,29 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 
-        python3 -m pip install ydb ydb[yc]
+        export branch_to_compare="main" 
+        export git_hash=$(git rev-parse --short "$GITHUB_SHA")
+        export yellow_treshold=102400
+        export red_treshold=2097152 
 
-        main_size_script=.github/scripts/get_main_build_size.py
-        current_size_script=.github/scripts/get_current_build_size.py 
+        python3 -m pip install ydb ydb[yc] humanize
+
+        get_sizes_comment_script=.github/scripts/get_build_diff.py
+        comment_raw=`$get_sizes_comment_script`
         
-        main_size_result_raw=`$main_size_script`
-        current_size_result_raw=`$current_size_script`
+        IFS=';;;'
+        read -ra comment_arr <<< "$comment_raw"
 
-        orange_treshold=102400
-        red_treshold=2097152
-
-        IFS=':'
-        read -ra main_sizes_result <<< "$main_size_result_raw"
-        read -ra current_sizes_result <<< "$current_size_result_raw"
-
-        bytesToHumanIEC() {
-            b=${1:-0}; d=''; s=0; S=(Bytes {K,M,G,T,E,P,Z,Y}iB)
-            while ((b > 1024)); do
-                d="$(printf ".%02d" $((b % 1024 * 100 / 1024)))"
-                b=$((b / 1024))
-                let s++
-            done
-            echo "$b$d ${S[$s]}"
-        }
-        format_number() {
-          echo "$1" | rev | sed 's/\(...\)/\1 /g' | rev | xargs
-        }
-
-        if [[ ${main_sizes_result[0]} == "sizes" && ${current_sizes_result[0]} == "sizes" ]]; then
-
-          main_github_sha=${main_sizes_result[1]} 
-          main_git_commit_time=${main_sizes_result[2]} 
-          main_size_bytes=${main_sizes_result[3]} 
-          main_size_stripped_bytes=${main_sizes_result[4]} 
-
-          current_size_bytes=${current_sizes_result[1]}
-          current_size_stripped_bytes=${current_sizes_result[2]}
-          current_pr_commit_sha=${{github.event.pull_request.head.sha}}
-
-          bytes_diff=$((current_size_bytes-main_size_bytes))
-          diff_perc=$(echo "scale=3; $bytes_diff*100/$main_size_bytes" | bc | sed -r 's/^(-?)\./\10./')
-
-          main_url="https://github.com/ydb-platform/ydb/commit/"$main_github_sha
-          current_url="https://github.com/ydb-platform/ydb/commit/"$current_pr_commit_sha
-
-          human_readable_size=`bytesToHumanIEC $current_size_bytes`
-          human_readable_size_diff=`bytesToHumanIEC $bytes_diff`
-
-          if [ "$bytes_diff" -ge "0" ]; then
-            sign="+"
-            if [ "$bytes_diff" -ge "$red_treshold" ]; then
-              color="red"
-            elif ["$bytes_diff" -ge "$orange_treshold" ]; then
-              color="yellow"
-            else
-              color="green"
-            fi
-          else
-            sign=""
-            color="green"
-          fi
-
-          comment="[Current:${current_pr_commit_sha:0:8}]($current_url) ydbd size $human_readable_size **$sign$human_readable_size_diff $diff_perc %%**  vs build [main:${main_github_sha:0:8}]($main_url)
-
-        <details><summary>YDBD build size details</summary><p>
-
-        [main:${main_github_sha:0:8}]($main_url) ydbd build size:
-          - binary size **$(format_number $main_size_bytes)** Bytes 
-          - stripped binary size **$(format_number $main_size_stripped_bytes)** Bytes
-
-        [current:${current_pr_commit_sha:0:8}]($current_url) ydbd build size:
-          - binary size **$(format_number $current_size_bytes)** Bytes 
-          - stripped binary size **$(format_number $current_size_stripped_bytes)** Bytes
-
-        [ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)  
-
-        </p></details>"
-        
+        printf "$comment"
+        if [[ ${comment_raw} != "Error"* ]];then
+          color=${comment_arr[0]}
+          replace=$color";;;"
+          comment=${comment_raw/$replace/""}
+          
           printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
-        
+
         else
-          echo "Skipped build size difference"
+          echo "Skipped build size difference, comment_raw = ${comment_raw}"
         fi
 
     - name: comment-if-cancel

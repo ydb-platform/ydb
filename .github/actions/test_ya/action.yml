@@ -316,7 +316,7 @@ runs:
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
-          --test-history-url $TEST_HISTORY_URL \
+          --test-history-url "$TEST_HISTORY_URL" \
           --test-log-url="$YA_TEST_LOG_URL" \
           --build-preset "$BUILD_PRESET" \
           --status-report-file statusrep.txt \

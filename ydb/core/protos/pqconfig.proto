@@ -416,7 +416,7 @@ message TPQTabletConfig {
         optional uint32 ScaleThresholdSeconds = 3 [default = 300];
         optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
         optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
-        required TPartitionStrategyType PartitionStrategyType = 6;
+        required TPartitionStrategyType PartitionStrategyType = 6 [default = DISABLED];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 

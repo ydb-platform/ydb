@@ -175,8 +175,8 @@ public:
                 return nullptr;
             }
 
-            if (!alterConfig.HasPartitionStrategy()) {
-                alterConfig.MutablePartitionStrategy()->CopyFrom(*tabletConfig->MutablePartitionStrategy());
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
             }
 
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());

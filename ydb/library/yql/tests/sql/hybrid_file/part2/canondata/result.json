@@ -57,9 +57,9 @@
     ],
     "test.test[action-subquery_merge_nested_subquery-default.txt-Debug]": [
         {
-            "checksum": "d32a3afdd03b6999f6e278e75caf9d06",
-            "size": 466,
-            "uri": "https://{canondata_backend}/1936842/51593b2a750dbb036388d012a30fa937edaab5f0/resource.tar.gz#test.test_action-subquery_merge_nested_subquery-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9b9bd9b5c87918ed2451269a9938d2c4",
+            "size": 620,
+            "uri": "https://{canondata_backend}/1942278/8b999765d5b3ee30766f09cb37b290aab0244d6e/resource.tar.gz#test.test_action-subquery_merge_nested_subquery-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-subquery_merge_nested_subquery-default.txt-Plan]": [

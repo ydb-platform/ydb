@@ -1,7 +1,7 @@
 (
 #comment
 (let mr_source (DataSource 'yt 'plato))
-(let x (Read! world mr_source (Key '('table (MrTableRange '""))) '('key) '()))
+(let x (Read! world mr_source (Key '('table (MrTableRange '"" (lambda '($i) (And (>= $i (String '"Input")) (<= $i (String '"Input~")))) '""))) '('key) '()))
 (let world (Left! x))
 (let table1 (Right! x))
 (let res_sink (DataSink 'result))

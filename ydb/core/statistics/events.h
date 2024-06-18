@@ -71,6 +71,10 @@ struct TEvStatistics {
 
         EvDeleteStatisticsQueryResponse,
 
+        EvScanTableAccepted,
+        EvGetScanStatus,
+        EvGetScanStatusResponse,
+
         EvEnd
     };
 
@@ -174,10 +178,28 @@ struct TEvStatistics {
         EvScanTable>
     {};
 
+    struct TEvScanTableAccepted : public TEventPB<
+        TEvScanTableAccepted,
+        NKikimrStat::TEvScanTableAccepted,
+        EvScanTableAccepted>
+    {};
+
     struct TEvScanTableResponse : public TEventPB<
         TEvScanTableResponse,
         NKikimrStat::TEvScanTableResponse,
         EvScanTableResponse>
+    {};
+
+    struct TEvGetScanStatus : public TEventPB<
+        TEvGetScanStatus,
+        NKikimrStat::TEvGetScanStatus,
+        EvGetScanStatus>
+    {};
+
+    struct TEvGetScanStatusResponse : public TEventPB<
+        TEvGetScanStatusResponse,
+        NKikimrStat::TEvGetScanStatusResponse,
+        EvGetScanStatusResponse>
     {};
 
 };

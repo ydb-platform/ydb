@@ -147,7 +147,7 @@ VALUES
                 parameters["$" + column] = sanitize_str(value)
             
             #workaround for https://github.com/ydb-platform/ydb/issues/5294
-            parameters["$github_sha"] = github_sha
+            parameters["$github_sha"] = sanitize_str(github_sha)
             
             print("Executing query:\n{}".format(text_query))
             print("With parameters:")

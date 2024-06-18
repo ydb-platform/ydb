@@ -104,8 +104,12 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         workloadManagerConfig.Pools.insert({"sample_pool_id", NWorkload::TWorkloadManagerConfig::TPoolConfig()});
         SetWorkloadManagerConfig(workloadManagerConfig);
 
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
         auto kikimr = TKikimrRunner(TKikimrSettings()
-            .SetEnableWorkloadManager(true)
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true)
             .SetEnableScriptExecutionOperations(true));
         auto db = kikimr.GetQueryClient();
 

@@ -241,6 +241,7 @@ public:
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             SessionId, QueryState->UserRequestContext->PoolId, QueryState->UserToken
         ));
+        QueryState->PlacedInWorkloadPool = true;
 
         Become(&TKqpSessionActor::QueuedState);
     }
@@ -452,7 +453,7 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId && AppData()->FeatureFlags.GetEnableWorkloadManager()) {
+        if (QueryState->UserRequestContext->PoolId) {
             PassRequestToWorkloadPool();
             return;
         }
@@ -461,6 +462,16 @@ public:
     }
 
     void HandleQueued(NWorkload::TEvContinueRequest::TPtr& ev) {
+        YQL_ENSURE(QueryState);
+
+        if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
+            LOG_N("Failed to place request in resource pool, feature flag is disabled");
+            QueryState->UserRequestContext->PoolId.clear();
+            QueryState->PlacedInWorkloadPool = false;
+            CompileQuery();
+            return;
+        }
+
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
@@ -468,11 +479,7 @@ public:
             return;
         }
 
-        YQL_ENSURE(QueryState);
-        QueryState->PlacedInWorkloadPool = true;
-
         LOG_D("continue request, queue id: " << QueryState->UserRequestContext->PoolId);
-
         CompileQuery();
     }
 

@@ -278,7 +278,7 @@ struct TYdbSetupSettings {
     FLUENT_FIELD_DEFAULT(TString, DomainName, "Root");
 
     // Cluster configuration
-    FLUENT_FIELD_DEFAULT(bool, EnableWorkloadManager, true);
+    FLUENT_FIELD_DEFAULT(bool, EnableResourcePools, true);
 
     // Default queue settings
     FLUENT_FIELD_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -302,7 +302,7 @@ private:
         SetWorkloadManagerConfig(workloadManagerConfig);
 
         TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableWorkloadManager(Settings_.EnableWorkloadManager_);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
 
         return appConfig;
     }
@@ -466,7 +466,7 @@ struct TSampleQueries {
 
 Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
-        TWorkloadServiceYdbSetup ydb(TYdbSetupSettings().EnableWorkloadManager(false));
+        TWorkloadServiceYdbSetup ydb(TYdbSetupSettings().EnableResourcePools(false));
         TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, "another_pool_id"));
     }
 

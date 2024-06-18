@@ -90,6 +90,10 @@ public:
         return AccessChecker.HasAccess(userToken);
     }
 
+    ui64 GetLocalPoolSize() const final {
+        return LocalSessions.size();
+    }
+
     bool PlaceRequest(const TActorId& workerActorId, const TString& sessionId) final {
         if (LocalSessions.contains(sessionId)) {
             ActorContext.Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
@@ -218,10 +222,6 @@ protected:
         return LocalInFlight;
     }
 
-    ui64 GetNumberLocalSessions() const {
-        return LocalSessions.size();
-    }
-
     TString LogPrefix() const {
         return TStringBuilder() << "PoolId: " << PoolId << ", ";
     }
@@ -312,6 +312,10 @@ public:
         Y_ENSURE(InFlightLimit == std::numeric_limits<ui64>::max());
     }
 
+    bool TablesRequired() const override {
+        return false;
+    }
+
     void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) override {
         Y_UNUSED(status, issues);
     }
@@ -343,6 +347,10 @@ public:
         Y_ENSURE(InFlightLimit < std::numeric_limits<ui64>::max());
         FinishedRequests.reserve(InFlightLimit);
         RegisterCounters();
+    }
+
+    bool TablesRequired() const override {
+        return true;
     }
 
     void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) override {
@@ -378,7 +386,7 @@ public:
     }
 
     bool OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetNumberLocalSessions() > PoolSizeLimit) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalPoolSize() > PoolSizeLimit) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return false;
         }

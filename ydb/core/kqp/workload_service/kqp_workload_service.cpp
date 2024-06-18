@@ -4,7 +4,10 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/core/protos/console_config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -48,22 +51,62 @@ public:
     void Bootstrap() {
         Become(&TKqpWorkloadService::MainState);
 
-        if (!AppData()->FeatureFlags.GetEnableWorkloadManager()) {
-            return;
+        // Subscribe for FeatureFlags
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
+        }), IEventHandle::FlagTrackDelivery);
+
+        EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
+        if (EnabledResourcePools) {
+            InitializeWorkloadService();
+        }
+    }
+
+    void HandleSetConfigSubscriptionResponse() {
+        LOG_D("Subscribed for config changes");
+    }
+
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        auto &event = ev->Get()->Record;
+        
+        auto featureFlags = event.GetConfig().GetFeatureFlags();
+        if (featureFlags.GetEnableResourcePools()) {
+            LOG_N("Resource pools was enanbled");
+            EnabledResourcePools = true;
+            InitializeWorkloadService();
+        } else {
+            LOG_N("Resource pools was disabled");
+            EnabledResourcePools = false;
         }
 
-        PoolIdToState.reserve(WorkloadManagerConfig.Pools.size());
-        for (const auto& [poolId, poolConfig] : WorkloadManagerConfig.Pools) {
-            PoolIdToState.insert({poolId, NQueue::CreateState(ActorContext(), poolId, poolConfig, Counters->GetSubgroup("pool", poolId))});
-        }
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
 
-        Register(CreateCleanupTablesActor());
-        Schedule(LEASE_DURATION / 2, new TEvPrivate::TEvUpdatePoolsLeases());
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
+        switch (ev->Get()->SourceType) {
+            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+                LOG_C("Failed to deliver subscription request to config dispatcher");
+                break;
+
+            case NConsole::TEvConsole::EvConfigNotificationResponse:
+                LOG_E("Failed to deliver config notification response");
+                break;
+
+            case TKqpWorkloadServiceEvents::EvContinueRequest:
+            case TKqpWorkloadServiceEvents::EvCleanupResponse:
+                LOG_E("Failed to deliver event " << ev->Get()->SourceType << " to worker acrtor, session was lost");
+                break;
+
+            default:
+                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                break;
+        }
     }
 
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
         const TActorId& workerActorId = ev->Sender;
-        if (!AppData()->FeatureFlags.GetEnableWorkloadManager()) {
+        if (!EnabledResourcePools) {
             ReplyContinueError(workerActorId, Ydb::StatusIds::UNSUPPORTED, "Workload manager is disabled. Please contact your system administrator to enable it");
             return;
         }
@@ -80,34 +123,30 @@ public:
             return;
         }
 
-        if (poolState->PlaceRequest(workerActorId, ev->Get()->SessionId)) {
+        if (poolState->PlaceRequest(workerActorId, ev->Get()->SessionId) && poolState->TablesRequired()) {
+            ScheduleLeaseUpdate();
             PrepareWorkloadServiceTables();
-            return;
         }
     }
 
-    void Handle(TEvCleanupRequest::TPtr& ev) {
-        const TActorId& workerActorId = ev->Sender;
-        if (!AppData()->FeatureFlags.GetEnableWorkloadManager()) {
-            ReplyCleanupError(workerActorId, Ydb::StatusIds::UNSUPPORTED, "Workload manager is disabled. Please contact your system administrator to enable it");
-            return;
-        }
-
-        const TString& poolId = ev->Get()->PoolId;
-        auto poolState = GetPoolStateSafe(poolId);
+    void Handle(TEvCleanupRequest::TPtr& ev) const {
+        auto poolState = GetPoolStateSafe(ev->Get()->PoolId);
         if (!poolState) {
-            ReplyCleanupError(workerActorId, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
+            ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << ev->Get()->PoolId << " not found");
             return;
         }
 
-        poolState->CleanupRequest(workerActorId, ev->Get()->SessionId);
+        poolState->CleanupRequest(ev->Sender, ev->Get()->SessionId);
     }
 
     STRICT_STFUNC(MainState,
+        sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
 
-        sFunc(TEvPrivate::TEvUpdatePoolsLeases, UpdatePoolsLeases);
+        sFunc(TEvPrivate::TEvUpdatePoolsLeases, HandleUpdatePoolsLeases);
         hFunc(TEvPrivate::TEvRefreshPoolState, Handle);
         hFunc(TEvPrivate::TEvCleanupTablesFinished, Handle);
         hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
@@ -122,12 +161,18 @@ public:
     )
 
 private:
-    void UpdatePoolsLeases() const {
+    void HandleUpdatePoolsLeases() {
+        ScheduledLeaseUpdate = false;
         LOG_T("Try to start refresh for all pools");
+
+        ui64 localPoolsSize = 0;
         for (auto& [_, poolState] : PoolIdToState) {
             poolState->RefreshState();
+            localPoolsSize += poolState->GetLocalPoolSize();
         }
-        Schedule(LEASE_DURATION / 2, new TEvPrivate::TEvUpdatePoolsLeases());
+        if (localPoolsSize) {
+            ScheduleLeaseUpdate();
+        }
     }
 
     void Handle(TEvPrivate::TEvRefreshPoolState::TPtr& ev) const {
@@ -174,6 +219,29 @@ private:
     }
 
 private:
+    void InitializeWorkloadService() {
+        if (ServiceInitialized) {
+            return;
+        }
+        LOG_D("Started workload service initialization");
+        ServiceInitialized = true;
+
+        PoolIdToState.reserve(WorkloadManagerConfig.Pools.size());
+        for (const auto& [poolId, poolConfig] : WorkloadManagerConfig.Pools) {
+            PoolIdToState.insert({poolId, NQueue::CreateState(ActorContext(), poolId, poolConfig, Counters->GetSubgroup("pool", poolId))});
+        }
+
+        Register(CreateCleanupTablesActor());
+    }
+
+    void ScheduleLeaseUpdate() {
+        if (ScheduledLeaseUpdate) {
+            return;
+        }
+        ScheduledLeaseUpdate = true;
+        Schedule(LEASE_DURATION / 2, new TEvPrivate::TEvUpdatePoolsLeases());
+    }
+
     void PrepareWorkloadServiceTables() {
         TablesCreationRequired = true;
         if (TablesCreationStatus == ETablesCreationStatus::NotStarted) {
@@ -216,6 +284,9 @@ private:
     const TWorkloadManagerConfig WorkloadManagerConfig;
     NMonitoring::TDynamicCounterPtr Counters;
 
+    bool EnabledResourcePools = false;
+    bool ServiceInitialized = false;
+    bool ScheduledLeaseUpdate = false;
     bool TablesCreationRequired = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
 

@@ -297,7 +297,7 @@ private:
             ExpireAt = TInstant::Now() + ResultsTtl;
         }
 
-        auto resultSetInfo = ResultSetInfos[resultSetId];
+        auto& resultSetInfo = ResultSetInfos[resultSetId];
         Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetId, ExpireAt, resultSetInfo.FirstRowId, resultSetInfo.AccumulatedSize, std::move(resultSetInfo.PendingResult)));
         SaveResultInflight++;
         PendingResultSetsSize -= resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;

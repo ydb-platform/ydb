@@ -93,7 +93,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
             event->Record.SetSource(source);
         }
 
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, false));
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, true, ++SubscribeCookie));
         Become(&TThis::StateWaitingStatus);
     }
 
@@ -133,7 +133,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        if (TabletId == ev->Get()->TabletId) {
+        if (TabletId == ev->Get()->TabletId && ev->Cookie == SubscribeCookie) {
             Leave();
         }
     }
@@ -188,6 +188,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
+    ui64 SubscribeCookie = 0;
     TMemoryPool MemoryPool;
 
 }; // TTablePartitionWriter

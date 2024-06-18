@@ -37,14 +37,16 @@ public:
 
     NThreading::TEventCount* GetEventCount();
 
+    void Reconfigure(TDuration pollingPeriod);
+
 private:
     static constexpr TCpuInstant SentinelMinEnqueuedAt = std::numeric_limits<TCpuInstant>::max();
 
     const TIntrusivePtr<NThreading::TEventCount> EventCount_;
     const NProfiling::TCounter WakeupCounter_;
     const NProfiling::TCounter WakeupByTimeoutCounter_;
-    const TDuration PollingPeriod_;
 
+    std::atomic<TDuration> PollingPeriod_;
     std::atomic<bool> NotifyLock_ = false;
     // LockedInstant is used for debug and check purpose.
     std::atomic<TCpuInstant> LockedInstant_ = 0;

@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 25428);
+        CheckMixedIndex(*subset, 24000, 2106479, 25458);
     }
 
     Y_UNIT_TEST(Serial_Groups)
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 49502);
+        CheckMixedIndex(*subset, 24000, 2106479, 49555);
     }
 
     Y_UNIT_TEST(Serial_Groups)

@@ -14,12 +14,10 @@ using namespace NKikimrCms;
 namespace {
 
 template<typename T>
-T ParseFromString(const TString& str) {
+bool ParseFromStringSafe(const TString& input, T* output) {
     google::protobuf::TextFormat::Parser parser;
     parser.AllowUnknownField(true);
-    T result;
-    parser.ParseFromString(str, &result);
-    return result;
+    return parser.ParseFromString(input, output);
 }
 
 } // anonymous namespace
@@ -106,7 +104,7 @@ public:
             request.Owner = owner;
             request.Order = order;
             request.Priority = priority;
-            request.Request = ParseFromString<TPermissionRequest>(requestStr);
+            ParseFromStringSafe<TPermissionRequest>(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
                       id.data(), owner.data(), requestStr.data());
@@ -164,8 +162,8 @@ public:
             permission.PermissionId = id;
             permission.RequestId = requestId;
             permission.Owner = owner;
+            ParseFromStringSafe<TAction>(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
-            permission.Action = ParseFromString<TAction>(actionStr);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
                       id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());
@@ -200,7 +198,7 @@ public:
             TNotificationInfo notification;
             notification.NotificationId = id;
             notification.Owner = owner;
-            notification.Notification = ParseFromString<TNotification>(notificationStr);
+            ParseFromStringSafe<TNotification>(notificationStr, &notification.Notification);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
                       id.data(), owner.data(), notificationStr.data());

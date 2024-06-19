@@ -1,13 +1,17 @@
 #include "dq_input_transform_lookup.h"
+
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/minikql/computation/mkql_key_payload_value_lru_cache.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <chrono>
 
 namespace NYql::NDq {
 
@@ -37,7 +41,9 @@ public:
         const NMiniKQL::TStructType* lookupKeyType,
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
-        TOutputRowColumnOrder&& outputRowColumnOrder
+        TOutputRowColumnOrder&& outputRowColumnOrder,
+        const size_t cacheLimit,
+        const  std::chrono::seconds cacheTtl
     )
         : Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -56,6 +62,8 @@ public:
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
+        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
+        , CacheTtl(cacheTtl)
         , AwaitingQueue()
         , ReadyQueue(OutputRowType)
         , WaitingForLookupResults(false)
@@ -89,13 +97,7 @@ private: //events
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
     )
 
-    void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
-        auto guard = BindAllocator();
-        const auto lookupResult = std::move(ev->Get()->Result);
-        while (!AwaitingQueue.empty()) {
-            const auto& [lookupKey, inputOther] = AwaitingQueue.front();
-            auto lookupPayload = lookupResult.FindPtr(lookupKey);
-
+    void AddReadyQueue(NUdf::TUnboxedValue &lookupKey, NUdf::TUnboxedValue &inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
@@ -120,8 +122,22 @@ private: //events
                         break;
                 }
             }
-            AwaitingQueue.pop_front();
             ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
+    }
+
+    void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
+        auto guard = BindAllocator();
+        const auto now = std::chrono::steady_clock::now();
+        auto lookupResult = std::move(ev->Get()->Result);
+        for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
+            auto& [lookupKey, inputOther] = AwaitingQueue.front();
+            auto lookupPayload = lookupResult.FindPtr(lookupKey);
+            if (lookupPayload == nullptr)
+                continue;
+            AddReadyQueue(lookupKey, inputOther, lookupPayload);
+        }
+        for (auto&& [k, v]: lookupResult) {
+            LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         WaitingForLookupResults = false;
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
@@ -149,21 +165,30 @@ private: //IDqComputeActorAsyncInput
         KeyTypeHelper.reset();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
         decltype(ReadyQueue){}.swap(ReadyQueue);
+        LruCache.reset();
+    }
+
+    void DrainReadyQueue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) {
+        while (!ReadyQueue.empty()) {
+            PushOutputValue(batch, ReadyQueue.Head());
+            ReadyQueue.Pop();
+        }
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         auto guard = BindAllocator();
-        while (!ReadyQueue.empty()) {
-            PushOutputValue(batch, ReadyQueue.Head());
-            ReadyQueue.Pop();
-        }
+
+        DrainReadyQueue(batch);
 
         if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && !WaitingForLookupResults) {
-            NUdf::TUnboxedValue* inputRowItems;
-            NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
+             NUdf::TUnboxedValue* inputRowItems;
+             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
+            const auto now = std::chrono::steady_clock::now();
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
             IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
+            while (LruCache->Tick(now)) { // Prune cache
+            }
             while (
                 (keysForLookup.size() < maxKeysInRequest) &&
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
@@ -177,13 +202,18 @@ private: //IDqComputeActorAsyncInput
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
                 }
-                AwaitingQueue.emplace_back(key, std::move(other));
-                keysForLookup.emplace(std::move(key), NUdf::TUnboxedValue{});
+                if (auto lookupPayload = LruCache->Get(key, now)) {
+                    AddReadyQueue(key, other, &*lookupPayload);
+                } else {
+                    AwaitingQueue.emplace_back(key, std::move(other));
+                    keysForLookup.emplace(std::move(key), NUdf::TUnboxedValue{});
+                }
             }
             if (!keysForLookup.empty()) {
                 LookupSource.first->AsyncLookup(std::move(keysForLookup));
                 WaitingForLookupResults = true;
             }
+            DrainReadyQueue(batch);
         }
         finished = IsFinished();
         return AwaitingQueue.size();
@@ -234,6 +264,8 @@ protected:
     const TOutputRowColumnOrder OutputRowColumnOrder;
 
     NUdf::EFetchStatus InputFlowFetchStatus;
+    std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
+    std::chrono::seconds CacheTtl;
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
@@ -435,7 +467,7 @@ TVector<size_t> GetJoinColumnIndexes(const NMiniKQL::TStructType* type, const TH
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStreamLookup(
     IDqAsyncIoFactory* factory,
     NDqProto::TDqInputTransformLookupSettings&& settings,
-    IDqAsyncIoFactory::TInputTransformArguments&& args //TODO expand me
+    IDqAsyncIoFactory::TInputTransformArguments&& args
 )
 {
     const auto narrowInputRowType = DeserializeStructType(settings.GetNarrowInputRowType(), args.TypeEnv);
@@ -491,7 +523,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupKeyType,
             lookupPayloadType,
             outputRowType,
-            std::move(outputColumnsOrder)
+            std::move(outputColumnsOrder),
+            settings.GetCacheLimit(),
+            std::chrono::seconds(settings.GetCacheTtlSeconds())
         ) :
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
             args.Alloc,
@@ -508,7 +542,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupKeyType,
             lookupPayloadType,
             outputRowType,
-            std::move(outputColumnsOrder)
+            std::move(outputColumnsOrder),
+            settings.GetCacheLimit(),
+            std::chrono::seconds(settings.GetCacheTtlSeconds())
         );
     return {actor, actor};
 }

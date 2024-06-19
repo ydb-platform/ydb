@@ -9,6 +9,21 @@
 
 namespace NKikimr::NCms {
 
+using namespace NKikimrCms;
+
+namespace {
+
+template<typename T>
+T ParseFromString(const TString& str) {
+    google::protobuf::TextFormat::Parser parser;
+    parser.AllowUnknownField(true);
+    T result;
+    parser.ParseFromString(str, &result);
+    return result;
+}
+
+} // anonymous namespace
+
 class TCms::TTxLoadState : public TTransactionBase<TCms> {
 public:
     TTxLoadState(TCms *self)
@@ -91,10 +106,7 @@ public:
             request.Owner = owner;
             request.Order = order;
             request.Priority = priority;
-
-            google::protobuf::TextFormat::Parser parser;
-            parser.AllowUnknownField(true);
-            parser.ParseFromString(requestStr, &request.Request);
+            request.Request = ParseFromString<TPermissionRequest>(requestStr);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
                       id.data(), owner.data(), requestStr.data());
@@ -153,10 +165,7 @@ public:
             permission.RequestId = requestId;
             permission.Owner = owner;
             permission.Deadline = TInstant::MicroSeconds(deadline);
-
-            google::protobuf::TextFormat::Parser parser;
-            parser.AllowUnknownField(true);
-            parser.ParseFromString(actionStr, &permission.Action);
+            permission.Action = ParseFromString<TAction>(actionStr);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
                       id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());
@@ -191,10 +200,7 @@ public:
             TNotificationInfo notification;
             notification.NotificationId = id;
             notification.Owner = owner;
-            
-            google::protobuf::TextFormat::Parser parser;
-            parser.AllowUnknownField(true);
-            parser.ParseFromString(notificationStr, &notification.Notification);
+            notification.Notification = ParseFromString<TNotification>(notificationStr);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
                       id.data(), owner.data(), notificationStr.data());

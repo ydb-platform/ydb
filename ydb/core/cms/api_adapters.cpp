@@ -380,7 +380,11 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetAvailabilityMode(ConvertAvailabilityMode(opts.availability_mode()));
         cmsRequest.SetPartialPermissionAllowed(true);
         cmsRequest.SetSchedule(true);
-        cmsRequest.SetPriority(opts.priority());
+
+        i32 priority = opts.priority();
+        if (priority != 0) {
+            cmsRequest.SetPriority(priority);
+        }
 
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(group.actions().size() == 1);

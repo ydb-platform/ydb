@@ -12,6 +12,7 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -131,6 +132,15 @@ protected:
                       NTable::TTransaction* tx);
     size_t GetTableRecordsCount(const TString& tablePath);
 
+    struct TTestTxWithBigBlobsParams {
+        size_t OldHeadCount = 0;
+        size_t BigBlobsCount = 2;
+        size_t NewHeadCount = 0;
+    };
+
+    void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
+
+protected:
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
@@ -1552,6 +1562,86 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[5].size(),  6'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[6].size(), 20'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[7].size(),  7'000'000);
+}
+
+void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
+{
+    size_t oldHeadMsgCount = 0;
+    size_t bigBlobMsgCount = 0;
+    size_t newHeadMsgCount = 0;
+
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t i = 0; i < params.OldHeadCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        ++oldHeadMsgCount;
+    }
+
+    for (size_t i = 0; i < params.BigBlobsCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'900'000, 'x'), &tx);
+        ++bigBlobMsgCount;
+    }
+
+    for (size_t i = 0; i < params.NewHeadCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), &tx);
+        ++newHeadMsgCount;
+    }
+
+    DBGTRACE_LOG("oldHeadMsgCount=" << oldHeadMsgCount);
+    DBGTRACE_LOG("bigBlobMsgCount=" << bigBlobMsgCount);
+    DBGTRACE_LOG("newHeadMsgCount=" << newHeadMsgCount);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount);
+
+    size_t start = 0;
+
+    for (size_t i = 0; i < oldHeadMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 100'000);
+    }
+    start += oldHeadMsgCount;
+
+    for (size_t i = 0; i < bigBlobMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'900'000);
+    }
+    start += bigBlobMsgCount;
+
+    for (size_t i = 0; i < newHeadMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 100'000);
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_18, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 2, .NewHeadCount = 10});
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_19, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 0, .NewHeadCount = 10});
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_20, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 2, .NewHeadCount = 0});
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_21, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 2, .NewHeadCount = 10});
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_22, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 0, .NewHeadCount = 10});
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_23, TFixture)
+{
+    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 2, .NewHeadCount = 0});
 }
 
 void TFixture::CreateTable(const TString& tablePath)

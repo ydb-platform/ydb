@@ -277,7 +277,13 @@ public:
                      const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
                      ui16 nextPartNo = 0);
 
-    std::optional<std::pair<TKey, TString>> Add(TClientBlob&& blob);
+    struct TFormedBlobInfo {
+        TKey Key;
+        TString Value;
+    };
+
+    std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
+    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
 
     bool IsInited() const { return !SourceId.empty(); }
 
@@ -290,11 +296,18 @@ public:
 
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 
+    struct TRenameFormedBlobInfo {
+        TKey OldKey;
+        TKey NewKey;
+        ui32 Size;
+    };
+
     const std::deque<TClientBlob>& GetClientBlobs() const { return Blobs; }
-    const std::deque<std::pair<TKey, ui32>> GetFormedBlobs() const { return FormedBlobs; }
+    const std::deque<TRenameFormedBlobInfo>& GetFormedBlobs() const { return FormedBlobs; }
 
 private:
     TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
+    std::optional<TFormedBlobInfo> CreateFormedBlob(ui32 size, bool useRename);
 
 private:
     TPartitionId Partition;
@@ -310,7 +323,7 @@ private:
     ui16 HeadPartNo;
     std::deque<TClientBlob> Blobs;
     ui32 BlobsSize;
-    std::deque<std::pair<TKey, ui32>> FormedBlobs;
+    std::deque<TRenameFormedBlobInfo> FormedBlobs;
     THead &Head;
     THead &NewHead;
     ui32 HeadSize;

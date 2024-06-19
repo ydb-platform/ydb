@@ -21,6 +21,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -411,13 +412,16 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;
             }
+            DBGTRACE_LOG("delete by size. bodySize=" << bodySize << ", limit=" << partConfig.GetStorageLimitBytes());
         } else {
             if (now < firstKey.Timestamp + lifetimeLimit) {
                 break;
             }
+            DBGTRACE_LOG("delete by time. now=" << now << ", key.Timestamp=" << firstKey.Timestamp << ", limit=" << lifetimeLimit);
         }
 
         BodySize -= firstKey.Size;
+        DBGTRACE_LOG("delete key " << firstKey.Key.ToString() << ", size=" << firstKey.Size);
         DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
@@ -1210,6 +1214,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
 }
 
 void TPartition::CheckHeadConsistency() const {
+    DBGTRACE("TPartition::CheckHeadConsistency");
     ui32 p = 0;
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
         ui32 s = 0;
@@ -1222,6 +1227,15 @@ void TPartition::CheckHeadConsistency() const {
             ++p;
         }
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
+    }
+    if (!(DataKeysBody.empty() ||
+          Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount())) {
+        DBGTRACE_LOG("Head.Offset=" << Head.Offset);
+        DBGTRACE_LOG("DataKeysBody.back().Key.Offset=" << DataKeysBody.back().Key.GetOffset());
+        DBGTRACE_LOG("DataKeysBody.back().Key.Count=" << DataKeysBody.back().Key.GetCount());
+        for (const auto& dk : DataKeysBody) {
+            DBGTRACE_LOG(dk.Key.ToString());
+        }
     }
     Y_ABORT_UNLESS(DataKeysBody.empty() ||
              Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
@@ -1531,6 +1545,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                 "OnWrite topic '" << TopicName() << "' partition " << Partition
                     << " commands are not processed at all, reason: " << response.DebugString()
         );
+        DBGTRACE_LOG("send TEvPoisonPill");
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         //TODO: if status is DISK IS FULL, is global status MSTATUS_OK? it will be good if it is true
         return;
@@ -1544,6 +1559,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                             << " delete range error"
                 );
                 //TODO: if disk is full, could this be ok? delete must be ok, of course
+                DBGTRACE_LOG("send TEvPoisonPill");
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
                 return;
             }
@@ -1559,6 +1575,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                         "OnWrite  topic '" << TopicName() << "' partition " << Partition
                             << " write error"
                 );
+                DBGTRACE_LOG("send TEvPoisonPill");
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
                 return;
             }
@@ -1575,6 +1592,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                     "OnWrite  topic '" << TopicName() << "' partition " << Partition
                         << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus()
             );
+            DBGTRACE_LOG("send TEvPoisonPill");
             ctx.Send(Tablet, new TEvents::TEvPoisonPill());
             return;
         }
@@ -2075,6 +2093,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
+    DBGTRACE("TPartition::CommitWriteOperations");
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2092,83 +2111,94 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         HaveWriteMsg = true;
     }
 
-    for (auto& k : t.WriteInfo->BodyKeys) {
-        const TKey& oldKey = k.Key;
-        const TKey newKey(TKeyPrefix::TypeData,
-                          Partition,
-                          NewHead.Offset + oldKey.GetOffset(),
-                          oldKey.GetPartNo(),
-                          oldKey.GetCount(),
-                          oldKey.GetInternalPartsCount(),
-                          oldKey.IsHead());
+    if (!t.WriteInfo->BodyKeys.empty()) {
+        PartitionedBlob = TPartitionedBlob(Partition,
+                                           NewHead.Offset,
+                                           "", // SourceId
+                                           0,  // SeqNo
+                                           1,  // TotalParts
+                                           0,  // TotalSize
+                                           Head,
+                                           NewHead,
+                                           Parameters->HeadCleared,  // headCleared
+                                           Head.PackedSize != 0,     // needCompactHead
+                                           MaxBlobSize);
 
-        auto cmd = PersistRequest->Record.AddCmdRename();
-        cmd->SetOldKey(oldKey.ToString());
-        cmd->SetNewKey(newKey.ToString());
+        for (auto& k : t.WriteInfo->BodyKeys) {
+            auto write = PartitionedBlob.Add(k.Key, k.Size);
+            if (write && !write->Value.empty()) {
+                AddCmdWrite(write, PersistRequest.Get(), ctx);
+                CompactedKeys.emplace_back(write->Key, write->Value.size());
+            }
+        }
+
+    }
+
+    if (auto formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+        ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+        RenameFormedBlobs(formedBlobs,
+                          *Parameters,
+                          curWrites,
+                          PersistRequest.Get(),
+                          ctx);
     }
 
     if (!t.WriteInfo->BodyKeys.empty()) {
-        auto& last = t.WriteInfo->BodyKeys.back();
+        const auto& last = t.WriteInfo->BodyKeys.back();
 
-        NewHead.Batches.clear();
-        NewHead.PackedSize = 0;
         NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
-
-        if (t.WriteInfo->BlobsFromHead.empty()) {
-            NewHead.PartNo = 0;
-        } else {
-            auto& first = t.WriteInfo->BlobsFromHead.front();
-            NewHead.PartNo = first.GetPartNo();
-
-            PartitionedBlob = TPartitionedBlob(Partition,
-                                               NewHead.Offset,
-                                               first.SourceId,
-                                               first.SeqNo,
-                                               first.GetTotalParts(),
-                                               first.GetTotalSize(),
-                                               Head,
-                                               NewHead,
-                                               true,  // headCleared
-                                               false, // needCompactHead
-                                               MaxBlobSize,
-                                               NewHead.PartNo);
-        }
-
-        Parameters->CurOffset = NewHead.Offset;
     }
 
-    for (auto i = t.WriteInfo->BlobsFromHead.begin(); i != t.WriteInfo->BlobsFromHead.end(); ++i) {
-        auto& blob = *i;
+    if (!t.WriteInfo->BlobsFromHead.empty()) {
+        auto& first = t.WriteInfo->BlobsFromHead.front();
+        NewHead.PartNo = first.GetPartNo();
+        DBGTRACE_LOG("NewHead=" << NewHead);
 
-        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-            .SourceId = blob.SourceId,
-            .SeqNo = blob.SeqNo,
-            .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-            .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-            .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-            .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-            .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-            .DisableDeduplication = false,
-            .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-            .Data = blob.Data,
-            .UncompressedSize = blob.UncompressedSize,
-            .PartitionKey = blob.PartitionKey,
-            .ExplicitHashKey = blob.ExplicitHashKey,
-            .External = false,
-            .IgnoreQuotaDeadline = true,
-            .HeartbeatVersion = std::nullopt,
-        }, std::nullopt};
+        Parameters->CurOffset = NewHead.Offset;
+        Parameters->HeadCleared = !t.WriteInfo->BodyKeys.empty();
 
-        ExecRequest(msg, *Parameters, PersistRequest.Get());
+        PartitionedBlob = TPartitionedBlob(Partition,
+                                           NewHead.Offset,
+                                           first.SourceId,
+                                           first.SeqNo,
+                                           first.GetTotalParts(),
+                                           first.GetTotalSize(),
+                                           Head,
+                                           NewHead,
+                                           Parameters->HeadCleared, // headCleared
+                                           false,                   // needCompactHead
+                                           MaxBlobSize,
+                                           first.GetPartNo());
 
-        auto& info = TxSourceIdForPostPersist[blob.SourceId];
-        info.SeqNo = blob.SeqNo;
-        info.Offset = NewHead.Offset;
+        for (auto& blob : t.WriteInfo->BlobsFromHead) {
+            TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = blob.SourceId,
+                .SeqNo = blob.SeqNo,
+                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .DisableDeduplication = false,
+                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+                .Data = blob.Data,
+                .UncompressedSize = blob.UncompressedSize,
+                .PartitionKey = blob.PartitionKey,
+                .ExplicitHashKey = blob.ExplicitHashKey,
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+            }, std::nullopt};
+
+            ExecRequest(msg, *Parameters, PersistRequest.Get());
+
+            auto& info = TxSourceIdForPostPersist[blob.SourceId];
+            info.SeqNo = blob.SeqNo;
+            info.Offset = NewHead.Offset;
+        }
     }
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
-
-    DBGTRACE_LOG("CompactedKeys.size=" << CompactedKeys.size() << ", Head.PackedSize=" << Head.PackedSize);
 }
 
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)

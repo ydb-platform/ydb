@@ -3,6 +3,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
 #include <functional>
@@ -17,6 +18,7 @@ struct TEvWorker {
         EvPoll,
         EvData,
         EvGone,
+        EvStatus,
 
         EvEnd,
     };
@@ -30,9 +32,10 @@ struct TEvWorker {
         struct TRecord {
             ui64 Offset;
             TString Data;
+            TInstant CreateTime;
 
-            explicit TRecord(ui64 offset, const TString& data);
-            explicit TRecord(ui64 offset, TString&& data);
+            explicit TRecord(ui64 offset, const TString& data, TInstant createTime = TInstant::Zero());
+            explicit TRecord(ui64 offset, TString&& data, TInstant createTime = TInstant::Zero());
             void Out(IOutputStream& out) const;
         };
 
@@ -53,13 +56,24 @@ struct TEvWorker {
         };
 
         EStatus Status;
+        TString ErrorDescription;
 
-        explicit TEvGone(EStatus status);
+        explicit TEvGone(EStatus status, const TString& errorDescription = {});
+        TString ToString() const override;
+    };
+
+    struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
+        TDuration Lag;
+
+        explicit TEvStatus(TDuration lag);
         TString ToString() const override;
     };
 };
 
-IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn);
+IActor* CreateWorker(
+    const TActorId& parent,
+    std::function<IActor*(void)>&& createReaderFn,
+    std::function<IActor*(void)>&& createWriterFn);
 
 }
 

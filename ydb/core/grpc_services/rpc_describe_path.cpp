@@ -162,6 +162,11 @@ void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
     f.RegisterActor(new TListDirectoryRPC(p.release()));
 }
 
+template<>
+IActor* TEvListDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TListDirectoryRPC(msg);
+}
+
 void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDescribePathRPC(p.release()));
 }

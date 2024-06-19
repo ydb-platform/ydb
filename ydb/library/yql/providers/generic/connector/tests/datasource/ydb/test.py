@@ -68,6 +68,7 @@ one_time_waiter = OneTimeWaiter(
         "count_NATIVE",
         "pushdown_NATIVE",
         "unsupported_types_NATIVE",
+        "json_NATIVE",
     ]
 )
 

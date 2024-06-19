@@ -20,6 +20,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
@@ -160,6 +161,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
@@ -173,6 +175,7 @@ protected:
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
@@ -1255,6 +1258,7 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
+            source.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
@@ -1272,6 +1276,7 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .ProgramBuilder = *source.ProgramBuilder,
                         .TaskCounters = TaskCounters,
                         .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
@@ -1287,8 +1292,11 @@ protected:
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
+            const auto typeNode = NKikimr::NMiniKQL::DeserializeNode(inputDesc.GetTransform().GetOutputType(), typeEnv);
+            transform.ValueType = static_cast<NKikimr::NMiniKQL::TType*>(typeNode);
             CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
             try {
+                auto guard = BindAllocator();
                 std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                     IDqAsyncIoFactory::TInputTransformArguments {
                         .InputDesc = inputDesc,
@@ -1852,6 +1860,7 @@ protected:
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;

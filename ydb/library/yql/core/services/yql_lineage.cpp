@@ -723,9 +723,9 @@ private:
                     const auto& list = f->Child(i);
                     auto field = list->Head().Content();
                     auto& res = (*lineage.Fields)[field];
-                    if (list->Tail().IsCallable("RowNumber")) {
+                    if (list->Tail().IsCallable({"RowNumber","CumeDist","NTile"})) {
                         continue;
-                    } else if (list->Tail().IsCallable({"Lag","Lead","Rank","DenseRank"})) {
+                    } else if (list->Tail().IsCallable({"Lag","Lead","Rank","DenseRank","PercentRank"})) {
                         const auto& lambda = list->Tail().Child(1);
                         bool produceStruct = list->Tail().IsCallable({"Lag","Lead"});
                         MergeLineageFromUsedFields(lambda->Tail(), lambda->Head().Head(), innerLineage, res, produceStruct);

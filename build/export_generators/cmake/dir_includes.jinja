@@ -1,0 +1,11 @@
+{%- if includes is defined %}
+{%      for incl in includes -%}
+include({{ incl }})
+{%      endfor -%}
+{%- endif -%}
+
+{%- if subdirs|length %}
+{%      for subdir in subdirs -%}
+add_subdirectory({{ subdir }})
+{%      endfor -%}
+{%- endif -%}

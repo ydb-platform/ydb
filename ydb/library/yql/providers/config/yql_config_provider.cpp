@@ -932,8 +932,7 @@ namespace {
                     return false;
                 }
                 Types.StreamLookupJoin = name == "_EnableStreamLookupJoin";
-            }
-            else {
+            } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
             }

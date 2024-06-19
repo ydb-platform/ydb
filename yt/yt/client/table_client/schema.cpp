@@ -924,19 +924,16 @@ TTableSchemaPtr TTableSchema::FromKeyColumns(const TKeyColumns& keyColumns)
 
 TTableSchemaPtr TTableSchema::FromSortColumns(const TSortColumns& sortColumns)
 {
-    TTableSchema schema;
     std::vector<TColumnSchema> columns;
     for (const auto& sortColumn : sortColumns) {
         columns.push_back(
             TColumnSchema(sortColumn.Name, ESimpleLogicalValueType::Any)
                 .SetSortOrder(sortColumn.SortOrder));
     }
-    schema.ColumnInfo_ = std::make_shared<const TColumnInfo>(
-        std::move(columns),
-        std::vector<TDeletedColumn>{});
-    schema.KeyColumnCount_ = sortColumns.size();
-    ValidateTableSchema(schema);
-    return New<TTableSchema>(std::move(schema));
+
+    auto schema = New<TTableSchema>(std::move(columns), /*strict*/ false);
+    ValidateTableSchema(*schema);
+    return schema;
 }
 
 TTableSchemaPtr TTableSchema::ToQuery() const
@@ -963,6 +960,31 @@ TTableSchemaPtr TTableSchema::ToQuery() const
         return New<TTableSchema>(std::move(columns), true, false,
             ETableSchemaModification::None, DeletedColumns());
     }
+}
+
+TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
+{
+    std::vector<TColumnSchema> columns;
+    if (IsSorted()) {
+        for (const auto& column : Columns()) {
+            if (!column.Expression()) {
+                columns.push_back(column);
+            }
+        }
+    } else {
+        columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
+            .SetSortOrder(ESortOrder::Ascending));
+        columns.push_back(TColumnSchema(SequenceNumberColumnName, ESimpleLogicalValueType::Int64));
+        for (const auto& column : Columns()) {
+            if (column.StableName().Underlying() != TimestampColumnName &&
+                column.StableName().Underlying() != CumulativeDataWeightColumnName)
+            {
+                columns.push_back(column);
+            }
+        }
+    }
+    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
+        ETableSchemaModification::None, DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToWrite() const
@@ -1379,11 +1401,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
     builder->AppendChar(']');
 }
 
-TString ToString(const TTableSchema& schema)
-{
-    return ToStringViaBuilder(schema);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec)
 {
     if (schema) {
@@ -1391,11 +1408,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     } else {
         builder->AppendString(TStringBuf("<null>"));
     }
-}
-
-TString ToString(const TTableSchemaPtr& schema)
-{
-    return ToStringViaBuilder(schema);
 }
 
 TString SerializeToWireProto(const TTableSchemaPtr& schema)
@@ -1548,6 +1560,16 @@ void ValidateKeyColumns(const TKeyColumns& keyColumns)
                 name);
         }
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateDynamicTableKeyColumnCount(int count)
+{
+    THROW_ERROR_EXCEPTION_IF(count > MaxKeyColumnCountInDynamicTable,
+        "Too many key columns: expected <= %v, got %v",
+        MaxKeyColumnCountInDynamicTable,
+        count);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1754,21 +1776,17 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         THROW_ERROR_EXCEPTION("There must be at least one non-key column");
     }
 
-    if (schema.GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
-        THROW_ERROR_EXCEPTION("Too many key columns: limit %v, actual: %v",
-            MaxKeyColumnCountInDynamicTable,
-            schema.GetKeyColumnCount());
-    }
+    ValidateDynamicTableKeyColumnCount(schema.GetKeyColumnCount());
 
     for (const auto& column : schema.Columns()) {
         try {
-            auto logical_type = column.LogicalType();
+            auto logicalType = column.LogicalType();
             if (column.SortOrder() && !column.IsOfV1Type() &&
-                logical_type->GetMetatype() != ELogicalMetatype::List &&
-                logical_type->GetMetatype() != ELogicalMetatype::Tuple)
+                logicalType->GetMetatype() != ELogicalMetatype::List &&
+                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *logical_type);
+                    *logicalType);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",

@@ -28,7 +28,7 @@ using namespace NNet;
 using namespace NConcurrency;
 using namespace NLogging;
 
-static const TLogger Logger{"Tls"};
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 ////////////////////////////////////////////////////////////////////////////////
 

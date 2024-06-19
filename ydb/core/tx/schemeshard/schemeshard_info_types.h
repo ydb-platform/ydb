@@ -44,6 +44,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -548,6 +550,7 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
+        bool datetime64TypesEnabled,        
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -2593,6 +2596,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     ui64 SnapshotStep = 0;
     ui64 SnapshotTxId = 0;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2737,6 +2743,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TVector<TItem> Items;
 
     TSet<TActorId> Subscribers;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     explicit TImportInfo(
             const ui64 id,

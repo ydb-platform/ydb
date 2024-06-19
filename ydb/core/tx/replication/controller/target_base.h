@@ -1,23 +1,29 @@
 #pragma once
 
+#include "lag_provider.h"
 #include "replication.h"
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetBase: public TReplication::ITarget {
+class TTargetBase
+    : public TReplication::ITarget
+    , public TLagProvider
+{
 protected:
     using ETargetKind = TReplication::ETargetKind;
     using EDstState = TReplication::EDstState;
     using EStreamState = TReplication::EStreamState;
+    struct TWorker: public TItemWithLag {};
 
-    inline TReplication::TPtr GetReplication() const {
+    inline TReplication* GetReplication() const {
         return Replication;
     }
 
+    const THashMap<ui64, TWorker>& GetWorkers() const;
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
-    explicit TTargetBase(TReplication::TPtr replication, ETargetKind kind,
+    explicit TTargetBase(TReplication* replication, ETargetKind kind,
         ui64 id, const TString& srcPath, const TString& dstPath);
 
     ui64 GetId() const override;
@@ -43,13 +49,13 @@ public:
 
     void AddWorker(ui64 id) override;
     void RemoveWorker(ui64 id) override;
-    const THashSet<ui64>& GetWorkers() const override;
+    void UpdateLag(ui64 workerId, TDuration lag) override;
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
 private:
-    TReplication::TPtr Replication;
+    TReplication* const Replication;
     const ui64 Id;
     const ETargetKind Kind;
     const TString SrcPath;
@@ -65,7 +71,7 @@ private:
     TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
-    THashSet<ui64> Workers;
+    THashMap<ui64, TWorker> Workers;
     bool PendingRemoveWorkers = false;
 
 }; // TTargetBase

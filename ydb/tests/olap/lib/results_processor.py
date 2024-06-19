@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import ydb
 import os
@@ -7,13 +8,21 @@ from time import time_ns
 
 
 class ResultsProcessor:
-    _results_driver : ydb.Driver = None
+    class Endpoint:
+        def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
+            self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
+            self._db = db
+            self._table = table
+
+        def send_data(self, data):
+            self._driver.table_client.bulk_upsert(
+                os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
+            )
+
+    _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
 
     send_results = external_param_is_true('send-results')
-    results_endpoint = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135')
-    results_database = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf')
-    results_table = get_external_param('results-table', 'tests_results')
     _columns_types = (
         ydb.BulkUpsertColumns()
         .add_column('Db', ydb.PrimitiveType.Utf8)
@@ -33,12 +42,24 @@ class ResultsProcessor:
     )
 
     @classmethod
-    def get_results_driver(cls):
-        if cls._results_driver is None:
-            cls._results_driver = YdbCluster._create_ydb_driver(
-                cls.results_endpoint, cls.results_database, os.getenv('RESULT_YDB_OAUTH', None)
-            )
-        return cls._results_driver
+    def get_endpoints(cls):
+        if cls._endpoints is None:
+            endpoints = get_external_param('results-endpoint', 'grpc://ydb-ru-prestable.yandex.net:2135').split(',')
+            dbs = get_external_param('results-db', '/ru-prestable/kikimr/preprod/olap-click-perf').split(',')
+            tables = get_external_param('results-table', 'tests_results').split(',')
+            count = max(len(endpoints), len(dbs), len(tables))
+            common_key = os.getenv('RESULT_YDB_OAUTH', None)
+            cls._endpoints = []
+            for i in range(count):
+                ep = endpoints[i] if i < len(endpoints) else endpoints[-1]
+                db = dbs[i] if i < len(dbs) else dbs[-1]
+                table = tables[i] if i < len(tables) else tables[-1]
+                iam_file = os.getenv(f'RESULT_IAM_FILE_{i}', None)
+                key = None
+                if iam_file is None:
+                    key = os.getenv(f'RESULT_YDB_OAUTH_{i}', common_key)
+                cls._endpoints.append(ResultsProcessor.Endpoint(ep, db, table, key, iam_file))
+        return cls._endpoints
 
     @classmethod
     def get_run_id(cls) -> int:
@@ -96,6 +117,5 @@ class ResultsProcessor:
             'Stats': json.dumps(statistics) if statistics is not None else None,
             'Info': json.dumps(info),
         }
-        cls.get_results_driver().table_client.bulk_upsert(
-            os.path.join(cls.results_database, cls.results_table), [data], cls._columns_types
-        )
+        for endpoint in cls.get_endpoints():
+            endpoint.send_data(data)

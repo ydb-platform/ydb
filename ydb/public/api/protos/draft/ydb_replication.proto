@@ -6,6 +6,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 
+import "google/protobuf/duration.proto";
+
 package Ydb.Replication;
 option java_package = "com.yandex.ydb.replication";
 
@@ -44,9 +46,11 @@ message DescribeReplicationResult {
         string source_path = 1;
         string destination_path = 2;
         optional string source_changefeed_name = 3;
+        uint64 id = 4;
     }
 
     message RunningState {
+        optional google.protobuf.Duration lag = 1;
     }
 
     message ErrorState {

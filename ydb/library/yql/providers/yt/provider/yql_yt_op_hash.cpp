@@ -173,6 +173,9 @@ TString TYtNodeHashCalculator::GetOutTableHash(const TExprNode& node, TArgIndex&
         if (auto replicationFactor = Configuration->TemporaryReplicationFactor.Get(Cluster)) {
             builder << *replicationFactor;
         }
+        if (auto optimizeFor = Configuration->OptimizeFor.Get(Cluster)) {
+            builder << *optimizeFor;
+        }
     }
 
     return builder.Finish();

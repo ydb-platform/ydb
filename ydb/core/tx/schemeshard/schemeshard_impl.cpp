@@ -148,7 +148,7 @@ void TSchemeShard::InitializeTabletMigrations() {
         }
 
         if (EnableStatistics &&
-            !IsServerlessDomain(subdomain) &&
+            !IsServerlessDomainGlobal(pathId, subdomain) &&
             subdomain->GetTenantStatisticsAggregatorID() == InvalidTabletId)
         {
             createSA = true;
@@ -4413,6 +4413,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
+    EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4572,7 +4573,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //
         HFuncTraced(TEvColumnShard::TEvProposeTransactionResult, Handle);
-        HFuncTraced(NBackgroundTasks::TEvAddTaskResult, Handle);
         HFuncTraced(TEvColumnShard::TEvNotifyTxCompletionResult, Handle);
 
         // sequence shard
@@ -5728,38 +5728,6 @@ void TSchemeShard::Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TA
     } else {
         Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
     }
-}
-
-void TSchemeShard::Handle(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Handle NBackgroundTasks::TEvAddTaskResult"
-        << ", at schemeshard: " << TabletID()
-        << ", message: " << ev->Get()->GetDebugString());
-    TOperationId id;
-    if (!id.DeserializeFromString(ev->Get()->GetTaskId())) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult cannot parse operation id in result"
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    if (!Operations.contains(id.GetTxId())) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult for unknown txId, ignore it"
-            << ", txId: " << id.SerializeToString()
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    if (!ev->Get()->IsSuccess()) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got NBackgroundTasks::TEvAddTaskResult cannot execute"
-            << ", txId: " << id.SerializeToString()
-            << ", message: " << ev->Get()->GetDebugString()
-            << ", at schemeshard: " << TabletID());
-        return;
-    }
-    Execute(CreateTxOperationReply(id, ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
@@ -6995,6 +6963,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
+    EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

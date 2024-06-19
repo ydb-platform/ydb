@@ -615,26 +615,34 @@ private:
                 generateColumnsIfInsert.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
             }
 
-            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
-                .Add(node.Settings())
-                .Add()
+            TVector<TCoNameValueTuple> settings;
+            for (const auto& setting : node.Settings()) {
+                settings.push_back(setting);
+            }
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("input_columns")
                     .Value<TCoAtomList>()
                         .Add(columns)
                         .Build()
-                    .Build()
-                .Add()
+                    .Done());
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("default_constraint_columns")
                     .Value<TCoAtomList>()
                         .Add(defaultConstraintColumns)
                         .Build()
-                    .Build()
-                .Add()
+                    .Done());
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("generate_columns_if_insert")
                     .Value<TCoAtomList>()
                         .Add(generateColumnsIfInsert)
                         .Build()
-                    .Build()
+                    .Done());
+
+            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
+                .Add(settings)
                 .Done()
                 .Ptr();
 

@@ -97,8 +97,7 @@ private:
 void Serialize(const TBooleanFormulaTags& tags, NYson::IYsonConsumer* consumer);
 void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node);
 
-TString ToString(const TBooleanFormulaTags& tags);
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/);
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -153,6 +152,8 @@ TBooleanFormula operator!(const TBooleanFormula& formula);
 void Serialize(const TBooleanFormula& booleanFormula, NYson::IYsonConsumer* consumer);
 void Deserialize(TBooleanFormula& booleanFormula, NYTree::INodePtr node);
 void Deserialize(TBooleanFormula& booleanFormula, NYson::TYsonPullParserCursor* cursor);
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 

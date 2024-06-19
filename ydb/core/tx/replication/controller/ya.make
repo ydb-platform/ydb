@@ -19,6 +19,7 @@ SRCS(
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp
+    lag_provider.cpp
     logging.cpp
     nodes_manager.cpp
     private_events.cpp
@@ -47,6 +48,7 @@ SRCS(
     tx_init.cpp
     tx_init_schema.cpp
     tx_resolve_secret_result.cpp
+    tx_worker_error.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

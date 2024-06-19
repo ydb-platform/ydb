@@ -35,7 +35,7 @@ public:
         , Client_(std::move(client))
         , ConsumerPath_(std::move(consumerPath))
         , PartitionIndex_(partitionIndex)
-        , Logger(QueueClientLogger.WithTag("Consumer: %v, Partition: %v", ConsumerPath_, PartitionIndex_))
+        , Logger(QueueClientLogger().WithTag("Consumer: %v, Partition: %v", ConsumerPath_, PartitionIndex_))
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
         , PullQueueOptions_({.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi})
     { }
@@ -271,9 +271,9 @@ public:
         , QueuePath_(std::move(queuePath))
         , PartitionIndex_(partitionIndex)
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
-        , Logger(QueueClientLogger.WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
+        , Logger(QueueClientLogger().WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
     {
-        PullConsumerOptions_.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi;
+        PullQueueConsumerOptions_.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi;
     }
 
     TFuture<void> Open() override
@@ -301,7 +301,7 @@ private:
     const TQueueRowBatchReadOptions RowBatchReadOptions_;
     const NLogging::TLogger Logger;
 
-    TPullConsumerOptions PullConsumerOptions_;
+    TPullQueueConsumerOptions PullQueueConsumerOptions_;
 
     ISubConsumerClientPtr ConsumerClient_;
     bool Opened_ = false;
@@ -384,20 +384,20 @@ private:
             RowBatchReadOptions_.MaxRowCount,
             RowBatchReadOptions_.MaxDataWeight,
             RowBatchReadOptions_.DataWeightPerRowHint);
-        auto asyncRowset = (Config_->UsePullConsumer
-            ? Client_->PullConsumer(
+        auto asyncRowset = (Config_->UsePullQueueConsumer
+            ? Client_->PullQueueConsumer(
                 ConsumerPath_,
                 QueuePath_,
                 currentOffset,
                 PartitionIndex_,
                 RowBatchReadOptions_,
-                PullConsumerOptions_)
+                PullQueueConsumerOptions_)
             : Client_->PullQueue(
                 QueuePath_,
                 currentOffset,
                 PartitionIndex_,
                 RowBatchReadOptions_,
-                PullConsumerOptions_));
+                PullQueueConsumerOptions_));
         auto rowset = WaitFor(asyncRowset)
             .ValueOrThrow();
 

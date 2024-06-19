@@ -94,6 +94,7 @@
                                                                             "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],
@@ -185,6 +186,7 @@
                                                                             "EventTime (-\u221e, +\u221e)",
                                                                             "WatchID (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"
                                                                     }
                                                                 ],

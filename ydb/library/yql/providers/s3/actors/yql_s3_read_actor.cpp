@@ -40,7 +40,6 @@
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
-#include "yql_s3_source_factory.h"
 #include "yql_s3_source_queue.h"
 
 #include <ydb/core/base/events.h>
@@ -904,7 +903,7 @@ public:
         if (!ErrorText.empty()) {
             TString errorCode;
             TString message;
-            if (ParseS3ErrorResponse(ErrorText, errorCode, message)) {
+            if (!ParseS3ErrorResponse(ErrorText, errorCode, message)) {
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));

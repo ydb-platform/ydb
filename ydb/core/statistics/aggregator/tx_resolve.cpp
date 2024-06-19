@@ -27,14 +27,10 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             Cancelled = true;
 
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
-                Self->DropScanTable(db);
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->RescheduleScanTable(db);
-                Self->ScheduleNextScan();
+                Self->FinishScan(db);
             }
-
-            Self->ResetScanState(db);
             return true;
         }
 

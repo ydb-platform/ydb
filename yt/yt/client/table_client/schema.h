@@ -327,7 +327,11 @@ public:
     //! but without |$timestamp| column, if any.
     TTableSchemaPtr ToWrite() const;
 
-    //! For sorted tables, return the current schema
+    //! For sorted tables, return the current schema.
+    //! For ordered tables, prepends the current schema with |(tablet_index, sequence_number)| key column.
+    TTableSchemaPtr ToWriteViaQueueProducer() const;
+
+    //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
 
@@ -422,9 +426,6 @@ DEFINE_REFCOUNTED_TYPE(TTableSchema)
 void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
-TString ToString(const TTableSchema& schema);
-TString ToString(const TTableSchemaPtr& schema);
-
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
 TString SerializeToWireProto(const TTableSchemaPtr& schema);
 
@@ -477,6 +478,8 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
+
+void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const TString& name);
 

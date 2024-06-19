@@ -65,5 +65,12 @@ void SerializeTzTimestamp(ui64 timestamp, ui16 tzId, IOutputStream& out);
 bool DeserializeTzDate(TStringBuf buf, ui16& date, ui16& tzId);
 bool DeserializeTzDatetime(TStringBuf buf, ui32& datetime, ui16& tzId);
 bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId);
+
+void SerializeTzDate32(i32 date, ui16 tzId, IOutputStream& out);
+void SerializeTzDatetime64(i64 datetime, ui16 tzId, IOutputStream& out);
+void SerializeTzTimestamp64(i64 timestamp, ui16 tzId, IOutputStream& out);
+bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId);
+bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId);
+bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId);
 } // namespace NMiniKQL
 } // namespace NKikimr

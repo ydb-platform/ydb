@@ -72,6 +72,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
+    , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
@@ -90,8 +91,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
-    NOlap::TNormalizationController::TInitContext initCtx(Info());
-    NormalizerController.InitNormalizers(initCtx);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -836,7 +835,11 @@ void TColumnShard::SetupGC() {
         return;
     }
     for (auto&& i : StoragesManager->GetStorages()) {
-        i.second->StartGC();
+        auto gcTask = i.second->CreateGC();
+        if (!gcTask) {
+            continue;
+        }
+        Execute(new TTxGarbageCollectionStart(this, gcTask, i.second), NActors::TActivationContext::AsActorContext());
     }
 }
 
@@ -1068,15 +1071,23 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 }
 
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
+    if (SharingSessionsManager->IsSharingInProgress()) {
+        ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
+            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)TabletID(),
+                NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress");
+        return;
+    }
+
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvDeleteSharedBlobs");
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvDeleteSharedBlobs");
-    auto removeAction = StoragesManager->GetOperator(ev->Get()->Record.GetStorageId())->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
+    NOlap::TTabletsByBlob blobs;
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
         auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
         AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
-        removeAction->DeclareRemove((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), *blobId);
+        AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
-    Execute(new TTxRemoveSharedBlobs(this, removeAction, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId())), ctx);
+    Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

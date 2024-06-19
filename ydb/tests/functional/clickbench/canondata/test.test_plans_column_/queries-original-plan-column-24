@@ -61,6 +61,7 @@
                                                             "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
@@ -181,6 +182,7 @@
                                                             "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {

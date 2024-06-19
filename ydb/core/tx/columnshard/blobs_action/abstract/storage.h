@@ -51,9 +51,15 @@ protected:
         return "";
     }
 
-    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const = 0;
-    std::shared_ptr<IBlobsGCAction> StartGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const {
-        return DoStartGCAction(counters);
+    virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& counters) const = 0;
+
+    void StartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
+        return DoStartGCAction(action);
+    }
+
+    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const = 0;
+    std::shared_ptr<IBlobsGCAction> CreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const {
+        return DoCreateGCAction(counters);
     }
 
 public:
@@ -72,6 +78,7 @@ public:
     }
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
+    virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
     virtual ~IBlobsStorageOperator() = default;
@@ -101,22 +108,26 @@ public:
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
         return result;
     }
-    bool StartGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+
+    void StartGC(const std::shared_ptr<IBlobsGCAction>& action) {
+        AFL_VERIFY(CurrentGCAction == action);
+        AFL_VERIFY(!!action && action->IsInProgress());
+        StartGCAction(action);
+    }
+
+    [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_in_progress");
-            return false;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
+            return nullptr;
         }
         if (Stopped) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_on_gc");
-            return false;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "stopped_on_gc");
+            return nullptr;
         }
-        auto task = StartGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());
-        if (!task) {
-            return false;
-        }
+        auto task = CreateGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());
         CurrentGCAction = task;
-        return true;
+        return CurrentGCAction;
     }
 };
 

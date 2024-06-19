@@ -10,4 +10,9 @@ SRCS(
     mpmc_ring_queue_ut_multi_threads.cpp
 )
 
+PEERDIR(
+    ydb/library/actors/queues/observer
+)
+
+
 END()

@@ -71,6 +71,9 @@ namespace NActors {
         void GetCurrentStats(TExecutorThreadStats& statsCopy);
         void GetSharedStats(i16 poolId, TExecutorThreadStats &stats);
 
+        void GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy);
+        void GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats);
+
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
 

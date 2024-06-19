@@ -10,6 +10,8 @@ import process_command_files as pcf
 
 from process_whole_archive_option import ProcessWholeArchiveOption
 
+from fix_py2_protobuf import fix_py2
+
 
 def get_leaks_suppressions(cmd):
     supp, newcmd = [], []
@@ -30,6 +32,7 @@ CUDA_LIBRARIES = {
     '-lcudart_static': '-lcudart',
     '-lcudnn_static': '-lcudnn',
     '-lcufft_static_nocallback': '-lcufft',
+    '-lcupti_static': '-lcupti',
     '-lcurand_static': '-lcurand',
     '-lcusolver_static': '-lcusolver',
     '-lcusparse_static': '-lcusparse',
@@ -44,6 +47,18 @@ CUDA_LIBRARIES = {
     '-lnvrtc_static': '-lnvrtc',
     '-lnvrtc-builtins_static': '-lnvrtc-builtins',
     '-lnvptxcompiler_static': '',
+    '-lnppc_static': '-lnppc',
+    '-lnppial_static': '-lnppial',
+    '-lnppicc_static': '-lnppicc',
+    '-lnppicom_static': '-lnppicom',
+    '-lnppidei_static': '-lnppidei',
+    '-lnppif_static': '-lnppif',
+    '-lnppig_static': '-lnppig',
+    '-lnppim_static': '-lnppim',
+    '-lnppist_static': '-lnppist',
+    '-lnppisu_static': '-lnppisu',
+    '-lnppitc_static': '-lnppitc',
+    '-lnpps_static': '-lnpps',
 }
 
 
@@ -68,7 +83,9 @@ class CUDAManager:
 
     def _known_fatbin_libs(self, libs):
         libs_wo_device_code = {
-            '-lcudart_static'
+            '-lcudart_static',
+            '-lcupti_static',
+            '-lnppc_static',
         }
         return set(libs) - libs_wo_device_code
 
@@ -301,93 +318,6 @@ def parse_args():
     parser.add_option('--whole-archive-libs', action='append')
     return parser.parse_args()
 
-
-def run(*args):
-    # print >>sys.stderr, args
-    return subprocess.check_output(list(args), shell=False).strip()
-
-
-def gen_renames_1(d):
-    for l in d.split('\n'):
-        l = l.strip()
-
-        if ' ' in l:
-            yield l.split(' ')[-1]
-
-def gen_renames_2(p, d):
-    for s in gen_renames_1(d):
-        yield s + ' ' + p + s
-
-def gen_renames(p, d):
-    return '\n'.join(gen_renames_2(p, d)).strip() + '\n'
-
-def rename_syms(where, ret, libs):
-    p = 'py2_'
-
-    # join libs
-    run(where + 'llvm-ar', 'qL', ret, *libs)
-
-    # find symbols to rename
-    syms = run(where + 'llvm-nm', '--extern-only', '--defined-only', '-A', ret)
-
-    # prepare rename plan
-    renames = gen_renames(p, syms)
-
-    with open('syms', 'w') as f:
-        f.write(renames)
-
-    # rename symbols
-    run(where + 'llvm-objcopy', '--redefine-syms=syms', ret)
-
-    # back-rename some symbols
-    args = [
-        where + 'llvm-objcopy',
-        '--redefine-sym',
-        p + 'init_api_implementation=init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + 'init_message=init6google8protobuf5pyext8_message',
-        '--redefine-sym',
-        p + 'init6google8protobuf8internal19_api_implementation=init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + 'init6google8protobuf5pyext8_message=init6google8protobuf5pyext8_message',
-        '--redefine-sym',
-        p + '_init6google8protobuf8internal19_api_implementation=_init6google8protobuf8internal19_api_implementation',
-        '--redefine-sym',
-        p + '_init6google8protobuf5pyext8_message=_init6google8protobuf5pyext8_message',
-        ret
-    ]
-
-    run(*args)
-
-    return ret
-
-
-def fix_py2(cmd):
-    if 'protobuf_old' not in str(cmd):
-        return cmd
-
-    def my(x):
-        for v in ['libcontrib-libs-protobuf_old.a', 'libpypython-protobuf-py2.a']:
-            if v in x:
-                return True
-
-        return False
-
-    old = []
-    lib = []
-
-    where = ''
-
-    for x in cmd:
-        if '/clang++' in x:
-            where = os.path.dirname(x) + '/'
-
-        if my(x):
-            lib.append(x)
-        else:
-            old.append(x)
-
-    return old + [rename_syms(where, 'libprotoherobora.a', lib)]
 
 if __name__ == '__main__':
     opts, args = parse_args()

@@ -149,7 +149,11 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseTmpfs);
     REGISTER_SETTING(*this, SuspendIfAccountLimitExceeded);
     REGISTER_SETTING(*this, ExtraTmpfsSize);
-    REGISTER_SETTING(*this, OptimizeFor).Parser([](const TString& v) { return FromString<NYT::EOptimizeForAttr>(v); });
+    REGISTER_SETTING(*this, OptimizeFor)
+        .Parser([](const TString& v) {
+            return FromString<NYT::EOptimizeForAttr>(v);
+        });
+
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
             if (!ValidClusters.contains(value)) {
@@ -489,6 +493,12 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, ViewIsolation);
     REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
+    REGISTER_SETTING(*this, ColumnGroupMode)
+        .Parser([](const TString& v) {
+            return FromString<EColumnGroupMode>(v);
+        });
+    REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
+    REGISTER_SETTING(*this, MaxColumnGroups);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

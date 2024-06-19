@@ -412,6 +412,7 @@ public:
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
                 result.emplace_back(nullptr);
+                it.Next();
             }
             result.emplace_back(nullptr);
             return result;

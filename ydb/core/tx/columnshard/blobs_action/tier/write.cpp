@@ -30,9 +30,7 @@ void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/
 }
 
 NKikimr::NOlap::TUnifiedBlobId TWriteAction::AllocateNextBlobId(const TString& data) {
-    static TAtomic Counter = 0;
-    auto now = TInstant::Now();
-    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, now.GetValue() >> 32, now.GetValue() & Max<ui32>(), TLogoBlobID::MaxChannel, data.size(), AtomicIncrement(Counter) % TLogoBlobID::MaxCookie, 1));
+    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TLogoBlobID::MaxChannel, data.size(), ++BlobIdsCounter));
 }
 
 void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {

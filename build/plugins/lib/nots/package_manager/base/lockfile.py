@@ -29,6 +29,10 @@ class LockfilePackageMeta(object):
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
+    def to_uri(self):
+        pkg_uri = f"{self.tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
+        return pkg_uri
+
 
 class LockfilePackageMetaInvalidError(RuntimeError):
     pass

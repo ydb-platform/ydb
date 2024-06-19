@@ -50,6 +50,7 @@
                                                 "ReadRanges": [
                                                     "f1 (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Sequential",
                                                 "Table": "postgres_select.test_plan/foo"
                                             }
                                         ],

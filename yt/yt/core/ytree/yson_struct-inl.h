@@ -552,7 +552,7 @@ public: \
     YSON_STRUCT_EXTERNAL_SERIALIZER_IMPL__DECLARE_ALIASES(TStruct, TSerializer) \
 
 #define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer) \
-    [[maybe_unused]] constexpr auto GetExternalizedYsonStructTraits(TStruct) \
+    [[maybe_unused]] constexpr auto GetExternalizedYsonStructTraits(TStruct*) \
     { \
         struct [[maybe_unused]] TTraits \
         { \

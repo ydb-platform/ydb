@@ -4,6 +4,8 @@ GTEST(benchmark_gtest)
 
 WITHOUT_LICENSE_TEXTS()
 
+LICENSE(Apache-2.0)
+
 PEERDIR(
     contrib/restricted/google/benchmark
 )

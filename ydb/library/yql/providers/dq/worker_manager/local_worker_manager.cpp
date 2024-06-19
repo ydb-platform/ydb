@@ -97,6 +97,7 @@ private:
         hFunc(TEvConfigureFailureInjectorRequest, OnConfigureFailureInjector)
         HFunc(TEvRoutesRequest, OnRoutesRequest)
         hFunc(TEvQueryStatus, OnQueryStatus)
+        hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
     })
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
@@ -108,6 +109,92 @@ private:
         ResourceId.Counter = 0;
 
         Send(SelfId(), new TEvents::TEvWakeup());
+    }
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream html;
+        const auto& params = ev->Get()->Request.GetParams();
+        if (params.Has("get")) {
+            TString txId = params.Get("tx_id");
+            ui64 taskId = 0;
+            try {
+                taskId = std::stoull(params.Get("task_id"));
+            } catch (...) {
+                // ¯\_(ツ)_/¯
+            }
+
+            for (const auto& [_, workersInfo]: AllocatedWorkers) {
+                auto* traceId = std::get_if<TString>(&workersInfo.TxId);
+                if (traceId && *traceId != txId) {
+                    continue;
+                }
+
+                for (size_t i = 0; i < workersInfo.WorkerActors.ActorIds.size(); i++) {
+                    auto workerTaskId = workersInfo.WorkerActors.TaskIds[i];
+                    auto actorId = workersInfo.WorkerActors.ActorIds[i];
+                    if (workerTaskId == taskId) {
+                        Send(ev->Forward(actorId));
+                        return;
+                    }
+                }
+            }
+
+            html << "<div style='border:1px dotted red;padding:2%;'>Couldn't find the worker with parameters: TxId = " <<  txId << ", TaskId: " << taskId << "</div>";
+        }
+
+        html << "<form method='get'>";
+        html << "<p>TxId:<input name='tx_id' type='text'/></p>";
+        html << "<p>TaskId:<input name='task_id' type='text'/></p>";
+        html << "<button name='get' type='submit'><b>Get</b></button>";
+        html << "</form>";
+
+        // Table with known workers info
+        html << "<br>";
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>ResourceId</th>";
+        html << "<th>Sender</th>";
+        html << "<th>Deadline</th>";
+        html << "<th>TxId</th>";
+        html << "<th>WorkerActor</th>";
+        html << "<th>TaskId</th>";
+        html << "<th>Link</th>";
+        html << "</tr></thead><tbody>";
+
+        for (const auto& [ResourceId, workersInfo]: AllocatedWorkers) {
+            auto* traceId = std::get_if<TString>(&workersInfo.TxId);
+            html << "<tr>";
+            html << "<td>" << ResourceId << "</td>";
+            html << "<td>" << workersInfo.Sender.ToString() << "</td>";
+            html << "<td>" << workersInfo.Deadline.ToString() << "</td>";
+            html << "<td>" << (traceId ? *traceId : "<unknown>") << "</td>";
+            html << "<td></td><td></td><td></td>";
+            html << "</tr>\n";
+
+            for (size_t i = 0; i < workersInfo.WorkerActors.ActorIds.size(); i++) {
+                auto workerTaskId = workersInfo.WorkerActors.TaskIds[i];
+                auto actorId = workersInfo.WorkerActors.ActorIds[i];
+                html << "<tr>";
+                html << "<td>" << ResourceId << "</td>";
+                html << "<td>" << workersInfo.Sender.ToString() << "</td>";
+                html << "<td>" << workersInfo.Deadline.ToString() << "</td>";
+                html << "<td>" << (traceId ? *traceId : "<unknown>") << "</td>";
+                html << "<td>" << actorId.ToString() << "</td>";
+                html << "<td>" << workerTaskId <<"</td>";
+                html << "<td>";
+                html << "<form method='get'>";
+                html << "<input name='tx_id' type='hidden' value='" << (traceId ? *traceId : "<unknown>") << "'/>";
+                html << "<input name='task_id' type='hidden' value='" << workerTaskId << "'/>";
+                html << "<button name='get' type='submit'><b>Detailed</b></button>";
+                html << "</form>";
+                html <<"</td>";
+                html << "</tr>\n";
+            }
+        }
+
+        html << "</tbody></table>";
+
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(html.Str()));
     }
 
     void WakeUp() {
@@ -261,8 +348,9 @@ private:
         auto& allocationInfo = AllocatedWorkers[resourceId];
         allocationInfo.TxId = traceId;
 
-        if (allocationInfo.WorkerActors.empty()) {
-            allocationInfo.WorkerActors.reserve(count);
+        if (allocationInfo.WorkerActors.ActorIds.empty()) {
+            allocationInfo.WorkerActors.ActorIds.reserve(count);
+            allocationInfo.WorkerActors.TaskIds.reserve(count);
             allocationInfo.Sender = ev->Sender;
             if (ev->Get()->Record.GetFreeWorkerAfterMs()) {
                 allocationInfo.Deadline =
@@ -283,10 +371,12 @@ private:
 
             for (ui32 i = 0; i < count; i++) {
                 THolder<NActors::IActor> actor;
-
+                ui64 taskId = 0;
                 if (createComputeActor) {
                     YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
+                    
                     NYql::NDqProto::TDqTask* taskPtr = &(tasks[i]);
+                    taskId = taskPtr->id();
                     actor.Reset(NYql::CreateComputeActor(
                         Options,
                         std::make_shared<TMemoryQuotaManager>(MemoryQuoter, allocationInfo.TxId, quotas[i]),
@@ -302,18 +392,20 @@ private:
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,
-                        Options.AsyncIoFactory));
+                        Options.AsyncIoFactory,
+                        Options.FunctionRegistry));
                 }
-                allocationInfo.WorkerActors.emplace_back(RegisterChild(
+                allocationInfo.WorkerActors.ActorIds.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr
                 ));
+                allocationInfo.WorkerActors.TaskIds.emplace_back(taskId);
             }
 
             Options.Counters.ActiveWorkers->Add(count);
         }
 
         Send(ev->Sender,
-            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors),
+            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors.ActorIds),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             ev->Cookie);
         Subscribe(ev->Sender.NodeId());
@@ -333,13 +425,13 @@ private:
     void DropTaskCounters(const auto& info) {
         auto traceId = std::get<TString>(info.TxId);
         if (auto it = TaskCountersMap.find(traceId); it != TaskCountersMap.end()) {
-            if (it->second.ReferenceCount <= info.WorkerActors.size()) {
+            if (it->second.ReferenceCount <= info.WorkerActors.ActorIds.size()) {
                 if (TaskCounters) {
                     TaskCounters->RemoveSubgroup("operation", traceId);
                 }
                 TaskCountersMap.erase(it);
             } else {
-                it->second.ReferenceCount -= info.WorkerActors.size();
+                it->second.ReferenceCount -= info.WorkerActors.ActorIds.size();
             }
         }
     }
@@ -348,7 +440,7 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << "Free Group " << id;
         auto it = AllocatedWorkers.find(id);
         if (it != AllocatedWorkers.end()) {
-            for (const auto& actorId : it->second.WorkerActors) {
+            for (const auto& actorId : it->second.WorkerActors.ActorIds) {
                 UnregisterChild(actorId);
             }
 
@@ -361,7 +453,7 @@ private:
                 DropTaskCounters(it->second);
             }
 
-            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size());
+            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.ActorIds.size());
             AllocatedWorkers.erase(it);
         }
     }
@@ -384,7 +476,12 @@ private:
     NMonitoring::TDynamicCounterPtr TaskCounters;
 
     struct TAllocationInfo {
-        TVector<NActors::TActorId> WorkerActors;
+        struct TWorkerInfo {
+            TVector<NActors::TActorId> ActorIds;
+            TVector<ui64> TaskIds;
+        };
+
+        TWorkerInfo WorkerActors;
         NActors::TActorId Sender;
         TInstant Deadline;
         NDq::TTxId TxId;

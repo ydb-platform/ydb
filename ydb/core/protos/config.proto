@@ -238,6 +238,7 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
 
         message TUser {
             optional string Name = 1;
@@ -1504,6 +1505,12 @@ message TColumnShardConfig {
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
     optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
+
+    message TRepairInfo {
+        optional string ClassName = 1;
+        optional string Description = 2;
+    }
+    repeated TRepairInfo Repairs = 15;
 }
 
 message TSchemeShardConfig {
@@ -1746,12 +1753,16 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
-    message TDynamicNodeDefinition {
+    message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
+        repeated string MemberGroups = 3;
+        optional bool RequireSameIssuer = 4 [default = true];
     }
 
-    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+    repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
+    optional bool RequestClientCertificate = 2 [default = false];
+    optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
 message TLocalPgWireConfig {
@@ -1787,6 +1798,10 @@ message TKafkaProxyConfig {
 
 message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
+}
+
+message TMetadataCacheConfig {
+    optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
 
 message TLabel {
@@ -1869,6 +1884,7 @@ message TAppConfig {
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
+    optional TMetadataCacheConfig MetadataCacheConfig = 80;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

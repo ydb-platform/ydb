@@ -595,3 +595,21 @@ FROM my_table;
 
 {% endif %}
 
+## ListTop, ListTopAsc, ListTopDesc, ListTopSort, ListTopSortAsc и ListTopSortDesc {#listtop}
+
+Select top values from the list. `ListTopSort*` additionally sorts the returned values. The smallest values are selected by default. Thus, the functions without a suffix are the aliases to `*Asc` functions, while `*Desc` functions return the largest values.
+
+`ListTopSort` is more effective than consecutive `ListTop` and `ListSort` because `ListTop` can partially sort the list to find needed values. However, `ListTop` is more effective than `ListTopSort` when the result order is unimportant.
+
+Arguments:
+
+1. List.
+2. Size of selection.
+3. An optional expression to get the sort key from a list element (it's the element itself by default).
+
+**Signature**
+```
+ListTop(List<T>{Flags:AutoMap}, N)->List<T>
+ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
+```
+The signatures of other functions are the same.

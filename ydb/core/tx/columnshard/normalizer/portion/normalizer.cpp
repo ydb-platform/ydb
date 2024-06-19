@@ -93,12 +93,18 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         if (package.size() == 1000) {
             std::vector<std::shared_ptr<TPortionInfo>> local;
             local.swap(package);
-            tasks.emplace_back(BuildTask(std::move(local), schemas));
+            auto task = BuildTask(std::move(local), schemas);
+            if (!!task) {
+                tasks.emplace_back(task);
+            }
         }
     }
 
     if (package.size() > 0) {
-        tasks.emplace_back(BuildTask(std::move(package), schemas));
+        auto task = BuildTask(std::move(package), schemas);
+        if (!!task) {
+            tasks.emplace_back(task);
+        }
     }
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;

@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#include <google/protobuf/util/time_util.h>
+
 namespace NKikimr::NGRpcService {
 
 using namespace Ydb;
@@ -159,6 +161,7 @@ private:
     }
 
     static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
+        to.set_id(from.GetId());
         to.set_source_path(from.GetSrcPath());
         to.set_destination_path(from.GetDstPath());
         if (from.HasSrcStreamName()) {
@@ -170,6 +173,10 @@ private:
         switch (from.GetStateCase()) {
         case NKikimrReplication::TReplicationState::kStandBy:
             to.mutable_running();
+            if (from.GetStandBy().HasLagMilliSeconds()) {
+                *to.mutable_running()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                    from.GetStandBy().GetLagMilliSeconds());
+            }
             break;
         case NKikimrReplication::TReplicationState::kError:
             *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());

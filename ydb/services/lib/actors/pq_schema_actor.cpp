@@ -764,9 +764,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (settings.has_partitions_count()) {
-            if (settings.partitions_count() > 0) {
-                minParts = settings.partitions_count();
-            }
+            minParts = settings.partitions_count();
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
             if (autoScalteSettings.min_active_partitions() > 0) {
@@ -776,10 +774,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
 
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(autoScalteSettings.max_active_partitions(), 0L, 1L));
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoScalteSettings.max_active_partitions(), 0L, 1L));
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_up_threshold_percent(), 0 ,30));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_down_threshold_percent(), 0, 90));
-                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
                 switch(autoScalteSettings.strategy()) {
                     case ::Ydb::PersQueue::V1::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
@@ -795,6 +793,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     return code->YdbCode;
                 }
             }
+        }
+        if (minParts <= 0) {
+            error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+            return Ydb::StatusIds::BAD_REQUEST;
         }
         pqDescr->SetTotalGroupCount(minParts);
         pqTabletConfig->SetRequireAuthWrite(true);
@@ -1088,17 +1090,19 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() > 0) {
-                minParts = settings.min_active_partitions();
+            if (settings.min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
+            minParts = std::max<ui32>(1, settings.min_active_partitions());
             if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(settings.max_active_partitions(),0L,1L));
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(settings.max_active_partitions(),0L,1L));
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_up_threshold_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_down_threshold_percent(), 0, 30));
-                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoscaleSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoscaleSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
                 switch(autoscaleSettings.strategy()) {
                     case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);

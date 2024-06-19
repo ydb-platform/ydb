@@ -1,5 +1,10 @@
 LMDB 0.9 Change Log
 
+LMDB 0.9.33 Release (2024/05/21)
+	ITS#9037 mdb_page_search: fix error code when DBI record is missing
+	ITS#10198 For win32, stop passing ignored parameter
+	ITS#10212 Fix meta page usage by read only tools
+
 LMDB 0.9.32 Release (2024/01/29)
 	ITS#9378 - Add ability to replay log and replay log tool
 	ITS#10095 - partial revert of ITS#9278. The patch was incorrect and introduced numerous race conditions.

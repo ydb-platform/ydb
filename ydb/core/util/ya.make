@@ -24,6 +24,8 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    gen_step.cpp
+    gen_step.h
     hazard.cpp
     hyperlog_counter.cpp
     hyperlog_counter.h

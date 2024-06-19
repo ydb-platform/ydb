@@ -5,6 +5,17 @@
 namespace NKikimr {
 namespace NSysView {
 
+TVector<Schema::PgColumn> Schema::PgTables::Columns = { //lexicographical order
+    Schema::PgColumn(5, "pgbool", "hasindexes"),
+    Schema::PgColumn(6, "pgbool", "hasrules"),
+    Schema::PgColumn(7, "pgbool", "hastriggers"),
+    Schema::PgColumn(8, "pgbool", "rowsecurity"),
+    Schema::PgColumn(1, "pgname", "schemaname"),
+    Schema::PgColumn(2, "pgname", "tablename"),
+    Schema::PgColumn(3, "pgname", "tableowner"),
+    Schema::PgColumn(4, "pgname", "tablespace")
+};
+
 bool MaybeSystemViewPath(const TVector<TString>& path) {
     auto length = path.size();
     // minimal system view path should be /Root/.sys/view
@@ -168,6 +179,29 @@ private:
         }
     };
 
+    void RegisterPgTablesSystemView() {
+        auto& dsv  = DomainSystemViews[PgTablesName];
+        auto& sdsv = SubDomainSystemViews[PgTablesName];
+        auto PgTablesSchema = Schema::PgTables();
+        for (const auto& column : PgTablesSchema.Columns) {
+            dsv.Columns[column._ColumnId - 1] = TSysTables::TTableColumnInfo(
+                column.GetColumnName(), column._ColumnId, column._ColumnTypeInfo, "", -1
+            );
+            sdsv.Columns[column._ColumnId - 1] = TSysTables::TTableColumnInfo(
+                column.GetColumnName(), column._ColumnId, column._ColumnTypeInfo, "", -1
+            );
+        }
+        auto fillKey = [&](TSchema& schema, i32 index) -> void {
+            auto& column = schema.Columns[index];
+            column.KeyOrder = index;
+            schema.KeyColumnTypes.push_back(column.PType);
+        };
+        for (size_t i = 0; i < 2; i++) {
+            fillKey(dsv, i);
+            fillKey(sdsv, i);
+        }
+    }
+
     template <typename Table>
     void RegisterSystemView(const TStringBuf& name) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
@@ -225,6 +259,8 @@ private:
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
+
+        RegisterPgTablesSystemView();
     }
 
 private:

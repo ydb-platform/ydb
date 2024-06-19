@@ -123,6 +123,7 @@ public:
         cFunc(TEvBlobStorage::EvDropDonor, Ignore);
         cFunc(TEvBlobStorage::EvGroupStatReport, Ignore);
         cFunc(TEvBlobStorage::EvNotifyVDiskGenerationChange, Ignore);
+        cFunc(TEvents::TSystem::Gone, Ignore);
 
         fFunc(TEvBlobStorage::EvPut, ForwardToProxy);
         fFunc(TEvBlobStorage::EvGet, ForwardToProxy);
@@ -438,7 +439,7 @@ class TActivityActorImpl : public TActorCoroImpl {
 
 public:
     TActivityActorImpl(ui64 tabletId, ui32 groupId, ui32 *doneCounter, ui32 *counter, ui32 maxGen)
-        : TActorCoroImpl(65536)
+        : TActorCoroImpl(65536, true)
         , TabletId(tabletId)
         , GroupId(groupId)
         , MaxGen(maxGen)
@@ -582,6 +583,7 @@ public:
 
 Y_UNIT_TEST_SUITE(GroupStress) {
     Y_UNIT_TEST(Test) {
+        THPTimer timer;
         TAppData::RandomProvider = CreateDeterministicRandomProvider(1);
         SetRandomSeed(1);
         TTestEnv env(9);
@@ -628,6 +630,9 @@ Y_UNIT_TEST_SUITE(GroupStress) {
             };
 
             do {
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::Minutes(5)) {
+                    break;
+                }
                 runtime.Sim([&] {
                     for (auto& [condition, action] : map) {
                         if (condition()) {

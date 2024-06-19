@@ -56,7 +56,7 @@ struct TLoggingAnchor
 
     struct TCounter
     {
-        std::atomic<i64> Current = 0;
+        i64 Current = 0;
         i64 Previous = 0;
     };
 
@@ -100,6 +100,8 @@ struct TLogEvent
 
     TStringBuf SourceFile;
     int SourceLine = -1;
+
+    TLoggingAnchor* Anchor = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -328,21 +330,12 @@ void LogStructuredEvent(
             break; \
         } \
         \
-        static thread_local i64 localByteCounter__; \
-        static thread_local ui8 localMessageCounter__; \
-        \
-        localByteCounter__ += message__.MessageRef.Size(); \
-        if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \
-            anchor__->MessageCounter.Current += 256; \
-            anchor__->ByteCounter.Current += localByteCounter__; \
-            localByteCounter__ = 0; \
-        } \
-        \
         ::NYT::NLogging::NDetail::LogEventImpl( \
             loggingContext__, \
             logger__, \
             level__, \
             location__, \
+            anchor__, \
             std::move(message__.MessageRef)); \
     } while (false)
 

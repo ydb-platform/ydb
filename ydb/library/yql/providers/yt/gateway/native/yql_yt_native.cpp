@@ -1930,7 +1930,7 @@ private:
         }
 
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        
+
         return rangeRes;
     }
 
@@ -1996,7 +1996,7 @@ private:
         }
 
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        
+
         return rangeRes;
     }
 
@@ -4989,11 +4989,11 @@ private:
 
     template <class TExecParamsPtr>
     static void PrepareAttributes(
-            NYT::TNode& attrs,
-            const TOutputInfo& out,
-            const TExecParamsPtr& execCtx,
-            const TString& cluster,
-            bool createTable)
+        NYT::TNode& attrs,
+        const TOutputInfo& out,
+        const TExecParamsPtr& execCtx,
+        const TString& cluster,
+        bool createTable)
     {
         PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
 
@@ -5001,7 +5001,7 @@ private:
 
         if (createTable) {
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
+            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
         }
     }
 

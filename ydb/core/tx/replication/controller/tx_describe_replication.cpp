@@ -43,6 +43,7 @@ public:
             }
 
             auto& item = *Result->Record.AddTargets();
+            item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
             if (target->GetStreamName()) {
@@ -55,6 +56,9 @@ public:
         case TReplication::EState::Ready:
         case TReplication::EState::Removing:
             state.MutableStandBy();
+            if (const auto lag = replication->GetLag()) {
+                state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
+            }
             break;
         case TReplication::EState::Done:
             state.MutableDone();

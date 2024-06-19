@@ -98,7 +98,7 @@ INTEGER_WEIGHTED_DISTRIBUTION = calc_label_from_name(
 InterestingOrigin = Tuple[
     Type[BaseException], str, int, Tuple[Any, ...], Tuple[Tuple[Any, ...], ...]
 ]
-TargetObservations = Dict[Optional[str], Union[int, float]]
+TargetObservations = Dict[str, Union[int, float]]
 
 T = TypeVar("T")
 
@@ -136,6 +136,8 @@ IRKWargsType: TypeAlias = Union[
     IntegerKWargs, FloatKWargs, StringKWargs, BytesKWargs, BooleanKWargs
 ]
 IRTypeName: TypeAlias = Literal["integer", "string", "boolean", "float", "bytes"]
+# ir_type, kwargs, forced
+InvalidAt: TypeAlias = Tuple[IRTypeName, IRKWargsType, Optional[IRType]]
 
 
 class ExtraInformation:
@@ -777,10 +779,6 @@ class Blocks:
         """Equivalent to self[i].end."""
         return self.endpoints[i]
 
-    def bounds(self, i: int) -> Tuple[int, int]:
-        """Equivalent to self[i].bounds."""
-        return (self.start(i), self.end(i))
-
     def all_bounds(self) -> Iterable[Tuple[int, int]]:
         """Equivalent to [(b.start, b.end) for b in self]."""
         prev = 0
@@ -956,6 +954,9 @@ class DataObserver:
     ) -> None:
         pass
 
+    def mark_invalid(self, invalid_at: InvalidAt) -> None:
+        pass
+
 
 @attr.s(slots=True, repr=False, eq=False)
 class IRNode:
@@ -965,7 +966,12 @@ class IRNode:
     was_forced: bool = attr.ib()
     index: Optional[int] = attr.ib(default=None)
 
-    def copy(self, *, with_value: IRType) -> "IRNode":
+    def copy(
+        self,
+        *,
+        with_value: Optional[IRType] = None,
+        with_kwargs: Optional[IRKWargsType] = None,
+    ) -> "IRNode":
         # we may want to allow this combination in the future, but for now it's
         # a footgun.
         assert not self.was_forced, "modifying a forced node doesn't make sense"
@@ -974,8 +980,8 @@ class IRNode:
         # after copying.
         return IRNode(
             ir_type=self.ir_type,
-            value=with_value,
-            kwargs=self.kwargs,
+            value=self.value if with_value is None else with_value,
+            kwargs=self.kwargs if with_kwargs is None else with_kwargs,
             was_forced=self.was_forced,
         )
 
@@ -1048,6 +1054,16 @@ class IRNode:
             and self.was_forced == other.was_forced
         )
 
+    def __hash__(self):
+        return hash(
+            (
+                self.ir_type,
+                ir_value_key(self.ir_type, self.value),
+                ir_kwargs_key(self.ir_type, self.kwargs),
+                self.was_forced,
+            )
+        )
+
     def __repr__(self):
         # repr to avoid "BytesWarning: str() on a bytes instance" for bytes nodes
         forced_marker = " [forced]" if self.was_forced else ""
@@ -1056,9 +1072,17 @@ class IRNode:
 
 def ir_value_permitted(value, ir_type, kwargs):
     if ir_type == "integer":
-        if kwargs["min_value"] is not None and value < kwargs["min_value"]:
+        min_value = kwargs["min_value"]
+        max_value = kwargs["max_value"]
+        shrink_towards = kwargs["shrink_towards"]
+        if min_value is not None and value < min_value:
             return False
-        if kwargs["max_value"] is not None and value > kwargs["max_value"]:
+        if max_value is not None and value > max_value:
+            return False
+
+        if (max_value is None or min_value is None) and (
+            value - shrink_towards
+        ).bit_length() >= 128:
             return False
 
         return True
@@ -1087,22 +1111,36 @@ def ir_value_permitted(value, ir_type, kwargs):
     raise NotImplementedError(f"unhandled type {type(value)} of ir value {value}")
 
 
+def ir_value_key(ir_type, v):
+    if ir_type == "float":
+        return float_to_int(v)
+    return v
+
+
+def ir_kwargs_key(ir_type, kwargs):
+    if ir_type == "float":
+        return (
+            float_to_int(kwargs["min_value"]),
+            float_to_int(kwargs["max_value"]),
+            kwargs["allow_nan"],
+            kwargs["smallest_nonzero_magnitude"],
+        )
+    if ir_type == "integer":
+        return (
+            kwargs["min_value"],
+            kwargs["max_value"],
+            None if kwargs["weights"] is None else tuple(kwargs["weights"]),
+            kwargs["shrink_towards"],
+        )
+    return tuple(kwargs[key] for key in sorted(kwargs))
+
+
 def ir_value_equal(ir_type, v1, v2):
-    if ir_type != "float":
-        return v1 == v2
-    return float_to_int(v1) == float_to_int(v2)
+    return ir_value_key(ir_type, v1) == ir_value_key(ir_type, v2)
 
 
 def ir_kwargs_equal(ir_type, kwargs1, kwargs2):
-    if ir_type != "float":
-        return kwargs1 == kwargs2
-    return (
-        float_to_int(kwargs1["min_value"]) == float_to_int(kwargs2["min_value"])
-        and float_to_int(kwargs1["max_value"]) == float_to_int(kwargs2["max_value"])
-        and kwargs1["allow_nan"] == kwargs2["allow_nan"]
-        and kwargs1["smallest_nonzero_magnitude"]
-        == kwargs2["smallest_nonzero_magnitude"]
-    )
+    return ir_kwargs_key(ir_type, kwargs1) == ir_kwargs_key(ir_type, kwargs2)
 
 
 @dataclass_transform()
@@ -1115,16 +1153,25 @@ class ConjectureResult:
     status: Status = attr.ib()
     interesting_origin: Optional[InterestingOrigin] = attr.ib()
     buffer: bytes = attr.ib()
-    blocks: Blocks = attr.ib()
+    # some ConjectureDatas pass through the ir and some pass through buffers.
+    # the ir does not drive its result through the buffer, which means blocks/examples
+    # may differ (I think for forced values?) even when the buffer is the same.
+    # I don't *think* anything was relying on anything but .buffer for result equality,
+    # though that assumption may be leaning on flakiness detection invariants.
+    #
+    # If we consider blocks or examples in equality checks, multiple semantically equal
+    # results get stored in e.g. the pareto front.
+    blocks: Blocks = attr.ib(eq=False)
     output: str = attr.ib()
     extra_information: Optional[ExtraInformation] = attr.ib()
     has_discards: bool = attr.ib()
     target_observations: TargetObservations = attr.ib()
     tags: FrozenSet[StructuralCoverageTag] = attr.ib()
     forced_indices: FrozenSet[int] = attr.ib(repr=False)
-    examples: Examples = attr.ib(repr=False)
+    examples: Examples = attr.ib(repr=False, eq=False)
     arg_slices: Set[Tuple[int, int]] = attr.ib(repr=False)
     slice_comments: Dict[Tuple[int, int], str] = attr.ib(repr=False)
+    invalid_at: Optional[InvalidAt] = attr.ib(repr=False)
 
     index: int = attr.ib(init=False)
 
@@ -1977,6 +2024,7 @@ class ConjectureData:
         self.extra_information = ExtraInformation()
 
         self.ir_tree_nodes = ir_tree_prefix
+        self.invalid_at: Optional[InvalidAt] = None
         self._node_index = 0
         self.start_example(TOP_LABEL)
 
@@ -2054,7 +2102,7 @@ class ConjectureData:
         )
 
         if self.ir_tree_nodes is not None and observe:
-            node = self._pop_ir_tree_node("integer", kwargs)
+            node = self._pop_ir_tree_node("integer", kwargs, forced=forced)
             if forced is None:
                 assert isinstance(node.value, int)
                 forced = node.value
@@ -2111,7 +2159,7 @@ class ConjectureData:
         )
 
         if self.ir_tree_nodes is not None and observe:
-            node = self._pop_ir_tree_node("float", kwargs)
+            node = self._pop_ir_tree_node("float", kwargs, forced=forced)
             if forced is None:
                 assert isinstance(node.value, float)
                 forced = node.value
@@ -2153,7 +2201,7 @@ class ConjectureData:
             },
         )
         if self.ir_tree_nodes is not None and observe:
-            node = self._pop_ir_tree_node("string", kwargs)
+            node = self._pop_ir_tree_node("string", kwargs, forced=forced)
             if forced is None:
                 assert isinstance(node.value, str)
                 forced = node.value
@@ -2189,7 +2237,7 @@ class ConjectureData:
         kwargs: BytesKWargs = self._pooled_kwargs("bytes", {"size": size})
 
         if self.ir_tree_nodes is not None and observe:
-            node = self._pop_ir_tree_node("bytes", kwargs)
+            node = self._pop_ir_tree_node("bytes", kwargs, forced=forced)
             if forced is None:
                 assert isinstance(node.value, bytes)
                 forced = node.value
@@ -2231,7 +2279,7 @@ class ConjectureData:
         kwargs: BooleanKWargs = self._pooled_kwargs("boolean", {"p": p})
 
         if self.ir_tree_nodes is not None and observe:
-            node = self._pop_ir_tree_node("boolean", kwargs)
+            node = self._pop_ir_tree_node("boolean", kwargs, forced=forced)
             if forced is None:
                 assert isinstance(node.value, bool)
                 forced = node.value
@@ -2272,14 +2320,15 @@ class ConjectureData:
             POOLED_KWARGS_CACHE[key] = kwargs
             return kwargs
 
-    def _pop_ir_tree_node(self, ir_type: IRTypeName, kwargs: IRKWargsType) -> IRNode:
+    def _pop_ir_tree_node(
+        self, ir_type: IRTypeName, kwargs: IRKWargsType, *, forced: Optional[IRType]
+    ) -> IRNode:
         assert self.ir_tree_nodes is not None
 
         if self._node_index == len(self.ir_tree_nodes):
             self.mark_overrun()
 
         node = self.ir_tree_nodes[self._node_index]
-        self._node_index += 1
         # If we're trying to draw a different ir type at the same location, then
         # this ir tree has become badly misaligned. We don't have many good/simple
         # options here for realigning beyond giving up.
@@ -2292,14 +2341,21 @@ class ConjectureData:
         # (in fact, it is possible that giving up early here results in more time
         # for useful shrinks to run).
         if node.ir_type != ir_type:
+            invalid_at = (ir_type, kwargs, forced)
+            self.invalid_at = invalid_at
+            self.observer.mark_invalid(invalid_at)
             self.mark_invalid(f"(internal) want a {ir_type} but have a {node.ir_type}")
 
         # if a node has different kwargs (and so is misaligned), but has a value
         # that is allowed by the expected kwargs, then we can coerce this node
         # into an aligned one by using its value. It's unclear how useful this is.
         if not ir_value_permitted(node.value, node.ir_type, kwargs):
+            invalid_at = (ir_type, kwargs, forced)
+            self.invalid_at = invalid_at
+            self.observer.mark_invalid(invalid_at)
             self.mark_invalid(f"(internal) got a {ir_type} but outside the valid range")
 
+        self._node_index += 1
         return node
 
     def as_result(self) -> Union[ConjectureResult, _Overrun]:
@@ -2328,6 +2384,7 @@ class ConjectureData:
                 forced_indices=frozenset(self.forced_indices),
                 arg_slices=self.arg_slices,
                 slice_comments=self.slice_comments,
+                invalid_at=self.invalid_at,
             )
             assert self.__result is not None
             self.blocks.transfer_ownership(self.__result)
@@ -2475,7 +2532,34 @@ class ConjectureData:
         self.frozen = True
 
         self.buffer = bytes(self.buffer)
-        self.observer.conclude_test(self.status, self.interesting_origin)
+
+        # if we were invalid because of a misalignment in the tree, we don't
+        # want to tell the DataTree that. Doing so would lead to inconsistent behavior.
+        # Given an empty DataTree
+        #               ┌──────┐
+        #               │ root │
+        #               └──────┘
+        # and supposing the very first draw is misaligned, concluding here would
+        # tell the datatree that the *only* possibility at the root node is Status.INVALID:
+        #               ┌──────┐
+        #               │ root │
+        #               └──┬───┘
+        #      ┌───────────┴───────────────┐
+        #      │ Conclusion(Status.INVALID)│
+        #      └───────────────────────────┘
+        # when in fact this is only the case when we try to draw a misaligned node.
+        # For instance, suppose we come along in the second test case and try a
+        # valid node as the first draw from the root. The DataTree thinks this
+        # is flaky (because root must lead to Status.INVALID in the tree) while
+        # in fact nothing in the test function has changed and the only change
+        # is in the ir tree prefix we are supplying.
+        #
+        # From the perspective of DataTree, it is safe to not conclude here. This
+        # tells the datatree that we don't know what happens after this node - which
+        # is true! We are aborting early here because the ir tree became misaligned,
+        # which is a semantically different invalidity than an assume or filter failing.
+        if self.invalid_at is None:
+            self.observer.conclude_test(self.status, self.interesting_origin)
 
     def choice(
         self,

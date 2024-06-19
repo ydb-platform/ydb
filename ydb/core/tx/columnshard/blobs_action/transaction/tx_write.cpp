@@ -31,7 +31,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     TMemoryProfileGuard mpg("TTxWrite::Execute");
-    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
     const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
     for (auto&& aggr : buffer.GetAggregations()) {
@@ -113,7 +113,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
 void TTxWrite::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxWrite::Complete");
-    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
     const auto now = TMonotonic::Now();
     const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
     for (auto&& i : buffer.GetAddActions()) {

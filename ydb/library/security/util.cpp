@@ -26,20 +26,4 @@ TString MaskTicket(const TString& token) {
     return MaskTicket(TStringBuf(token));
 }
 
-TString PrintCertificateSuffix(TStringBuf certificate) {
-    size_t endPos = certificate.rfind("\n-----END");
-    if (endPos != TStringBuf::npos && endPos > 0) {
-        size_t startPos = certificate.rfind("\n", endPos - 1);
-        if (startPos != TStringBuf::npos) {
-            size_t len = std::min(endPos - startPos - 1, 16UL);
-            return TString(certificate.substr(endPos - len, len));
-        }
-    }
-    return "certificate";
-}
-
-TString PrintCertificateSuffix(const TString& certificate) {
-    return PrintCertificateSuffix(TStringBuf(certificate));
-}
-
 } // namespace NKikimr

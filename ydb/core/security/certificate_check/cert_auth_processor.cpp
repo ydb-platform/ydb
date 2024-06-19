@@ -9,6 +9,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
+#include <util/string/hex.h>
 
 namespace NKikimr {
 
@@ -96,6 +97,15 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
 TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(const X509Ptr& x509) {
     X509_NAME* name = X509_get_issuer_name(x509.get()); // return internal pointer
     return ReadTerms(name);
+}
+
+TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
+    unsigned char fingerprint[128];
+    unsigned int len = 0;
+    if (X509_digest(x509.get(), EVP_sha1(), fingerprint, &len) <= 0) {
+        return "";
+    }
+    return HexEncode(fingerprint, len);
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, bool requireSameIssuer, const std::vector<TString>& groups)

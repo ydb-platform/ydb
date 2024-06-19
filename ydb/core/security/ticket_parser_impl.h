@@ -247,7 +247,7 @@ protected:
                 return MaskTicket(Signature.AccessKeyId);
             }
             if (TokenType == TDerived::ETokenType::Certificate) {
-                return PrintCertificateSuffix(Ticket);
+                return GetCertificateFingerprint(Ticket);
             }
             return MaskTicket(Ticket);
         }

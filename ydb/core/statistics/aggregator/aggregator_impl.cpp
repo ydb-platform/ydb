@@ -56,7 +56,12 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
     if (config.HasFeatureFlags()) {
         const auto& featureFlags = config.GetFeatureFlags();
         EnableStatistics = featureFlags.GetEnableStatistics();
+
+        bool enableColumnStatisticsOld = EnableColumnStatistics;
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        if (!enableColumnStatisticsOld && EnableColumnStatistics) {
+            InitializeStatisticsTable();
+        }
     }
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -434,7 +439,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev) {
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
-void TStatisticsAggregator::Initialize() {
+void TStatisticsAggregator::InitializeStatisticsTable() {
+    if (!EnableColumnStatistics) {
+        return;
+    }
     Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()));
 }
 

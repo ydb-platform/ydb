@@ -43,6 +43,10 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const TString LogPrefix;
 
+    using SessionKey = std::pair<TString, ui32>; // TopicPath / PartitionId
+
+    TMap<SessionKey, TActorId> Sessions;
+
 public:
     explicit TRowDispatcher(
         const NConfig::TRowDispatcherConfig& config,
@@ -149,25 +153,39 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvStartSession");
+    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+        " partitionId " << ev->Get()->Record.GetPartitionId());
     
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
+        LOG_ROW_DISPATCHER_DEBUG("RD: readOffset " << readOffset);
     }
-    auto actorId = Register(NewTopicSession(
-        ev->Get()->Record.GetSource(),
-        ev->Get()->Record.GetPartitionId(),
-        readOffset,
-        YqSharedResources->UserSpaceYdbDriver,
-        CreateCredentialsProviderFactoryForStructuredToken(
-            CredentialsFactory,
-            ev->Get()->Record.GetToken(),
-            ev->Get()->Record.GetAddBearerToToken())).release());
+
+
+    SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
+    LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
+    auto sessionIt = Sessions.find(key);
+    if (sessionIt == Sessions.end()) {
+        LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
+        auto actorId = Register(NewTopicSession(
+            ev->Get()->Record.GetSource(),
+            ev->Get()->Record.GetPartitionId(),
+            YqSharedResources->UserSpaceYdbDriver,
+            CreateCredentialsProviderFactoryForStructuredToken(
+                CredentialsFactory,
+                ev->Get()->Record.GetToken(),
+                ev->Get()->Record.GetAddBearerToToken())).release());
+        Sessions[key] = actorId;
+    }
+
+    auto sessionActorId = Sessions[key];
 
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
     event->ConsumerActorId = ev->Sender;
-    Send(actorId, event.release());
+    event->Offset = readOffset;
+    event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
+    Send(sessionActorId, event.release());
 }
 
 } // namespace

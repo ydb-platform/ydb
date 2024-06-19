@@ -15,7 +15,6 @@ namespace NFq {
 std::unique_ptr<NActors::IActor> NewTopicSession(
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
-    TMaybe<ui64> readOffset,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 

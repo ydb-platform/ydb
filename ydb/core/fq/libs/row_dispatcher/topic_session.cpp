@@ -73,13 +73,13 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
         //NKikimr::NMiniKQL::TUnboxedValueVector Data;
         TVector<TString> Data;
         i64 UsedSpace = 0;
-        THashMap<NYdb::NTopic::TPartitionSession::TPtr, TList<std::pair<ui64, ui64>>> OffsetRanges; // [start, end)
+        ui64 LastOffset = 0; // [start, end)
     };
 
 private:
     const NYql::NPq::NProto::TDqPqTopicSource SourceParams;
     ui32 PartitionId;
-    TMaybe<ui64> ReadOffset;
+    //TMaybe<ui64> ReadOffset;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
 
@@ -91,11 +91,12 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
     std::vector<std::tuple<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
-    TInstant StartingMessageTimestamp;
+    //TInstant StartingMessageTimestamp;
    // NKikimr::NMiniKQL::TScopedAlloc Alloc; // TODO ?
 
     struct ConsumersInfo {
-
+        TMaybe<ui64> Offset;
+        TInstant StartingMessageTimestamp;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
 
@@ -104,7 +105,7 @@ public:
     explicit TTopicSession(
         const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
         ui32 partitionId,
-        TMaybe<ui64> readOffset,
+        //TMaybe<ui64> readOffset,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 
@@ -115,11 +116,13 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession();
     void SubscribeOnNextEvent();
     void SendData();
+    void CloseSession();
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr&);
     TString GetSessionId() const;
     void HandleNewEvents();
+
 
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
     std::optional<NYql::TIssues> ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev);
@@ -128,6 +131,9 @@ public:
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
     TReadyBatch& GetActiveBatch(/*const TPartitionKey& partitionKey, TInstant time*/);
 
+    void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
 
     static constexpr char ActorName[] = "YQ_ROW_DISPATCHER";
 
@@ -136,6 +142,10 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
+
+        hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
         
     )
 
@@ -145,17 +155,17 @@ private:
 TTopicSession::TTopicSession(
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
-    TMaybe<ui64> readOffset,
+   // TMaybe<ui64> readOffset,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory)
     : SourceParams(sourceParams)
     , PartitionId(partitionId)
-    , ReadOffset(readOffset)
+   // , ReadOffset(readOffset)
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession: ")
-    , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
+   // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
    // , Alloc(__LOCATION__)
 {
    // Alloc.DisableStrictAllocationCheck();
@@ -171,8 +181,6 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("id " << SelfId());
-    GetReadSession();
-    SubscribeOnNextEvent();
 }
 
 void TTopicSession::SubscribeOnNextEvent() {
@@ -213,8 +221,8 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings() const
     return NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
         .ConsumerName(SourceParams.GetConsumerName())
-        .MaxMemoryUsageBytes(BufferSize)
-        .ReadFromTimestamp(StartingMessageTimestamp);
+        .MaxMemoryUsageBytes(BufferSize);
+       // .ReadFromTimestamp(StartingMessageTimestamp); // TODO
 }
 
 NYdb::NTopic::IReadSession& TTopicSession::GetReadSession() {
@@ -263,13 +271,25 @@ void TTopicSession::HandleNewEvents() {
          // if NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent
         // auto issues = std::visit(TTopicEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
         if (issues) {
-            LOG_ROW_DISPATCHER_DEBUG("Close session");
-            ReadSession->Close(TDuration::Zero());
-            ReadSession.reset();
+            CloseSession();
             // Callbacks->OnAsyncOutputError(OutputIndex, *issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             break;
         }
     }
+}
+
+void TTopicSession::CloseSession() {
+    LOG_ROW_DISPATCHER_DEBUG("CloseSession");
+
+
+    if (!ReadSession) {
+        LOG_ROW_DISPATCHER_DEBUG("CloseSession ?");
+
+        return;
+    }
+    LOG_ROW_DISPATCHER_DEBUG("Close session");
+    ReadSession->Close(TDuration::Zero());
+    ReadSession.reset();
 }
 
 std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -281,10 +301,10 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
         // LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
         LOG_ROW_DISPATCHER_DEBUG("Data received: " << message.DebugString(true));
 
-        if (message.GetWriteTime() < StartingMessageTimestamp) {
-            LOG_ROW_DISPATCHER_DEBUG("Skip data. StartingMessageTimestamp: " << StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
-            continue;
-        }
+        // if (message.GetWriteTime() < StartingMessageTimestamp) {
+        //     LOG_ROW_DISPATCHER_DEBUG("Skip data. StartingMessageTimestamp: " << StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
+        //     continue;
+        // } // TODO
 
         const TString& item = message.GetData();
         size_t size = item.size();
@@ -294,15 +314,7 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
         auto& curBatch = GetActiveBatch(/*partitionKey, message.GetWriteTime()*/);
         curBatch.Data.emplace_back(std::move(item));
         curBatch.UsedSpace += size;
-
-        auto& offsets = curBatch.OffsetRanges[message.GetPartitionSession()];
-        if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
-            offsets.back().second = message.GetOffset() + 1;
-        } else {
-            offsets.emplace_back(message.GetOffset(), message.GetOffset() + 1);
-        }
-
-
+        curBatch.LastOffset = message.GetOffset() + 1;
     }
     return std::nullopt;
 }
@@ -318,9 +330,18 @@ std::optional<NYql::TIssues> TTopicSession::ProcessSessionClosedEvent(NYdb::NTop
 
 
 std::optional<NYql::TIssues> TTopicSession::ProcessStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-    LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received" << ReadOffset);
+    LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received");
 
-    event.Confirm(ReadOffset);
+    TMaybe<ui64> minOffset;
+    for (const auto& [actorId, info] : Consumers) {
+        if (!minOffset
+            || (info.Offset && (*info.Offset < *minOffset))) {
+                minOffset = info.Offset;
+            } 
+    }
+    LOG_ROW_DISPATCHER_DEBUG("minOffset " << minOffset);
+
+    event.Confirm(minOffset);
     return std::nullopt;
 }
 
@@ -414,23 +435,47 @@ void TTopicSession::SendData() {
     for (const auto& [actorId, info] : Consumers) {
         auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
         event->Record.SetPartitionId(PartitionId);
-        event->Record.SetLastOffset(0); // TODO 
         for (const auto& value : readyBatch.Data) {
 
             //TString str(value.AsStringRef());
             event->Record.AddBlob(value);
         }
+        event->Record.SetLastOffset(readyBatch.LastOffset);
 
         LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId << " size " <<  event->Record.BlobSize());
 
-        Send(actorId, event.release());
+        Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
     ReadyBuffer.pop();
 }
 
+
+void TTopicSession::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
+}
+
+void TTopicSession::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
+
+}
+
+void TTopicSession::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
+}
+
 void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: " << ev->Get()->ConsumerActorId);
-    Consumers[ev->Get()->ConsumerActorId];
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: offset " << ev->Get()->Offset);
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: StartingMessageTimestampMs " << ev->Get()->StartingMessageTimestampMs);
+    Consumers[ev->Get()->ConsumerActorId].Offset = ev->Get()->Offset;
+    Consumers[ev->Get()->ConsumerActorId].StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
+
+    LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
+
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: CloseSession ");
+    CloseSession(); // TODO
+    GetReadSession();
+    SubscribeOnNextEvent();
 }
 
 
@@ -441,10 +486,9 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
 std::unique_ptr<NActors::IActor> NewTopicSession(
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
-    TMaybe<ui64> readOffset,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(sourceParams, partitionId, readOffset, driver, credentialsProviderFactory));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(sourceParams, partitionId, driver, credentialsProviderFactory));
 }
 
 } // namespace NFq

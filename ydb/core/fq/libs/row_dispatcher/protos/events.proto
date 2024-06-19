@@ -27,6 +27,7 @@ message TEvStartSession {
     string Token = 3;
     bool AddBearerToToken = 4;
     optional uint64 Offset = 5;
+    uint64 StartingMessageTimestampMs = 6;
 }
 
 message TEvSessionData {

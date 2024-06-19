@@ -92,9 +92,11 @@ struct TEvRowDispatcher {
     };
 
 
-     //  Row_dispatcher  <->  session: 
+    //  Row_dispatcher  <->  session: 
     struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
         NActors::TActorId ConsumerActorId;
+        TMaybe<ui64> Offset;
+        ui64 StartingMessageTimestampMs;
     };
 };
 

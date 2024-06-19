@@ -4,6 +4,8 @@
 #include <util/generic/fwd.h>
 #include <contrib/libs/protobuf/src/google/protobuf/map.h>
 
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
 namespace NKikimr::NKqp {
     
     struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
@@ -13,6 +15,7 @@ namespace NKikimr::NKqp {
         TString CurrentExecutionId;
         TString CustomerSuppliedId;
         TString PoolId;
+        NResourcePool::TPoolSettings PoolConfig;
 
         TUserRequestContext() = default;
 

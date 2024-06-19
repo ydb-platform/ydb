@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -291,7 +293,7 @@ struct TYdbSetupSettings {
 class TWorkloadServiceYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
-        TWorkloadManagerConfig::TPoolConfig defaultPoolConfig;
+        NResourcePool::TPoolSettings defaultPoolConfig;
         defaultPoolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
         defaultPoolConfig.QueryCountLimit = Settings_.QueryCountLimit_;
         defaultPoolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;

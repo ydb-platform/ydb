@@ -481,6 +481,7 @@ public:
         }
 
         LOG_D("continue request, pool id: " << poolId);
+        QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
         CompileQuery();
     }
 

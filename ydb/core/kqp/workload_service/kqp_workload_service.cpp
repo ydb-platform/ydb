@@ -258,7 +258,7 @@ private:
 
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
         LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << message);
-        Send(replyActorId, new TEvContinueRequest(status, {NYql::TIssue(message)}));
+        Send(replyActorId, new TEvContinueRequest(status, {}, {NYql::TIssue(message)}));
     }
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {

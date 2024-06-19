@@ -74,8 +74,9 @@ protected:
     };
 
 public:
-    TStateBase(const TActorContext& actorContext, const TString& poolId, const TWorkloadManagerConfig::TPoolConfig& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+    TStateBase(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : Counters(counters)
+        , PoolConfig(poolConfig)
         , ActorContext(actorContext)
         , PoolId(poolId)
         , CancelAfter(poolConfig.QueryCancelAfter)
@@ -96,7 +97,7 @@ public:
 
     bool PlaceRequest(const TActorId& workerActorId, const TString& sessionId) final {
         if (LocalSessions.contains(sessionId)) {
-            ActorContext.Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
+            ActorContext.Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
             return false;
         }
 
@@ -143,7 +144,7 @@ public:
     }
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, NYql::TIssues issues = {}) {
-        ActorContext.Send(request->WorkerActorId, new TEvContinueRequest(status, std::move(issues)));
+        ActorContext.Send(request->WorkerActorId, new TEvContinueRequest(status, PoolConfig, std::move(issues)));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
@@ -250,12 +251,12 @@ private:
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 
-    static ui64 GetMaxPoolSize(const TWorkloadManagerConfig::TPoolConfig& poolConfig) {
+    static ui64 GetMaxPoolSize(const NResourcePool::TPoolSettings& poolConfig) {
         const ui64 queryCountLimit = poolConfig.QueryCountLimit;
         return queryCountLimit ? queryCountLimit : std::numeric_limits<ui64>::max();
     }
 
-    static ui64 GetMaxInFlight(const TWorkloadManagerConfig::TPoolConfig& poolConfig) {
+    static ui64 GetMaxInFlight(const NResourcePool::TPoolSettings& poolConfig) {
         const ui64 queueSizeLimit = GetMaxPoolSize(poolConfig);
         const ui64 concurrentQueryLimit = poolConfig.ConcurrentQueryLimit;
         return std::min(concurrentQueryLimit ? concurrentQueryLimit : std::numeric_limits<ui64>::max(), queueSizeLimit);
@@ -277,6 +278,7 @@ private:
 protected:
     NMonitoring::TDynamicCounterPtr Counters;
 
+    const NResourcePool::TPoolSettings PoolConfig;
     const TActorContext ActorContext;
     const TString PoolId;
     const TDuration CancelAfter;
@@ -306,7 +308,7 @@ class TUnlimitedState : public TStateBase {
     using TBase = TStateBase;
 
 public:
-    TUnlimitedState(const TActorContext& actorContext, const TString& poolId, const TWorkloadManagerConfig::TPoolConfig& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+    TUnlimitedState(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : TBase(actorContext, poolId, poolConfig, counters)
     {
         Y_ENSURE(InFlightLimit == std::numeric_limits<ui64>::max());
@@ -341,7 +343,7 @@ class TFifoState : public TStateBase {
     static constexpr ui64 MAX_PENDING_REQUESTS = 1000;
 
 public:
-    TFifoState(TActorContext actorContext, const TString& poolId, const TWorkloadManagerConfig::TPoolConfig& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+    TFifoState(TActorContext actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : TBase(actorContext, poolId, poolConfig, counters)
     {
         Y_ENSURE(InFlightLimit < std::numeric_limits<ui64>::max());
@@ -667,7 +669,7 @@ private:
 
 }  // anonymous namespace
 
-TStatePtr CreateState(const TActorContext& actorContext, const TString& poolId, const TWorkloadManagerConfig::TPoolConfig& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
+TStatePtr CreateState(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
     if (!poolConfig.ConcurrentQueryLimit && !poolConfig.QueryCountLimit) {
         return MakeIntrusive<TUnlimitedState>(actorContext, poolId, poolConfig, counters);
     }

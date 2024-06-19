@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -24,12 +25,14 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {
-    explicit TEvContinueRequest(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+    TEvContinueRequest(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, NYql::TIssues issues = {})
         : Status(status)
+        , PoolConfig(poolConfig)
         , Issues(std::move(issues))
     {}
 
     const Ydb::StatusIds::StatusCode Status;
+    const NResourcePool::TPoolSettings PoolConfig;
     const NYql::TIssues Issues;
 };
 

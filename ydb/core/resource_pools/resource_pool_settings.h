@@ -1,0 +1,18 @@
+#pragma once
+
+#include <util/datetime/base.h>
+
+
+namespace NKikimr::NResourcePool {
+
+struct TPoolSettings {
+    ui64 ConcurrentQueryLimit = 0;  // 0 = infinity
+    ui64 QueryCountLimit = 0;  // 0 = infinity
+    TDuration QueryCancelAfter = TDuration::Days(1);
+
+    double QueryMemoryLimitRatioPerNode = 100;  // Percent from node memory capacity
+
+    TString ACL = "";  // empty = full access for all users
+};
+
+}  // namespace NKikimr::NResourcePool

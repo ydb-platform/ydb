@@ -1,9 +1,9 @@
 #pragma once
 
-#include "kqp_workload_service.h"
 #include "kqp_workload_service_tables_impl.h"
 
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
@@ -36,7 +36,7 @@ public:
 
 using TStatePtr = TIntrusivePtr<IState>;
 
-TStatePtr CreateState(const NActors::TActorContext& actorContext, const TString& poolId, const TWorkloadManagerConfig::TPoolConfig& poolConfig, NMonitoring::TDynamicCounterPtr counters);
+TStatePtr CreateState(const NActors::TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters);
 
 }  // NQueue
 

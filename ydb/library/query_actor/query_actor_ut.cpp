@@ -55,6 +55,8 @@ struct TTestServer {
             KeyColumnNames: ["Key"]
             )"
         );
+
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::EServiceKikimr::KQP_PROXY, NActors::NLog::EPriority::PRI_DEBUG);
     }
 
     template <class TQueryActor, class... TParams>

@@ -287,21 +287,26 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     RunningQuery = false;
     LOG_D("TEvStreamQueryResultPart " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
-    if (ev->Get()->Status == StatusIds::SUCCESS) {
+    if (ev->Get()->Status != StatusIds::SUCCESS) {
+        Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
+        return;
+    }
+
+    if (ev->Get()->ResultSet.rows_size()) {
         try {
             (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
         } catch (const std::exception& ex) {
             Finish(StatusIds::INTERNAL_ERROR, ex.what());
             return;
         }
-        if (StreamQueryProcessor && StreamQueryProcessor->HasData()) {
+    }
+
+    if (StreamQueryProcessor) {
+        if (StreamQueryProcessor->HasData()) {
             ReadNextStreamPart();
-        } else if (StreamQueryProcessor) {
+        } else {
             FinishStreamRequest();
         }
-    } else {
-        Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
-        return;
     }
 }
 
@@ -310,6 +315,7 @@ void TQueryBase::CallOnStreamResult(NYdb::TResultSet&& resultSet) {
 }
 
 void TQueryBase::CancelStreamQuery() {
+    LOG_D("Cancel stream request");
     Y_ABORT_UNLESS(StreamQueryProcessor);
 
     if (!StreamQueryProcessor->IsFinished()) {

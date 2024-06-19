@@ -26,7 +26,9 @@ ALTER TABLE episodes DROP column is_deleted;
 
 {% if feature_secondary_index %}
 
-## Adding or removing a secondary index {#secondary-index}
+## Secondary indexes {#secondary-index}
+
+### Adding an index {#add-index}
 
 ```ADD INDEX```: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named ```title_index``` for the ```title``` column.
 
@@ -36,7 +38,53 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 You can specify any index parameters from the [`CREATE TABLE`](../create_table#secondary_index) command.
 
-Deleting an index:
+You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index#add) command.
+
+### Altering an index {#alter-index}
+
+Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like [those of regular tables](#additional-alter).
+
+{% note info %}
+
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table#secondary_index) clauses.
+
+{% endnote %}
+
+```sql
+ALTER TABLE table_name ALTER INDEX index_name SET partitioning_setting_name value;
+ALTER TABLE table_name ALTER INDEX index_name SET (partitioning_setting_name_1 = value_1, ...);
+```
+
+* `table_name`: The name of the table whose index is to be altered.
+
+* `index_name`: The name of the index to be altered.
+
+* `partitioning_setting_name`: The name of the setting to be altered, which should be one of the following:
+    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+
+{% note info %}
+
+These settings cannot be [reset](#additional-reset).
+
+{% endnote %}
+
+* `value`: The new value for the setting. Possible values include:
+    * `ENABLED` or `DISABLED` for `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
+    * integer of `Uint64` type for the other settings
+
+The code in the following example enables automatic partitioning by load for the index named `title_index` and sets the minimal partition count to 5:
+```sql
+ALTER TABLE `series` ALTER INDEX `title_index` SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+);
+```
+
+### Deleting an index {#drop-index}
 
 ```DROP INDEX```: Deletes the index with the specified name. The code below deletes the index named ```title_index```.
 
@@ -44,9 +92,9 @@ Deleting an index:
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-You can also add or remove a secondary index using the {{ ydb-short-name }} CLI [table index](https://ydb.tech/en/docs/reference/ydb-cli/commands/secondary_index) command.
+You can also remove a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index#drop) command.
 
-## Renaming a secondary index {#rename-secondary-index}
+### Renaming an index {#rename-index}
 
 `RENAME INDEX`: Renames the index with the specified name.
 

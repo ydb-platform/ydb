@@ -548,14 +548,10 @@ namespace NKikimr {
                 front.ReplyFunc(std::move(rec->Ev), ctx, NKikimrProto::ERROR, "error state", now, feedback.first);
             }
 
-            void DisconnectClients(const TActorContext& ctx, const TActorId& serviceId) {
+            void DisconnectClients(const TActorContext& ctx) {
                 auto callback = [&](const auto& winp) {
                     ctx.Send(winp->ActorId, new TEvBlobStorage::TEvVWindowChange(ExtQueueId,
                         TEvBlobStorage::TEvVWindowChange::DropConnection));
-
-                    // small hack for older versions of BS_QUEUE that do not support DropConnection flag
-                    ctx.Send(new IEventHandle(winp->ActorId, serviceId, new TEvents::TEvUndelivered(0,
-                        TEvents::TEvUndelivered::ReasonActorUnknown)));
                 };
                 QueueBackpressure->ForEachWindow(callback);
             }
@@ -1696,11 +1692,9 @@ namespace NKikimr {
         }
 
         void DisconnectClients(const TActorContext& ctx) {
-            const auto& base = Config->BaseInfo;
-            const TActorId& serviceId = MakeBlobStorageVDiskID(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId);
             for (auto *q : {&ExtQueueAsyncGets, &ExtQueueFastGets, &ExtQueueDiscoverGets, &ExtQueueLowGets,
                     &ExtQueueTabletLogPuts, &ExtQueueAsyncBlobPuts, &ExtQueueUserDataPuts}) {
-                q->DisconnectClients(ctx, serviceId);
+                q->DisconnectClients(ctx);
             }
         }
 
@@ -1764,11 +1758,6 @@ namespace NKikimr {
         }
 
     private:
-        void Die(const TActorContext &ctx) override {
-            ActiveActors.KillAndClear(ctx);
-            TActorBootstrapped::Die(ctx);
-        }
-
         void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
@@ -1825,7 +1814,7 @@ namespace NKikimr {
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
+            cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -1872,7 +1861,7 @@ namespace NKikimr {
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
+            cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
@@ -1916,7 +1905,7 @@ namespace NKikimr {
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
+            cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
@@ -2065,7 +2054,7 @@ namespace NKikimr {
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
+            cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
@@ -2208,6 +2197,9 @@ namespace NKikimr {
         }
 
         void PassAway() override {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            DisconnectClients(ctx);
+            ActiveActors.KillAndClear(ctx);
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));

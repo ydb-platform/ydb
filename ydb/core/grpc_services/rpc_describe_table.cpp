@@ -92,7 +92,7 @@ private:
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
 
-                FillIndexDescription(describeTableResult, tableDescription);
+                FillIndexDescription(describeTableResult, tableDescription, splitKeyType);
                 FillChangefeedDescription(describeTableResult, tableDescription);
 
                 if (GetProtoRequest()->include_table_stats()) {

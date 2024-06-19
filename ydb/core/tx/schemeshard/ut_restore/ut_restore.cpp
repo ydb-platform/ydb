@@ -42,7 +42,7 @@ namespace {
 
         scheme.mutable_primary_key()->CopyFrom(tableDesc.GetKeyColumnNames());
         FillColumnDescription(scheme, mkqlKeyType, tableDesc);
-        FillIndexDescription(scheme, tableDesc);
+        FillIndexDescription(scheme, tableDesc, mkqlKeyType);
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
         FillAttributes(scheme, pathDesc);

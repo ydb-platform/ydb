@@ -59,7 +59,7 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
         return Nothing();
     }
 
-    FillIndexDescription(scheme, tableDesc);
+    FillIndexDescription(scheme, tableDesc, mkqlKeyType);
     FillStorageSettings(scheme, tableDesc);
     FillColumnFamilies(scheme, tableDesc);
     FillAttributes(scheme, pathDesc);

@@ -2214,18 +2214,21 @@ TIndexDescription::TIndexDescription(
     const TString& name,
     EIndexType type,
     const TVector<TString>& indexColumns,
-    const TVector<TString>& dataColumns
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& settings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
+    , GlobalIndexSettings_(settings)
 {}
 
 TIndexDescription::TIndexDescription(
     const TString& name,
     const TVector<TString>& indexColumns,
-    const TVector<TString>& dataColumns
-)   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns)
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& settings
+)   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, settings)
 {}
 
 TIndexDescription::TIndexDescription(const Ydb::Table::TableIndex& tableIndex)
@@ -2257,10 +2260,43 @@ ui64 TIndexDescription::GetSizeBytes() const {
 }
 
 template <typename TProto>
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
+    auto partitionsFromProto = [](const auto& proto) -> TUniformOrExplicitPartitions {
+        switch (proto.partitions_case()) {
+        case TProto::kUniformPartitions:
+            return proto.uniform_partitions();
+        case TProto::kPartitionAtKeys:
+            return TExplicitPartitions::FromProto(proto.partition_at_keys());
+        default:
+            return {};
+        }
+    };
+
+    return {
+        .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
+        .Partitions = partitionsFromProto(proto)
+    };
+}
+
+void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings) const {
+    *settings.mutable_partitioning_settings() = PartitioningSettings.GetProto();
+    std::visit([&settings](auto&& partitions) {
+            using T = std::decay_t<decltype(partitions)>;
+            if constexpr (std::is_same_v<T, ui64>) {
+                settings.set_uniform_partitions(partitions);
+            } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
+                partitions.SerializeTo(*settings.mutable_partition_at_keys());
+            }
+        }, Partitions
+    );
+}
+
+template <typename TProto>
 TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     TVector<TString> indexColumns;
     TVector<TString> dataColumns;
+    TGlobalIndexSettings globalIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2268,19 +2304,22 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     switch (proto.type_case()) {
     case TProto::kGlobalIndex:
         type = EIndexType::GlobalSync;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_index().settings());
         break;
     case TProto::kGlobalAsyncIndex:
         type = EIndexType::GlobalAsync;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_async_index().settings());
         break;
     case TProto::kGlobalUniqueIndex:
         type = EIndexType::GlobalUnique;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_unique_index().settings());
         break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
         break;
     }
 
-    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns);
+    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
         result.SizeBytes = proto.size_bytes();
     }
@@ -2298,13 +2337,13 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
 
     switch (IndexType_) {
     case EIndexType::GlobalSync:
-        *proto.mutable_global_index() = Ydb::Table::GlobalIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_index()->mutable_settings());
         break;
     case EIndexType::GlobalAsync:
-        *proto.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_async_index()->mutable_settings());
         break;
     case EIndexType::GlobalUnique:
-        *proto.mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_unique_index()->mutable_settings());
         break;
     case EIndexType::Unknown:
         break;

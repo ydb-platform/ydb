@@ -173,11 +173,23 @@ struct TExplicitPartitions {
     using TSelf = TExplicitPartitions;
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
-
+    
     template <typename TProto>
     static TExplicitPartitions FromProto(const TProto& proto);
-
+    
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
+};
+
+struct TGlobalIndexSettings {
+    using TUniformOrExplicitPartitions = std::variant<std::monostate, ui64, TExplicitPartitions>;
+
+    TPartitioningSettings PartitioningSettings;
+    TUniformOrExplicitPartitions Partitions;
+
+    template <typename TProto>
+    static TGlobalIndexSettings FromProto(const TProto& proto);
+
+    void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 
 //! Represents index description
@@ -189,13 +201,15 @@ public:
         const TString& name,
         EIndexType type,
         const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns = {}
+        const TVector<TString>& dataColumns = {},
+        const TGlobalIndexSettings& settings = {}
     );
 
     TIndexDescription(
         const TString& name,
         const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns = {}
+        const TVector<TString>& dataColumns = {},
+        const TGlobalIndexSettings& settings = {}
     );
 
     const TString& GetIndexName() const;
@@ -220,6 +234,7 @@ private:
     EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
+    TGlobalIndexSettings GlobalIndexSettings_;
     ui64 SizeBytes = 0;
 };
 

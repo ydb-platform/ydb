@@ -719,9 +719,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
 
 template <typename TYdbProto>
 void FillTableBoundaryImpl(TYdbProto& out,
-        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-
-    for (const auto& boundary : in.GetSplitBoundary()) {
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
+    const NKikimrMiniKQL::TType& splitKeyType
+) {
+    for (const auto& boundary : boundaries) {
         if (boundary.HasSerializedKeyPrefix()) {
             throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
                 << "Unexpected serialized response from txProxy";
@@ -730,7 +731,9 @@ void FillTableBoundaryImpl(TYdbProto& out,
 
             if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
                 ydbValue = out.add_shard_key_bounds();
-            } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value) {
+            } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value
+                || std::is_same<TYdbProto, Ydb::Table::GlobalIndexSettings>::value
+            ) {
                 ydbValue = out.mutable_partition_at_keys()->add_split_points();
             } else {
                 Y_ABORT("Unknown proto type");
@@ -753,12 +756,12 @@ void FillTableBoundaryImpl(TYdbProto& out,
 
 void FillTableBoundary(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillTableBoundaryImpl<Ydb::Table::DescribeTableResult>(out, in, splitKeyType);
+    FillTableBoundaryImpl<Ydb::Table::DescribeTableResult>(out, in.GetSplitBoundary(), splitKeyType);
 }
 
 void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillTableBoundaryImpl<Ydb::Table::CreateTableRequest>(out, in, splitKeyType);
+    FillTableBoundaryImpl<Ydb::Table::CreateTableRequest>(out, in.GetSplitBoundary(), splitKeyType);
 }
 
 template <typename TYdbProto>
@@ -799,9 +802,38 @@ void FillPartitioningSettings(TYdbProto& out, const NKikimrSchemeOp::TPartitioni
     }
 }
 
+void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
+        const NKikimrSchemeOp::TIndexDescription& tableIndex,
+        const NKikimrMiniKQL::TType& splitKeyType) {
+
+    switch (tableIndex.GetPartitionsCase()) {
+    case NKikimrSchemeOp::TIndexDescription::kUniformPartitions:
+        settings.set_uniform_partitions(tableIndex.GetUniformPartitions());
+        break;
+    case NKikimrSchemeOp::TIndexDescription::kPartitionAtKeys:
+        FillTableBoundaryImpl(*settings.mutable_partition_at_keys(),
+            tableIndex.GetPartitionAtKeys().GetSplitBoundary(),
+            splitKeyType
+        );
+        break;
+    default:
+        break;
+    }
+
+    auto& partitioningSettings = *settings.mutable_partitioning_settings();
+    if (tableIndex.HasPartitioningPolicy()) {
+        FillPartitioningSettings(
+            partitioningSettings,
+            tableIndex.GetPartitioningPolicy()
+        );
+    } else {
+        FillDefaultPartitioningSettings(partitioningSettings);
+    }
+}
+
 template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out,
-        const NKikimrSchemeOp::TTableDescription& in) {
+        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
 
     for (const auto& tableIndex : in.GetTableIndexes()) {
         auto index = out.add_indexes();
@@ -820,13 +852,13 @@ void FillIndexDescriptionImpl(TYdbProto& out,
 
         switch (tableIndex.GetType()) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            *index->mutable_global_index() = Ydb::Table::GlobalIndex();
+            FillGlobalIndexSettings(*index->mutable_global_index()->mutable_settings(), tableIndex, splitKeyType);
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            *index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+            FillGlobalIndexSettings(*index->mutable_global_async_index()->mutable_settings(), tableIndex, splitKeyType);
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
-            *index->mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+            FillGlobalIndexSettings(*index->mutable_global_unique_index()->mutable_settings(), tableIndex, splitKeyType);
             break;
         default:
             break;
@@ -844,13 +876,13 @@ void FillIndexDescriptionImpl(TYdbProto& out,
 }
 
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
-        const NKikimrSchemeOp::TTableDescription& in) {
-    FillIndexDescriptionImpl(out, in);
+        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
+    FillIndexDescriptionImpl(out, in, splitKeyType);
 }
 
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
-        const NKikimrSchemeOp::TTableDescription& in) {
-    FillIndexDescriptionImpl(out, in);
+        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
+    FillIndexDescriptionImpl(out, in, splitKeyType);
 }
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,

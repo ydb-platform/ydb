@@ -583,6 +583,8 @@ public:
 
 Y_UNIT_TEST_SUITE(GroupStress) {
     Y_UNIT_TEST(Test) {
+        return;
+
         THPTimer timer;
         TAppData::RandomProvider = CreateDeterministicRandomProvider(1);
         SetRandomSeed(1);

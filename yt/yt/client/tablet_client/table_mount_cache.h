@@ -92,6 +92,8 @@ DEFINE_ENUM(ETableSchemaKind,
     (PrimaryWithTabletIndex)
     // Schema used for replication log rows.
     (ReplicationLog)
+    // Schema used for inserting rows into ordered tables via queue producer.
+    (WriteViaQueueProducer)
 );
 
 struct TTableMountInfo

@@ -4989,11 +4989,11 @@ private:
 
     template <class TExecParamsPtr>
     static void PrepareAttributes(
-            NYT::TNode& attrs,
-            const TOutputInfo& out,
-            const TExecParamsPtr& execCtx,
-            const TString& cluster,
-            bool createTable)
+        NYT::TNode& attrs,
+        const TOutputInfo& out,
+        const TExecParamsPtr& execCtx,
+        const TString& cluster,
+        bool createTable)
     {
         PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
 
@@ -5001,8 +5001,7 @@ private:
 
         if (createTable) {
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-            const bool useColumnGroups = execCtx->Options_.Config()->ColumnGroupMode.Get(cluster).GetOrElse(EColumnGroupMode::Disable) == EColumnGroupMode::Single;
-            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, useColumnGroups).ToNode();
+            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
         }
     }
 

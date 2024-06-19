@@ -61,7 +61,7 @@ static_assert(
     sizeof(TUnversionedValue) == 16,
     "TUnversionedValue has to be exactly 16 bytes.");
 static_assert(
-    std::is_pod_v<TUnversionedValue>,
+    (std::is_standard_layout_v<TUnversionedValue> && std::is_trivial_v<TUnversionedValue>),
     "TUnversionedValue must be a POD type.");
 
 ////////////////////////////////////////////////////////////////////////////////

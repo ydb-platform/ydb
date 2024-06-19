@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -99,15 +100,41 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
-        auto kikimr = DefaultKikimrRunner();
+        NWorkload::TWorkloadManagerConfig workloadManagerConfig;
+        workloadManagerConfig.Pools.insert({"sample_pool_id", NWorkload::TWorkloadManagerConfig::TPoolConfig()});
+        SetWorkloadManagerConfig(workloadManagerConfig);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true)
+            .SetEnableScriptExecutionOperations(true));
         auto db = kikimr.GetQueryClient();
 
         TExecuteScriptSettings settings;
-        settings.PoolId("sample_pool_id");
 
-        auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
-        CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
+        {  // Existing pool
+            settings.PoolId("sample_pool_id");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+            CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
+        }
+
+        {  // Not existing pool (check workload manager enabled)
+            settings.PoolId("another_pool_id");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
+        }
     }
 
     void ValidatePlan(const TString& plan) {

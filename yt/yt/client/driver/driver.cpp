@@ -306,6 +306,7 @@ public:
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TDumpJobProxyLogCommand,              "dump_job_proxy_log",              Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER_ALL(TGetVersionCommand,                   "get_version",                     Null,       Structured, false, false);
         REGISTER_ALL(TGetSupportedFeaturesCommand,         "get_supported_features",          Null,       Structured, false, false);
@@ -349,11 +350,15 @@ public:
         REGISTER    (TUnregisterQueueConsumerCommand,      "unregister_queue_consumer",       Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TListQueueConsumerRegistrationsCommand, "list_queue_consumer_registrations", Null,   Structured, false, false, ApiVersion4);
         REGISTER    (TPullQueueCommand,                    "pull_queue",                      Null,       Tabular,    false, true , ApiVersion4);
+        // COMPAT(nadya73): for compatibility with old versions of clients.
         REGISTER    (TPullQueueConsumerCommand,            "pull_consumer",                   Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TPullQueueConsumerCommand,            "pull_queue_consumer",             Null,       Tabular,    false, true , ApiVersion4);
-        REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        // COMPAT(nadya73): for compatibility with old versions of clients.
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TAdvanceQueueConsumerCommand,         "advance_queue_consumer",          Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPushQueueProducerCommand,            "push_queue_producer",             Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true,  false, ApiVersion4);
@@ -376,7 +381,7 @@ public:
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TGetPipelineStatusCommand,            "get_pipeline_status",             Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {

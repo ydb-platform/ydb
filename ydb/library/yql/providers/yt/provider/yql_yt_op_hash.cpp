@@ -176,9 +176,6 @@ TString TYtNodeHashCalculator::GetOutTableHash(const TExprNode& node, TArgIndex&
         if (auto optimizeFor = Configuration->OptimizeFor.Get(Cluster)) {
             builder << *optimizeFor;
         }
-        if (auto columnGroup = Configuration->ColumnGroupMode.Get(Cluster)) {
-            builder << *columnGroup;
-        }
     }
 
     return builder.Finish();

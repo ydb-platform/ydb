@@ -31,6 +31,8 @@ void AdjustHeapBack(TIterator begin, TIterator end);
 //! Extracts the front from the heap on |[begin, end)| by moving
 //! its back to the front and then pushing it down if needed.
 template <class TIterator, class TComparer, class TOnAssign>
+void ExtractHeap(TIterator begin, TIterator end, TIterator current, TComparer comparer, TOnAssign onAssign);
+template <class TIterator, class TComparer, class TOnAssign>
 void ExtractHeap(TIterator begin, TIterator end, TComparer comparer, TOnAssign onAssign);
 template <class TIterator, class TComparer>
 void ExtractHeap(TIterator begin, TIterator end, TComparer comparer);

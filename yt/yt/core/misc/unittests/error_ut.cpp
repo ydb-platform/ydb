@@ -280,7 +280,7 @@ TEST(TErrorTest, BitshiftOverloadsImplicitLeftOperand)
     };
     IterateTestOverEveryRightOperand<
         decltype(adlResolutionTester),
-        /*LeftOperandHasUserDefinedOverload=*/ true>(adlResolutionTester);
+        /*LeftOperandHasUserDefinedOverload*/ true>(adlResolutionTester);
 
     // Make sure no ambiguous calls.
     auto genericErrorOrTester = [] (auto&& arg) {

@@ -20,10 +20,10 @@ message TTableServiceConfig {
             optional TRetrySettings SubscriberSettings = 2;
             optional TRetrySettings ExchangerSettings = 3;
         }
-        optional uint32 ComputeActorsCount = 1 [default = 1000];
+        optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 31457280];   // 30 MB
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 524288];   // 512 KB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];

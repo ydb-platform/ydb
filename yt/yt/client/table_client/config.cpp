@@ -191,7 +191,7 @@ void TKeyFilterWriterConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Parameter("false_positive_rate", &TThis::FalsePositiveRate)
-        .InRange(0, 1.0 / (1ll << 62))
+        .InRange(1.0 / (1ll << 62), 1)
         .Default()
         .Optional();
 

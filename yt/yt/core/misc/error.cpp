@@ -64,11 +64,6 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
     FormatValue(builder, static_cast<int>(code), spec);
 }
 
-TString ToString(TErrorCode code)
-{
-    return ToStringViaBuilder(code);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_THREAD_LOCAL(bool, ErrorSanitizerEnabled, false);
@@ -1079,13 +1074,6 @@ bool operator == (const TError& lhs, const TError& rhs)
 void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf /*spec*/)
 {
     AppendError(builder, error, 0);
-}
-
-TString ToString(const TError& error)
-{
-    TStringBuilder builder;
-    AppendError(&builder, error, 0);
-    return builder.Flush();
 }
 
 void ToProto(NYT::NProto::TError* protoError, const TError& error)

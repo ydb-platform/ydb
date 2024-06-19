@@ -1495,6 +1495,38 @@ private:
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_resource_pool_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterResourcePool(const TRule_alter_resource_pool_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitToken(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+        VisitToken(msg.GetToken3());
+        Visit(msg.GetRule_object_ref4());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_resource_pool_action5());
+        for (const auto& action : msg.GetBlock6()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_resource_pool_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
+    void VisitDropResourcePool(const TRule_drop_resource_pool_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_resource_pool_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
@@ -2708,7 +2740,10 @@ TStaticData::TStaticData()
         {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
         {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
         {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
-        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)}
+        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
+        {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
+        {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
+        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

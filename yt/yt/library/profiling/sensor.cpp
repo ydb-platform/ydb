@@ -232,9 +232,10 @@ TRateHistogram::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TSensorOptions& options)
+void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TStringBuf /*spec*/)
 {
-    return Format(
+    Format(
+        builder,
         "{sparse=%v;global=%v;hot=%v;histogram_min=%v;histogram_max=%v;time_histogram_bounds=%v;histogram_bounds=%v;summary_policy=%v}",
         options.Sparse,
         options.Global,

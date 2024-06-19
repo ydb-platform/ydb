@@ -43,6 +43,8 @@ struct TUnit {
 
 namespace {
 
+static ui64 currentTime = 1704067200000000ull; //TInstant::ParseIso8601("2024-01-01").GetValue();
+
 void CreateTable(TServer::TPtr server, const TActorId& sender, const TString& root,
         const TString& name, const TString& ttlColType = "Timestamp") {
     auto opts = TShardedTableOptions()
@@ -426,14 +428,18 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase) {
+    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, const bool enableDatetime64 = false) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(enableDatetime64);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetFeatureFlags(featureFlags);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -446,7 +452,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         ExecSQL(server, sender, toUpload);
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, TInstant::Now().GetValue(), unit);
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, currentTime, unit);
 
         auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
@@ -613,6 +619,50 @@ key = 4, value = (empty maybe)
         )");
     }
 
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDate32) {
+        ConditionalEraseShouldSuccess("Date32", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01" AS Date32)),
+(2, CAST("1970-01-01" AS Date32)),
+(3, CAST("1990-03-01" AS Date32)),
+(4, CAST("2030-04-15" AS Date32)),
+(5, NULL);
+        )", R"(
+key = 4, value = 22019
+key = 5, value = (empty maybe)
+        )", true);
+    } 
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDatetime64) {
+        ConditionalEraseShouldSuccess("Datetime64", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01T00:00:00Z" AS Datetime64)),
+(2, CAST("1970-01-01T00:00:00Z" AS Datetime64)),
+(3, CAST("1990-03-01T00:00:00Z" AS Datetime64)),
+(4, CAST("2030-04-15T00:00:00Z" AS Datetime64)),
+(5, NULL);
+        )", R"(
+key = 4, value = 1902441600
+key = 5, value = (empty maybe)
+        )", true);
+    } 
+    
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
+        ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01T00:00:00.000000Z" AS Timestamp64)),
+(2, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp64)),
+(3, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp64)),
+(4, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp64)),
+(5, NULL);
+        )", R"(
+key = 4, value = 1902441600000000
+key = 5, value = (empty maybe)
+        )", true);
+    }    
+
+
+
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
@@ -698,7 +748,7 @@ key = 4, value = (empty maybe)
 
         {
             auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-            ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, TInstant::Now().GetValue());
+            ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, currentTime);
 
             auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
@@ -749,7 +799,7 @@ key = 4, value = (empty maybe)
         });
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, TInstant::Now().GetValue());
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 2, currentTime);
 
         if (!delayed) {
             TDispatchOptions opts;
@@ -1008,7 +1058,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, TInstant::Now().GetValue(), unit, indexes);
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, unit, indexes);
 
         auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
@@ -1137,7 +1187,7 @@ tkey = 100, key = 4
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
         auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         // case 1: modify ttl column
         ExecSQL(server, sender, R"(
@@ -1173,7 +1223,7 @@ tkey = 100, key = 4
         )");
 
         delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         // case 2: modify index column
         ExecSQL(server, sender, R"(
@@ -1203,7 +1253,7 @@ tkey = 100, key = 4
         }
 
         // after one more run, all records should be deleted
-        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, TInstant::Now().GetValue(), TUnit::AUTO, indexes);
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, TUnit::AUTO, indexes);
         {
             auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
@@ -1250,7 +1300,7 @@ tkey = 100, key = 4
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
         auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key < 3;");
 
@@ -1478,7 +1528,7 @@ tkey = 100, key = 4
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
         auto delayed = ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         SimulateSleep(server, TDuration::Seconds(1));
         SetSplitMergePartCountLimit(&runtime, -1);
@@ -1522,7 +1572,7 @@ tkey = 100, key = 4
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
         auto delayed = ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         const ui64 txId = AsyncAlterAddExtraColumn(server, "/Root", "table-1");
         WaitTxNotification(server, sender, txId);
@@ -1562,7 +1612,7 @@ tkey = 100, key = 4
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
         auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, TInstant::Now().GetValue(), indexes);
+            tableId, 4, currentTime, indexes);
 
         auto tabletIds = GetTableShards(server, sender, "/Root/table-1/by_skey/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
@@ -1661,7 +1711,7 @@ tkey = 100, key = 4
 
             auto tableId = ResolveTableId(server, sender, Sprintf("/Root/%s", table));
             auto indexes = GetIndexes(server, sender, Sprintf("/Root/%s", table));
-            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, TInstant::Now().GetValue(), TUnit::AUTO, indexes, limits);
+            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes, limits);
 
             ui32 runs = 0;
             TEvResponse::ProtoRecordType::EStatus status;
@@ -1718,7 +1768,7 @@ tkey = 100, key = 4
 
             auto tableId = ResolveTableId(server, sender, Sprintf("/Root/%s", table));
             auto indexes = GetIndexes(server, sender, Sprintf("/Root/%s", table));
-            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, TInstant::Now().GetValue(), TUnit::AUTO, indexes);
+            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes);
 
             auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);

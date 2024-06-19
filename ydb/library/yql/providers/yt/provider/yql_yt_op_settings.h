@@ -100,7 +100,7 @@ enum class EYtSettingType: ui64 {
     MapOutputType               = 1ull << 49 /* "mapOutputType" */,            // hybrid supported
     ReduceInputType             = 1ull << 50 /* "reduceInputType" */,          // hybrid supported
     NoDq                        = 1ull << 51 /* "noDq" */,
-    // Read 
+    // Read
     Split                       = 1ull << 52 /* "split" */,
     // Write hints
     CompressionCodec            = 1ull << 53 /* "compression_codec" "compressioncodec"*/,
@@ -113,6 +113,7 @@ enum class EYtSettingType: ui64 {
     KeepMeta                    = 1ull << 60 /* "keep_meta", "keepmeta" */,
     MonotonicKeys               = 1ull << 61 /* "monotonic_keys", "monotonickeys" */,
     MutationId                  = 1ull << 62 /* "mutationid", "mutation_id" */,
+    ColumnGroups                = 1ull << 63 /* "column_groups", "columngroups" */,
 };
 
 Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
@@ -142,6 +143,7 @@ TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& column
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type);
 TExprNode::TPtr UpdateSettingValue(const TExprNode& settings, EYtSettingType type, TExprNode::TPtr&& value, TExprContext& ctx);
+TExprNode::TPtr AddOrUpdateSettingValue(const TExprNode& settings, EYtSettingType type, TExprNode::TPtr&& value, TExprContext& ctx);
 
 TExprNode::TListType GetAllSettingValues(const TExprNode& settings, EYtSettingType type);
 TVector<TString> GetSettingAsColumnList(const TExprNode& settings, EYtSettingType type);

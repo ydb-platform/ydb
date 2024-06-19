@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
@@ -1080,6 +1081,7 @@ struct TEvPQ {
         ui64 MessagesWrittenTotal;
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
+        THolder<NPQ::TMultiBucketCounter> InputLags;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {

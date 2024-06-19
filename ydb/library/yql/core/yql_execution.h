@@ -49,7 +49,7 @@ namespace NYql {
             ui64 Failed = 0ULL;
             ui64 Lost = 0ULL;
             ui64 Pending = 0ULL;
-            THashMap<TString, i64> Custom;
+            THashMap<TString, i64> Custom = {};
             bool operator==(const TCounters& rhs) const noexcept {
                 return Completed == rhs.Completed &&
                        Running == rhs.Running &&

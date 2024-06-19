@@ -940,8 +940,21 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
     YQL_ENSURE(false, "Not supported type: " << (*type)[0].AsString());
 }
 
-NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, bool useColumnGroups) {
-    static TString DEFAULT_GROUP = "default";
+NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, const NYT::TNode& columnGroupsSpec) {
+
+    TString defaultGroup;
+    THashMap<TString, TString> columnGroups;
+    if (!columnGroupsSpec.IsUndefined()) {
+        for (const auto& grp: columnGroupsSpec.AsMap()) {
+            if (grp.second.IsEntity()) {
+                defaultGroup = grp.first;
+            } else {
+                for (const auto& col: grp.second.AsList()) {
+                    columnGroups[col.AsString()] = grp.first;
+                }
+            }
+        }
+    }
 
     NYT::TTableSchema schema;
     const auto& rowSpecMap = rowSpec.AsMap();
@@ -994,8 +1007,8 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
             auto columnNode = NYT::TColumnSchema()
                 .Name(columnString);
 
-            if (useColumnGroups) {
-                columnNode.Group(DEFAULT_GROUP);
+            if (auto group = columnGroups.Value(columnString, defaultGroup)) {
+                columnNode.Group(std::move(group));
             }
 
             bool auxField = false;
@@ -1021,8 +1034,8 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
             continue;
         }
         auto columnNode = NYT::TColumnSchema().Name(column);
-        if (useColumnGroups) {
-            columnNode.Group(DEFAULT_GROUP);
+        if (auto group = columnGroups.Value(column, defaultGroup)) {
+            columnNode.Group(std::move(group));
         }
         if (useNativeTypes) {
             auto field = fieldNativeTypes.find(column);

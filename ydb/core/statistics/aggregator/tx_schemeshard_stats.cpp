@@ -26,6 +26,10 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         Self->BaseStats[schemeShardId] = stats;
 
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
@@ -40,7 +44,8 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                 scanTable.PathId = pathId;
                 scanTable.SchemeShardId = schemeShardId;
                 scanTable.LastUpdateTime = TInstant::MicroSeconds(0);
-                Self->ScanTablesByTime.push(scanTable);
+                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
+                Self->ScanTablesByTime.Add(&it->second);
 
                 db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::ScanTables::SchemeShardId>(schemeShardId),
@@ -50,6 +55,13 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         for (auto& pathId : oldPathIds) {
             if (newPathIds.find(pathId) == newPathIds.end()) {
+                auto it = Self->ScanTables.find(pathId);
+                if (it != Self->ScanTables.end()) {
+                    if (Self->ScanTablesByTime.Has(&it->second)) {
+                        Self->ScanTablesByTime.Remove(&it->second);
+                    }
+                    Self->ScanTables.erase(it);
+                }
                 db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
             }
         }
@@ -61,10 +73,6 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
-
-        if (!Self->ScanTableId.PathId) {
-            Self->ScheduleNextScan();
-        }
     }
 };
 

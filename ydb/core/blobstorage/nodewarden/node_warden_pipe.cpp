@@ -30,6 +30,9 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
             (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
             (PipeClientId, PipeClientId));
         OnPipeError();
+    } else {
+        STLOG(PRI_DEBUG, BS_NODE, NW05, "TEvTabletPipe::TEvClientConnected OK", (ClientId, msg->ClientId),
+            (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
     }
 }
 

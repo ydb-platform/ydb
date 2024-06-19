@@ -345,6 +345,12 @@ public:
             DeserializeTzDatetime({buf.Data(), length}, date, tz);
         } else if constexpr (std::is_same_v<T, NUdf::TTzTimestamp>) {
             DeserializeTzTimestamp({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzDate32>) {
+            DeserializeTzDate32({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzDatetime64>) {
+            DeserializeTzDatetime64({buf.Data(), length}, date, tz);
+        } else if constexpr (std::is_same_v<T, NUdf::TTzTimestamp64>) {
+            DeserializeTzTimestamp64({buf.Data(), length}, date, tz);
         } else {
             static_assert(sizeof(T) == 0, "Unsupported tz date type");
         }

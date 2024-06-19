@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     local_partition_reader.cpp
+    table_writer.cpp
 )
 
 PEERDIR(

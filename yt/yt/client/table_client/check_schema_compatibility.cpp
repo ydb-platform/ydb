@@ -14,8 +14,7 @@ namespace NYT::NTableClient {
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder,
-    bool forbidExtraComputedColumns)
+    TTableSchemaCompatibilityOptions options)
 {
     // If output schema is strict, check that input columns are subset of output columns.
     if (outputSchema.GetStrict()) {
@@ -93,7 +92,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
-        } else if (forbidExtraComputedColumns && outputColumn.Expression()) {
+        } else if (options.ForbidExtraComputedColumns && outputColumn.Expression()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Unexpected computed column %v in output schema",
@@ -159,7 +158,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         }
     }
 
-    if (ignoreSortOrder) {
+    if (options.IgnoreSortOrder) {
         return result;
     }
 
@@ -218,14 +217,12 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder,
-    bool forbidExtraComputedColumns)
+    TTableSchemaCompatibilityOptions options)
 {
     auto result = CheckTableSchemaCompatibilityImpl(
         inputSchema,
         outputSchema,
-        ignoreSortOrder,
-        forbidExtraComputedColumns);
+        options);
     if (result.first != ESchemaCompatibility::FullyCompatible) {
         result.second = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
             << result.second

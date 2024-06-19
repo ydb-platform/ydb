@@ -787,7 +787,7 @@ void ValidateClientRow(
         }
 
         const auto& column = schema.Columns()[mappedId];
-        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/false);
+        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/ false);
 
         if (Any(value.Flags & EValueFlags::Aggregate) && !column.Aggregate()) {
             THROW_ERROR_EXCEPTION(

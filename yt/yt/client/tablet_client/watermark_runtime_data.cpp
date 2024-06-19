@@ -4,7 +4,7 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TWatermarkRuntimeData::Register(TRegistrar registrar)
+void TWatermarkRuntimeDataConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("column_name", &TThis::ColumnName);
     registrar.Parameter("watermark", &TThis::Watermark);

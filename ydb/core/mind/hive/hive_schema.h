@@ -301,12 +301,13 @@ struct Schema : NIceDb::Schema {
     };
 
     struct OperationsLog : Table<21> {
-        struct Timestamp : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Index : Column<1, NScheme::NTypeIds::Uint64> {};
         struct User : Column<2, NScheme::NTypeIds::String> {};
         struct Operation : Column<3, NScheme::NTypeIds::String> {}; // JSON
+        struct OperationTimestamp : Column<4, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Timestamp>;
-        using TColumns = TableColumns<Timestamp, User, Operation>;
+        using TKey = TableKey<Index>;
+        using TColumns = TableColumns<Index, User, Operation, OperationTimestamp>;
     };
 
     using TTables = SchemaTables<

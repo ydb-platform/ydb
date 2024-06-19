@@ -67,14 +67,13 @@ def main():
             stripped_sign = ""
 
         comment = (
-            f"merge: {current_pr_commit_sha} ydbd size {human_readable_size} **{sign}{human_readable_size_diff} {sign}{diff_perc}%%** vs build {branch}: {main_github_sha}\n\n"
-            "<details><summary>Build size details</summary><p>\n\n"
-            f"{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
+
+            f"\n{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
             f"| ---: | ---: | ---: | ---: |\n"
             f"|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|{sign}{diff_perc}%%**|\n"
-            f"|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
-            "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n\n"
-            "</p></details>"
+            f"|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n"
+            "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n"
+
         )
         print(f"{color};;;{comment}")
     else:

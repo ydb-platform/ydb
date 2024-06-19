@@ -117,28 +117,51 @@ namespace NTypeAnnImpl {
         bool isValid;
         if (atomNode.Flags() & TNodeFlags::BinaryContent) {
             // just deserialize
-            switch (sizeof(T)) {
-            case sizeof(ui16): {
+            switch (slot) {
+            case NKikimr::NUdf::EDataSlot::Date: {
                 ui16 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDate(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui32): {
+            case NKikimr::NUdf::EDataSlot::Datetime: {
                 ui32 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDatetime(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui64): {
+            case NKikimr::NUdf::EDataSlot::Timestamp: {
                 ui64 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
+            case NKikimr::NUdf::EDataSlot::Date32: {
+                i32 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDate32(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Datetime64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDatetime64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Timestamp64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            default:
+                Y_ENSURE(false, "Unknown data slot:" << slot);
             }
         } else {
             TStringBuf atom = atomNode.Content();
@@ -740,6 +763,18 @@ namespace NTypeAnnImpl {
                 }
             } else if (input->Content() == "Interval64") {
                 if (!IsValidSmallData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Interval64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzDate32") {
+                if (!IsValidTzData<i32>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date32, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzDatetime64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Datetime64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzTimestamp64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Timestamp64, textValue)) {
                     return IGraphTransformer::TStatus::Error;
                 }
             } else if (input->Content() == "Uuid") {

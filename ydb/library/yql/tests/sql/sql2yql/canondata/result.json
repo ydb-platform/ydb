@@ -2981,6 +2981,20 @@
             "uri": "https://{canondata_backend}/212715/99c394fc142b628d22e13d9433512bcac243f701/resource.tar.gz#test_sql2yql.test_bigdate-table_yt_native_/sql.yql"
         }
     ],
+    "test_sql2yql.test[bigdate-tznumliterals]": [
+        {
+            "checksum": "0ba6e6b77a0900605359caac56160511",
+            "size": 10076,
+            "uri": "https://{canondata_backend}/1773845/723ba74c1f8fe2198e8eda94ad781fdefd785099/resource.tar.gz#test_sql2yql.test_bigdate-tznumliterals_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[bigdate-tzstrliterals]": [
+        {
+            "checksum": "50f91fa622c3e868d46fffbecbf63e59",
+            "size": 9992,
+            "uri": "https://{canondata_backend}/1773845/723ba74c1f8fe2198e8eda94ad781fdefd785099/resource.tar.gz#test_sql2yql.test_bigdate-tzstrliterals_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[binding-anon_table_binding]": [
         {
             "checksum": "cf1e9ee529d4fcca3781cc85b3e555d8",
@@ -22033,6 +22047,20 @@
             "checksum": "5d3db5e1fe04a2235a432f6b61868082",
             "size": 332,
             "uri": "https://{canondata_backend}/212715/99c394fc142b628d22e13d9433512bcac243f701/resource.tar.gz#test_sql_format.test_bigdate-table_yt_native_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-tznumliterals]": [
+        {
+            "checksum": "fbc4caece751eb8481ca44a7b645d202",
+            "size": 2545,
+            "uri": "https://{canondata_backend}/1773845/723ba74c1f8fe2198e8eda94ad781fdefd785099/resource.tar.gz#test_sql_format.test_bigdate-tznumliterals_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-tzstrliterals]": [
+        {
+            "checksum": "56ec4f62918cd7efb0abb2e69cf27cd9",
+            "size": 2150,
+            "uri": "https://{canondata_backend}/1773845/723ba74c1f8fe2198e8eda94ad781fdefd785099/resource.tar.gz#test_sql_format.test_bigdate-tzstrliterals_/formatted.sql"
         }
     ],
     "test_sql_format.test[binding-anon_table_binding]": [

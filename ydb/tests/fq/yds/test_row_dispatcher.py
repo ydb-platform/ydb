@@ -29,7 +29,7 @@ def stop_yds_query(client, query_id):
     client.wait_query(query_id)
 
 
-class TestPqReadWrite(TestYdsBase):
+class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
@@ -105,3 +105,54 @@ class TestPqReadWrite(TestYdsBase):
         # Assert that all read rules were removed after query stops
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 0, read_rules
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_restoring_with_offset(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
+        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        
+        output_topic1 = "pq_test_pq_read_write_output1"
+        output_topic2 = "pq_test_pq_read_write_output2"
+        create_stream(output_topic1, partitions_count=1)
+        create_read_rule(output_topic1, self.consumer_name)
+
+        create_stream(output_topic2, partitions_count=1)
+        create_read_rule(output_topic2, self.consumer_name)
+
+        sql1 = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
+            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+
+        query_id1 = start_yds_query(kikimr, client, sql1)
+
+        data = [
+            '{"time" = 101;}',
+            '{"time" = 102;}'
+        ]
+
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 1
+        )
+        stop_yds_query(client, query_id1)  # TODO?
+
+        sql2 = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
+            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+        query_id2 = start_yds_query(kikimr, client, sql2)
+
+        data = [
+            '{"time" = 103;}',
+            '{"time" = 104;}'
+        ]
+
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+
+
+

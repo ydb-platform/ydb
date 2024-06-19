@@ -381,6 +381,7 @@ public:
 
                 return UpdateSpillingAndWait();
             case EOperatingMode::ProcessSpilled:
+                // TODO: add finalizing and loading next bucket here;
                return false;
             case EOperatingMode::Spilling: {
                 CurrentBucketId = -1;
@@ -468,6 +469,11 @@ public:
 
         
         return false;
+    }
+
+    NUdf::TUnboxedValuePod* Extract() {
+        // TODO
+        return nullptr;
     }
 
     bool IsImmediateProcessingAvaliable() const {
@@ -1311,35 +1317,36 @@ public:
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            while (EFetchResult::Finish != ptr->InputStatus) {
+            while (true) {
                 if (ptr->UpdateSpillingAndWait()) {
                     return EFetchResult::Yield;
                 }
-                for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                    fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
 
-                switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
-                    case EFetchResult::One: {
-                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+                if (ptr->IsFetchRequired()) {
+                    ptr->InputStatus = Flow->FetchValues(ctx, fields);
+                    if (ptr->InputStatus == EFetchResult::Yield) return EFetchResult::Yield;
+                }
 
-                        bool isNew = ptr->TasteIt();
-                        if (ptr->IsImmediateProcessingAvaliable()) {
-                            Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
-                        }
-                        continue;
+                if (ptr->IsProcessingRequired()) {
+                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                        fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+
+                    bool isNew = ptr->TasteIt();
+                    if (ptr->IsImmediateProcessingAvaliable()) {
+                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
                     }
-                    case EFetchResult::Yield:
-                        return EFetchResult::Yield;
-                    case EFetchResult::Finish:
-                        break;
+                    continue;
+                }
+
+                if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
+                    Nodes.FinishItem(ctx, values, output);
+                    return EFetchResult::One;
                 }
             }
 
-            if (ptr->FlushSpillingBuffersAndWait()) {
-                return EFetchResult::Yield;
-            }
-
-            return ptr->Finish(output);
+            return EFetchResult::Finish;
         }
         Y_UNREACHABLE();
     }

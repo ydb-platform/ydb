@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include "ut_helpers.h"
 
 Y_UNIT_TEST_SUITE(GroupReconfiguration) {
@@ -69,7 +70,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         // Start load actors
         for (ui32 nodeId = 1; nodeId < numNodes - 1; ++nodeId) {
             if (loadNodesWVDisks || (nodesInGroup.count(nodeId) > 0 && nodeId != toNodeId && nodeId != fromNodeId)) {
-                TInflightActor* newActor = new TInflightActorPut({100, 1, TDuration::MilliSeconds(100), groupId}, 1_KB);
+                TInflightActor* newActor = new TInflightActorPut({100, 1, TDuration::MilliSeconds(100), TGroupId::FromValue(groupId)}, 1_KB);
                 actors.push_back(newActor);
                 env->Runtime->Register(newActor, nodeId);
             }
@@ -459,14 +460,15 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
             "Put", "HugePut", "Get", "HugeGet", "Patch", "HugePatch",
         };
 
+
         for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
             std::vector<TInflightActor*> newActors = {
-                new TInflightActorPut({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
-                new TInflightActorPut({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
-                new TInflightActorGet({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
-                new TInflightActorGet({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
-                new TInflightActorPatch({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
-                new TInflightActorPatch({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
+                new TInflightActorPut({requests, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, blobSize),
+                new TInflightActorPut({requestsHuge, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, hugeBlobSize),
+                new TInflightActorGet({requests, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, blobSize),
+                new TInflightActorGet({requestsHuge, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, hugeBlobSize),
+                new TInflightActorPatch({requests, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, blobSize),
+                new TInflightActorPatch({requestsHuge, 1, TDuration::MilliSeconds(1), TGroupId::FromValue(groupId)}, hugeBlobSize),
             };
             // remember to add new actor type to actorTypes
             Y_ABORT_UNLESS(newActors.size() == actorTypes.size());

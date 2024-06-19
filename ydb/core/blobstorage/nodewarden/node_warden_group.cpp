@@ -292,11 +292,11 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev) {
         auto *msg = ev->Get();
         bool fromResolver = false;
-        if (const auto it = Groups.find(msg->GroupId); it != Groups.end() && ev->Sender == it->second.GroupResolver) {
+        if (const auto it = Groups.find(msg->GroupId.GetRawId()); it != Groups.end() && ev->Sender == it->second.GroupResolver) {
             it->second.GroupResolver = {};
             fromResolver = true;
         }
-        ApplyGroupInfo(msg->GroupId, msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
+        ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
     }
 
     void TNodeWarden::HandleGetGroup(TAutoPtr<IEventHandle> ev) {

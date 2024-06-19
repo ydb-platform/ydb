@@ -269,7 +269,7 @@ public:
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId);
+                groupIDsToRead.insert(it->second->GroupId.GetRawId());
             }
         }
 
@@ -286,7 +286,7 @@ public:
 
         if (startedGroups.size() <= Self->GroupMap.size() / 10) {
             for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(p.first));
+                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
             }
         } else {
             auto started = startedGroups.begin();
@@ -296,8 +296,8 @@ public:
                 TGroupInfo *group = nullptr;
 
                 // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first <= started->first; ++groupIt) {
-                    if (groupIt->first == started->first) {
+                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
+                    if (groupIt->first.GetRawId() == started->first) {
                         group = groupIt->second.Get();
                     }
                 }
@@ -333,8 +333,8 @@ public:
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
         for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(groupId);
-            Self->GroupToNode.emplace(groupId, nodeId);
+            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
+            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
         }
 
         return true;
@@ -374,13 +374,13 @@ public:
 void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = *it;
+        const TGroupId groupId = TGroupId::FromValue(*it);
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
             NKikimrBlobStorage::TGroupInfo *groupProto = serviceSetProto->AddGroups();
             if (!group) {
-                groupProto->SetGroupID(groupId);
+                groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
                 const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);

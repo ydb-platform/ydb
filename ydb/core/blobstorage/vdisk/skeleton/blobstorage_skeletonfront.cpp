@@ -22,6 +22,7 @@
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -673,7 +674,6 @@ namespace NKikimr {
         ui64 AllocateMessageId() {
             return NextUniqueMessageId++;
         }
-
         ////////////////////////////////////////////////////////////////////////
         // NOTIFICATIONS
         ////////////////////////////////////////////////////////////////////////
@@ -710,7 +710,7 @@ namespace NKikimr {
                 const auto &bi = Config->BaseInfo;
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
                 TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32 " (%" PRIu32 ")",
-                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID);
+                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID.GetRawId());
                 mon->RegisterActorPage(vdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
             }
         }
@@ -1317,20 +1317,20 @@ namespace NKikimr {
             const char* name = "Unknown";
             TIntQueueClass *queue = IntQueueHugePutsBackground.get();
             if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
                 name = "TEvVMovedPatch";
             } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
                 queue = IntQueueFastGets.get();
                 name = "TEvVPatchStart";
             } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
                 name = "TEvVPatchDiff";
             } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
                 name = "TEvVPatchXorDiff";
             }
@@ -1346,7 +1346,7 @@ namespace NKikimr {
 
             const NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
             const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+            LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
 
             if (logPutInternalQueue) {
@@ -1372,7 +1372,7 @@ namespace NKikimr {
             const ui64 cost = VCtx->CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
 
             const NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
-            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                  VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), record.ItemsSize(),
                  ev->Get()->GetSumBlobSize());
 
@@ -1463,7 +1463,7 @@ namespace NKikimr {
                             auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, nullptr);
                             ChangeGeneration(vdiskId, newInfo, ctx);
                             Y_ABORT_UNLESS(vdiskId == SelfVDiskId);
-                            const ui32 groupId = newInfo->GroupID;
+                            const TGroupId groupId = newInfo->GroupID;
                             const ui32 generation = newInfo->GroupGeneration;
                             auto ev = std::make_unique<TEvBlobStorage::TEvUpdateGroupInfo>(groupId, generation, *newInfo->Group);
                             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
@@ -1621,7 +1621,7 @@ namespace NKikimr {
                 const TActorContext& ctx) {
             // check group id
             Y_ABORT_UNLESS(info->GroupID == GInfo->GroupID, "GroupId# %" PRIu32 " new GroupId# %" PRIu32,
-                GInfo->GroupID, info->GroupID);
+                GInfo->GroupID.GetRawId(), info->GroupID.GetRawId());
 
             // check target disk id
             Y_ABORT_UNLESS(TVDiskIdShort(SelfVDiskId) == TVDiskIdShort(vdiskId), "Incorrect target VDiskId"
@@ -2109,7 +2109,7 @@ namespace NKikimr {
             chain.emplace_back("storagePool", cfg->BaseInfo.StoragePoolName);
 
             // add 'group' label
-            const ui32 blobstorageGroupId = info->GroupID;
+            const ui32 blobstorageGroupId = info->GroupID.GetRawId();
             chain.emplace_back("group", Sprintf("%09" PRIu32, blobstorageGroupId));
 
             // add 'orderNumber' label (VDisk order number in the group)

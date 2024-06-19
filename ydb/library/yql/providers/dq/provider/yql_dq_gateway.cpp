@@ -25,6 +25,79 @@ namespace NYql {
 
 using namespace NThreading;
 
+class TPlanPrinter {
+public:
+    TStringBuilder b;
+
+    void PrintChannel(const auto& ch, const auto& inputName) {
+        b << "T" << ch.GetSrcTaskId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"Ch" << ch.GetId() << "," << inputName << "\"];\n";
+    }
+
+    void PrintSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"];\n";
+    }
+
+    void DescribeSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " ";
+        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"];\n";
+    }
+
+    void PrintTask(const auto& task) {
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            TString inputName = "Unknown";
+            bool isSource = false;
+            if (input.HasUnionAll()) { inputName = "UnionAll"; }
+            else if (input.HasMerge()) { inputName = "Merge"; }
+            else if (input.HasSource()) { inputName = "Source"; isSource = true; }
+            if (isSource) {
+                PrintSource(task.GetId(), index);
+            } else {
+                for (const auto& ch : input.GetChannels()) {
+                    PrintChannel(ch, inputName);
+                }
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            TString outputName = "Unknown";
+            if (output.HasMap()) { outputName = "Map"; }
+            else if (output.HasRangePartition()) { outputName = "Range"; }
+            else if (output.HasHashPartition()) { outputName = "Hash"; }
+            else if (output.HasBroadcast()) { outputName = "Broadcast"; }
+            // TODO: effects, sink
+            for (const auto& ch : output.GetChannels()) {
+                PrintChannel(ch, outputName);
+            }
+        }
+    }
+
+    void DescribeTask(const auto& task) {
+        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"];\n";
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) {
+                DescribeSource(task.GetId(), index);
+            }
+            index ++;
+        }
+    }
+ 
+    TString Print(const NDqs::TPlan& plan) {
+        b.clear();
+        b << "digraph G {\n";
+        for (const auto& task : plan.Tasks) {
+            DescribeTask(task);
+        }
+        b << "\n";
+        for (const auto& task : plan.Tasks) {
+            PrintTask(task);
+        }
+        b << "}\n";
+        return b;
+    }
+};
+
 class TDqTaskScheduler : public TTaskScheduler {
 private:
     struct TDelay: public TTaskScheduler::ITask {
@@ -266,6 +339,8 @@ public:
             *queryPB.AddColumns() = column;
         }
         settings->Save(queryPB);
+
+        YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
 
         {
             auto& secParams = *queryPB.MutableSecureParams();

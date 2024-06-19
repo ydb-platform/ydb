@@ -7,7 +7,7 @@
     ```sql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. 
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать [сетевой адрес мастер-ноды Greenplum](https://www.greenplumdba.com/greenplum-master). При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. 
     ```sql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (
         SOURCE_TYPE="Greenplum",
@@ -66,6 +66,7 @@ SELECT * FROM greenplum_datasource.<table_name>
 |`float4`|`Optional<Float>`||
 |`double precision`|`Optional<Double>`||
 |`float8`|`Optional<Double>`||
+|`Json`|`Optional<Json>`||
 |`date`|`Optional<Date>`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона возвращается `NULL`.|
 |`timestamp`|`Optional<Timestamp>`|Допустимый диапазон времени с 1970-01-01 00:00:00 и до 2105-12-31 23:59:59. При выходе значения за границы диапазона возвращается значение `NULL`.|
 |`bytea`|`Optional<String>`||

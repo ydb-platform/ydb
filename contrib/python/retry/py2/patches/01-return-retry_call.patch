@@ -1,0 +1,13 @@
+--- contrib/python/retry/py2/retry/__init__.py	(index)
++++ contrib/python/retry/py2/retry/__init__.py	(working tree)
+@@ -1,8 +1,8 @@
+-__all__ = ['retry']
++__all__ = ['retry', 'retry_call']
+ 
+ import logging
+ 
+-from .api import retry
++from .api import retry, retry_call
+ 
+ 
+ # Set default logging handler to avoid "No handler found" warnings.

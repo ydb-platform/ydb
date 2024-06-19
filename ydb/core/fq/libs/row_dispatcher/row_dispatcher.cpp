@@ -45,7 +45,11 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     using SessionKey = std::pair<TString, ui32>; // TopicPath / PartitionId
 
-    TMap<SessionKey, TActorId> Sessions;
+    struct PartitionInfo {
+        TList<TActorId> TopicSessions;
+    };
+
+    TMap<SessionKey, PartitionInfo> Sessions;
 
 public:
     explicit TRowDispatcher(
@@ -171,8 +175,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
 
     SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
-    auto sessionIt = Sessions.find(key);
-    if (sessionIt == Sessions.end()) {
+    auto& sessions = Sessions[key].TopicSessions;
+
+    TActorId sessionActorId;
+
+    if (sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         auto actorId = Register(NewTopicSession(
             ev->Get()->Record.GetSource(),
@@ -182,10 +189,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 ev->Get()->Record.GetAddBearerToToken())).release());
-        Sessions[key] = actorId;
+        sessions.push_back(actorId);
+        sessionActorId = actorId;
+    } else  {
+        sessionActorId = sessions.front();
     }
 
-    auto sessionActorId = Sessions[key];
+    //auto sessionActorId = Sessions[key];
 
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
     event->ConsumerActorId = ev->Sender;

@@ -73,7 +73,7 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
         //NKikimr::NMiniKQL::TUnboxedValueVector Data;
         TVector<TString> Data;
         i64 UsedSpace = 0;
-        ui64 LastOffset = 0; // [start, end)
+        ui64 LastOffset = 0;
     };
 
 private:
@@ -97,6 +97,7 @@ private:
     struct ConsumersInfo {
         TMaybe<ui64> Offset;
         TInstant StartingMessageTimestamp;
+        ui64 LastSendedMessage = 0;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
 
@@ -142,13 +143,10 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
-
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        
     )
-
 
 };
 
@@ -432,18 +430,20 @@ void TTopicSession::SendData() {
     }
     auto& readyBatch = ReadyBuffer.front();
 
-    for (const auto& [actorId, info] : Consumers) {
+    for (auto& [actorId, info] : Consumers) {
+     //   LOG_ROW_DISPATCHER_DEBUG("Consumers.LastSendedMessage " << info.LastSendedMessage);
+
         auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
         event->Record.SetPartitionId(PartitionId);
+       // ui64 offset = readyBatch.FirstOffset;
+    
         for (const auto& value : readyBatch.Data) {
-
-            //TString str(value.AsStringRef());
             event->Record.AddBlob(value);
         }
         event->Record.SetLastOffset(readyBatch.LastOffset);
 
         LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId << " size " <<  event->Record.BlobSize());
-
+        //info.LastSendedMessage = offset;
         Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
     ReadyBuffer.pop();
@@ -472,8 +472,8 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
 
     LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
 
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: CloseSession ");
-    CloseSession(); // TODO
+    // LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: CloseSession ");
+    // CloseSession(); // TODO
     GetReadSession();
     SubscribeOnNextEvent();
 }

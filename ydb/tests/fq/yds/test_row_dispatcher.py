@@ -80,13 +80,23 @@ class TestPqReadWrite(TestYdsBase):
             SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
-        data = ['{"time" = 103;}']
+        data = [
+            '{"time" = 103;}',
+            '{"time" = 104;}'
+        ]
+
         self.write_stream(data)
         expected = data
 
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
         assert self.read_stream(len(expected), topic_path = output_topic3) == expected
+
+        assert kikimr.control_plane.get_actor_count(1, "YQ_ROW_DISPATCHER_SESSION") == 1
+
+        assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
+        assert not read_stream(output_topic2, 1, True, self.consumer_name, timeout = 1)
+        assert not read_stream(output_topic3, 1, True, self.consumer_name, timeout = 1)
 
         stop_yds_query(client, query_id1)
         stop_yds_query(client, query_id2)

@@ -40,9 +40,9 @@
 Операции с [учётными данными](../concepts/auth#static-credentials):
 | __Атрибут__ | __Описание__ |
 |:----|:----|
-| `login_user` | Имя пользователя (при [создании или модификации пользователя](access.md#users)).
-| `login_group` | Имя группы (при [создании, модификации групп](access.md#groups)).
-| `login_member` | Имя пользователя (при [добавлении, удалении из группы](access.md#groups)).
+| `login_user` | Имя пользователя (при [создании или модификации пользователя](./access-management.md#users)).
+| `login_group` | Имя группы (при [создании, модификации групп](./access-management.md#groups)).
+| `login_member` | Имя пользователя (при [добавлении, удалении из группы](./access-management.md#groups)).
 
 ## Включение
 

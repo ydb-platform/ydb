@@ -29,13 +29,13 @@ Information about actions or operations is recorded in the audit log in the form
 | `new_owner` | User SID of the new owner of the object when ownership is transferred.  |
 | `acl_add` | List of added permissions, in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`). |
 | `acl_remove` | List of revoked permissions, in [short notation](./short-access-control-notation.md) (for example, `[-R:somegroup]`). |
-| _[User (or custom) attributes](../operations/manage-users-attr.md)_ |
+| _[User (or custom) attributes](../dev/custom-attributes.md)_ |
 | `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`). |
 | `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`). |
 | **[Credentials](../concepts/auth#static-credentials) management operations** | (`schemeshard` component)
-| `login_user` | User name (when [adding or modifying the user](access.md#users)).
-| `login_group` | Group name (when [adding or modifying the user group](access.md#groups)).
-| `login_member` | User name (when [adding or removing the user to or from a group](access.md#groups)).
+| `login_user` | User name (when [adding or modifying the user](./access-management.md#users)).
+| `login_group` | Group name (when [adding or modifying the user group](./access-management.md#groups)).
+| `login_member` | User name (when [adding or removing the user to or from a group](./access-management.md#groups)).
 | **DML operations** | (`grpc-proxy` component)
 | `query_text` | YQL query text.
 | `prepared_query_id` | Prepared query ID.
@@ -57,7 +57,7 @@ It is possible to use any of the listed destinations, as well as their combinati
 
 Writing to a file or unified-agent is recommended for use in production installations. In the case of writing to a file, access to the audit log is set by file-system rights.
 
-Writing to `stderr` is recommended for test installations. Further processing of `stderr` may be affected by the settings of the [logging](./logs.md) subsystem.
+Writing to `stderr` is recommended for test installations. Further processing of `stderr` may be affected by the settings of the [logging](../devops/manual/logging.md) subsystem.
 
 ### Settings
 

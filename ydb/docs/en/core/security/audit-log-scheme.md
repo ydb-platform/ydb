@@ -40,9 +40,9 @@ Schema operations:
 [Credentials](../concepts/auth#static-credentials) management operations:
 | __Attribute__ | __Description__ |
 |:----|:----|
-| `login_user` | User name (when [adding or modifying the user](access.md#users)).
-| `login_group` | Group name (when [adding or modifying the user group](access.md#groups)).
-| `login_member` | User name (when [adding or removing the user to or from a group](access.md#groups)).
+| `login_user` | User name (when [adding or modifying the user](./access-management.md#users)).
+| `login_group` | Group name (when [adding or modifying the user group](./access-management.md#groups)).
+| `login_member` | User name (when [adding or removing the user to or from a group](./access-management.md#groups)).
 
 ## How to enable
 

@@ -15,9 +15,7 @@ lambda_stmt:
   | import_stmt
 ;
 
-QUERY: Q U E R Y;
-
-sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
+sql_stmt: (EXPLAIN (TQ TU TE TR TY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -97,7 +95,7 @@ double_question: QUESTION QUESTION;
 
 neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
   // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
-  ((double_question neq_subexpr) | QUESTION+)?;
+  (double_question neq_subexpr | QUESTION+)?;
 
 bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
 
@@ -418,11 +416,11 @@ row_pattern_common_syntax:
 ;
 
 row_pattern_skip_to:
-      SKIP_RULE TO NEXT ROW
-    | SKIP_RULE PAST LAST ROW
-    | SKIP_RULE TO FIRST row_pattern_skip_to_variable_name
-    | SKIP_RULE TO LAST row_pattern_skip_to_variable_name
-    | SKIP_RULE TO row_pattern_skip_to_variable_name
+      TSKIP TO NEXT ROW
+    | TSKIP PAST LAST ROW
+    | TSKIP TO FIRST row_pattern_skip_to_variable_name
+    | TSKIP TO LAST row_pattern_skip_to_variable_name
+    | TSKIP TO row_pattern_skip_to_variable_name
 ;
 
 row_pattern_skip_to_variable_name: row_pattern_variable_name;
@@ -1199,7 +1197,7 @@ keyword_as_compat:
   | SECONDS
   | SEEK
   | SHOW
-  | SKIP_RULE
+  | TSKIP
   | SOURCE
   | SUBSET
   | TABLES
@@ -1382,7 +1380,7 @@ keyword_compat: (
   | SEMI
   | SETS
   | SHOW
-  | SKIP_RULE
+  | TSKIP
   | SOURCE
   | SUBQUERY
   | SUBSET
@@ -1445,33 +1443,23 @@ integer: DIGITS | INTEGER_VALUE;
 // Lexer
 //
 
-EQUALS2:       '==';
 EQUALS:        '=';
-
+EQUALS2:       '==';
 NOT_EQUALS:    '!=';
-
 NOT_EQUALS2:   '<>';
-LESS_OR_EQ:    '<=';
-SHIFT_LEFT:    '<<';
-STRUCT_OPEN:   '<|';
 LESS:          '<';
-
-GREATER_OR_EQ: '>=';
+LESS_OR_EQ:    '<=';
 GREATER:       '>';
-
+GREATER_OR_EQ: '>=';
+SHIFT_LEFT:    '<<';
 ROT_LEFT:      '|<<';
-STRUCT_CLOSE:  '|>';
-DOUBLE_PIPE:   '||';
-PIPE:          '|';
-
-ARROW:         '->';
-MINUS:         '-';
-
-NAMESPACE:     '::';
-COLON:         ':';
-
 AMPERSAND:     '&';
+PIPE:          '|';
+DOUBLE_PIPE:   '||';
+STRUCT_OPEN:   '<|';
+STRUCT_CLOSE:  '|>';
 PLUS:          '+';
+MINUS:         '-';
 TILDA:         '~';
 ASTERISK:      '*';
 SLASH:         '/';
@@ -1483,13 +1471,49 @@ COMMA:         ',';
 LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
-
+COLON:         ':';
+AT:            '@';
+DOUBLE_AT:     '@@';
 DOLLAR:        '$';
+QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
+QUOTE_SINGLE:  '\'';
+BACKTICK:      '`';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
+NAMESPACE:     '::';
+ARROW:         '->';
 RBRACE_SQUARE: ']';
 LBRACE_SQUARE: '['; // pair ]
+
+// http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
+fragment A:('a'|'A');
+fragment B:('b'|'B');
+fragment C:('c'|'C');
+fragment D:('d'|'D');
+fragment F:('f'|'F');
+fragment G:('g'|'G');
+fragment H:('h'|'H');
+fragment I:('i'|'I');
+fragment J:('j'|'J');
+fragment K:('k'|'K');
+fragment L:('l'|'L');
+fragment M:('m'|'M');
+fragment N:('n'|'N');
+fragment O:('o'|'O');
+fragment P:('p'|'P');
+fragment S:('s'|'S');
+fragment T:('t'|'T');
+fragment V:('v'|'V');
+fragment W:('w'|'W');
+fragment X:('x'|'X');
+fragment Z:('z'|'Z');
+fragment Q:('q'|'Q');
+fragment U:('u'|'U');
+fragment E:('e'|'E');
+fragment R:('r'|'R');
+fragment Y:('y'|'Y');
+
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
@@ -1643,17 +1667,17 @@ MODIFY: M O D I F Y;
 NANOSECONDS: N A N O S E C O N D S;
 NATURAL: N A T U R A L;
 NEXT: N E X T;
-NOTNULL: N O T N U L L;
-NOT: N O T;
 NO: N O;
-NULLS: N U L L S;
+NOT: N O T;
+NOTNULL: N O T N U L L;
 TNULL: N U L L;
+NULLS: N U L L S;
 OBJECT: O B J E C T;
 OF: O F;
 OFFSET: O F F S E T;
 OMIT: O M I T;
-ONE: O N E;
 ON: O N;
+ONE: O N E;
 ONLY: O N L Y;
 OPTION: O P T I O N;
 OPTIONAL: O P T I O N A L;
@@ -1717,7 +1741,7 @@ SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
-SKIP_RULE: S K I P;
+TSKIP: S K I P;
 SOURCE: S O U R C E;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
@@ -1768,84 +1792,6 @@ WRAPPER: W R A P P E R;
 //WRITE: W R I T E;
 XOR: X O R;
 
-STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
-
-STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
-QUOTE_SINGLE:  '\'';
-
-STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-QUOTE_DOUBLE:  '"';
-
-STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
-DOUBLE_AT:     '@@';
-AT:            '@';
-
-ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
-
-ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
-BACKTICK: '`';
-
-// not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
-INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
-FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
-REAL:
-    (
-        DECDIGITS DOT DIGIT* FLOAT_EXP?
-    |   DECDIGITS FLOAT_EXP
-//  |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
-    ) (F | P (F ('4'|'8') | N)?)?
-    ;
-
-DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
-DECDIGITS: DIGIT+;
-
-HEXDIGIT: '0'..'9' | 'a'..'f' | 'A'..'F';
-DIGIT: '0'..'9';
-HEXDIGITS: '0' X HEXDIGIT+;
-OCTDIGITS: '0' O ('0'..'8')+;
-BINDIGITS: '0' B ('0' | '1')+;
-
-BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
-
-// YQL Default Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = .
-// ANSI Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
-
-// http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
-A:('a'|'A');
-B:('b'|'B');
-C:('c'|'C');
-D:('d'|'D');
-E:('e'|'E');
-F:('f'|'F');
-G:('g'|'G');
-H:('h'|'H');
-I:('i'|'I');
-J:('j'|'J');
-K:('k'|'K');
-L:('l'|'L');
-M:('m'|'M');
-N:('n'|'N');
-O:('o'|'O');
-P:('p'|'P');
-Q:('q'|'Q');
-R:('r'|'R');
-S:('s'|'S');
-T:('t'|'T');
-U:('u'|'U');
-V:('v'|'V');
-W:('w'|'W');
-X:('x'|'X');
-Y:('y'|'Y');
-Z:('z'|'Z');
-
-WS: (' '|'\r'|'\t'|'\u000C'|'\n') -> channel(HIDDEN);
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) -> channel(HIDDEN);
-
-MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
-LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
-
 // YQL Default Lexer:
 // GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
 // GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
@@ -1854,6 +1800,54 @@ LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
 // GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
 // GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
 
-STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
-STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
-ID_QUOTED_CORE: '``' | '\\`' | ~'`';
+fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
+fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
+
+fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
+fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
+fragment STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
+
+STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
+
+ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
+
+fragment ID_QUOTED_CORE: '``' | '\\`' | ~'`';
+ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
+
+fragment DIGIT: '0'..'9';
+fragment HEXDIGIT: '0'..'9' | 'a'..'f' | 'A'..'F';
+fragment HEXDIGITS: '0' X HEXDIGIT+;
+fragment OCTDIGITS: '0' O ('0'..'8')+;
+fragment BINDIGITS: '0' B ('0' | '1')+;
+fragment DECDIGITS: DIGIT+;
+DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
+
+// not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
+INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
+
+fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
+REAL:
+    (
+        DECDIGITS DOT DIGIT* FLOAT_EXP?
+    |   DECDIGITS FLOAT_EXP
+//  |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
+    ) (F | P (F ('4'|'8') | N)?)?
+    ;
+
+BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
+
+TQ:('q'|'Q');
+TU:('u'|'U');
+TE:('e'|'E');
+TR:('r'|'R');
+TY:('y'|'Y');
+
+// YQL Default Lexer:
+// GRAMMAR_MULTILINE_COMMENT_CORE = .
+// ANSI Lexer:
+// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
+
+fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
+fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
+WS: (' '|'\r'|'\t'|'\u000C'|'\n')->channel(HIDDEN);
+COMMENT: (MULTILINE_COMMENT|LINE_COMMENT)->channel(HIDDEN);

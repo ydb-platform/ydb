@@ -484,6 +484,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
 
+        Y_ABORT_UNLESS(1);
+        Y_ABORT_UNLESS(0);
+
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()

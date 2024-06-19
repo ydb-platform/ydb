@@ -32,6 +32,10 @@ struct TOptions {
     TString Data;
     ui64 Rows = 0;
     ui64 TopK = 0;
+    ui16 Levels = 2;
+    ui16 Clusters = 80;
+    ui16 Iterations = 5;
+    bool LastLevelEmbeddings = false;
 };
 
 int DropIndex(NYdb::TDriver& driver, const TOptions& options);

@@ -6,6 +6,8 @@
 #include <chrono>
 #include <thread>
 
+inline constexpr ui64 kMinClusterSize = 8;
+
 using TId = uint64_t;
 using TRawEmbedding = TString&&;
 using TEmbedding = std::span<const float>;
@@ -41,7 +43,7 @@ public:
     TClusters Run(const TOptions& options);
 
 private:
-    void Init(ui64 k);
+    bool Init(ui64 k);
 
     bool Step(float neededDiff);
 

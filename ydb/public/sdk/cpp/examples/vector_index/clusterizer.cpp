@@ -2,9 +2,11 @@
 #include "util/stream/output.h"
 #include "util/system/yassert.h"
 
+static constexpr ui64 kMinClusters = 4;
 static ui64 gId = 1;
 
 void TClusterizer::TProgress::Reset(ui64 rows) {
+    // Y_UNUSED(rows, Rows, Curr, Last);
     Cout << "Start reading: " << rows << Endl;
     Curr = 0;
     Rows = rows;
@@ -149,24 +151,37 @@ TClusterizer::~TClusterizer() {
 TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     Y_ASSERT(!options.normalize); // normalize not supported
     const ui64 clusters = std::min<ui64>(options.maxK, 1000);
-    if (clusters < 8) {
-        return {};
-    }
-    Init(clusters);
-    for (size_t i = 0; i < options.maxIterations;) {
-        Cout << "Start step: " << ++i << " / " << options.maxIterations << Endl;
-        if (!Step(1.25)) {
-            break;
+    if (Init(clusters)) {
+        for (size_t i = 0; i < options.maxIterations;) {
+            Cout << "Start step: " << ++i << " / " << options.maxIterations << Endl;
+            if (!Step(1.25)) {
+                break;
+            }
         }
+        Finalize();
+    } else {
+        auto rows = It.Rows();
+        Cout << "Bad dataset (" << rows << ") for such clusterization ( iterations: " << options.maxIterations << ", k: " << options.maxK << " )" << Endl;
+        Progress.Reset(rows);
+        auto parentId = ++gId;
+        It.Iterate([&](ui32, TId id, TRawEmbedding rawEmbedding) {
+            Progress.Report(1);
+            Create(parentId, id, std::move(rawEmbedding));
+        });
+        Progress.ForceReport();
+        Clusters.Ids.emplace_back(parentId);
+        Clusters.Count.emplace_back(rows);
+        Clusters.Coords.emplace_back();
     }
-    Finalize();
     return std::move(Clusters);
 }
 
-void TClusterizer::Init(ui64 k) {
+bool TClusterizer::Init(ui64 k) {
     Cout << "Start init" << Endl;
     // TODO kmeans++, kmeans||?
-    Y_ASSERT(k > 0);
+    if (k < kMinClusters || k * kMinClusterSize >= It.Rows()) {
+        return false;
+    }
     Clusters.Coords.clear();
     Clusters.Ids.clear();
     Clusters.Ids.resize(k, 0);
@@ -176,13 +191,17 @@ void TClusterizer::Init(ui64 k) {
         auto embedding = GetArray<float>(rawEmbedding);
         Clusters.Coords.emplace_back(embedding.begin(), embedding.end());
     });
+    if (Clusters.Coords.size() < k) {
+        return false;
+    }
     // TODO check distance between vectors in initial set
-    Y_ASSERT(Clusters.Coords.size() == k);
     auto dims = Clusters.Coords.front().size();
     NewClusters.resize(k);
     for (auto& cluster : NewClusters) {
         cluster.Coords.resize(dims, 0.f);
     }
+    OldMean = std::numeric_limits<float>::max();
+    return true;
 }
 
 bool TClusterizer::Step(float neededDiff) {

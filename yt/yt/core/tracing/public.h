@@ -26,6 +26,8 @@ constexpr TTraceId InvalidTraceId = {};
 using TSpanId = ui64;
 constexpr TSpanId InvalidSpanId = 0;
 
+struct TTracingAttributes;
+
 // Request ids come from RPC infrastructure but
 // we should avoid include-dependencies here.
 using TRequestId = TGuid;

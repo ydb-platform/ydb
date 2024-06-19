@@ -210,6 +210,14 @@ public:
         return TraceId_ != NTracing::InvalidTraceId;
     }
 
+    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes)
+    {
+        YT_VERIFY(!HasTracingAttributes());
+
+        TraceId_ = tracingAttributes.TraceId;
+        SpanId_ = tracingAttributes.SpanId;
+    }
+
     NTracing::TTraceId GetTraceId() const
     {
         return TraceId_;
@@ -624,6 +632,14 @@ bool TError::HasTracingAttributes() const
         return false;
     }
     return Impl_->HasTracingAttributes();
+}
+
+void TError::SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes)
+{
+    if (!Impl_) {
+        return;
+    }
+    Impl_->SetTracingAttributes(tracingAttributes);
 }
 
 NTracing::TTraceId TError::GetTraceId() const

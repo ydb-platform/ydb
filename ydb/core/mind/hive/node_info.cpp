@@ -30,7 +30,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Disconnected:
         case EVolatileState::Connecting:
             RegisterInDomains();
-            Hive.UpdateCounterNodesConnected(+1);
             break;
 
         default:
@@ -43,7 +42,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Connected:
         case EVolatileState::Disconnecting:
             DeregisterInDomains();
-            Hive.UpdateCounterNodesConnected(-1);
             break;
 
         default:

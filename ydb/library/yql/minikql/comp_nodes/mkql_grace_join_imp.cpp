@@ -33,6 +33,9 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     // Processing variable length string columns
     if ( NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns != 0) {
 
+        totalBytesForStrings += sizeof(ui32)*NumberOfKeyStringColumns;
+        totalBytesForStrings += sizeof(ui32)*NumberOfKeyIColumns;
+
         for( ui64 i = 0; i < NumberOfKeyStringColumns; i++ ) {
             totalBytesForStrings += stringsSizes[i];
         }
@@ -55,11 +58,15 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         char * currStrPtr = reinterpret_cast< char* > (startPtr);
 
         for( ui64 i = 0; i < NumberOfKeyStringColumns; i++) {
+            WriteUnaligned<ui32>(currStrPtr, stringsSizes[i] );
+            currStrPtr+=sizeof(ui32);
             std::memcpy(currStrPtr, stringColumns[i], stringsSizes[i] );
             currStrPtr+=stringsSizes[i];
         }
 
         for( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
+            WriteUnaligned<ui32>(currStrPtr, IColumnsVals[i].size() );
+            currStrPtr+=sizeof(ui32);
             std::memcpy(currStrPtr, IColumnsVals[i].data(), IColumnsVals[i].size() );
             currStrPtr+=IColumnsVals[i].size();
         }

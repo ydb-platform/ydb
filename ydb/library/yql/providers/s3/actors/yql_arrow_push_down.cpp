@@ -135,11 +135,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
     return NYql::MatchPredicate(columns, predicate);
 }
 
-}
-
-namespace NYql::NDq {
-
-TVector<ui64> MatchedRowGroups(std::shared_ptr<parquet::FileMetaData> fileMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {
+TVector<ui64> MatchedRowGroupsImpl(parquet::FileMetaData* fileMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {
     TVector<ui64> matchedRowGroups;
     matchedRowGroups.reserve(fileMetadata->num_row_groups());
     for (int i = 0; i < fileMetadata->num_row_groups(); i++) {
@@ -149,5 +145,19 @@ TVector<ui64> MatchedRowGroups(std::shared_ptr<parquet::FileMetaData> fileMetada
     }
     return matchedRowGroups;
 }
+
+}
+
+namespace NYql::NDq {
+
+TVector<ui64> MatchedRowGroups(std::shared_ptr<parquet::FileMetaData> fileMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {
+    return MatchedRowGroupsImpl(fileMetadata.get(), predicate);
+}
+
+TVector<ui64> MatchedRowGroups(const std::unique_ptr<parquet::FileMetaData>& fileMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {
+    return MatchedRowGroupsImpl(fileMetadata.get(), predicate);
+}
+
+
 
 } // namespace NYql::NDq

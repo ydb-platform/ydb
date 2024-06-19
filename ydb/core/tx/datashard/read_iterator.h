@@ -214,11 +214,6 @@ public:
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
-    // Everything regarding external blobs
-    bool ExternalBlobsReadMode = false;
-    bool LookingForKeys = true;
-    TVector<TString> CurrentKeys;
-
     // Orbit used for tracking progress
     NLWTrace::TOrbit Orbit;
 };

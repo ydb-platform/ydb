@@ -146,7 +146,8 @@ namespace {
 TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer,
+        bool ignoreMissingExternalBlobs) const noexcept
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -157,7 +158,7 @@ TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range,
 
     ESeek seek = !range.MinKey || range.MinInclusive ? ESeek::Lower : ESeek::Upper;
 
-    auto iter = Require(table)->Iterate(range.MinKey, tags, Env, seek, snapshot, visible, observer);
+    auto iter = Require(table)->Iterate(range.MinKey, tags, Env, seek, snapshot, visible, observer, ignoreMissingExternalBlobs);
 
     if (range.MaxKey) {
         TCelled maxKey(range.MaxKey, *iter->Scheme->Keys, false);
@@ -175,7 +176,8 @@ TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range,
 TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer,
+        bool ignoreMissingExternalBlobs) const noexcept
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -186,7 +188,7 @@ TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKe
 
     ESeek seek = !range.MaxKey || range.MaxInclusive ? ESeek::Lower : ESeek::Upper;
 
-    auto iter = Require(table)->IterateReverse(range.MaxKey, tags, Env, seek, snapshot, visible, observer);
+    auto iter = Require(table)->IterateReverse(range.MaxKey, tags, Env, seek, snapshot, visible, observer, ignoreMissingExternalBlobs);
 
     if (range.MinKey) {
         TCelled minKey(range.MinKey, *iter->Scheme->Keys, false);

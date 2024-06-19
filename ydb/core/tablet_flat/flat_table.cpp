@@ -975,7 +975,8 @@ TMemTable& TTable::MemTable()
 TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer,
+        bool ignoreMissingExternalBlobs) const noexcept
 {
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
 
@@ -1002,7 +1003,7 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env, ignoreMissingExternalBlobs);
 
             if (iter->Seek(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
@@ -1022,8 +1023,10 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
 TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer,
+        bool ignoreMissingExternalBlobs) const noexcept
 {
+    Y_UNUSED(ignoreMissingExternalBlobs);
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
@@ -1049,7 +1052,7 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env, ignoreMissingExternalBlobs);
 
             if (iter->SeekReverse(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));

@@ -97,21 +97,17 @@ struct TShortColumnInfo {
     NTable::TTag Tag;
     NScheme::TTypeInfo Type;
     TString Name;
-    bool IsKey;
-    bool CanHaveExternalBlobs;
 
-    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeInfo type, const TString& name, bool isKey, bool canHaveExternalBlobs)
+    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeInfo type, const TString& name)
         : Tag(tag)
         , Type(type)
         , Name(name)
-        , IsKey(isKey)
-        , CanHaveExternalBlobs(canHaveExternalBlobs)
     {}
 
     TString Dump() const {
         TStringStream ss;
         // TODO: support pg types
-        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << ", IsKey: " << IsKey << "}";
+        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << "}";
         return ss.Str();
     }
 };
@@ -128,17 +124,7 @@ struct TShortTableInfo {
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
-            bool canHaveExternalBlobs = false;
-
-            auto family = tableInfo->Families.find(column.Family);
-            if (family != tableInfo->Families.end()) {
-                const ui32 externalThreshold = family->second.ExternalThreshold;
-                if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
-                    canHaveExternalBlobs = true;
-                }
-            }
-
-            Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name, column.IsKey, canHaveExternalBlobs));
+            Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name));
         }
     }
 
@@ -153,7 +139,7 @@ struct TShortTableInfo {
         // note that we don't have column names here, but
         // for cellvec we will not need them at all
         for (const auto& col: schema.Cols) {
-            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, "", col.IsKey(), false));
+            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, ""));
         }
     }
 
@@ -310,9 +296,6 @@ class TReader {
     absl::flat_hash_set<ui64> VolatileReadDependencies;
     bool VolatileWaitForCommit = false;
 
-    bool LookingForKeys = true;
-    TVector<TString> Keys;
-
     enum class EReadStatus {
         Done = 0,
         NeedData,
@@ -332,8 +315,6 @@ public:
         , Self(self)
         , TableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
-        , LookingForKeys(State.LookingForKeys)
-        , Keys(State.CurrentKeys)
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -395,43 +376,12 @@ public:
 
         EReadStatus result;
 
-        if (State.ExternalBlobsReadMode) {
-            if (LookingForKeys) {
-                if (!reverse) {
-                    auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.KeyColumns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                    result = IterateRangeGetKeysOnly(iter.Get(), ctx);
-                } else {
-                    auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.KeyColumns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                    result = IterateRangeGetKeysOnly(iter.Get(), ctx);
-                }
-
-                if (Keys.size() > 0) {
-                    LookingForKeys = false;
-                }
-            } 
-            
-            if (!LookingForKeys) {
-                if (!reverse) {
-                    auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                    result = IterateRangeForValues(iter.Get(), ctx);
-                } else {
-                    auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                    result = IterateRangeForValues(iter.Get(), ctx);
-                }
-
-                if (Keys.size() == 0) {
-                    // We read all keys we were looking for.
-                    LookingForKeys = true;
-                }
-            }
+        if (!reverse) {
+            auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver(), true);
+            result = IterateRange(iter.Get(), ctx);
         } else {
-            if (!reverse) {
-                auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                result = IterateRange(iter.Get(), ctx);
-            } else {
-                auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-                result = IterateRange(iter.Get(), ctx);
-            }
+            auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver(), true);
+            result = IterateRange(iter.Get(), ctx);
         }
 
         if (result == EReadStatus::NeedData && !(RowsProcessed && CanResume())) {
@@ -795,9 +745,6 @@ public:
     const absl::flat_hash_set<ui64>& GetVolatileReadDependencies() const { return VolatileReadDependencies; }
     bool NeedVolatileWaitForCommit() const { return VolatileWaitForCommit; }
 
-    bool IsLookingForKeys() const { return LookingForKeys; }
-    TVector<TString> GetKeys() const { return Keys; }
-
 private:
     bool CanResume() const {
         if (Self->IsFollower() && State.ReadVersion.IsMax()) {
@@ -929,19 +876,69 @@ private:
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
+
+        bool precharging = false;
+        ui32 prechargedCount = 0;
+        ui64 prechargedSize = 0;
+
+        TString lastKey;
+        NTable::ERowOp lastKeyState;
+
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             advanced = true;
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
 
             TDbTupleRef rowKey = iter->GetKey();
+            TDbTupleRef rowValues = iter->GetValues();
+
+            if (!precharging) {
+                if (iter->Row().MissingExternalBlobs() == 0) {
+                    lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                    lastKeyState = iter->GetKeyState();
+                } else {
+                    precharging = true;
+                } 
+            }
+
+            if (precharging) {
+                prechargedCount++;
+                prechargedSize += iter->Row().ExternalBlobSize();
+
+                auto cells = rowValues.Cells();
+                size_t cellsSize = cells.size();
+
+                size_t size = sizeof(TCell) * cellsSize;
+                for (auto& cell : cells) {
+                    if (!cell.IsNull() && !cell.IsInline()) {
+                        const size_t cellSize = cell.Size();
+                        size += AlignUp(cellSize);
+                    }
+                }
+
+                prechargedSize += size;
+
+                // We are only precharging, meaning that data will be out of order.
+                // Let's add it to ResultSet on the next iteration
+                if (ShouldStopPrecharging(prechargedSize)) {
+                    break;
+                }
+
+                if (ReachedTotalRowsLimit(prechargedCount)) {
+                    break;
+                }
+
+                if (ShouldStopReadingKeys(prechargedCount)) {
+                    break;
+                }
+
+                continue;
+            }
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
             RowsProcessed += processedRecords;
-
-            TDbTupleRef rowValues = iter->GetValues();
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
@@ -968,17 +965,16 @@ private:
         // row). When there are not enough rows we would prefer restarting in
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
-        auto lastKey = iter->GetKey().Cells();
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
-            LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
-            LastProcessedKeyErased = iter->GetKeyState() == NTable::ERowOp::Erase;
+        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && ((iter->Last() == NTable::EReady::Page) || precharging)) {
+            LastProcessedKey = lastKey;
+            LastProcessedKeyErased = lastKeyState == NTable::ERowOp::Erase;
             advanced = true;
         } else {
             LastProcessedKey.clear();
         }
 
         // last iteration to Page or Gone might also have deleted or invisible rows
-        if (advanced || iter->Last() != NTable::EReady::Page) {
+        if (advanced || (iter->Last() != NTable::EReady::Page && !precharging)) {
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
@@ -988,144 +984,7 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page) {
-            return EReadStatus::NeedData;
-        }
-
-        return EReadStatus::Done;
-    }
-
-    template <typename TIterator>
-    EReadStatus IterateRangeForValues(TIterator* iter, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
-        auto keyAccessSampler = Self->GetKeyAccessSampler();
-
-        size_t read = 0;
-
-        bool precharging = false;
-
-        ui64 prechargedSize = 0;
-
-        for (auto& key : Keys) {
-            TSerializedCellVec keyVec(key);
-
-            iter->SkipTo(keyVec.GetCells());
-
-            if (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-                TDbTupleRef rowKey = iter->GetKey();
-
-                keyAccessSampler->AddSample(TableId, rowKey.Cells());
-
-                if (precharging) {
-                    prechargedSize += iter->Row().ExternalBlobSize();
-
-                    // We are only precharging, meaning that data will be out of order.
-                    // Let's add it to ResultSet on the next iteration
-                    if (ShouldStopPrecharging(prechargedSize)) {
-                        break;
-                    }
-                    continue;
-                }
-
-                TDbTupleRef rowValues = iter->GetValues();
-
-                // note that if user requests key columns then they will be in
-                // rowValues and we don't have to add rowKey columns
-                BlockBuilder.AddRow(TDbTupleRef(), rowValues);
-                ++RowsRead;
-                ++read;
-
-                if (ShouldStop()) {
-                    Keys.erase(Keys.begin(), Keys.begin() + read);
-                    
-                    LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
-                    LastProcessedKeyErased = false;
-                    return EReadStatus::StoppedByLimit;
-                }
-            } else {
-                precharging = true;
-                prechargedSize += iter->Row().ExternalBlobSize();
-
-                if (ShouldStopPrecharging(prechargedSize)) {
-                    break;
-                }
-                continue;
-            }
-        }
-
-        Keys.erase(Keys.begin(), Keys.begin() + read);
-
-        if (iter->Last() == NTable::EReady::Page) {
-            return EReadStatus::NeedData;
-        }
-
-        return EReadStatus::Done;
-    }
-
-    template <typename TIterator>
-    EReadStatus IterateRangeGetKeysOnly(TIterator* iter, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
-        ui64 keysRead = 0;
-
-        auto keyAccessSampler = Self->GetKeyAccessSampler();
-
-        bool advanced = false;
-        while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-            advanced = true;
-            DeletedRowSkips += iter->Stats.DeletedRowSkips;
-            InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
-
-            TDbTupleRef rowKey = iter->GetKey();
-
-            keyAccessSampler->AddSample(TableId, rowKey.Cells());
-            const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
-            RowsSinceLastCheck += processedRecords;
-
-            TString keyVec = TSerializedCellVec::Serialize(rowKey.Cells());
-
-            Keys.push_back(keyVec);
-            ++keysRead;
-
-            if (ReachedTotalRowsLimit(keysRead)) {
-                LastProcessedKey.clear();
-                return EReadStatus::NeedData;
-            }
-
-            if (ShouldStopReadingKeys(keysRead)) {
-                return EReadStatus::NeedData;
-            }
-        }
-
-        // Note: when stopping due to page faults after an erased row we will
-        // reposition on that same row so erase cache can extend that cached
-        // erased range. When we don't observe any user-visible rows before a
-        // page fault we want to make sure we observe multiple deleted rows,
-        // which must be at least 2 (because we may resume from a known deleted
-        // row). When there are not enough rows we would prefer restarting in
-        // the same transaction, instead of starting a new one, in which case
-        // we will not update stats and will not update RowsProcessed.
-
-        auto lastKey = iter->GetKey().Cells();
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
-            LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
-            LastProcessedKeyErased = iter->GetKeyState() == NTable::ERowOp::Erase;
-            advanced = true;
-        } else {
-            LastProcessedKey.clear();
-        }
-
-        // last iteration to Page or Gone might also have deleted or invisible rows
-        if (advanced || iter->Last() != NTable::EReady::Page) {
-            DeletedRowSkips += iter->Stats.DeletedRowSkips;
-            InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
-            const ui64 processedRecords = ResetRowSkips(iter->Stats);
-            RowsSinceLastCheck += processedRecords;
-            RowsProcessed += processedRecords;
-        }
-
-        if (iter->Last() == NTable::EReady::Page) {
+        if (iter->Last() == NTable::EReady::Page || precharging) {
             return EReadStatus::NeedData;
         }
 
@@ -1737,16 +1596,6 @@ public:
             }
 
             state.Columns.push_back(col);
-
-            auto& columnInfo = it->second;
-
-            if (columnInfo.IsKey) {
-                state.KeyColumns.push_back(col);
-            }
-
-            if (columnInfo.CanHaveExternalBlobs) {
-                state.ExternalBlobsReadMode = true;
-            }
         }
 
         state.State = TReadIteratorState::EState::Executing;
@@ -1975,10 +1824,7 @@ private:
             AppData()->MonotonicTimeProvider->Now(),
             Self));
 
-        bool read = Reader->Read(txc, ctx);
-        state.LookingForKeys = Reader->IsLookingForKeys();
-        state.CurrentKeys = Reader->GetKeys();
-        return read;
+        return Reader->Read(txc, ctx);
     }
 
     void PrepareValidationInfo(const TActorContext&, const TReadIteratorState& state) {
@@ -2626,12 +2472,8 @@ public:
             Self));
 
         LWTRACK(ReadExecute, state.Orbit);
-        
-        bool read = Reader->Read(txc, ctx);
-        state.LookingForKeys = Reader->IsLookingForKeys();
-        state.CurrentKeys = Reader->GetKeys();
 
-        if (read) {
+        if (Reader->Read(txc, ctx)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
                 Self->WaitVolatileDependenciesThenSend(

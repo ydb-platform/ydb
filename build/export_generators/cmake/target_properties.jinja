@@ -1,4 +1,4 @@
-{%  for property in current_target.properties -%}
+{%- for property in current_target.properties -%}
 set_property(TARGET {{ name }} PROPERTY {{ property.name }}
 {%-     for value in property.value %}
   {{ value }}

@@ -115,6 +115,7 @@ dir_macroses="list"
 dir_macroses-ITEM="dict"
 dir_macroses-macro="str"
 dir_macroses-args="list"
+dir_includes="set"
 
 [attrs.target]
 # DEPRECATED - Skipped old hardcoded-cmake attributes

@@ -1,7 +1,7 @@
-{%- if includes is defined %}
-{%      for incl in includes -%}
-include({{ incl }})
-{%      endfor -%}
+{%- if dir_includes is defined %}
+{%     for dir_include in dir_includes -%}
+include({{ dir_include }})
+{%     endfor -%}
 {%- endif -%}
 
 {%- if subdirs|length %}

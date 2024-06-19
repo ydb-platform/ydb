@@ -359,7 +359,6 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
                 return false;
             } 
 
-            // TODO(pixcc): норм ошибка
             if (request.action_groups().size() > 1 && group.actions().size() > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"

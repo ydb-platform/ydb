@@ -54,6 +54,8 @@ ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [9/10] chunk chunk
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [9/10] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams

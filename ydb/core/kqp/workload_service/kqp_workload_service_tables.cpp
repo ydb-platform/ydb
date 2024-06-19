@@ -90,12 +90,13 @@ private:
         return CreateTableCreator(
             GetTablePath(DelayedRequests),
             {
+                Col("database", NScheme::NTypeIds::Text),
                 Col("pool_id", NScheme::NTypeIds::Text),
                 Col("session_id", NScheme::NTypeIds::Text),
                 Col("node_id", NScheme::NTypeIds::Uint32),
                 Col("wait_deadline", NScheme::NTypeIds::Timestamp),
             },
-            { "pool_id", "wait_deadline", "session_id" },
+            { "database", "pool_id", "wait_deadline", "session_id" },
             NKikimrServices::KQP_WORKLOAD_SERVICE,
             TtlCol("wait_deadline", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
@@ -105,12 +106,13 @@ private:
         return CreateTableCreator(
             GetTablePath(RunningRequests),
             {
+                Col("database", NScheme::NTypeIds::Text),
                 Col("pool_id", NScheme::NTypeIds::Text),
                 Col("session_id", NScheme::NTypeIds::Text),
                 Col("node_id", NScheme::NTypeIds::Uint32),
                 Col("lease_deadline", NScheme::NTypeIds::Timestamp),
             },
-            { "pool_id", "node_id", "session_id" },
+            { "database", "pool_id", "node_id", "session_id" },
             NKikimrServices::KQP_WORKLOAD_SERVICE,
             TtlCol("lease_deadline", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
@@ -441,20 +443,24 @@ public:
     void OnRunQuery() override {
         TString sql = TStringBuilder() << R"(
             -- TDelayRequestQuery::OnRunQuery
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
             DECLARE $session_id AS Text;
             DECLARE $node_id AS Uint32;
             DECLARE $wait_deadline AS Timestamp;
 
             UPSERT INTO `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-                (pool_id, session_id, node_id, wait_deadline)
+                (database, pool_id, session_id, node_id, wait_deadline)
             VALUES (
-                $pool_id, $session_id, $node_id, $wait_deadline
+                $database, $pool_id, $session_id, $node_id, $wait_deadline
             );
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
@@ -563,6 +569,7 @@ public:
     void StartQueuedRequest() {
         TString sql = TStringBuilder() << R"(
             -- TStartFirstDelayedRequestQuery::StartQueuedRequest
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
             DECLARE $session_id AS Text;
             DECLARE $node_id AS Uint32;
@@ -575,15 +582,18 @@ public:
               AND session_id = $session_id;
 
             UPSERT INTO `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
-                (pool_id, session_id, node_id, lease_deadline)
+                (database, pool_id, session_id, node_id, lease_deadline)
             VALUES (
-                $pool_id, $session_id, $node_id,
+                $database, $pool_id, $session_id, $node_id,
                 CurrentUtcTimestamp() + $lease_duration
             );
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
@@ -633,21 +643,25 @@ public:
     void OnRunQuery() override {
         TString sql = TStringBuilder() << R"(
             -- TStartRequestQuery::OnRunQuery
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
             DECLARE $session_id AS Text;
             DECLARE $node_id AS Uint32;
             DECLARE $lease_duration AS Interval;
 
             UPSERT INTO `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
-                (pool_id, session_id, node_id, lease_deadline)
+                (database, pool_id, session_id, node_id, lease_deadline)
             VALUES (
-                $pool_id, $session_id, $node_id,
+                $database, $pool_id, $session_id, $node_id,
                 CurrentUtcTimestamp() + $lease_duration
             );
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()

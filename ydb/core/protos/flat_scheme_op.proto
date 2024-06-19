@@ -1542,8 +1542,7 @@ enum EOperationType {
     // Move index
     ESchemeOpMoveIndex = 82;
 
-    ESchemeOpAllocatePersQueueGroup = 83;
-    ESchemeOpDeallocatePersQueueGroup = 84;
+    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
 
     // AlterExtSubDomain suboperations
     ESchemeOpAlterExtSubDomainCreateHive = 85;

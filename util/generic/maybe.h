@@ -47,6 +47,8 @@ private:
                   "Instantiation of TMaybe with a TInPlace type is ill-formed");
     static_assert(!std::is_reference<T>::value,
                   "Instantiation of TMaybe with reference type is ill-formed");
+    static_assert(!std::is_array<T>::value,
+                  "Instantiation of TMaybe with array type is ill-formed");
     static_assert(std::is_destructible<T>::value,
                   "Instantiation of TMaybe with non-destructible type is ill-formed");
 
@@ -393,12 +395,20 @@ public:
         return Defined() ? *Data() : elseValue;
     }
 
+    constexpr T&& GetOrElse(T&& elseValue Y_LIFETIME_BOUND) && Y_LIFETIME_BOUND {
+        return Defined() ? std::move(*Data()) : std::move(elseValue);
+    }
+
     constexpr const TMaybe& OrElse(const TMaybe& elseValue Y_LIFETIME_BOUND) const noexcept Y_LIFETIME_BOUND {
         return Defined() ? *this : elseValue;
     }
 
     constexpr TMaybe& OrElse(TMaybe& elseValue Y_LIFETIME_BOUND) Y_LIFETIME_BOUND {
         return Defined() ? *this : elseValue;
+    }
+
+    constexpr TMaybe&& OrElse(TMaybe&& elseValue Y_LIFETIME_BOUND) && Y_LIFETIME_BOUND {
+        return Defined() ? std::move(*this) : std::move(elseValue);
     }
 
     template <typename F>

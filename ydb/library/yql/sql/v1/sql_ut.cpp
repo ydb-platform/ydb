@@ -2494,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 722:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 725:7: local_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
@@ -4597,14 +4597,6 @@ select FormatType($f());
         auto res = SqlToYqlWithMode(withTopLevelSubq, NSQLTranslation::ESqlMode::LIBRARY);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
-    }
-
-    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
-        NSQLTranslation::TTranslationSettings settings;
-        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
 
     Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
@@ -6838,5 +6830,90 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             select 1;
         )";
         SqlToYql(query).IsOk();
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePool) {
+    Y_UNIT_TEST(CreateResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20,
+                    QUERY_CANCEL_AFTER_SECONDS=86400,
+                    QUEUE_TYPE="FIFO"
+                );
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"concurrent_query_limit" (Int32 '"20")) '('"query_cancel_after_seconds" (Int32 '"86400")) '('"queue_type" '"FIFO"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolWithBadArguments) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool;
+            )sql" , "<main>:3:51: Error: Unexpected token ';' : syntax error...\n\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    DUPLICATE_SETTING="first_value",
+                    DUPLICATE_SETTING="second_value"
+                );
+            )sql" , "<main>:5:21: Error: DUPLICATE_SETTING duplicate keys\n");
+    }
+
+    Y_UNIT_TEST(AlterResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER RESOURCE POOL MyResourcePool
+                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5),
+                    SET QUEUE_TYPE "UNORDERED",
+                    RESET (Query_Cancel_After_Seconds, Query_Count_Limit);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"concurrent_query_limit" (Int32 '"30")) '('"queue_type" '"UNORDERED") '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"query_cancel_after_seconds" '"query_count_limit")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropResourcePool) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                DROP RESOURCE POOL MyResourcePool;
+            )sql");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }

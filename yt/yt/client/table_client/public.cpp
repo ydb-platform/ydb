@@ -15,6 +15,7 @@ const TString TimestampColumnName = SystemColumnNamePrefix + "timestamp";
 const TString TtlColumnName = SystemColumnNamePrefix + "ttl";
 const TString CumulativeDataWeightColumnName = SystemColumnNamePrefix + "cumulative_data_weight";
 const TString EmptyValueColumnName = SystemColumnNamePrefix + "empty";
+const TString SequenceNumberColumnName = SystemColumnNamePrefix + "sequence_number";
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -101,6 +101,7 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void UpdateLag(const TWorkerId& id, TDuration lag);
 
     // local transactions
     class TTxInitSchema;

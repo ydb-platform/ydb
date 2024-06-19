@@ -158,6 +158,11 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
 };
 
 struct TEvStateStorage::TEvListSchemeBoard : public TEventLocal<TEvListSchemeBoard, EvListSchemeBoard> {
+    const bool Subscribe = false;
+
+    TEvListSchemeBoard(bool subscribe)
+        : Subscribe(subscribe)
+    {}
 };
 
 struct TEvStateStorage::TEvListSchemeBoardResult : public TEventLocal<TEvListSchemeBoardResult, EvListSchemeBoardResult> {

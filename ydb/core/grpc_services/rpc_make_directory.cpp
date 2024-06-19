@@ -63,6 +63,11 @@ void DoMakeDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
     f.RegisterActor(new TMakeDirectoryRPC(p.release()));
 }
 
+template<>
+IActor* TEvMakeDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TMakeDirectoryRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr
 

@@ -46,7 +46,7 @@ public:
 
     struct TGetRowCount {
         static ui64 Get(const TChild& child) noexcept {
-            return child.RowCount;
+            return child.GetRowCount();
         }
     };
 
@@ -127,17 +127,22 @@ private:
     };
 
 public:
-    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, TBuildStatsYieldHandler yieldHandler)
+    TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env, ui32 histogramBucketsCount, TBuildStatsYieldHandler yieldHandler)
         : Subset(subset)
         , KeyDefaults(*Subset.Scheme->Keys)
         , Env(env)
+        , HistogramBucketsCount(histogramBucketsCount)
         , YieldHandler(yieldHandler)
     {
     }
 
     template <typename TGetSize>
-    bool Build(THistogram& histogram, ui64 resolution, ui64 statTotalSize) {
-        Resolution = resolution;
+    bool Build(THistogram& histogram, ui64 statTotalSize) {
+        if (!HistogramBucketsCount) {
+            return true;
+        }
+
+        Resolution = statTotalSize / HistogramBucketsCount;
         StatTotalSize = statTotalSize;
         
         bool ready = true;
@@ -148,7 +153,7 @@ public:
             auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), index);
-            LoadedStateNodes.emplace_back(meta.PageId, meta.LevelCount, 0, meta.RowCount, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
+            LoadedStateNodes.emplace_back(meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
             ready &= SlicePart<TGetSize>(parts.back(), *part.Slices, LoadedStateNodes.back());
             endSize += parts.back().GetSize();
         }
@@ -441,8 +446,8 @@ private:
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
             auto& child = bTreeNode.GetChild(pos);
 
-            LoadedStateNodes.emplace_back(child.PageId, parent.Level - 1,
-                pos ? bTreeNode.GetChild(pos - 1).RowCount : parent.BeginRowId, child.RowCount,
+            LoadedStateNodes.emplace_back(child.GetPageId(), parent.Level - 1,
+                pos ? bTreeNode.GetChild(pos - 1).GetRowCount() : parent.BeginRowId, child.GetRowCount(),
                 pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
                 pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey,
                 pos ? TGetSize::Get(bTreeNode.GetChild(pos - 1)) : parent.BeginSize, TGetSize::Get(child));
@@ -497,6 +502,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
+    ui32 HistogramBucketsCount;
     TBuildStatsYieldHandler YieldHandler;
     ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
@@ -505,13 +511,13 @@ private:
 
 }
 
-inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     bool ready = true;
     
-    TTableHistogramBuilderBtreeIndex builder(subset, env, yieldHandler);
+    TTableHistogramBuilderBtreeIndex builder(subset, env, histogramBucketsCount, yieldHandler);
 
-    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, rowCountResolution, stats.RowCount);
-    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
+    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, stats.RowCount);
+    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, stats.DataSize.Size);
 
     return ready;
 }

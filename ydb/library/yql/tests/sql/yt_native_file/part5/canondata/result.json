@@ -751,6 +751,27 @@
             "uri": "file://test.test_coalesce-coalesce_symmetry-default.txt-Results_/extracted"
         }
     ],
+    "test.test[column_group-length-single-Debug]": [
+        {
+            "checksum": "62ff19384194ff7971670fda11ec73f7",
+            "size": 2819,
+            "uri": "https://{canondata_backend}/1937424/33453d537589ee83ea9b9d001c73f7c1914e0d3b/resource.tar.gz#test.test_column_group-length-single-Debug_/opt.yql"
+        }
+    ],
+    "test.test[column_group-length-single-Plan]": [
+        {
+            "checksum": "570243c6e64a5ef40d5431941a114357",
+            "size": 8045,
+            "uri": "https://{canondata_backend}/1937424/33453d537589ee83ea9b9d001c73f7c1914e0d3b/resource.tar.gz#test.test_column_group-length-single-Plan_/plan.txt"
+        }
+    ],
+    "test.test[column_group-length-single-Results]": [
+        {
+            "checksum": "225027ca97ad30d5c2f56009270eeaa2",
+            "size": 4136,
+            "uri": "https://{canondata_backend}/1937424/33453d537589ee83ea9b9d001c73f7c1914e0d3b/resource.tar.gz#test.test_column_group-length-single-Results_/results.txt"
+        }
+    ],
     "test.test[column_order-select_plain-default.txt-Debug]": [
         {
             "checksum": "6522aa584647ef284ab415736172403d",

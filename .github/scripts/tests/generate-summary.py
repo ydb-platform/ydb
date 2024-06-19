@@ -202,6 +202,8 @@ class TestSummary:
         if add_footnote:
             result.append("")
             result.append(f"[^1]: All mute rules are defined [here]({footnote_url}).")
+            
+        result.append("")
         return result
 
 
@@ -346,30 +348,28 @@ def main():
     summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
     write_summary(summary, args.test_log_url)
 
+    if summary.is_empty | summary.is_failed:
+        color = 'red'
+        overall_status = "failure"
+    else:
+        color = 'green'
+        overall_status = "success"
+
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
         gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
+        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-
         text = get_comment_text(pr, summary, args.test_history_url, args.test_log_url)
-
-        if summary.is_empty | summary.is_failed:
-            color = 'red'
-            overall_status = "failure"
-        else:
-            color = 'green'
-            overall_status = "success"
-
-        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
-        if args.status_report_file:
-            with open(args.status_report_file, 'w') as fo:
-                fo.write(overall_status)
+    if args.status_report_file:
+        with open(args.status_report_file, 'w') as fo:
+            fo.write(overall_status)
 
 
 if __name__ == "__main__":

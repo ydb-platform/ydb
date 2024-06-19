@@ -71,7 +71,12 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TMemoryPool& pool) const {
+void TChangeRecord::Serialize(
+    NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record,
+    TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord>& ctx) const
+{
+    auto& pool = ctx.MemoryPool;
+    pool.Clear();
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
 
@@ -108,8 +113,8 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
 }
 
 void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
-    TMemoryPool pool(256);
-    Serialize(record, pool);
+    TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord> ctx;
+    Serialize(record, ctx);
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {

@@ -92,13 +92,13 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
     }
 
-    void CheckBTreeIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui64 rowCountResolution = 531, ui64 dataSizeResolution = 53105) {
+    void CheckBTreeIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui32 histogramBucketsCount = 10) {
         TStats stats;
         TTouchEnv env;
 
         const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){})) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){})) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -108,7 +108,7 @@ namespace {
             ui64 byIndexBytes = 0;
             for (const auto& part : subset.Flatten) {
                 auto &root = part->IndexPages.GetBTree({});
-                byIndexBytes += root.DataSize + root.GroupDataSize;
+                byIndexBytes += root.GetDataSize() + root.GetGroupDataSize();
             }
             UNIT_ASSERT_VALUES_EQUAL(byIndexBytes, expectedData);
         }
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    void Check(const TSubset& subset, TMode mode, ui32 buckets = 10, bool verifyPercents = true) {
+    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true) {
         if (mode == 0) {
             Dump(subset);
         }
@@ -567,21 +567,21 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             CalcDataBefore(subset, TSerializedCellVec(emptyKey), totalBytes, totalRows);
         }
 
-        ui64 rowCountResolution = totalRows / buckets;
-        ui64 dataSizeResolution = totalBytes / buckets;
+        ui64 rowCountResolution = totalRows / histogramBucketsCount;
+        ui64 dataSizeResolution = totalBytes / histogramBucketsCount;
 
         TTouchEnv env;
         // env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
-                return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
+                return NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){});
             } else {
                 return NTable::BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             }
         };
 
-        const ui32 attempts = 25;
+        const ui32 attempts = 35;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;
@@ -1008,6 +1008,29 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             TMixerSeq mixer(4, Mass1.Saved.Size());
             auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), mode)).Mixed(0, 4, mixer, 0.3);
             Check(*subset, mode);
+        }
+    }
+
+    // this test uses same data as benchmark::TPartFixture/BuildStats/*, but may be debugged and prints result histograms
+    Y_UNIT_TEST(Benchmark)
+    {
+        const ui32 partsCount = 4;
+        const bool groups = false;
+        const bool history = false;
+        ui64 rowsCount = history ? 300000 : 1000000;
+
+        rowsCount /= 100; // to be faster
+
+        TAutoPtr<TMass> mass = new NTest::TMass(new NTest::TModelStd(groups), rowsCount);
+
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            NPage::TConf conf;
+            conf.Groups.resize(mass->Model->Scheme->Families.size());
+            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+
+            TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount), history ? 0.7 : 0);
+            
+            Check(*subset, mode, 10, false);
         }
     }
 }

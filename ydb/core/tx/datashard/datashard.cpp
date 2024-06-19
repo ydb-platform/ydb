@@ -37,6 +37,7 @@ bool gAllowLogBatchingDefaultValue = true;
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
+ui32 gDbStatsHistogramBucketsCount = 10;
 
 // The first byte is 0x01 so it would fail to parse as an internal tablet protobuf
 TStringBuf SnapshotTransferReadSetMagic("\x01SRS", 4);

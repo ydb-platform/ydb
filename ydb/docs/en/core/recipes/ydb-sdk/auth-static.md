@@ -63,15 +63,15 @@ Below are examples of the code for authentication based on a username and token 
 
 - Node.js
 
-  {% include [auth-static](../../../_includes/nodejs/auth-static.md) %}
+  {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 
 - Python
 
-  {% include [auth-static](../../../_includes/python/auth-static.md) %}
+  {% include [auth-static](../../_includes/python/auth-static.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-static](../../../_includes/python/async/auth-static.md) %}
+  {% include [auth-static](../../_includes/python/async/auth-static.md) %}
 
 - C# (.NET)
 

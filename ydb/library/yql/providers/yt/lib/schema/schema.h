@@ -7,7 +7,6 @@
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 
@@ -29,7 +28,7 @@ NYT::TNode GetSchemaFromAttributes(const NYT::TNode& attributes, bool onlySystem
 TYTSortInfo KeyColumnsFromSchema(const NYT::TNode& schema);
 bool ValidateTableSchema(const TString& tableName, const NYT::TNode& attributes, bool ignoreYamrDsv, bool ignoreWeakSchema = false);
 void MergeInferredSchemeWithSort(NYT::TNode& schema, TYTSortInfo& sortInfo);
-NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, bool useColumnGroups = false);
+NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, const NYT::TNode& columnGroupsSpec = {});
 NYT::TSortColumns ToYTSortColumns(const TVector<std::pair<TString, bool>>& sortColumns);
 TString GetTypeV3String(const TTypeAnnotationNode& type, ui64 nativeTypeCompatibility = NTCF_ALL);
 

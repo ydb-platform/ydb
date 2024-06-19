@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "date32_value", .Type = "Date32"},
                 {.Name = "datetime64_value", .Type = "Datetime64"},
                 {.Name = "timestamp64_value", .Type = "Timestamp64"},
-                {.Name = "interval64_value", .Type = "Interval64"}
+                {.Name = "interval64_value", .Type = "Interval64"},
             },
         }));
 

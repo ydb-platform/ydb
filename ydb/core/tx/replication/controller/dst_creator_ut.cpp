@@ -58,6 +58,71 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
     }
 
+    void WithSyncIndex(const TString& replicatedPath) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        const auto tableDesc = TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+
+        const TString indexName = "index_by_value";
+
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
+             indexName, TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal,
+             TVector<TString>{}, TDuration::Seconds(5000));
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        {
+            auto desc = env.GetDescription(replicatedPath);
+            const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
+            for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.ColumnsSize(), tableDesc.Columns.size());
+            for (ui32 i = 0; i < replicatedDesc.ColumnsSize(); ++i) {
+                auto pred = [name = replicatedDesc.GetColumns(i).GetName()](const auto& column) {
+                    return name == column.Name;
+                };
+
+                UNIT_ASSERT(FindIfPtr(tableDesc.Columns, pred));
+            }
+
+            const auto& replCfg = replicatedDesc.GetReplicationConfig();
+            UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+            UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+        }
+
+        {
+            auto desc = env.GetDescription(replicatedPath + "/" + indexName);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTableIndex().GetName(), indexName);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTableIndex().GetType(), NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        }
+
+        {
+            auto desc = env.GetDescription(replicatedPath + "/" + indexName + "/indexImplTable");
+            Cerr << desc.DebugString() << Endl;
+            const auto& indexTableDesc = desc.GetPathDescription().GetTable();
+            UNIT_ASSERT_VALUES_EQUAL(indexTableDesc.KeyColumnNamesSize(), 2);
+        }
+   }
+
+
     Y_UNIT_TEST(Basic) {
         Basic("/Root/Replicated");
     }
@@ -65,6 +130,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST(WithIntermediateDir) {
         Basic("/Root/Dir/Replicated");
     }
+
+    Y_UNIT_TEST(WithSyncIndex) {
+        WithSyncIndex("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(WithSyncIndexWithIntermediateDir) {
+        WithSyncIndex("/Root/Dir/Replicated");
+    }
+
 
     Y_UNIT_TEST(SameOwner) {
         TEnv env;

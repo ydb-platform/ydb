@@ -6,9 +6,13 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/sys_view/common/events.h>
 #include "viewer.h"
 
 namespace NKikimr {
@@ -16,6 +20,7 @@ namespace NViewer {
 
 using namespace NKikimr;
 using namespace NSchemeCache;
+using NNodeWhiteboard::TNodeId;
 
 template <typename TDerived>
 class TViewerPipeClient : public TActorBootstrapped<TDerived> {
@@ -161,6 +166,56 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
+        restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
+        evictVDisk->SetGroupId(groupId);
+        evictVDisk->SetGroupGeneration(groupGeneration);
+        evictVDisk->SetFailRealmIdx(failRealmIdx);
+        evictVDisk->SetFailDomainIdx(failDomainIdx);
+        evictVDisk->SetVDiskIdx(vdiskIdx);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
+        request->Record.SetInclusiveFrom(true);
+        request->Record.SetInclusiveTo(true);
+        request->Record.MutableFrom()->SetNodeId(nodeId);
+        request->Record.MutableFrom()->SetPDiskId(pdiskId);
+        request->Record.MutableTo()->SetNodeId(nodeId);
+        request->Record.MutableTo()->SetPDiskId(pdiskId);
+        SendRequestToPipe(pipeClient, request.release());
+    }
+
+    void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
+        updateDriveStatus->CopyFrom(driveStatus);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
     void RequestSchemeCacheNavigate(const TString& path) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -189,13 +244,32 @@ protected:
     }
 
     void RequestStateStorageEndpointsLookup(const TString& path) {
-        if (!AppData()->DomainsInfo->Domain) {
-            return;
-        }
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                               TBase::SelfId(),
                                                               EBoardLookupMode::Second));
         ++Requests;
+    }
+
+    void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
+        if (!AppData()->DomainsInfo->Domain) {
+            return;
+        }
+        TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
+                                                              TBase::SelfId(),
+                                                              EBoardLookupMode::Second));
+        ++Requests;
+    }
+
+    std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        std::vector<TNodeId> databaseNodes;
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
+                databaseNodes.emplace_back(actorId.NodeId());
+            }
+        }
+        std::sort(databaseNodes.begin(), databaseNodes.end());
+        databaseNodes.erase(std::unique(databaseNodes.begin(), databaseNodes.end()), databaseNodes.end());
+        return databaseNodes;
     }
 
     void InitConfig(const TCgiParameters& params) {

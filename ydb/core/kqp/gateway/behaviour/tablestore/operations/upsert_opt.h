@@ -1,5 +1,5 @@
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 namespace NKikimr::NKqp {
 
@@ -13,6 +13,7 @@ private:
 private:
     bool SchemeNeedActualization = false;
     std::optional<bool> ExternalGuaranteeExclusivePK;
+    NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer CompactionPlannerConstructor;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

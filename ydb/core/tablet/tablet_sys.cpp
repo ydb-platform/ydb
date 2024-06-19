@@ -312,7 +312,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     }
 
     StateStorageInfo.KnownGeneration = msg->CurrentGeneration;
-    StateStorageInfo.Signature.Reset(msg->Signature.Release());
+    StateStorageInfo.KnownStep = msg->CurrentStep;
 
     if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
         FollowerInfo.KnownLeaderID = msg->CurrentLeader;
@@ -1734,7 +1734,7 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
         << ", YellowMoveChannels: " << yellowMoveChannelsString(), "TSYS30");
 
-    Send(MakePipePeNodeCacheID(false),
+    Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(
             new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
             Info->HiveId,

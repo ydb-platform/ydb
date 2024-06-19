@@ -1006,6 +1006,7 @@ namespace NKikimr::NBsController {
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
                     }
+                    SysViewChangedVSlots.insert(vslotId);
                 }
                 if (slot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     // we can release donor slots without further notice then the VDisk is completely replicated; we
@@ -1031,6 +1032,7 @@ namespace NKikimr::NBsController {
                     .ReadySince = vslot.ReadySince,
                     .VDiskStatus = vslot.VDiskStatus,
                 });
+                SysViewChangedVSlots.insert(vslotId);
             }
         }
 

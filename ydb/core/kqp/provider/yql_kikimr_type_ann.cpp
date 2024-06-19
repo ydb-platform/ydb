@@ -615,26 +615,34 @@ private:
                 generateColumnsIfInsert.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
             }
 
-            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
-                .Add(node.Settings())
-                .Add()
+            TVector<TCoNameValueTuple> settings;
+            for (const auto& setting : node.Settings()) {
+                settings.push_back(setting);
+            }
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("input_columns")
                     .Value<TCoAtomList>()
                         .Add(columns)
                         .Build()
-                    .Build()
-                .Add()
+                    .Done());
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("default_constraint_columns")
                     .Value<TCoAtomList>()
                         .Add(defaultConstraintColumns)
                         .Build()
-                    .Build()
-                .Add()
+                    .Done());
+            settings.push_back(
+                Build<TCoNameValueTuple>(ctx, node.Pos())
                     .Name().Build("generate_columns_if_insert")
                     .Value<TCoAtomList>()
                         .Add(generateColumnsIfInsert)
                         .Build()
-                    .Build()
+                    .Done());
+
+            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
+                .Add(settings)
                 .Done()
                 .Ptr();
 
@@ -1361,12 +1369,34 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             << " Column: \"" << name << "\" does not exist"));
                         return TStatus::Error;
                     }
-                    auto families = columnTuple.Item(1);
-                    if (families.Cast<TCoAtomList>().Size() > 1) {
-                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                            << " Column: \"" << name
-                            << "\". Several column families for a single column are not yet supported"));
+                    auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
+                    auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+                    if (alterColumnAction == "setDefault") {
+                        auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
+                        auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                        auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                        if (func != "nextval") {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unsupported function to set default: " << func));
+                            return TStatus::Error;
+                        }
+                        if (setDefault.Size() > 2) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Function nextval has exactly one argument"));
+                            return TStatus::Error;
+                        }
+                    } else if (alterColumnAction == "setFamily") {
+                        auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
+                        if (families.Size() > 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column families for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unsupported action to alter column"));
                         return TStatus::Error;
                     }
                 }
@@ -1660,6 +1690,14 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
     virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
         const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "token_secret_name",
+            "user",
+            "password",
+            "password_secret_name",
             "state",
             "failover_mode",
         };

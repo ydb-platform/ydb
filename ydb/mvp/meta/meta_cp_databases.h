@@ -43,6 +43,7 @@ public:
     TDuration DatabaseRequestRetryDelta = TDuration::MilliSeconds(50);
     TString ControlPlaneName;
     TString MvpTokenName;
+    bool Light = false;
 
     THandlerActorMetaCpDatabasesGET(
             const NActors::TActorId& httpProxyId,
@@ -144,7 +145,12 @@ public:
                     ++Requests;
                 }
                 if (balancer) {
-                    TString balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=1&offload_merge=1&storage=1&nodes=1&timeout=55000");
+                    TString balancerEndpoint;
+                    if (Request.Parameters["light"] == "1") {
+                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=0&offload_merge=1&storage=1&nodes=0&users=0&timeout=55000");
+                    } else {
+                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=1&offload_merge=1&storage=1&nodes=1&users=1&timeout=55000");
+                    }
                     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(balancerEndpoint);
                     TString authHeaderValue = GetAuthHeaderValue(apiUserTokenName);
                     if (balancerEndpoint.StartsWith("https") && !authHeaderValue.empty()) {

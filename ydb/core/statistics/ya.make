@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 SRCS(
     events.h
     stat_service.h

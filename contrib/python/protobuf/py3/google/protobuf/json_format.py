@@ -226,7 +226,7 @@ class _Printer(object):
               else:
                 recorded_key = 'false'
             else:
-              recorded_key = key
+              recorded_key = str(key)
             js_map[recorded_key] = self._FieldToJsonObject(
                 v_field, value[key])
           js[name] = js_map
@@ -698,7 +698,7 @@ class _Parser(object):
             value[key], value_field)
 
 
-def _ConvertScalarFieldValue(value, field, require_str=False):
+def _ConvertScalarFieldValue(value, field, require_str=False, path=None):
   """Convert a single scalar field value.
 
   Args:

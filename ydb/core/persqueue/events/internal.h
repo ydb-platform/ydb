@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
@@ -183,6 +184,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
+	EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -1053,12 +1055,6 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
-        explicit TEvGetWriteInfoRequest(ui32 cookie) :
-            Cookie(cookie)
-        {
-        }
-
-        ui32 Cookie; // InternalPartitionId
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1078,12 +1074,14 @@ struct TEvPQ {
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
+
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
         ui64 BytesWrittenUncompressed;
         ui64 MessagesWrittenTotal;
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
+        THolder<NPQ::TMultiBucketCounter> InputLags;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
@@ -1095,6 +1093,13 @@ struct TEvPQ {
             Message(std::move(message))
         {
         }
+    };
+
+    struct TEvTxBatchComplete : public TEventLocal<TEvTxBatchComplete, EvTxBatchComplete> {
+        explicit TEvTxBatchComplete(ui64 batchSize)
+            : BatchSize(batchSize)
+        {}
+        ui64 BatchSize;
     };
 
     struct TEvReadingPartitionStatusRequest : public TEventPB<TEvReadingPartitionStatusRequest, NKikimrPQ::TEvReadingPartitionStatusRequest, EvReadingPartitionStatusRequest> {

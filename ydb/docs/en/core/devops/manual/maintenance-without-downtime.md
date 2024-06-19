@@ -56,7 +56,7 @@ The task's actions cannot be performed until all conflicting actions from tasks 
 
 In the CMS configuration, you can configure limits on the number of unavailable nodes for a database (tenant) or the cluster as a whole. Relative and absolute limits are supported.
 
-By default, each database and the cluster as a whole are allowed to have no more than 10% unavailable nodes.
+By default, each database and the cluster as a whole are allowed to have no more than 13% unavailable nodes.
 
 ## Checking algorithm {#checking-algorithm}
 

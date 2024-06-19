@@ -1366,6 +1366,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1432,12 +1434,17 @@ void FromProto(
     } else {
         query->AccessControlObject.reset();
     }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
+    }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());
     } else {
         query->State.reset();
     }
-    if (protoQuery.result_count()) {
+    if (protoQuery.has_result_count()) {
         query->ResultCount = protoQuery.result_count();
     } else {
         query->ResultCount.reset();

@@ -308,8 +308,7 @@ TEST(TJsonConsumerTest, IncorrectUtfWithoutEscaping)
 
     TString s = TString("\xFF", 1);
     EXPECT_ANY_THROW(
-        consumer->OnStringScalar(s);
-    );
+        consumer->OnStringScalar(s););
 }
 
 TEST(TJsonConsumerTest, StringStartingWithSpecialSymbol)

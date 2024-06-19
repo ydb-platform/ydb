@@ -115,7 +115,7 @@ public:
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept override;
+    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
     void ReturnToIndexes(const THashMap<ui64, THashSet<ui64>>& portions) const {
@@ -132,6 +132,14 @@ public:
     bool IsPortionExists(const ui64 pathId, const ui64 portionId) const {
         return !!GranulesStorage->GetPortionOptional(pathId, portionId);
     }
+
+    virtual bool ErasePathId(const ui64 pathId) override {
+        if (HasDataInPathId(pathId)) {
+            return false;
+        }
+        return GranulesStorage->EraseTable(pathId);
+    }
+
 
     virtual bool HasDataInPathId(const ui64 pathId) const override {
         auto g = GetGranuleOptional(pathId);
@@ -186,8 +194,6 @@ private:
     bool LoadColumns(IDbWrapper& db);
     bool LoadShardingInfo(IDbWrapper& db);
     bool LoadCounters(IDbWrapper& db);
-
-    void EraseTable(const ui64 pathId);
 
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);

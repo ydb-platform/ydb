@@ -42,6 +42,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[ListIndexBuilds]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[ListScriptExecutions]";
+        case TOperationId::SS_BG_TASKS:
+            return "[SchemeShardTasks]";
         default:
             return "[Untagged]";
         }
@@ -165,6 +167,7 @@ public:
         case TOperationId::EXPORT:
         case TOperationId::IMPORT:
         case TOperationId::BUILD_INDEX:
+        case TOperationId::SS_BG_TASKS:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -181,6 +184,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExport::TEvListExportsResponse, Handle);
             hFunc(TEvImport::TEvListImportsResponse, Handle);
+            hFunc(NSchemeShard::NBackground::TEvListResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
         default:
@@ -192,6 +196,11 @@ public:
 
 void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TListOperationsRPC(p.release()));
+}
+
+template<>
+IActor* TEvListOperationsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TListOperationsRPC(msg);
 }
 
 } // namespace NGRpcService

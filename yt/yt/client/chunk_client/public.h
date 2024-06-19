@@ -86,6 +86,7 @@ YT_DEFINE_ERROR_ENUM(
     ((DiskWaitingReplacement)                (757))
     ((LockFileIsFound)                       (758))
     ((DiskHealthCheckFailed)                 (759))
+    ((TooManyChunksToFetch)                  (760))
 );
 
 using TChunkId = NObjectClient::TObjectId;

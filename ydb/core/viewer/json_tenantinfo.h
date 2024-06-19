@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -28,6 +29,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
+    THashMap<TString, NKikimrViewer::EFlag> HcOverallByTenantPath;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
@@ -35,6 +37,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     THashSet<TNodeId> Subscribers;
     THashSet<TNodeId> WhiteboardNodesRequested;
     THashSet<TString> OffloadTenantsRequested;
+    THashSet<TString> MetadataCacheRequested;
     THashMap<TNodeId, TString> NodeIdsToTenant; // for tablet info
     TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> WhiteboardSystemStateResponse;
     THashMap<TString, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>> WhiteboardTabletStateResponse;
@@ -47,6 +50,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     bool SystemTablets = false;
     bool Storage = false;
     bool Nodes = false;
+    bool Users = false;
     bool OffloadMerge = false;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedTabletStateResponse;
@@ -54,6 +58,11 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     TTabletId RootHiveId = 0;
     TString RootId; // id of root domain (tenant)
     NKikimrViewer::TTenantInfo Result;
+
+    struct TStorageQuota {
+        uint64 SoftQuota = 0;
+        uint64 HardQuota = 0;
+    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -103,6 +112,7 @@ public:
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
+        Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
         Path = params.Get("path");
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -158,6 +168,8 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -172,6 +184,10 @@ public:
             }
             RequestConsoleGetTenantStatus(path);
             RequestSchemeCacheNavigate(path);
+
+            if (AppData()->FeatureFlags.GetEnableDbMetadataCache()) {
+                RequestStateStorageMetadataCacheEndpointsLookup(path);
+            }
         }
         RequestDone();
     }
@@ -378,6 +394,28 @@ public:
         RequestDone();
     }
 
+    void Handle(NHealthCheck::TEvSelfCheckResultProto::TPtr& ev) {
+        auto result = std::move(ev->Get()->Record);
+        if (result.database_status_size() == 1) {
+            HcOverallByTenantPath.emplace(result.database_status(0).name(), GetViewerFlag(result.database_status(0).overall()));
+        }
+
+        RequestDone();
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
+        if (activeNode != 0) {
+            Subscribers.insert(activeNode);
+            std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
+            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+            if (MetadataCacheRequested.insert(ev->Get()->Path).second) {
+                SendRequest(*cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+            }
+        }
+        RequestDone();
+    }
+
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
         auto tenantId = NodeIdsToTenant[nodeId];
@@ -400,6 +438,14 @@ public:
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
+        if (ev->Get()->SourceType == NHealthCheck::EvSelfCheckRequestProto) {
+            ui32 nodeId = ev.Get()->Cookie;
+            BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
+            auto tenantId = NodeIdsToTenant[nodeId];
+            if (HcOverallByTenantPath.emplace(tenantId, NKikimrViewer::EFlag::Grey).second) {
+                RequestDone();
+            }
+        }
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
             ui32 nodeId = ev.Get()->Cookie;
             BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
@@ -474,6 +520,22 @@ public:
                 RequestDone();
             }
         }
+        if (MetadataCacheRequested.count(tenantId) > 0) {
+            if (HcOverallByTenantPath.emplace(tenantId, NKikimrViewer::EFlag::Grey).second) {
+                RequestDone();
+            }
+        }
+    }
+
+    NKikimrViewer::TStorageUsage::EType GetStorageType(const TString& poolKind) {
+        auto kind = to_lower(poolKind);
+        if (kind.StartsWith("ssd") || kind.StartsWith("nvme")) {
+            return NKikimrViewer::TStorageUsage::SSD;
+        }
+        if (kind.StartsWith("hdd") || kind.StartsWith("rot")) {
+            return NKikimrViewer::TStorageUsage::HDD;
+        }
+        return NKikimrViewer::TStorageUsage::None;
     }
 
     void ReplyAndPassAway() {
@@ -521,16 +583,18 @@ public:
                     continue;
                 }
                 std::unordered_set<TString> users;
-                if (entry.SecurityObject) {
-                    users.emplace(entry.SecurityObject->GetOwnerSID());
-                    for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
-                        if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
-                            users.emplace(ace.GetSID());
+                if(!User.empty() || Users) {
+                    if (entry.SecurityObject) {
+                        users.emplace(entry.SecurityObject->GetOwnerSID());
+                        for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
+                            if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
+                                users.emplace(ace.GetSID());
+                            }
                         }
                     }
-                }
-                if (!IsValidOwner(users)) {
-                    continue;
+                    if (!IsValidOwner(users)) {
+                        continue;
+                    }
                 }
                 NKikimrViewer::TTenant& tenant = *Result.AddTenantInfo();
                 auto itTenantByPath = TenantByPath.find(path);
@@ -628,22 +692,33 @@ public:
                         tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
                         tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                         tenant.SetStorageGroups(storageGroups);
+                    }
 
-                        auto& ssdUsage = *tenant.AddStorageUsage();
-                        ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                        ssdUsage.SetSize(storageAllocatedSize);
-                        ssdUsage.SetLimit(storageAllocatedLimit);
-                        // TODO(andrew-rykov)
-                        auto& hddUsage = *tenant.AddStorageUsage();
-                        hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+                    THashMap<NKikimrViewer::TStorageUsage::EType, ui64> storageUsageByType;
+                    THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
+                    if (entry.DomainDescription) {
+                        for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
+                            auto type = GetStorageType(poolUsage.GetPoolKind());
+                            storageUsageByType[type] += poolUsage.GetTotalSize();
+                        }
+                    }
 
-                        if (tenant.databasequotas().data_size_hard_quota()) {
-                            auto& ssdQuotaUsage = *tenant.AddQuotaUsage();
-                            ssdQuotaUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                            ssdQuotaUsage.SetSize(tenant.GetMetrics().GetStorage());
-                            ssdQuotaUsage.SetLimit(tenant.databasequotas().data_size_hard_quota());
-                            auto& hddQuotaUsage = *tenant.AddQuotaUsage();
-                            hddQuotaUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
+                        auto type = GetStorageType(quota.unit_kind());
+                        auto& usage = storageQuotasByType[type];
+                        usage.SoftQuota += quota.data_size_soft_quota();
+                        usage.HardQuota += quota.data_size_hard_quota();
+                    }
+
+                    for (const auto& [type, size] : storageUsageByType) {
+                        auto& storageUsage = *tenant.AddStorageUsage();
+                        storageUsage.SetType(type);
+                        storageUsage.SetSize(size);
+                        auto it = storageQuotasByType.find(type);
+                        if (it != storageQuotasByType.end()) {
+                            storageUsage.SetLimit(it->second.HardQuota);
+                            storageUsage.SetSoftQuota(it->second.SoftQuota);
+                            storageUsage.SetHardQuota(it->second.HardQuota);
                         }
                     }
                 }
@@ -716,8 +791,13 @@ public:
                         tablet.SetCount(prTabletCount);
                     }
                 }
-                tenant.SetOverall(overall);
-                OverallByDomainId[tenant.GetId()] = overall;
+                if (HcOverallByTenantPath.count(path) > 0 && HcOverallByTenantPath[path] != NKikimrViewer::EFlag::Grey) {
+                    tenant.SetOverall(HcOverallByTenantPath[path]);
+                    OverallByDomainId[tenant.GetId()] = HcOverallByTenantPath[path];
+                } else {
+                    tenant.SetOverall(overall);
+                    OverallByDomainId[tenant.GetId()] = overall;
+                }
             }
         }
         for (const std::pair<const TString, NKikimrViewer::TTenant>& prTenant : TenantByPath) {
@@ -753,7 +833,7 @@ public:
             });
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -766,28 +846,76 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTenantInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TTenantInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TTenantInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTenantInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"user","in":"query","description":"tenant owner","required":false,"type":"string"},
-                      {"name":"followers","in":"query","description":"return followers","required":false,"type":"boolean"},
-                      {"name":"metrics","in":"query","description":"return tablet metrics","required":false,"type":"boolean"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return tablets","required":false,"type":"boolean"},
-                      {"name":"system_tablets","in":"query","description":"return system tablets","required":false,"type":"boolean"},
-                      {"name":"offload_merge","in":"query","description":"use offload merge","required":false,"type":"boolean"},
-                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
-                      {"name":"nodes","in":"query","description":"return nodes info","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: user
+              in: query
+              description: tenant owner
+              required: false
+              type: string
+            - name: followers
+              in: query
+              description: return followers
+              required: false
+              type: boolean
+            - name: metrics
+              in: query
+              description: return tablet metrics
+              required: false
+              type: boolean
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: tablets
+              in: query
+              description: return tablets
+              required: false
+              type: boolean
+            - name: system_tablets
+              in: query
+              description: return system tablets
+              required: false
+              type: boolean
+            - name: offload_merge
+              in: query
+              description: use offload merge
+              required: false
+              type: boolean
+            - name: storage
+              in: query
+              description: return storage info
+              required: false
+              type: boolean
+            - name: nodes
+              in: query
+              description: return nodes info
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 

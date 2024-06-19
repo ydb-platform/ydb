@@ -47,13 +47,14 @@ namespace NKikimr::NStorage {
 
             if (splitted[0] == "SectorMap") {
                 Y_ABORT_UNLESS(tokenCount >= 2);
-                ui64 size = (ui64)100 << 30; // 100GB is default
+                ui32 defaultSizeGb = 100;
+                ui64 size = (ui64)defaultSizeGb << 30;
                 if (splitted.size() >= 3) {
                     ui64 minSize = (ui64)100 << 30;
                     if (pdiskConfig->FeatureFlags.GetEnableSmallDiskOptimization()) {
-                        minSize = (32ull << 20) * 256; // at least needed 256 chunks
+                        minSize = (32ull << 20) * 256; // we need at least 256 chunks
                     }
-                    size = Max(minSize, FromStringWithDefault<ui64>(splitted[2], size) << 30);
+                    size = Max(minSize, (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30);
                 }
 
                 auto diskMode = NPDisk::NSectorMap::DM_NONE;
@@ -250,7 +251,7 @@ namespace NKikimr::NStorage {
                         key.PDiskId, key.VDiskSlotId));
                     it->second = round;
                 } else {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
             SendDiskMetrics(false);
@@ -262,7 +263,7 @@ namespace NKikimr::NStorage {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
                 if (!value.RuntimeData && !SlayInFlight.contains(key)) {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
         }
@@ -273,10 +274,22 @@ namespace NKikimr::NStorage {
     void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
         ui32 pdiskId = pdisk.GetPDiskID();
 
-        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+        STLOG(PRI_NOTICE, BS_NODE, NW75, "DoRestartLocalPDisk", (PDiskId, pdiskId));
+
+        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
+
+        if (!inserted) {
+            STLOG(PRI_NOTICE, BS_NODE, NW76, "Restart already in progress", (PDiskId, pdiskId));
+            // Restart is already in progress.
+            return;
+        }
 
         auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
         if (it == LocalPDisks.end()) {
+            PDiskRestartInFlight.erase(pdiskId);
+
+            STLOG(PRI_NOTICE, BS_NODE, NW77, "Restart state carried from previous start, just starting", (PDiskId, pdiskId));
+
             // This can happen if warden didn't handle pdisk's restart before node's restart.
             // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.
             StartLocalPDisk(pdisk);
@@ -284,12 +297,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
-
-        if (!inserted) {
-            // Restart is already in progress.
-            return;
-        }
+        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);
 

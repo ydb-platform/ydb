@@ -31,24 +31,32 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     NArrow::NSerialization::TSerializerContainer serializer(std::make_shared<NArrow::NSerialization::TNativeSerializer>());
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer, GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
-    TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
-    if (!TxAddTask) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
-        return false;
+    if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
+        TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
+        if (!TxAddTask) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            return false;
+        }
+    } else {
+        TaskExists = true;
     }
     return true;
 }
 
 TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(!!TxAddTask);
-    AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
+    if (!TaskExists) {
+        AFL_VERIFY(!!TxAddTask);
+        AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
+    }
     return TProposeResult();
 }
 
 void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    AFL_VERIFY(!!TxAddTask);
-    TxAddTask->Complete(ctx);
-    TxAddTask.reset();
+    if (!TaskExists) {
+        AFL_VERIFY(!!TxAddTask);
+        TxAddTask->Complete(ctx);
+        TxAddTask.reset();
+    }
 }
 
 bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {

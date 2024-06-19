@@ -213,6 +213,10 @@ public:
         Release();
     }
 
+    void SetMaximumLimitValueReached(bool IsReached) {
+        MyState_.SetMaximumLimitValueReached(IsReached);
+    }
+
 private:
     const bool InitiallyAcquired_;
     TAllocState MyState_;
@@ -402,6 +406,10 @@ inline void MKQLRegisterObject(NUdf::TBoxedValue* value) noexcept {
 inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
     value->Unlink();
 }
+
+void* MKQLArrowAllocate(ui64 size);
+void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
+void MKQLArrowFree(const void* mem, ui64 size);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {

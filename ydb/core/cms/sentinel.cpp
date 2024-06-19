@@ -984,6 +984,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
         }
+        request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release(), ++SentinelState->ChangeRequestId);
     }

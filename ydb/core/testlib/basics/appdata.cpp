@@ -3,6 +3,9 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+
 namespace NKikimr {
 
     TAppPrepare::TMine::~TMine()

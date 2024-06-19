@@ -478,8 +478,7 @@ struct TCheckNoRawPtrToRefCountedType
     static_assert(
         !(std::is_pointer_v<T> && (
             std::is_convertible_v<T, const TRefCounted*> ||
-            std::is_convertible_v<T, TRefCounted*>
-        )),
+            std::is_convertible_v<T, TRefCounted*>)),
         "T has reference-counted type and should not be bound by the raw pointer");
 };
 
@@ -522,23 +521,45 @@ template <>
 class TPropagateMixin<true>
 {
 public:
-    TPropagateMixin()
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation location
+#endif
+    )
         : Storage_(NConcurrency::GetCurrentPropagatingStorage())
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_(location)
+#endif
     { }
 
     NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
-        return NConcurrency::TPropagatingStorageGuard(Storage_);
+        return NConcurrency::TPropagatingStorageGuard(Storage_
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_
+#endif
+    );
     }
 
 private:
     const NConcurrency::TPropagatingStorage Storage_;
+
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+    const TSourceLocation Location_;
+#endif
 };
 
 template <>
 class TPropagateMixin<false>
 {
 public:
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation /*location*/
+#endif
+    )
+    { }
+
     std::monostate MakePropagatingStorageGuard()
     {
         return {};
@@ -564,6 +585,11 @@ public:
         XFunctor&& functor,
         XBs&&... boundArgs)
         : TBindStateBase(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+            location
+#endif
+        )
+        , TPropagateMixin<Propagate>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
             location
 #endif

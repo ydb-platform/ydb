@@ -217,7 +217,7 @@ void SaveState(
     checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
     checkpoint.SetId(checkpointId.SeqNo);
     auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskState>(GraphId, taskId, checkpoint);
-    request->State.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+    request->State.MiniKqlProgram.ConstructInPlace().Data.Blob = blob;
     runtime->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
     TAutoPtr<IEventHandle> handle;
@@ -247,7 +247,7 @@ TString GetState(
     UNIT_ASSERT(event->Issues.Empty());
     UNIT_ASSERT(!event->States.empty());
 
-    return event->States[0].GetMiniKqlProgram().GetData().GetStateData().GetBlob();
+    return event->States[0].MiniKqlProgram->Data.Blob;
 }
 
 void CreateCompletedCheckpoint(

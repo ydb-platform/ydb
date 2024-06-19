@@ -670,6 +670,16 @@ ui64 AsyncAlterDropStream(
         const TString& tableName,
         const TString& streamName);
 
+ui64 AsyncCreateContinuousBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName);
+
+ui64 AsyncAlterTakeIncrementalBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName);
+
 struct TReadShardedTableState {
     TActorId Sender;
     TActorId Worker;

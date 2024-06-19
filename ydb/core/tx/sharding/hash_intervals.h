@@ -62,13 +62,7 @@ private:
     std::vector<TConsistencyShardingTablet> SpecialSharding;
     std::vector<TConsistencyShardingTablet*> ActiveWriteSpecialSharding;
     std::vector<TConsistencyShardingTablet*> ActiveReadSpecialSharding;
-    ui64 GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const {
-        AFL_VERIFY(idx <= shardsCount);
-        if (idx == shardsCount) {
-            return Max<ui64>();
-        }
-        return Max<ui64>() * (1.0 * idx / shardsCount);
-    }
+    ui64 GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const;
 
     TConclusionStatus CheckIntervalsFilling() const {
         {
@@ -244,11 +238,24 @@ public:
         return false;
     }
 
+    bool DeleteShardInfo(const ui64 tabletId) {
+        const auto pred = [&](const TConsistencyShardingTablet& info) {
+            return info.GetTabletId() == tabletId;
+        };
+        const ui32 sizeStart = SpecialSharding.size();
+        SpecialSharding.erase(std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end());
+        return sizeStart != SpecialSharding.size();
+    }
+
     void AddShardInfo(const TConsistencyShardingTablet& info) {
         for (auto&& i : SpecialSharding) {
             AFL_VERIFY(i.GetTabletId() != info.GetTabletId());
         }
         SpecialSharding.emplace_back(info);
+
+        ActiveWriteSpecialSharding.clear();
+        ActiveReadSpecialSharding.clear();
+
         IndexConstructed = false;
     }
 
@@ -280,6 +287,11 @@ private:
             }
         }
         return false;
+    }
+
+    bool DeleteShardInfo(const ui64 tabletId) {
+        AFL_VERIFY(!!SpecialShardingInfo);
+        return SpecialShardingInfo->DeleteShardInfo(tabletId);
     }
 
     virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const override;

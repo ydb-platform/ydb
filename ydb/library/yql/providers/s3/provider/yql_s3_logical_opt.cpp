@@ -233,8 +233,15 @@ public:
                                 fileSizeLimit = it->second;
                             }
                         }
+
+                        ui64 userSizeLimit = std::numeric_limits<ui64>::max();
                         if (formatName == "parquet") {
                             fileSizeLimit = State_->Configuration->BlockFileSizeLimit;
+                        } else if (formatName == "raw") {
+                            const auto sizeLimitParam = dqSource.Input().Cast<TS3SourceSettings>().SizeLimit().Maybe<TCoAtom>();
+                            if (sizeLimitParam.IsValid()) {
+                                userSizeLimit = FromString<ui64>(sizeLimitParam.Cast().StringValue());
+                            }
                         }
 
                         for (const TS3Path& batch : maybeS3SourceSettings.Cast().Paths()) {
@@ -245,13 +252,14 @@ public:
                             UnpackPathsList(packed, isTextEncoded, paths);
 
                             for (auto& entry : paths) {
-                                if (entry.Size > fileSizeLimit) {
+                                const ui64 bytesUsed = std::min(entry.Size, userSizeLimit);
+                                if (bytesUsed > fileSizeLimit) {
                                     ctx.AddError(TIssue(ctx.GetPosition(batch.Pos()),
                                         TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
                                     hasErr = true;
                                     return false;
                                 }
-                                totalSize += entry.Size;
+                                totalSize += bytesUsed;
                                 ++count;
                             }
                         }
@@ -673,7 +681,7 @@ public:
                     .RowsLimitHint(count.Literal())
                     .Build()
             .Build()
-        .Done();   
+        .Done();
     }
 
     TMaybeNode<TExprBase> PushDownLimit(TExprBase node, TExprContext& ctx) const {

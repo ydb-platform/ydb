@@ -73,7 +73,7 @@ void FromProto(
 
 EMessageType GetMessageType(const TSharedRefArray& message);
 
-bool ParseRequestHeader(
+[[nodiscard]] bool ParseRequestHeader(
     const TSharedRefArray& message,
     NProto::TRequestHeader* header);
 

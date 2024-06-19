@@ -1,11 +1,5 @@
 LIBRARY()
 
-OWNER(
-    alexnick
-    g:kikimr
-    g:logbroker
-)
-
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
@@ -19,6 +13,7 @@ SRCS(
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
+    offload_actor.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
@@ -57,6 +52,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
+    ydb/core/backup/impl
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/keyvalue

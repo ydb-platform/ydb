@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
-
 PEERDIR(
     ydb/library/yql/minikql/codegen/llvm14
     ydb/library/yql/minikql/invoke_builtins/llvm14

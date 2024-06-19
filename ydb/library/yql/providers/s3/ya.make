@@ -1,8 +1,10 @@
 RECURSE(
     actors
+    actors_factory
     common
     compressors
     credentials
+    events
     expr_nodes
     object_listers
     path_generator

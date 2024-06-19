@@ -254,7 +254,8 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
 
     Schema::SaveTableInfo(db, table.GetPathId(), table.GetTieringUsage());
     const ui64 pathId = table.GetPathId();
-    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
+    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
@@ -269,7 +270,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     Y_ABORT_UNLESS(SchemaPresetsIds.contains(presetId));
 
     TSchemaPreset::TSchemaPresetVersionInfo versionInfo;
@@ -284,6 +285,9 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
             PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema);
             for (auto&& i : Tables) {
                 PrimaryIndex->RegisterTable(i.first);
+            }
+            if (manager->IsReady()) {
+                PrimaryIndex->OnTieringModified(manager, Ttl, {});
             }
         } else {
             PrimaryIndex->RegisterSchemaVersion(version, schema);
@@ -310,10 +314,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         if (SchemaPresetsIds.empty()) {
             TSchemaPreset fakePreset;
             Y_ABORT_UNLESS(RegisterSchemaPreset(fakePreset, db));
-            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db, manager);
         } else {
             Y_ABORT_UNLESS(SchemaPresetsIds.contains(fakePreset.GetId()));
-            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db, manager);
         }
     }
 
@@ -355,10 +359,12 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
     auto itDrop = PathsToDrop.find(pathId);
     AFL_VERIFY(itDrop != PathsToDrop.end());
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
+    AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     PathsToDrop.erase(itDrop);
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
     Tables.erase(itTable);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;
 }
 

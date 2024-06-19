@@ -20,6 +20,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
@@ -46,7 +47,7 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         OnSinkError(outputIndex, issues, fatalCode);
     }
 
-    void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+    void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
@@ -55,7 +56,7 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
     }
 
     virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
-    virtual void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnSinkFinished(ui64 outputIndex) = 0;
 };
 
@@ -64,7 +65,7 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
         OnOutputTransformError(outputIndex, issues, fatalCode);
     }
 
-    void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+    void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
@@ -73,7 +74,7 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
     }
 
     virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
-    virtual void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnTransformFinished(ui64 outputIndex) = 0;
 };
 
@@ -160,6 +161,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
@@ -173,6 +175,7 @@ protected:
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
@@ -630,12 +633,12 @@ protected: //TDqComputeActorChannels::ICallbacks
     }
 
 protected:
-    void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+    void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
-    void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
@@ -696,34 +699,34 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 protected:
     virtual void DoLoadRunnerState(TString&& blob) = 0;
 
-    void LoadState(NDqProto::TComputeActorState&& state) override final {
+    void LoadState(TComputeActorState&& state) override final {
         CA_LOG_D("Load state");
         TMaybe<TString> error = Nothing();
-        const NDqProto::TMiniKqlProgramState& mkqlProgramState = state.GetMiniKqlProgram();
+        const TMiniKqlProgramState& mkqlProgramState = *state.MiniKqlProgram;
         auto guard = BindAllocator();
         try {
-            const ui64 version = mkqlProgramState.GetData().GetStateData().GetVersion();
+            const ui64 version = mkqlProgramState.Data.Version;
             YQL_ENSURE(version && version <= TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion && version != TDqComputeActorCheckpoints::ComputeActorNonProtobufStateVersion, "Unsupported state version: " << version);
             if (version != TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion) {
                 ythrow yexception() << "Invalid state version " << version;
             }
-            for (const NDqProto::TSourceState& sourceState : state.GetSources()) {
-                TAsyncInputHelper* source = SourcesMap.FindPtr(sourceState.GetInputIndex());
-                YQL_ENSURE(source, "Failed to load state. Source with input index " << sourceState.GetInputIndex() << " was not found");
-                YQL_ENSURE(source->AsyncInput, "Source[" << sourceState.GetInputIndex() << "] is not created");
+            for (const TSourceState& sourceState : state.Sources) {
+                TAsyncInputHelper* source = SourcesMap.FindPtr(sourceState.InputIndex);
+                YQL_ENSURE(source, "Failed to load state. Source with input index " << sourceState.InputIndex << " was not found");
+                YQL_ENSURE(source->AsyncInput, "Source[" << sourceState.InputIndex << "] is not created");
                 source->AsyncInput->LoadState(sourceState);
             }
-            for (const NDqProto::TSinkState& sinkState : state.GetSinks()) {
-                TAsyncOutputInfoBase* sink = SinksMap.FindPtr(sinkState.GetOutputIndex());
-                YQL_ENSURE(sink, "Failed to load state. Sink with output index " << sinkState.GetOutputIndex() << " was not found");
-                YQL_ENSURE(sink->AsyncOutput, "Sink[" << sinkState.GetOutputIndex() << "] is not created");
+            for (const TSinkState& sinkState : state.Sinks) {
+                TAsyncOutputInfoBase* sink = SinksMap.FindPtr(sinkState.OutputIndex);
+                YQL_ENSURE(sink, "Failed to load state. Sink with output index " << sinkState.OutputIndex << " was not found");
+                YQL_ENSURE(sink->AsyncOutput, "Sink[" << sinkState.OutputIndex << "] is not created");
                 sink->AsyncOutput->LoadState(sinkState);
             }
         } catch (const std::exception& e) {
             error = e.what();
             CA_LOG_E("Exception: " << error);
         }
-        TString& blob = *state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->MutableBlob();
+        TString& blob = state.MiniKqlProgram->Data.Blob;
         if (blob && !error.Defined()) {
             CA_LOG_D("State size: " << blob.size());
             DoLoadRunnerState(std::move(blob));
@@ -1255,6 +1258,7 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
+            source.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
@@ -1272,6 +1276,7 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .ProgramBuilder = *source.ProgramBuilder,
                         .TaskCounters = TaskCounters,
                         .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
@@ -1287,8 +1292,11 @@ protected:
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
+            const auto typeNode = NKikimr::NMiniKQL::DeserializeNode(inputDesc.GetTransform().GetOutputType(), typeEnv);
+            transform.ValueType = static_cast<NKikimr::NMiniKQL::TType*>(typeNode);
             CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
             try {
+                auto guard = BindAllocator();
                 std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                     IDqAsyncIoFactory::TInputTransformArguments {
                         .InputDesc = inputDesc,
@@ -1852,6 +1860,7 @@ protected:
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;

@@ -18,7 +18,7 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Magic constant! This is the lower limit of the memory allocated for the request.
+// Magic constant! This is lower limit of memory allocated for request.
 constexpr i64 TypicalRequestSize = 4_KB;
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,7 +5,7 @@
 $p = (select p_partkey, p_name
 from
     `{path}part`
-where FIND(p_name, 'rose') IS NOT NULL);
+where p_name like '%rose%');
 
 $j1 = (select ps_partkey, ps_suppkey, ps_supplycost
 from

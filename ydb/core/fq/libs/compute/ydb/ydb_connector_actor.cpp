@@ -130,6 +130,7 @@ public:
     void Handle(const TEvYdbCompute::TEvFetchScriptResultRequest::TPtr& ev) {
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.FetchToken(ev->Get()->FetchToken);
+        settings.RowsLimit(ev->Get()->RowsLimit);
         QueryClient
             ->FetchScriptResults(ev->Get()->OperationId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {

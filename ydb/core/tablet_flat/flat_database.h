@@ -257,7 +257,6 @@ public:
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
     size_t GetCommitRedoBytes() const;
-    bool ValidateCommit(TString&);
 
     TCompactionStats GetCompactionStats(ui32 table) const;
 
@@ -305,7 +304,6 @@ private:
     TVector<TUpdateOp> ModifiedOps;
 
     mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
-    mutable THashSet<ui32> IteratedTables;
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;

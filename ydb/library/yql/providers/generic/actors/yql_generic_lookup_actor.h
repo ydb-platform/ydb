@@ -14,8 +14,9 @@ namespace NYql::NDq {
     CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        NActors::TActorId&& parentId,
+        NActors::TActorId parentId,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NYql::Generic::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,

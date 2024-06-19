@@ -43,6 +43,8 @@ class PnpmPackageManager(BasePackageManager):
         """
         ws = self._prepare_workspace()
 
+        self._copy_pnpm_patches()
+
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._nm_path(self._STORE_NM_PATH)
         virtual_store_dir = self._nm_path(self._VSTORE_NM_PATH)
@@ -84,6 +86,30 @@ class PnpmPackageManager(BasePackageManager):
                 peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
             )
+
+    def calc_prepare_deps_inouts_and_resources(
+        self, store_path: str, has_deps: bool
+    ) -> tuple[list[str], list[str], list[str]]:
+        ins = [
+            s_rooted(build_pj_path(self.module_path)),
+            s_rooted(build_lockfile_path(self.module_path)),
+        ]
+        outs = [
+            b_rooted(build_ws_config_path(self.module_path)),
+            b_rooted(build_pre_lockfile_path(self.module_path)),
+        ]
+        resources = []
+
+        if has_deps:
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_ws_config_path(dep_path)))
+                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
+
+            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
+                resources.append(pkg.to_uri())
+                outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
+
+        return ins, outs, resources
 
     # TODO: FBP-1254
     # def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> (list[str], list[str]):
@@ -239,6 +265,16 @@ class PnpmPackageManager(BasePackageManager):
         vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
 
         shutil.copyfile(original_lf_path, vs_lf_path)
+
+    def _copy_pnpm_patches(self):
+        pj = self.load_package_json_from_dir(self.sources_path)
+        patchedDependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})
+
+        for p in patchedDependencies.values():
+            patch_source_path = os.path.join(self.sources_path, p)
+            patch_build_path = os.path.join(self.build_path, p)
+            os.makedirs(os.path.dirname(patch_build_path), exist_ok=True)
+            shutil.copyfile(patch_source_path, patch_build_path)
 
     def _get_default_options(self):
         return super(PnpmPackageManager, self)._get_default_options() + [

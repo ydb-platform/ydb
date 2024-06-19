@@ -1399,7 +1399,7 @@ public:
             return false;
         }
 
-        if (!dynamic_cast<TTupleNode*>(Args[0].Get())) {
+        if (!Args[0]->GetTupleNode()) {
             ui32 numOptArgs;
             if (!Parseui32(Args[0], numOptArgs)) {
                 ctx.Error(Args[0]->GetPos()) << "Expected either tuple or number of optional arguments";
@@ -1409,12 +1409,12 @@ public:
             Args[0] = Q(Y(BuildQuotedAtom(Args[0]->GetPos(), ToString(numOptArgs))));
         }
 
-        if (!dynamic_cast<TTupleNode*>(Args[1].Get())) {
+        if (!Args[1]->GetTupleNode()) {
             Args[1] = Q(Y(Args[1]));
         }
 
         for (ui32 index = 2; index < Args.size(); ++index) {
-            if (!dynamic_cast<TTupleNode*>(Args[index].Get())) {
+            if (!Args[index]->GetTupleNode()) {
                 Args[index] = Q(Y(Args[index]));
             }
         }
@@ -1838,7 +1838,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!src || src->IsFake()) {
-            ctx.Error(Pos) << "TableRow requires data source";
+            ctx.Error(Pos) << TStringBuilder() << (Join ? "Join" : "") << "TableRow requires data source";
             return false;
         }
 
@@ -2300,7 +2300,7 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     TVector<TNodePtr> sqlCallArgs;
     sqlCallArgs.push_back(BuildQuotedAtom(pos, fullName));
     if (namedArgs) {
-        auto tupleNodePtr = dynamic_cast<const TTupleNode*>(positionalArgs.Get());
+        auto tupleNodePtr = positionalArgs->GetTupleNode();
         YQL_ENSURE(tupleNodePtr);
         TNodePtr positionalArgsNode = new TCallNodeImpl(pos, "PositionalArgs", tupleNodePtr->Elements());
         sqlCallArgs.push_back(BuildTuple(pos, { positionalArgsNode, namedArgs }));
@@ -2484,7 +2484,7 @@ public:
             return false;
         }
         auto scriptStrPtr = Args.back()->GetLiteral("String");
-        if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
+        if (!ctx.CompactNamedExprs && scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 
@@ -2650,7 +2650,8 @@ enum EAggrFuncTypeCallback {
     COUNT_DISTINCT_ESTIMATE,
     LIST,
     UDAF,
-    PG
+    PG,
+    NTH_VALUE
 };
 
 struct TCoreFuncInfo {
@@ -2733,6 +2734,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
             break;
         case PG:
             factory = BuildPGFactoryAggregation(pos, realFunctionName, aggMode);
+            break;
+        case NTH_VALUE:
+            factory = BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
         }
         if (isFactory) {
@@ -2904,6 +2908,12 @@ struct TBuiltinFuncData {
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
+            {"listtop", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTop", 2, 3)},
+            {"listtopasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopAsc", 2, 3)},
+            {"listtopdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopDesc", 2, 3)},
+            {"listtopsort", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSort", 2, 3)},
+            {"listtopsortasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortAsc", 2, 3)},
+            {"listtopsortdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortDesc", 2, 3)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
@@ -3100,6 +3110,7 @@ struct TBuiltinFuncData {
             {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
+            {"version", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Version", 0, 0)},
 
             {"systemmetadata", BuildNamedArgcBuiltinFactoryCallback<TCallDirectRow>("SystemMetadata", 1, -1)},
 
@@ -3112,6 +3123,9 @@ struct TBuiltinFuncData {
             {"denserank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("DenseRank", 0, 1)},
             {"lead", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lead", 1, 2)},
             {"lag", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lag", 1, 2)},
+            {"percentrank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("PercentRank", 0, 1)},
+            {"cumedist", BuildNamedArgcBuiltinFactoryCallback<TWinCumeDist>("CumeDist", 0, 0)},
+            {"ntile", BuildNamedArgcBuiltinFactoryCallback<TWinNTile>("NTile", 1, 1)},
 
             // Session window
             {"sessionwindow", BuildSimpleBuiltinFactoryCallback<TSessionWindow>()},
@@ -3240,8 +3254,10 @@ struct TBuiltinFuncData {
             // Window functions
             {"firstvalue", BuildAggrFuncFactoryCallback("FirstValue", "first_value_traits_factory", {OverWindow})},
             {"lastvalue", BuildAggrFuncFactoryCallback("LastValue", "last_value_traits_factory", {OverWindow})},
+            {"nthvalue", BuildAggrFuncFactoryCallback("NthValue", "nth_value_traits_factory", {OverWindow}, NTH_VALUE)},
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
+            {"nthvalueignorenulls", BuildAggrFuncFactoryCallback("NthValueIgnoreNulls", "nth_value_ignore_nulls_traits_factory", {OverWindow}, NTH_VALUE)},
         };
         return aggrFuncs;
     }
@@ -3432,9 +3448,9 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             };
         };
 
-        auto structNode = dynamic_cast<TStructNode*>(args[0].Get());
+        auto structNode = args[0]->GetStructNode();
         if (!structNode) {
-            if (auto callNode = dynamic_cast<TCallNode*>(args[0].Get())) {
+            if (auto callNode = args[0]->GetCallNode()) {
                 if (callNode->GetOpName() == "AsStruct") {
                     return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
                 }
@@ -3446,7 +3462,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         for (const auto& item : structNode->GetExprs()) {
             const auto& label = item->GetLabel();
             if (label == "Entities") {
-                auto callNode = dynamic_cast<TCallNode*>(item.Get());
+                auto callNode = item->GetCallNode();
                 if (!callNode || callNode->GetOpName() != "AsListMayWarn") {
                     return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings");
                 }
@@ -3621,14 +3637,14 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
                 YQL_ENSURE(args.size() == 2);
-                Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
-                auto posArgs = static_cast<TTupleNode*>(args[0].Get());
+                Y_DEBUG_ABORT_UNLESS(args[0]->GetTupleNode());
+                auto posArgs = args[0]->GetTupleNode();
                 if (posArgs->IsEmpty()) {
                     if (normalizedName == "asstruct") {
                         return args[1];
                     } else {
-                        Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
-                        auto namedArgs = static_cast<TStructNode*>(args[1].Get());
+                        Y_DEBUG_ABORT_UNLESS(args[1]->GetStructNode());
+                        auto namedArgs = args[1]->GetStructNode();
                         return new TStructTypeNode(pos, namedArgs->GetExprs());
                     }
                 }
@@ -3644,9 +3660,9 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 *mustUseNamed = false;
             }
             YQL_ENSURE(args.size() == 2);
-            auto posArgs = static_cast<TTupleNode*>(args[0].Get());
-            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
-            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
+            Y_DEBUG_ABORT_UNLESS(args[0]->GetTupleNode());
+            Y_DEBUG_ABORT_UNLESS(args[1]->GetStructNode());
+            auto posArgs = args[0]->GetTupleNode();
             if (posArgs->GetTupleSize() != 1) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
             }
@@ -3731,7 +3747,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     if (ns == "datetime2" && name == "Update") {
         if (namedArgs) {
-            TStructNode* castedNamedArgs = dynamic_cast<TStructNode*>(namedArgs.Get());
+            TStructNode* castedNamedArgs = namedArgs->GetStructNode();
             Y_DEBUG_ABORT_UNLESS(castedNamedArgs);
             auto exprs = castedNamedArgs->GetExprs();
             for (auto& arg : exprs) {

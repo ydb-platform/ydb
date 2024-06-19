@@ -137,13 +137,13 @@ public:
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullQueueOptions& options = {}) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) override;
+        const TPullQueueConsumerOptions& options = {}) override;
 
     TFuture<void> RegisterQueueConsumer(
         const NYPath::TRichYPath& queuePath,
@@ -160,6 +160,19 @@ public:
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options = {}) override;
+
+    TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options = {}) override;
+
+    TFuture<void> RemoveQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options = {}) override;
 
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
@@ -291,6 +304,12 @@ public:
     TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;
+
+    TFuture<void> DumpJobProxyLog(
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const NApi::TDumpJobProxyLogOptions& options) override;
 
     // Metadata.
     TFuture<NApi::TClusterMeta> GetClusterMeta(
@@ -532,9 +551,14 @@ public:
         const NYPath::TYPath& pipelinePath,
         const TPausePipelineOptions& options = {}) override;
 
-    TFuture<TPipelineStatus> GetPipelineStatus(
+    TFuture<TPipelineState> GetPipelineState(
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options) override;
+        const TGetPipelineStateOptions& options) override;
+
+    TFuture<TGetFlowViewResult> GetFlowView(
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;

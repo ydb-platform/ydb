@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#include <ydb/core/protos/auth.pb.h>
+
 namespace NActors {
 
 using namespace NMonitoring;

@@ -65,7 +65,9 @@ void TReplicationSettings::TOAuthToken::Serialize(NKikimrReplication::TOAuthToke
 }
 
 void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TStaticCredentials& proto) const {
-    proto.SetUser(UserName);
+    if (UserName) {
+        proto.SetUser(UserName);
+    }
     if (Password) {
         proto.SetPassword(Password);
     }

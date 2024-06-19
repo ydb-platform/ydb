@@ -395,8 +395,10 @@ public:
             keyColumns.reserve(keys.size());
             for (const NTxProxy::TTableColumnInfo* key : keys) {
                 NJson::TJsonValue jsonKey;
-                // TODO: support pg types
-                Y_ABORT_UNLESS(key->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+
+                if (key->PType.GetTypeId() == NScheme::NTypeIds::Pg)
+                    throw yexception() << "pg types are not supported";
+
                 if (jsonWhere.GetValue(key->Name, &jsonKey)) {
                     keyColumns.emplace_back(NewDataLiteral(pgmBuilder, jsonKey, key->PType.GetTypeId()));
                 } else {
@@ -453,8 +455,9 @@ public:
                 NMiniKQL::TTableRangeOptions tableRangeOptions = pgmBuilder.GetDefaultTableRangeOptions();
                 TVector<NMiniKQL::TRuntimeNode> keyFromColumns = keyColumns;
                 for (size_t i = keyColumns.size(); i < keyTypes.size(); ++i) {
-                    // TODO: support pg types
-                    Y_ABORT_UNLESS(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    if (keyTypes[i].GetTypeId() == NScheme::NTypeIds::Pg)
+                        throw yexception() << "pg types are not supported";
+
                     keyFromColumns.emplace_back(pgmBuilder.NewEmptyOptionalDataLiteral(keyTypes[i].GetTypeId()));
                 }
                 tableRangeOptions.ToColumns = keyColumns;
@@ -470,9 +473,10 @@ public:
             for (auto itVal = jsonMap.begin(); itVal != jsonMap.end(); ++itVal) {
                 auto itCol = columnByName.find(itVal->first);
                 if (itCol != columnByName.end()) {
+                    if (itCol->second->PType.GetTypeId() == NScheme::NTypeIds::Pg)
+                        throw yexception() << "pg types are not supported";
+
                     auto update = pgmBuilder.GetUpdateRowBuilder();
-                    // TODO: support pg types
-                    Y_ABORT_UNLESS(itCol->second->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
                     update.SetColumn(itCol->second->Id, itCol->second->PType, pgmBuilder.NewOptional(NewDataLiteral(pgmBuilder, itVal->second, itCol->second->PType.GetTypeId())));
                     pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(tableInfo.TableId, keyTypes, keyColumns, update));
                 } else {

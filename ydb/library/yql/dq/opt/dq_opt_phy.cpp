@@ -2655,7 +2655,7 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool useCBO)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2666,20 +2666,17 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
     const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
 
+    auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+    if (joinAlgo == EJoinAlgoType::MapJoin) {
+        hashJoin = EHashJoinMode::Map;
+    } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
+        hashJoin = EHashJoinMode::GraceAndSelf;
+    }
+
     bool useHashJoin = EHashJoinMode::Off != hashJoin
         && joinType != "Cross"sv 
         && leftIsUnionAll 
         && rightIsUnionAll;
-
-    if (useCBO) {
-        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-        if (joinAlgo == EJoinAlgoType::MapJoin || joinAlgo == EJoinAlgoType::GraceJoin) {
-            useHashJoin = joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll;
-        }
-        else {
-            useHashJoin = false;
-        }
-    }
 
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
@@ -2696,7 +2693,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     if (useHashJoin) {
-        return DqBuildHashJoin(join, hashJoin, useCBO, ctx, optCtx);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

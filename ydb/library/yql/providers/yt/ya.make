@@ -1,4 +1,5 @@
 RECURSE(
+    actors
     codec
     common
     comp_nodes
@@ -8,5 +9,6 @@ RECURSE(
     lib
     mkql_dq
     opt
+    proto
     provider
 )

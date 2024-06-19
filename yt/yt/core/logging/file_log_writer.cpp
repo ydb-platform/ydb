@@ -21,7 +21,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger(SystemLoggingCategoryName);
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 static constexpr size_t BufferSize = 64_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -286,7 +286,7 @@ private:
         int width = ToString(ssize(fileNames)).length();
         TString formatString = "%v.%0" + ToString(width) + "d";
         for (int index = ssize(fileNames); index > 0; --index) {
-            auto newFileName = Format(formatString, FileNamePrefix_, index);
+            auto newFileName = Format(TRuntimeFormat{formatString}, FileNamePrefix_, index);
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[index - 1]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
             YT_LOG_DEBUG("Rename log segment (OldFilePath: %v, NewFilePath: %v)", oldPath, newPath);

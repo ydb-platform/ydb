@@ -16,6 +16,7 @@ SRCS(
     kqp_olap_stats_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     sys_view_ut.cpp
+    datatime64_ut.cpp
     indexes_ut.cpp
     GLOBAL blobs_sharing_ut.cpp
     statistics_ut.cpp
@@ -33,6 +34,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/tx/datashard/ut_common
+    ydb/public/sdk/cpp/client/ydb_operation
 )
 
 YQL_LAST_ABI_VERSION()

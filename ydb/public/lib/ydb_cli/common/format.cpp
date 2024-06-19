@@ -390,7 +390,7 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
 
         TPrettyTable table(AnalyzeMode ? explainAnalyzeColumnNames : explainColumnNames,
-            TPrettyTableConfig().WithoutRowDelimiters());
+            TPrettyTableConfig().WithoutRowDelimiters().MaxWidth(MaxWidth));
 
         Y_ENSURE(queryPlan.GetMapSafe().contains("Plans"));
 
@@ -401,7 +401,9 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
 
         Output << table;
     } else { /* old format plan */
-        PrintJson(plan.GetStringRobust());
+        throw TMisuseException() << "Got no logical plan from the server. "
+            "Most likely, server version is old and does not support logical plans yet. "
+            "Try also using \"--execution-plan\" option to see the execution plan";
     }
 }
 
@@ -445,7 +447,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
     auto& newRow = table.AddRow();
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NColorizer::AutoColors(Output);
     TStringBuf color;
     switch(offset.size() % 3) {
         case 0: 

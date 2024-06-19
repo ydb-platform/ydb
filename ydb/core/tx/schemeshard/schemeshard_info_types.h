@@ -44,6 +44,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -548,6 +550,7 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
+        bool datetime64TypesEnabled,        
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -1281,6 +1284,12 @@ struct TSchemeQuotas : public TVector<TSchemeQuota> {
     mutable size_t LastKnownSize = 0;
 };
 
+enum class EUserFacingStorageType {
+    Ssd,
+    Hdd,
+    Ignored
+};
+
 struct IQuotaCounters {
     virtual void ChangeStreamShardsCount(i64 delta) = 0;
     virtual void ChangeStreamShardsQuota(i64 delta) = 0;
@@ -1289,10 +1298,12 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
+    virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
@@ -1624,25 +1635,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
     }
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
-        if (quotas.HardQuota != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
-        }
-        if (quotas.SoftQuota != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
-        }
-    }
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas);
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
-        i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
-        if (hardDelta != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
-        }
-        i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
-        if (softDelta != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
-        }
-    }
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
@@ -2601,6 +2596,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     ui64 SnapshotStep = 0;
     ui64 SnapshotTxId = 0;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2745,6 +2743,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TVector<TItem> Items;
 
     TSet<TActorId> Subscribers;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     explicit TImportInfo(
             const ui64 id,

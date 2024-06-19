@@ -139,28 +139,58 @@ private:
 
 template <>
 struct TJsonRequestParameters<TJsonContent> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"key","in":"query","description":"key for positioning","required":false,"type":"string"},
-                      {"name":"limit","in":"query","description":"rows limit","required":false,"type":"integer"},
-                      {"name":"offset","in":"query","description":"offset in rows","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: true
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: key
+              in: query
+              description: key for positioning
+              required: false
+              type: string
+            - name: limit
+              in: query
+              description: rows limit
+              required: false
+              type: integer
+            - name: offset
+              in: query
+              description: offset in rows
+              required: false
+              type: integer
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonContent> {
     static TString GetSummary() {
-        return "\"Schema content preview\"";
+        return "Schema content preview";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonContent> {
     static TString GetDescription() {
-        return "\"Return schema preview\"";
+        return "Return schema preview";
     }
 };
 

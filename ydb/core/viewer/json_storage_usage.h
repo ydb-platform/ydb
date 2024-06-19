@@ -79,37 +79,66 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonStorageUsage> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TStorageUsageStats>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TStorageUsageStats>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonStorageUsage> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"tenant","in":"query","description":"tenant name","required":false,"type":"string"},
-                      {"name":"pool","in":"query","description":"storage pool name","required":false,"type":"string"},
-                      {"name":"node_id","in":"query","description":"node id","required":false,"type":"integer"},
-                      {"name":"pace","in":"query","description":"bucket size as a percentage","required":false,"type":"integer","default":5},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: enums
+                in: query
+                description: convert enums to strings
+                type: boolean
+                required: false
+              - name: ui64
+                in: query
+                description: return ui64 as number
+                type: boolean
+                required: false
+              - name: tenant
+                in: query
+                description: tenant name
+                type: string
+                required: false
+              - name: pool
+                in: query
+                description: storage pool name
+                type: string
+                required: false
+              - name: node_id
+                in: query
+                description: node id
+                type: integer
+                required: false
+              - name: pace
+                in: query
+                description: bucket size as a percentage
+                type: integer
+                required: false
+                default: 5
+              - name: timeout
+                in: query
+                description: timeout in ms
+                type: integer
+                required: false
+                )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonStorageUsage> {
     static TString GetSummary() {
-        return "\"Storage groups statistics\"";
+        return "Storage groups statistics";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonStorageUsage> {
     static TString GetDescription() {
-        return "\"Returns the distribution of groups by usage\"";
+        return "Returns the distribution of groups by usage";
     }
 };
 

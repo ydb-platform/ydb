@@ -7,7 +7,7 @@
     ```sql
     CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse.  Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`).
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse. Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
     ```sql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
         SOURCE_TYPE="ClickHouse", 
@@ -20,7 +20,8 @@
         USE_TLS="TRUE"
     );
     ```
-1. Для корректного выполнения запроса необходимо [развернуть коннектор](../../deploy/manual/deploy-ydb-federated-query.md) и обеспечить сетевой доступ с динамических узлов {{ ydb-full-name }} к целевому кластеру ClickHouse.
+
+1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
 
@@ -39,7 +40,7 @@ SELECT * FROM clickhouse_datasource.<table_name>
 
 При работе с кластерами ClickHouse существует ряд ограничений:
 
-1. Поддерживаются только запросы чтения данных - `SELECT`, остальные виды запросов не поддерживаются.
+1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 

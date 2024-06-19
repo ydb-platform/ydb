@@ -555,6 +555,17 @@ TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
     return nullptr;
 }
 
+TExprNode::TPtr FilterSettings(const TExprNode& settings, const THashSet<TStringBuf>& names, TExprContext& ctx) {
+    TExprNode::TListType children;
+    for (auto setting : settings.Children()) {
+        if (setting->ChildrenSize() != 0 && names.contains(setting->Head().Content())) {
+            children.push_back(setting);
+        }
+    }
+
+    return ctx.NewList(settings.Pos(), std::move(children));
+}
+
 bool HasSetting(const TExprNode& settings, const TStringBuf& name) {
     return GetSetting(settings, name) != nullptr;
 }

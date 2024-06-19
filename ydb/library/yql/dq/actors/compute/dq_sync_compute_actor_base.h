@@ -1,5 +1,6 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 
 namespace NYql::NDq {
 
@@ -160,19 +161,20 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override final{
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override final{
         CA_LOG_D("Save state");
-        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
-        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-        data.SetBlob(TaskRunner->Save());
+        TMiniKqlProgramState& mkqlProgramState = state.MiniKqlProgram.ConstructInPlace();
+        mkqlProgramState.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+        TStateData& data = mkqlProgramState.Data;
+        data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+        data.Blob = TaskRunner->Save();
 
         for (auto& [inputIndex, source] : this->SourcesMap) {
             YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
+            state.Sources.push_back({});
+            TSourceState& sourceState = state.Sources.back();
             source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
+            sourceState.InputIndex = inputIndex;
         }
     }
 
@@ -209,6 +211,10 @@ protected:
 	}
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        if (this->Task.GetEnableSpilling()) {
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback()));
+        }
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -363,4 +369,3 @@ protected:
 };
 
 } //namespace NYql::NDq
-

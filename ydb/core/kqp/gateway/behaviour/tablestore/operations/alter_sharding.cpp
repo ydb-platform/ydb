@@ -11,7 +11,7 @@ TConclusionStatus TAlterShardingOperation::DoDeserialize(NYql::TObjectSettingsIm
     if (*modification == "SPLIT") {
         Increase = true;
     } else if (*modification == "MERGE") {
-        return TConclusionStatus::Fail("modification is impossible yet");
+        Increase = false;
     } else {
         return TConclusionStatus::Fail("undefined modification: \"" + *modification + "\"");
     }
@@ -20,9 +20,10 @@ TConclusionStatus TAlterShardingOperation::DoDeserialize(NYql::TObjectSettingsIm
 
 void TAlterShardingOperation::DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
     AFL_VERIFY(!isStandalone);
+    AFL_VERIFY(!!Increase);
     scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
     scheme.MutableAlterColumnTable()->SetName(GetStoreName());
-    *scheme.MutableAlterColumnTable()->MutableReshardColumnTable() = NKikimrSchemeOp::TReshardColumnTable();
+    scheme.MutableAlterColumnTable()->MutableReshardColumnTable()->SetIncrease(*Increase);
 }
 
 }

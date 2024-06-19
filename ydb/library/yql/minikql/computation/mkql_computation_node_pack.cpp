@@ -4,8 +4,9 @@
 #include "mkql_computation_node_holders.h"
 #include "presort.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -338,6 +339,21 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
             return ret;
         }
+        case NUdf::EDataSlot::TzDate32: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i32>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i64>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i64>(buf));
+            ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
+            return ret;
+        }        
         case NUdf::EDataSlot::Uuid: {
             return UnpackString(buf, 16);
         }
@@ -668,6 +684,21 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
         }
         case NUdf::EDataSlot::TzTimestamp: {
             PackData<Fast>(value.Get<ui64>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzDate32: {
+            PackData<Fast>(value.Get<i32>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            PackData<Fast>(value.Get<i64>(), buffer);
+            PackData<Fast>(value.GetTimezoneId(), buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            PackData<Fast>(value.Get<i64>(), buffer);
             PackData<Fast>(value.GetTimezoneId(), buffer);
             break;
         }
@@ -1039,7 +1070,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
     InitBlocks();
@@ -1050,7 +1081,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::Mem
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     InitBlocks();
 }

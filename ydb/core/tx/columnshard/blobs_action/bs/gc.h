@@ -1,5 +1,6 @@
 #pragma once
 
+#include "address.h"
 #include "blob_manager.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
@@ -17,7 +18,7 @@ public:
         THashSet<TLogoBlobID> DontKeepList;
         mutable ui32 RequestsCount = 0;
     };
-    using TGCListsByGroup = THashMap<ui32, TGCLists>;
+    using TGCListsByGroup = THashMap<TBlobAddress, TGCLists>;
 private:
     TGCListsByGroup ListsByGroupId;
     TGenStep CollectGenStepInFlight;
@@ -29,6 +30,10 @@ protected:
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
+
+    virtual void DoOnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
+    virtual bool DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
+
     virtual bool DoIsEmpty() const override {
         return false;
     }
@@ -41,13 +46,17 @@ public:
         return ListsByGroupId;
     }
 
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
     bool IsFinished() const {
         return ListsByGroupId.empty();
     }
 
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
 
-    std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> BuildRequest(const ui64 groupId) const;
+    std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> BuildRequest(const TBlobAddress& address) const;
 };
 
 }

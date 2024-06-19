@@ -64,10 +64,10 @@ public:
         bool enableChunkCombining = IsChunkCombiningEnabled();
 
         auto storeDep = [&opDeps, &opDepsOrder](const TYtOutput& out, const TExprNode* reader, const TExprNode* sec, const TExprNode* path) {
-            const auto realOp = GetRealOperation(out.Operation()).Raw();
-            auto& res = opDeps[realOp];
+            const auto op = out.Operation().Raw();
+            auto& res = opDeps[op];
             if (res.empty()) {
-                opDepsOrder.push_back(realOp);
+                opDepsOrder.push_back(op);
             }
             res.emplace_back(reader, sec, out.Raw(), path);
         };
@@ -428,6 +428,13 @@ public:
             }
         }
 
+        if (const auto mode = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable); mode != EColumnGroupMode::Disable) {
+            status = CalculateColumnGroups(input, output, opDeps, mode, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+        }
+
         return status;
     }
 
@@ -439,9 +446,18 @@ public:
         ProcessedHorizontalJoin.clear();
         ProcessedFieldSubsetForMultiUsage.clear();
         ProcessedFuseWithOuterMaps.clear();
+        ProcessedCalculateColumnGroups.clear();
     }
 
 private:
+
+    static bool IsBeingExecuted(const TExprNode& op) {
+        if (TYtTryFirst::Match(&op)) {
+            return op.Head().StartsExecution() || op.Head().HasResult();
+        } else {
+            return op.StartsExecution() || op.HasResult();
+        }
+    }
 
     static THashSet<TStringBuf> OPS_WITH_SORTED_OUTPUT;
 
@@ -607,7 +623,7 @@ private:
                 continue;
             }
 
-            if (writer->StartsExecution() || (writer->HasResult() && writer->GetResult().Type() == TExprNode::World)) {
+            if (IsBeingExecuted(*writer)) {
                 continue;
             }
             if (!TYtMap::Match(writer) && !TYtMerge::Match(writer)) {
@@ -875,7 +891,7 @@ private:
     TStatus OptimizeUnorderedOuts(TExprNode::TPtr input, TExprNode::TPtr& output, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         std::vector<const TExprNode*> matchedOps;
         for (auto writer: opDepsOrder) {
-            if (!TYtEquiJoin::Match(writer) && !writer->StartsExecution() && (!writer->HasResult() || writer->GetResult().Type() != TExprNode::World)) {
+            if (!TYtEquiJoin::Match(writer) && !IsBeingExecuted(*writer)) {
                 matchedOps.push_back(writer);
             }
         }
@@ -900,7 +916,19 @@ private:
             }
             if (!unorderedOuts.Empty()) {
                 if (orderedOuts.Empty() || !writer->IsCallable(OPS_WITH_SORTED_OUTPUT)) {
-                    TExprNode::TPtr newOp = MakeUnorderedOp(*writer, unorderedOuts, ctx);
+                    TExprNode::TPtr newOp;
+                    if (const auto mayTry = TExprBase(writer).Maybe<TYtTryFirst>()) {
+                        TExprNode::TPtr newOpFirst = MakeUnorderedOp(mayTry.Cast().First().Ref(), unorderedOuts, ctx);
+                        TExprNode::TPtr newOpSecond = MakeUnorderedOp(mayTry.Cast().Second().Ref(), unorderedOuts, ctx);
+                        if (newOpFirst || newOpSecond) {
+                            newOp = Build<TYtTryFirst>(ctx, writer->Pos())
+                                .First(newOpFirst ? std::move(newOpFirst) : mayTry.Cast().First().Ptr())
+                                .Second(newOpSecond ? std::move(newOpSecond) : mayTry.Cast().Second().Ptr())
+                                .Done().Ptr();
+                        }
+                    } else {
+                        newOp = MakeUnorderedOp(*writer, unorderedOuts, ctx);
+                    }
                     if (newOp) {
                         newOps[writer] = newOp;
                     }
@@ -1159,7 +1187,7 @@ private:
         settings.ProcessedNodes = &ProcessedSplitLargeInputs;
 
         return OptimizeExpr(input, output, [maxTables, maxSortedTables, splitMap, this](const TExprNode::TPtr& node, TExprContext& ctx) {
-            if (TYtTransientOpBase::Match(node.Get()) && !node->StartsExecution() && !node->HasResult()) {
+            if (TYtTransientOpBase::Match(node.Get()) && !IsBeingExecuted(*node)) {
                 auto op = TYtTransientOpBase(node);
                 auto outRowSpec = MakeIntrusive<TYqlRowSpecInfo>(op.Output().Item(0).RowSpec());
                 const bool sortedMerge = TYtMerge::Match(node.Get()) && outRowSpec->IsSorted();
@@ -1561,7 +1589,7 @@ private:
         TNodeOnNodeOwnedMap newOps;
         for (auto& x: opDeps) {
             auto writer = x.first;
-            if (const size_t outCount = TYtOutputOpBase(writer).Output().Size(); outCount > 1 && writer->GetState() != TExprNode::EState::ExecutionComplete
+            if (const size_t outCount = GetRealOperation(TExprBase(writer)).Output().Size(); outCount > 1 && writer->GetState() != TExprNode::EState::ExecutionComplete
                 && writer->GetState() != TExprNode::EState::ExecutionInProgress
                 && (!writer->HasResult() || writer->GetResult().Type() != TExprNode::World)
                 && ProcessedUnusedOuts.find(writer->UniqueId()) == ProcessedUnusedOuts.end())
@@ -1571,7 +1599,19 @@ private:
                     usedOuts.Set(FromString<size_t>(std::get<2>(item)->Child(TYtOutput::idx_OutIndex)->Content()));
                 }
                 if (!usedOuts.Empty() && usedOuts.Count() < outCount) {
-                    TExprNode::TPtr newOp = SuppressUnusedOuts(*writer, usedOuts, ctx);
+                    TExprNode::TPtr newOp;
+                    if (const auto mayTry = TExprBase(writer).Maybe<TYtTryFirst>()) {
+                        const auto opSecond = mayTry.Cast().Second().Raw();
+                        TExprNode::TPtr newOpSecond = SuppressUnusedOuts(*opSecond, usedOuts, ctx);
+                        if (newOpSecond) {
+                            newOp = Build<TYtTryFirst>(ctx, writer->Pos())
+                                .First(mayTry.Cast().First().Ptr())
+                                .Second(std::move(newOpSecond))
+                                .Done().Ptr();
+                        }
+                    } else {
+                        newOp = SuppressUnusedOuts(*writer, usedOuts, ctx);
+                    }
                     newOps[writer] = newOp;
                     TVector<size_t> remappedIndicies(outCount, Max<size_t>());
                     size_t newIndex = 0;
@@ -1634,8 +1674,8 @@ private:
                 continue;
             }
 
-            const TYtOutputOpBase operation(x.first);
-            const bool canUpdateOp = !operation.Ref().StartsExecution() && !operation.Ref().HasResult() && !operation.Maybe<TYtCopy>();
+            const TYtOutputOpBase operation = GetRealOperation(TExprBase(x.first));
+            const bool canUpdateOp = !IsBeingExecuted(*x.first) && !operation.Maybe<TYtCopy>();
             const bool canChangeNativeTypeForOp = !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
 
             auto origOutput = operation.Output().Ptr();
@@ -1954,7 +1994,7 @@ private:
         TNodeOnNodeOwnedMap newOps;
         for (auto& x: opDeps) {
             auto writer = x.first;
-            const TYtOutputOpBase op(writer);
+            const TYtOutputOpBase op = GetRealOperation(TExprBase(writer));
             if (const size_t outCount = op.Output().Size(); outCount > 1 && !BeingExecuted(*writer)
                 && (!op.Maybe<TYtMapReduce>() || GetMapDirectOutputsCount(op.Maybe<TYtMapReduce>().Cast()) == 0) // TODO: optimize this case
                 && ProcessedMultiOuts.find(writer->UniqueId()) == ProcessedMultiOuts.end())
@@ -2541,6 +2581,188 @@ private:
         return TStatus::Ok;
     }
 
+    TExprNode::TPtr UpdateColumnGroups(const TYtOutputOpBase& op, const std::map<size_t, TString>& groupSpecs, TExprContext& ctx) {
+        auto origOutput = op.Output().Ptr();
+        auto newOutput = origOutput;
+        for (const auto& item: groupSpecs) {
+            const auto table = op.Output().Item(item.first);
+            auto currentGroup = GetSetting(table.Settings().Ref(), EYtSettingType::ColumnGroups);
+            if (!currentGroup || currentGroup->Tail().Content() != item.second) {
+                auto newSettings = AddOrUpdateSettingValue(table.Settings().Ref(),
+                    EYtSettingType::ColumnGroups,
+                    ctx.NewAtom(table.Settings().Pos(), item.second, TNodeFlags::MultilineContent),
+                    ctx);
+                auto newTable = ctx.ChangeChild(table.Ref(), TYtOutTable::idx_Settings, std::move(newSettings));
+                newOutput = ctx.ChangeChild(*newOutput, item.first, std::move(newTable));
+            }
+        }
+        if (newOutput != origOutput) {
+            return ctx.ChangeChild(op.Ref(), TYtOutputOpBase::idx_Output, std::move(newOutput));
+        }
+        return {};
+    }
+
+    TStatus CalculateColumnGroups(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, EColumnGroupMode mode, TExprContext& ctx) {
+        const auto maxGroups = State_->Configuration->MaxColumnGroups.Get().GetOrElse(DEFAULT_MAX_COLUMN_GROUPS);
+        const auto minGroupSize = State_->Configuration->MinColumnGroupSize.Get().GetOrElse(DEFAULT_MIN_COLUMN_GROUP_SIZE);
+        TNodeOnNodeOwnedMap remap;
+        for (auto& x: opDeps) {
+            auto writer = x.first;
+            if (TYtEquiJoin::Match(writer) || IsBeingExecuted(*writer)) {
+                continue;
+            }
+            if (!ProcessedCalculateColumnGroups.insert(writer->UniqueId()).second) {
+                continue;
+            }
+
+            std::vector<const TStructExprType*> outTypes;
+            for (const auto& outTable: GetRealOperation(TExprBase(writer)).Output()) {
+                outTypes.push_back(outTable.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+            }
+
+            TNodeMap<size_t> uniquePaths;
+            std::vector<std::unordered_map<TString, std::set<size_t>>> columnUsage;
+            columnUsage.resize(outTypes.size());
+            std::vector<bool> fullUsage;
+            fullUsage.resize(outTypes.size());
+            std::vector<bool> publishUsage;
+            publishUsage.resize(outTypes.size());
+            // Collect column usage per consumer
+            for (auto& item: x.second) {
+                const auto out = TYtOutput(std::get<2>(item));
+                const auto outIndex = FromString<size_t>(out.OutIndex().Value());
+                auto rawPath = std::get<3>(item);
+                if (!rawPath) {
+                    if (TYtLength::Match(std::get<0>(item))) {
+                        continue;
+                    }
+                    if (TYtPublish::Match(std::get<0>(item))) {
+                        publishUsage.at(outIndex) = true;
+                    } else {
+                        fullUsage.at(outIndex) = true;
+                    }
+                } else if (EColumnGroupMode::Single == mode) {
+                    fullUsage.at(outIndex) = true;
+                } else {
+                    auto path = TYtPath(rawPath);
+                    auto columns = TYtColumnsInfo(path.Columns());
+                    if (!columns.HasColumns() || outTypes[outIndex]->GetSize() <= columns.GetColumns()->size()) {
+                        fullUsage.at(outIndex) = true;
+                    } else {
+                        const size_t pathNdx = uniquePaths.emplace(rawPath, uniquePaths.size()).first->second;
+                        std::for_each(columns.GetColumns()->cbegin(), columns.GetColumns()->cend(),
+                            [&columnUsage, outIndex, pathNdx](const TYtColumnsInfo::TColumn& c) {
+                                 columnUsage.at(outIndex)[c.Name].insert(pathNdx);
+                            }
+                        );
+                    }
+                }
+            }
+
+            std::map<size_t, TString> groupSpecs;
+            for (size_t i = 0; i < columnUsage.size(); ++i) {
+                if (publishUsage[i]) {
+                    continue;
+                }
+                if (EColumnGroupMode::Single == mode) {
+                    if (fullUsage[i]) {
+                        groupSpecs[i] = NYT::NodeToYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+                    }
+                } else {
+                    if (fullUsage[i]) {
+                        // Add all columns for tables with entire usage
+                        const size_t pathNdx = uniquePaths.emplace(nullptr, uniquePaths.size()).first->second;
+                        std::for_each(outTypes[i]->GetItems().cbegin(), outTypes[i]->GetItems().cend(),
+                            [&columnUsage, i, pathNdx](const TItemExprType* itemType) {
+                                columnUsage.at(i)[TString{itemType->GetName()}].insert(pathNdx);
+                            }
+                        );
+                    }
+
+                    if (!columnUsage.at(i).empty()) {
+                        auto groupSpec = NYT::TNode();
+
+                        // Find unique groups. Use ordered collections for stable names
+                        std::map<std::set<size_t>, std::set<TString>> groups;
+                        for (const auto& item: columnUsage.at(i)) {
+                            groups[item.second].insert(item.first);
+                            if (groups.size() > maxGroups) {
+                                groups.clear();
+                                break;
+                            }
+                        }
+                        if (!groups.empty()) {
+                            bool allGroups = true;
+                            size_t maxSize = 0;
+                            auto maxGrpIt = groups.end();
+                            // Delete too short groups and find a group with max size
+                            for (auto it = groups.begin(); it != groups.end();) {
+                                if (it->second.size() < minGroupSize) {
+                                    it = groups.erase(it);
+                                    allGroups = false;
+                                } else {
+                                    if (it->second.size() > maxSize) {
+                                        maxSize = it->second.size();
+                                        maxGrpIt = it;
+                                    }
+                                    ++it;
+                                }
+                            }
+                            if (!groups.empty()) {
+                                groupSpec = NYT::TNode::CreateMap();
+                                // If we keep all groups then use the group with max size as default
+                                if (allGroups && maxGrpIt != groups.end()) {
+                                    groupSpec["default"] = NYT::TNode::CreateEntity();
+                                    groups.erase(maxGrpIt);
+                                }
+                                TStringBuilder nameBuilder;
+                                nameBuilder.reserve(8); // "group" + 2 digit number + zero-terminator
+                                nameBuilder << "group";
+                                size_t num = 0;
+                                for (const auto& g: groups) {
+                                    nameBuilder.resize(5);
+                                    nameBuilder << num++;
+                                    auto columns = NYT::TNode::CreateList();
+                                    for (const auto& n: g.second) {
+                                        columns.Add(n);
+                                    }
+                                    groupSpec[nameBuilder] = std::move(columns);
+                                }
+                            }
+                        }
+                        if (!groupSpec.IsUndefined()) {
+                            groupSpecs[i] = NYT::NodeToYsonString(groupSpec, NYson::EYsonFormat::Text);
+                        }
+                    }
+                }
+            }
+            if (!groupSpecs.empty()) {
+                TExprNode::TPtr newOp;
+                if (const auto mayTry = TExprBase(writer).Maybe<TYtTryFirst>()) {
+                    TExprNode::TPtr newOpFirst = UpdateColumnGroups(mayTry.Cast().First(), groupSpecs, ctx);
+                    TExprNode::TPtr newOpSecond = UpdateColumnGroups(mayTry.Cast().Second(), groupSpecs, ctx);
+                    if (newOpFirst || newOpSecond) {
+                        newOp = Build<TYtTryFirst>(ctx, writer->Pos())
+                            .First(newOpFirst ? std::move(newOpFirst) : mayTry.Cast().First().Ptr())
+                            .Second(newOpSecond ? std::move(newOpSecond) : mayTry.Cast().Second().Ptr())
+                            .Done().Ptr();
+                    }
+                } else {
+                    newOp = UpdateColumnGroups(TYtOutputOpBase(writer), groupSpecs, ctx);
+                }
+                if (newOp) {
+                    remap[writer] = newOp;
+                }
+            }
+        }
+
+        if (!remap.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-CalculateColumnGroups";
+            return RemapExpr(input, output, remap, ctx, TOptimizeExprSettings{State_->Types});
+        }
+        return TStatus::Ok;
+    }
+
     bool BeingExecuted(const TExprNode& node) {
         return node.GetState() > TExprNode::EState::ExecutionRequired || node.HasResult();
     }
@@ -2553,6 +2775,7 @@ private:
     TProcessedNodesSet ProcessedMultiOuts;
     TProcessedNodesSet ProcessedHorizontalJoin;
     TProcessedNodesSet ProcessedFieldSubsetForMultiUsage;
+    TProcessedNodesSet ProcessedCalculateColumnGroups;
     std::unordered_set<std::pair<ui64, ui64>, THash<std::pair<ui64, ui64>>> ProcessedFuseWithOuterMaps;
 };
 
@@ -2563,6 +2786,7 @@ THashSet<TStringBuf> TYtPhysicalFinalizingTransformer::OPS_WITH_SORTED_OUTPUT = 
     TYtReduce::CallableName(),
     TYtFill::CallableName(),
     TYtDqProcessWrite::CallableName(),
+    TYtTryFirst::CallableName(),
 };
 
 }

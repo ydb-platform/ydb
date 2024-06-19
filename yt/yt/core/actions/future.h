@@ -721,6 +721,14 @@ TFuture<std::vector<TErrorOr<T>>> RunWithBoundedConcurrency(
 template <class T>
 TFuture<std::vector<TErrorOr<T>>> CancelableRunWithBoundedConcurrency(
     std::vector<TCallback<TFuture<T>()>> callbacks,
+    int concurrencyLimit,
+    bool failOnError = false);
+
+//! Same as above but cancels all futures if at least one task fails.
+// (same as CancelableRunWithBoundedConcurrency with failOnError=true)
+template <class T>
+TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
+    std::vector<TCallback<TFuture<T>()>> callbacks,
     int concurrencyLimit);
 
 ////////////////////////////////////////////////////////////////////////////////

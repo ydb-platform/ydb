@@ -482,7 +482,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
         writer.OnBeginMap();
 
         if (attributeFilter) {
-            WriteAttributesFragment(&writer, attributeFilter, /*stable*/false);
+            WriteAttributesFragment(&writer, attributeFilter, /*stable*/ false);
         } else {
             if (builtinAttributeProvider) {
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
@@ -1729,7 +1729,7 @@ IYPathServiceContextPtr CreateYPathContext(
 
     return New<TYPathServiceContext>(
         std::move(requestMessage),
-        TMemoryUsageTrackerGuard{},
+        TMemoryUsageTrackerGuard(),
         GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);
@@ -1746,7 +1746,7 @@ IYPathServiceContextPtr CreateYPathContext(
     return New<TYPathServiceContext>(
         std::move(requestHeader),
         std::move(requestMessage),
-        TMemoryUsageTrackerGuard{},
+        TMemoryUsageTrackerGuard(),
         GetNullMemoryUsageTracker(),
         std::move(logger),
         logLevel);

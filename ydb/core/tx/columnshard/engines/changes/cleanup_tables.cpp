@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -25,6 +26,7 @@ void TCleanupTablesColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TCo
     for (auto&& t : TablesToDrop) {
         self->TablesManager.TryFinalizeDropPathOnComplete(t);
     }
+    self->Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTablesErased>(TablesToDrop));
 }
 
 void TCleanupTablesColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {

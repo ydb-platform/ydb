@@ -167,10 +167,21 @@ public:
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
 
-    void Shutdown();
+    // NB(arkady-e1ppa): Trying to call graceful shutdown
+    // concurrently with someone calling Invoke
+    // may end up making shutdown not graceful
+    // as double-checking in Invoke would drain
+    // the queue. If want a truly graceful
+    // Shutdown (e.g. until you run out of callbacks)
+    // just drain the queue without shutting it down.
+    void Shutdown(bool graceful = false);
 
-    void DrainProducer();
-    void DrainConsumer();
+    // NB(arkady-e1ppa): Calling shutdown is not
+    // enough to prevent leaks of callbacks
+    // as there might be some callbacks left in
+    // local queue of MPSC queue if shutdown
+    // was not graceful.
+    void OnConsumerFinished();
 
     bool BeginExecute(TEnqueuedAction* action, typename TQueueImpl::TConsumerToken* token = nullptr);
     void EndExecute(TEnqueuedAction* action);
@@ -191,6 +202,8 @@ private:
 
     NThreading::TThreadId ThreadId_ = NThreading::InvalidThreadId;
     std::atomic<bool> Running_ = true;
+    std::atomic<bool> Stopping_ = false;
+    std::atomic<bool> Graceful_ = false;
 
     struct TCounters
     {
@@ -212,6 +225,8 @@ private:
     TWaitTimeObserver WaitTimeObserver_;
 
     TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry);
+
+    void TryDrainProducer(bool force = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

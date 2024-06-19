@@ -51,7 +51,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
-    db.Table<IndexColumns>().Key(0, portion.GetPathId(), row.ColumnId,
+    db.Table<IndexColumns>().Key(0, 0, row.ColumnId,
         portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Update(
             NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
@@ -85,7 +85,7 @@ void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
-    db.Table<IndexColumns>().Key(0, portion.GetPathId(), row.ColumnId,
+    db.Table<IndexColumns>().Key(0, 0, row.ColumnId,
         portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 

@@ -167,7 +167,9 @@ namespace NKikimr {
         // the same logic for every yard response: apply response and restart main cycle
         void HandleYardResponse(NPDisk::TEvChunkReadResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
-            HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            if (HullCtx->VCtx->CostTracker) {
+                HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            }
             if (ev->Get()->Status != NKikimrProto::CORRUPTED) {
                 CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             }
@@ -200,7 +202,9 @@ namespace NKikimr {
 
         void HandleYardResponse(NPDisk::TEvChunkWriteResult::TPtr& ev, const TActorContext &ctx) {
             --PendingResponses;
-            HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            if (HullCtx->VCtx->CostTracker) {
+                HullCtx->VCtx->CostTracker->CountPDiskResponse();
+            }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             if (FinalizeIfAborting(ctx)) {
                 return;

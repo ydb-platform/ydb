@@ -22,6 +22,7 @@ namespace NViewer {
 using namespace NActors;
 using namespace NMonitoring;
 using ::google::protobuf::FieldDescriptor;
+using namespace NNodeWhiteboard;
 
 class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     using TThis = TJsonQuery;
@@ -37,8 +38,9 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Action;
     TString Stats;
     TString Syntax;
-    TString UserToken;
-    bool IsBase64Encode;
+    TString QueryId;
+    bool Direct = false;
+    bool IsBase64Encode = true;
 
     enum ESchemaType {
         Classic,
@@ -47,11 +49,7 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
         Ydb,
     };
     ESchemaType Schema = ESchemaType::Classic;
-
-    std::optional<TNodeId> SubscribedNodeId;
-    std::vector<TNodeId> TenantDynamicNodes;
-    bool Direct = false;
-    bool MadeKqpProxyRequest = false;
+    TString SessionId;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -83,11 +81,12 @@ public:
         TString schemaStr = params.Get("schema");
         Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
+        QueryId = params.Get("query_id");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
 
-    void ParsePostContent(const TStringBuf& content) {
+    bool ParsePostContent(const TStringBuf& content) {
         static NJson::TJsonReaderConfig JsonConfig;
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
@@ -97,7 +96,9 @@ public:
             Stats = Stats.empty() ? requestData["stats"].GetStringSafe({}) : Stats;
             Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
             Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
+            QueryId = QueryId.empty() ? requestData["query_id"].GetStringSafe({}) : QueryId;
         }
+        return success;
     }
 
     bool IsPostContent() const {
@@ -108,38 +109,48 @@ public:
         : Viewer(viewer)
         , Event(ev)
     {
+    }
+
+    void Bootstrap() {
         const auto& params(Event->Get()->Request.GetParams());
         InitConfig(params);
         ParseCgiParameters(params);
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
-            ParsePostContent(content);
+            if (!ParsePostContent(content)) {
+                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content recieved"));
+            }
         }
-        UserToken = Event->Get()->UserToken;
+        if (Query.empty() && Action != "cancel-query") {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Query is empty"));
+        }
+
+        Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
+        Direct |= (Database == AppData()->TenantName); // we're already on the right node
+
+        if (Database && !Direct) {
+            BLOG_TRACE("Requesting StateStorageEndpointsLookup for " << Database);
+            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
+        } else {
+            SendKpqProxyRequest();
+        }
+        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    TJsonQuery(TEvViewer::TEvViewerRequest::TPtr& ev)
-        : ViewerRequest(ev)
-    {
-        auto& request = ViewerRequest->Get()->Record.GetQueryRequest();
-
-        TCgiParameters params(request.GetUri());
-        InitConfig(params);
-        ParseCgiParameters(params);
-
-        TStringBuf content = request.GetContent();
-        if (content) {
-            ParsePostContent(content);
-        }
-
-        Timeout = ViewerRequest->Get()->Record.GetTimeout();
-        UserToken = request.GetUserToken();
-        Direct = true;
+    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        BLOG_TRACE("Received TEvBoardInfo");
+        ReplyAndPassAway(Viewer->MakeForward(Event->Get(), GetNodesFromBoardReply(ev)));
     }
 
     void PassAway() override {
-        if (SubscribedNodeId.has_value()) {
-            Send(TActivationContext::InterconnectProxy(SubscribedNodeId.value()), new TEvents::TEvUnsubscribe());
+        if (QueryId) {
+            Viewer->EndRunningQuery(QueryId, SelfId());
+        }
+        if (SessionId) {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            BLOG_TRACE("Closing session " << SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
         TBase::PassAway();
         BLOG_TRACE("PassAway()");
@@ -148,27 +159,71 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, HandleReply);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            hFunc(TEvViewer::TEvViewerResponse, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
-
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void SendKpqProxyRequest() {
-        if (MadeKqpProxyRequest) {
-            return;
+        if (QueryId) {
+            TActorId actorId = Viewer->FindRunningQuery(QueryId);
+            if (actorId) {
+                auto event = std::make_unique<NKqp::TEvKqp::TEvAbortExecution>();
+                Ydb::Issue::IssueMessage* issue = event->Record.AddIssues();
+                issue->set_message("Query was cancelled");
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                Send(actorId, event.release());
+
+                if (Action == "cancel-query") {
+                    return ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Query was cancelled"));
+                }
+            } else {
+                if (Action == "cancel-query") {
+                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Query not found"));
+                }
+            }
+            Viewer->AddRunningQuery(QueryId, SelfId());
         }
-        MadeKqpProxyRequest = true;
+
+        auto event = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        if (Database) {
+            event->Record.MutableRequest()->SetDatabase(Database);
+        }
+        BLOG_TRACE("Creating session");
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return ReplyAndPassAway(
+                Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain",
+                    TStringBuilder() << "Failed to create session, error " << ev->Get()->Record.GetYdbStatus()));
+        }
+        SessionId = ev->Get()->Record.GetResponse().GetSessionId();
+        BLOG_TRACE("Session created " << SessionId);
+
+        {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
+        request.SetSessionId(SessionId);
+        if (Database) {
+            request.SetDatabase(Database);
+        }
+        if (Event->Get()->UserToken) {
+            event->Record.SetUserToken(Event->Get()->UserToken);
+        }
         if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -176,7 +231,6 @@ public:
         } else if (Action == "execute-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
             request.SetKeepSession(false);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -190,6 +244,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -208,12 +263,6 @@ public:
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
             request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         }
-        if (Database) {
-            request.SetDatabase(Database);
-        }
-        if (UserToken) {
-            event->Record.SetUserToken(UserToken);
-        }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
         } else if (Syntax == "pg") {
@@ -221,28 +270,7 @@ public:
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
-    }
-
-    void Bootstrap() {
-        if (Query.empty()) {
-            if (Event) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
-            } else {
-                auto* response = new TEvViewer::TEvViewerResponse();
-                response->Record.MutableQueryResponse()->SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                ReplyAndPassAway(response);
-            }
-            return;
-        }
-
-        if (Database && !Direct) {
-            RequestStateStorageEndpointsLookup(Database); // to find some dynamic node and redirect query there
-        }
-
-        if (Requests == 0) {
-            SendKpqProxyRequest();
-        }
-        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        BLOG_TRACE("Query sent");
     }
 
 private:
@@ -333,101 +361,50 @@ private:
         }
     }
 
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &) {}
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
-        if (ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
-            SendKpqProxyRequest();
-        }
-    }
-
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &) {
-        SendKpqProxyRequest();
-    }
-
-    void SendDynamicNodeQueryRequest() {
-        ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
-
-        auto itPos = std::next(TenantDynamicNodes.begin(), hash % TenantDynamicNodes.size());
-        std::nth_element(TenantDynamicNodes.begin(), itPos, TenantDynamicNodes.end());
-
-        TNodeId nodeId = *itPos;
-        SubscribedNodeId = nodeId;
-        TActorId viewerServiceId = MakeViewerID(nodeId);
-
-        THolder<TEvViewer::TEvViewerRequest> request = MakeHolder<TEvViewer::TEvViewerRequest>();
-        request->Record.SetTimeout(Timeout);
-        auto queryRequest = request->Record.MutableQueryRequest();
-        queryRequest->SetUri(TString(Event->Get()->Request.GetUri()));
-        if (IsPostContent()) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            queryRequest->SetContent(TString(content));
-        }
-        if (UserToken) {
-            queryRequest->SetUserToken(UserToken);
-        }
-
-        ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kQueryRequest, nodeId);
-        SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
-    }
-
-    void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BLOG_TRACE("Received TEvBoardInfo");
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
-                TenantDynamicNodes.emplace_back(actorId.NodeId());
-            }
-        }
-        if (TenantDynamicNodes.empty()) {
-            SendKpqProxyRequest();
-        } else {
-            SendDynamicNodeQueryRequest();
-        }
-    }
-
-    void Handle(NKikimrKqp::TEvQueryResponse& record) {
-        if (Event) {
-            TStringBuilder out;
-            NJson::TJsonValue jsonResponse;
-            if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                MakeOkReply(out, jsonResponse, record);
-            } else {
-                MakeErrorReply(out, jsonResponse, record);
-            }
-
-            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
-                jsonResponse = std::move(jsonResponse["result"]);
-            }
-
-            TStringStream stream;
-            NJson::TJsonWriterConfig config;
-            config.ValidateUtf8 = false;
-            config.WriteNanAsString = true;
-            NJson::WriteJson(&stream, &jsonResponse, config);
-            out << stream.Str();
-
-            ReplyAndPassAway(out);
-        } else {
-            TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
-            response->Record.MutableQueryResponse()->CopyFrom(record);
-            response->Record.MutableQueryResponse()->MutableResponse()->MutableYdbResults()->Add(ResultSets.begin(), ResultSets.end());
-            ReplyAndPassAway(response);
-        }
-    }
-
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Handle(ev->Get()->Record.GetRef());
-    }
+        BLOG_TRACE("Query response received");
+        auto& record(ev->Get()->Record.GetRef());
+        NJson::TJsonValue jsonResponse;
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            MakeOkReply(jsonResponse, record);
+        } else {
+            MakeErrorReply(jsonResponse, record.MutableResponse()->MutableQueryIssues());
+        }
 
-    void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
+        if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
+            jsonResponse = std::move(jsonResponse["result"]);
+        }
+
+        TStringStream stream;
+        NJson::WriteJson(&stream, &jsonResponse, {
+            .ValidateUtf8 = false,
+            .WriteNanAsString = true,
+        });
+
+        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), stream.Str()));
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        Y_UNUSED(ev);
+        auto& record(ev->Get()->Record);
+        NJson::TJsonValue jsonResponse;
+        if (record.IssuesSize() > 0) {
+            MakeErrorReply(jsonResponse, record.MutableIssues());
+        }
+
+        TStringStream stream;
+        NJson::WriteJson(&stream, &jsonResponse, {
+            .ValidateUtf8 = false,
+            .WriteNanAsString = true,
+        });
+
+        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), stream.Str()));
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         Y_UNUSED(ev);
     }
 
@@ -443,32 +420,34 @@ private:
     }
 
     void HandleTimeout() {
-        if (Event) {
-            ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
-        } else {
-            auto* response = new TEvViewer::TEvViewerResponse();
-            response->Record.MutableQueryResponse()->SetYdbStatus(Ydb::StatusIds::TIMEOUT);
-            ReplyAndPassAway(response);
+        TStringBuilder error;
+        error << "Timeout executing query";
+        if (SessionId) {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            BLOG_TRACE("Cancelling query in session " << SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+            error << ", query was cancelled";
         }
-    }
-
-    void ReplyAndPassAway(TEvViewer::TEvViewerResponse* response) {
-        Send(ViewerRequest->Sender, response);
-        PassAway();
+        NJson::TJsonValue json;
+        json["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
+        json["error"]["message"] = error;
+        NJson::TJsonValue& issue = json["issues"].AppendValue({});
+        issue["severity"] = NYql::TSeverityIds::S_ERROR;
+        issue["message"] = error;
+        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
     }
 
     void ReplyAndPassAway(TString data) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
 private:
-    void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
+    void MakeErrorReply(NJson::TJsonValue& jsonResponse, google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues) {
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error
-        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues = record.MutableResponse()->MutableQueryIssues();
         std::stable_sort(protoIssues->begin(), protoIssues->end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
             return a.severity() < b.severity();
         });
@@ -479,13 +458,13 @@ private:
             const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
             NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
         }
-        for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) {
+        for (const auto& queryIssue : *protoIssues) {
             NJson::TJsonValue& issue = jsonIssues.AppendValue({});
             NProtobufJson::Proto2Json(queryIssue, issue);
         }
     }
 
-    void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
+    void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
         if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
@@ -502,14 +481,13 @@ private:
             }
             catch (const std::exception& ex) {
                 Ydb::Issue::IssueMessage* issue = record.MutableResponse()->AddQueryIssues();
-                issue->set_message(Sprintf("Convert error: %s", ex.what()));
+                issue->set_message(TStringBuilder() << "Convert error: " << ex.what());
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record.MutableResponse()->MutableQueryIssues());
                 return;
             }
         }
 
-        out << Viewer->GetHTTPOKJSON(Event->Get());
         if (ResultSets.size() > 0) {
             if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
@@ -614,38 +592,121 @@ private:
             NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
         }
     }
-
 };
 
 template <>
-struct TJsonRequestParameters<TJsonQuery> {
-    static TString GetParameters() {
-        return R"___([{"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"query","in":"query","description":"query text","required":true,"type":"string"},
-                      {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
-                      {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
-                      {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
-                      {"name":"stats","in":"query","description":"return stats (profile, full)","required":false,"type":"string"},
-                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
-                      {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
-    }
-};
-
-template <>
-struct TJsonRequestSummary<TJsonQuery> {
-    static TString GetSummary() {
-        return "\"Execute query\"";
-    }
-};
-
-template <>
-struct TJsonRequestDescription<TJsonQuery> {
-    static TString GetDescription() {
-        return "\"Executes database query\"";
-    }
-};
+YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
+    YAML::Node node = YAML::Load(R"___(
+        post:
+          tags:
+          - viewer
+          summary: Executes SQL query
+          description: Executes SQL query
+          parameters:
+          - name: action
+            in: query
+            type: string
+            enum: [execute-scan, execute-script, execute-query, execute-data, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
+            required: true
+            description: >
+              execute method:
+               * `execute-query` - execute query (QueryService)
+               * `execute-data` - execute data query (DataQuery)
+               * `execute-scan` - execute scan query (ScanQuery)
+               * `execute-script` - execute script query (ScriptingService)
+               * `explain-query` - explain query (QueryService)
+               * `explain-data` - explain data query (DataQuery)
+               * `explain-scan` - explain scan query (ScanQuery)
+               * `explain-script` - explain script query (ScriptingService)
+               * `cancel-query` - cancel query (using query_id)
+          - name: query
+            in: query
+            description: SQL query text
+            type: string
+            required: false
+          - name: query_id
+            in: query
+            description: unique query identifier (uuid) - use the same id to cancel query
+            required: false
+          - name: syntax
+            in: query
+            description: >
+              query syntax:
+               * `yql_v1` - YQL v1 (default)
+               * `pg` - PostgreSQL compatible
+            type: string
+            enum: [yql_v1, pg]
+            required: false
+          - name: database
+            in: query
+            description: database name
+            type: string
+            required: false
+          - name: schema
+            in: query
+            description: >
+              result format schema:
+               * `classic`
+               * `modern`
+               * `multi`
+               * `ydb`
+            type: string
+            enum: [classic, modern, ydb, multi]
+            required: false
+          - name: stats
+            in: query
+            description: >
+              return stats:
+               * `profile`
+               * `full`
+            type: string
+            enum: [profile, full]
+            required: false
+          - name: direct
+            in: query
+            description: force processing query on current node
+            type: boolean
+            required: false
+          - name: base64
+            in: query
+            description: return strings using base64 encoding
+            type: string
+            required: false
+          - name: timeout
+            in: query
+            description: timeout in ms
+            type: integer
+            required: false
+          - name: ui64
+            in: query
+            description: return ui64 as number to avoid 56-bit js rounding
+            type: boolean
+            required: false
+          requestBody:
+            description: Executes SQL query
+            required: false
+            content:
+              application/json:
+                schema:
+                  type: object
+                  description: the same properties as in query parameters
+          responses:
+            200:
+              description: OK
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    description: format depends on schema parameter
+            400:
+              description: Bad Request
+            403:
+              description: Forbidden
+            504:
+              description: Gateway Timeout
+        )___");
+    return node;
+}
 
 
 }

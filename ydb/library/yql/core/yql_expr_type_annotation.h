@@ -154,6 +154,7 @@ bool EnsureCallableType(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureResourceType(const TExprNode& node, TExprContext& ctx);
 bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx);
+bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
 bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx);

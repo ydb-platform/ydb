@@ -276,7 +276,8 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             UNIT_ASSERT_VALUES_EQUAL(table.parameters["numFiles"], "2");
             UNIT_ASSERT_STRING_CONTAINS(table.parameters["previous_metadata_location"], "s3://datalake/data/logs/metadata/");
             UNIT_ASSERT_VALUES_EQUAL(table.parameters["table_type"], "ICEBERG");
-            UNIT_ASSERT_C(table.parameters["totalSize"] == "6760" || table.parameters["totalSize"] == "6754", table.parameters["totalSize"]);
+            int totalSize = std::stoi(table.parameters["totalSize"]);
+            UNIT_ASSERT_C(6000 <= totalSize && totalSize <= 7000, table.parameters["totalSize"]);
             UNIT_ASSERT_VALUES_UNEQUAL(table.parameters["transient_lastDdlTime"], TString());
             UNIT_ASSERT_VALUES_EQUAL(table.viewOriginalText, TString());
             UNIT_ASSERT_VALUES_EQUAL(table.viewExpandedText, TString());

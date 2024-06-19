@@ -667,16 +667,19 @@ namespace NTable {
                     lay->AddHistoricIndexes(page);
                 }
 
-                for (bool history : {false, true}) {
-                    for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
-                        auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
-                        m->SetRootPageId(meta.PageId);
-                        m->SetLevelCount(meta.LevelCount);
-                        m->SetIndexSize(meta.IndexSize);
-                        m->SetDataSize(meta.DataSize);
-                        m->SetGroupDataSize(meta.GroupDataSize);
-                        m->SetRowCount(meta.RowCount);
-                        m->SetErasedRowCount(meta.ErasedRowCount);
+                if (WriteBTreeIndex) {
+                    lay->SetBTreeIndexesFormatVersion(NPage::TBtreeIndexNode::FormatVersion);
+                    for (bool history : {false, true}) {
+                        for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
+                            auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
+                            m->SetRootPageId(meta.GetPageId());
+                            m->SetLevelCount(meta.LevelCount);
+                            m->SetIndexSize(meta.IndexSize);
+                            m->SetDataSize(meta.GetDataSize());
+                            m->SetGroupDataSize(meta.GetGroupDataSize());
+                            m->SetRowCount(meta.GetRowCount());
+                            m->SetErasedRowCount(meta.GetErasedRowCount());
+                        }
                     }
                 }
 

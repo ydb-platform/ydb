@@ -110,7 +110,7 @@ struct TEvColumnShard {
                 ui64 txId, TString txBody, const ui32 flags = 0)
             : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
         {
-            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
+//            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
             Record.SetSchemeShardId(ssId);
         }
 

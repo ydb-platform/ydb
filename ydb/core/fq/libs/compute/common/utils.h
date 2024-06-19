@@ -73,7 +73,7 @@ public:
         std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode = std::nullopt
     );
     Fq::Private::PingTaskRequest Build(const Ydb::TableStats::QueryStats& queryStats);
-    Fq::Private::PingTaskRequest Build(const TString& queryPlan, const TString& queryAst);
+    Fq::Private::PingTaskRequest Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs);
     NYql::TIssues Issues;
     double CpuUsage = 0.0;
     TPublicStat PublicStat;

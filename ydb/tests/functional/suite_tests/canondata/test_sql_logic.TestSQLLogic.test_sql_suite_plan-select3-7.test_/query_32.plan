@@ -56,6 +56,7 @@
                                                     "d (-\u221e, +\u221e)",
                                                     "e (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "sqllogictest_select3-7.test_plan/t1"
                                             }
                                         ],

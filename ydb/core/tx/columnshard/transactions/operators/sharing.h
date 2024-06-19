@@ -12,6 +12,7 @@ private:
 
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::NDataSharing::TDestinationSession> SharingTask;
+    bool SessionExistsFlag = false;
     using TProposeResult = TTxController::TProposeResult;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxPropose;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
@@ -25,9 +26,14 @@ private:
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
     virtual bool DoIsAsync() const override {
-        return true;
+        AFL_VERIFY(SharingTask);
+        return !SharingTask->IsFinished();
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+    virtual TString DoDebugString() const override {
+        return "SHARING";
+    }
+
 public:
     using TBase::TBase;
     virtual void RegisterSubscriber(const TActorId& actorId) override {

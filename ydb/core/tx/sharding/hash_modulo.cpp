@@ -64,6 +64,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 auto& transfer = *alter.MutableTransfer()->AddTransfers();
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(i);
+                transfer.SetSessionId("SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
                 result.emplace_back(alter);
             }
             {
@@ -85,6 +86,12 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
 
 NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
     AFL_VERIFY(!!SpecialShardingInfo);
+    for (auto&& i : proto.GetDeleteShardIds()) {
+        if (!DeleteShardInfo(i)) {
+            return TConclusionStatus::Fail("no shard with same id on delete modulo interval");
+        }
+    }
+
     if (!proto.HasModulo()) {
         return TConclusionStatus::Success();
     }
@@ -161,20 +168,20 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
         return TConclusionStatus::Fail("can div 2 only for reduce shards count");
     }
     if (!!SpecialShardingInfo) {
-        return TConclusionStatus::Fail("not unified shards distribution for consistency intervals modification");
+        return TConclusionStatus::Fail("not unified shards distribution for modulo");
     }
     const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         ui32 idx = 0;
         for (auto&& i : newTabletIds) {
-            const ui64 from1 = GetOrderedShardIds()[2 * idx];
-            const ui64 from2 = GetOrderedShardIds()[2 * idx + 1];
+            const ui64 from1 = GetOrderedShardIds()[idx];
+            const ui64 from2 = GetOrderedShardIds()[idx + newTabletIds.size()];
             auto source1 = shardingInfo.GetShardingTabletVerified(from1);
             auto source2 = shardingInfo.GetShardingTabletVerified(from2);
             AFL_VERIFY(source1.GetAppropriateMods().size() == 1);
             AFL_VERIFY(source2.GetAppropriateMods().size() == 1);
-            AFL_VERIFY(*source1.GetAppropriateMods().begin() + 1 == *source2.GetAppropriateMods().begin());
+            AFL_VERIFY(*source1.GetAppropriateMods().begin() + newTabletIds.size() == *source2.GetAppropriateMods().begin());
             {
                 NKikimrSchemeOp::TAlterShards alter;
                 TSpecificShardingInfo::TModuloShardingTablet newInterval(i, { *source1.GetAppropriateMods().begin() ,*source2.GetAppropriateMods().begin() });
@@ -188,6 +195,8 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
+                transfer.SetSessionId("MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
+                transfer.SetMoving(true);
                 result.emplace_back(alter);
             }
             {

@@ -494,9 +494,28 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionPlannerConstructorContainer {
+    optional string ClassName = 1;
+
+    message TLOptimizer {
+
+    }
+
+    message TSOptimizer {
+        optional string LogicName = 1;
+        optional uint32 FreshnessCheckDurationSeconds = 2 [default = 300];
+    }
+
+    oneof Implementation {
+        TLOptimizer LBuckets = 20;
+        TSOptimizer SBuckets = 21;
+    }
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
+    optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
 }
 
 message TColumnTableSchema {
@@ -526,6 +545,7 @@ message TColumnTableSchema {
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2;
+    optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
 }
 
 message TAlterColumnTableSchema {
@@ -751,9 +771,7 @@ message TColumnTableDescription {
 
     // Table may be created using presets specific to the olap store.
     optional uint32 SchemaPresetId = 4;
-    optional uint32 RESERVED_TtlSettingsPresetId = 5;
     optional string SchemaPresetName = 6;
-    optional string RESERVED_TtlSettingsPresetName = 7;
 
     // Associated olap store id, initialized by schemeshard
     // May be missing for tables that are not part of an ColumnStore
@@ -928,9 +946,12 @@ message TAlterContinuousBackup {
     message TStop {
     }
 
+    message TTakeIncrementalBackup {
+    }
+
     oneof Action {
         TStop Stop = 2;
-        // TODO(innokentii): something like TakeIncremental
+        TTakeIncrementalBackup TakeIncrementalBackup = 3;
     }
 }
 
@@ -1559,6 +1580,7 @@ message TApplyIf {
     optional uint64 PathId = 1;
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
+    optional bool CheckEntityVersion = 4 [default = false];
 }
 
 message TUpgradeSubDomain {
@@ -1626,6 +1648,8 @@ message TShardingModification {
 message TShardingTransfer {
     optional uint64 DestinationTabletId = 1;
     repeated uint64 SourceTabletIds = 2;
+    optional bool Moving = 3 [default = false];
+    optional string SessionId = 4;
 }
 
 message TShardingTransfers {

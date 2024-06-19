@@ -35,8 +35,7 @@ void FromProto(
     TSortColumns* sortColumns,
     const NProto::TSortColumnsExt& protoSortColumns);
 
-void FormatValue(TStringBuilderBase* builder, const TSortColumns& key, TStringBuf format);
-TString ToString(const TSortColumns& key);
+void FormatValue(TStringBuilderBase* builder, const TSortColumns& key, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

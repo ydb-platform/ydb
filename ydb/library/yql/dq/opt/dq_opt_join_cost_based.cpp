@@ -197,13 +197,12 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = std::make_shared<TOptimizerStatistics>(
-        ComputeJoinStats(
+        ctx.ComputeJoinStats(
             *join->LeftArg->Stats, 
             *join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
-            EJoinAlgoType::GraceJoin, 
-            ctx
+            EJoinAlgoType::GraceJoin
         )
     );
 }
@@ -304,6 +303,13 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     }
 
     joinTree = opt.JoinSearch(joinTree);
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Optimizied join tree:\n";
+        joinTree->Print(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);

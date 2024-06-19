@@ -494,6 +494,22 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
             out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return out.Str();
         }
+        case NUdf::EDataSlot::TzDate32: {
+            TStringStream out;
+            out << value.Get<i32>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+
         case NUdf::EDataSlot::JsonDocument: {
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
             return ToString(TStringBuf(value.AsStringRef()));

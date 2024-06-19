@@ -68,17 +68,23 @@ Y_UNIT_TEST_SUITE(TPyCastTest) {
             yexception, "Cast error object '3 <dot> 1415926' to Float");
     }
 
+#if PY_MAJOR_VERSION >= 3
+#   define RETVAL "-1"
+#else
+#   define RETVAL "-18446744073709551616L"
+#endif
+
     Y_UNIT_TEST(BadFromPythonLong) {
         TPythonTestEngine engine;
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             engine.ToMiniKQL<ui64>(
                 "def Test():\n"
-                "    return -1",
+                "    return " RETVAL,
                 [](const NUdf::TUnboxedValuePod& value) {
                     Y_UNUSED(value);
                     Y_UNREACHABLE();
                 }),
-            yexception, "Cast error object -1 to Long");
+            yexception, "Cast error object " RETVAL " to Long");
     }
 
 }

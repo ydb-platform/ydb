@@ -309,7 +309,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 3U, ctx)) {
+        if (!EnsureMinArgsCount(*input, 4U, ctx)) {
             return TStatus::Error;
         }
 
@@ -327,6 +327,10 @@ public:
             return TStatus::Error;
         }
 
+        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_Path), ctx)) {
+            return TStatus::Error;
+        }
+
         const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
@@ -337,7 +341,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
 
@@ -353,6 +357,10 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_RowsLimitHint), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Path), ctx)) {
             return TStatus::Error;
         }
 
@@ -407,7 +415,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -416,6 +424,10 @@ public:
         }
 
         if (!EnsureSpecificDataSource(*input->Child(TS3ReadObject::idx_DataSource), S3ProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(TS3ReadObject::idx_Path), ctx)) {
             return TStatus::Error;
         }
 
@@ -707,6 +719,14 @@ public:
                     return true;
                 }
 
+                if (name == "constraints"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "constraints"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -721,7 +741,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
+                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
                                         "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {

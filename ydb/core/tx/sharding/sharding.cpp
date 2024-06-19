@@ -144,6 +144,20 @@ NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeO
         shardInfo->SetIsOpenForRead(true);
     }
     {
+        std::set<ui64> deleteIds;
+        for (auto&& i : proto.GetDeleteShardIds()) {
+            if (!Shards.erase(i)) {
+                return TConclusionStatus::Fail("shard id from DeleteShardIds absent with current full shardIds list");
+            }
+            deleteIds.emplace(i);
+        }
+        const auto pred = [&deleteIds](const ui64 tabletId) {
+            return deleteIds.contains(tabletId);
+        };
+        OrderedShardIds.erase(std::remove_if(OrderedShardIds.begin(), OrderedShardIds.end(), pred), OrderedShardIds.end());
+    }
+    
+    {
         auto conclusion = DoApplyModification(proto);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -227,7 +241,7 @@ NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     return result;
 }
 
-NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch) {
     THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {
@@ -236,9 +250,14 @@ NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatc
         chunks = NArrow::ShardingSplit(batch, sharding);
     }
     AFL_VERIFY(chunks.size() == sharding.size());
+    return chunks;
+}
+
+TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
+    auto splitted = SplitByShardsToArrowBatches(batch);
     NArrow::TBatchSplitttingContext context(chunkBytesLimit);
     THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
-    for (auto&& [tabletId, chunk]: chunks) {
+    for (auto&& [tabletId, chunk] : splitted) {
         if (!chunk) {
             continue;
         }

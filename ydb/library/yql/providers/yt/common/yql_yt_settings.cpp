@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -148,7 +149,11 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseTmpfs);
     REGISTER_SETTING(*this, SuspendIfAccountLimitExceeded);
     REGISTER_SETTING(*this, ExtraTmpfsSize);
-    REGISTER_SETTING(*this, OptimizeFor).Parser([](const TString& v) { return FromString<NYT::EOptimizeForAttr>(v); });
+    REGISTER_SETTING(*this, OptimizeFor)
+        .Parser([](const TString& v) {
+            return FromString<NYT::EOptimizeForAttr>(v);
+        });
+
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
             if (!ValidClusters.contains(value)) {
@@ -460,6 +465,17 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
+    REGISTER_SETTING(*this, BlockReaderSupportedTypes);
+    REGISTER_SETTING(*this, BlockReaderSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
     REGISTER_SETTING(*this, MaxCpuUsageToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, ApplyStoredConstraints)
@@ -477,6 +493,12 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, ViewIsolation);
     REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
+    REGISTER_SETTING(*this, ColumnGroupMode)
+        .Parser([](const TString& v) {
+            return FromString<EColumnGroupMode>(v);
+        });
+    REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
+    REGISTER_SETTING(*this, MaxColumnGroups);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -49,7 +49,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
 
 TEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
     if (!TxResults.empty() && Y_LIKELY(AllocState)) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             TxResults.crop(0);
         }
     }

@@ -13,7 +13,7 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
     for (auto&& i : sources) {
         auto fetchingPlan = GetColumnsFetchingPlan(i.second);
         AFL_VERIFY(i.second->GetIntervalsCount());
-        const ui64 sourceMemory = fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount();
+        const ui64 sourceMemory = std::max<ui64>(1, fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount());
         if (!i.second->IsSourceInMemory()) {
             hasSequentialReadSources = true;
         }
@@ -55,6 +55,38 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     }
 }
 
+class TColumnsAccumulator {
+private:
+    TColumnsSet FetchingReadyColumns;
+    TColumnsSet AssemblerReadyColumns;
+
+public:
+    bool AddFetchingStep(TFetchingScript& script, const TColumnsSet& columns) {
+        auto actualColumns = columns - FetchingReadyColumns;
+        FetchingReadyColumns = FetchingReadyColumns + columns;
+        if (!actualColumns.IsEmpty()) {
+            auto actualSet = std::make_shared<TColumnsSet>(actualColumns);
+            script.AddStep(std::make_shared<TColumnBlobsFetchingStep>(actualSet));
+            return true;
+        }
+        return false;
+    }
+    bool AddAssembleStep(TFetchingScript& script, const TColumnsSet& columns, const TString& purposeId, const bool optional) {
+        auto actualColumns = columns - AssemblerReadyColumns;
+        AssemblerReadyColumns = AssemblerReadyColumns + columns;
+        if (!actualColumns.IsEmpty()) {
+            auto actualSet = std::make_shared<TColumnsSet>(actualColumns);
+            if (optional) {
+                script.AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
+            } else {
+                script.AddStep(std::make_shared<TAssemblerStep>(actualSet, purposeId));
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource, const bool partialUsageByPredicateExt, const bool useIndexes,
                                                                                const bool needFilterSharding) const {
     std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
@@ -64,10 +96,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         result->AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
     bool hasFilterSharding = false;
+    TColumnsAccumulator acc;
     if (needFilterSharding && !ShardingColumns->IsEmpty()) {
         hasFilterSharding = true;
-        result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(ShardingColumns));
-        result->AddStep(std::make_shared<TAssemblerStep>(ShardingColumns, "SPEC_SHARDING"));
+        acc.AddFetchingStep(*result, *ShardingColumns);
+        acc.AddAssembleStep(*result, *ShardingColumns, "SPEC_SHARDING", false);
         result->AddStep(std::make_shared<TShardingFilter>());
     }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
@@ -84,15 +117,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             }
         }
         if (columnsFetch.GetColumnsCount() || hasFilterSharding) {
-            result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));
+            acc.AddFetchingStep(*result, columnsFetch);
             if (!exclusiveSource) {
-                result->AddStep(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns), "LAST"));
-                auto additional = columnsFetch - (*PKColumns + *SpecColumns);
-                if (!additional.IsEmpty()) {
-                    result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch - (*PKColumns + *SpecColumns)), "LAST"));
-                }
+                acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
+                acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
             } else {
-                result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch), "LAST"));
+                acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
             }
         } else {
             return nullptr;
@@ -106,78 +136,51 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             columnsFetch = columnsFetch + *PredicateColumns;
         }
+
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));
+        acc.AddFetchingStep(*result, columnsFetch);
 
         if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
-            result->AddStep(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
+            acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
             result->AddStep(std::make_shared<TSnapshotFilter>());
-            columnsFetch = columnsFetch - *SpecColumns;
         }
         if (partialUsageByPredicate) {
-            result->AddStep(std::make_shared<TAssemblerStep>(PredicateColumns, "PREDICATE"));
+            acc.AddAssembleStep(*result, *PredicateColumns, "PREDICATE", false);
             result->AddStep(std::make_shared<TPredicateFilter>());
-            columnsFetch = columnsFetch - *PredicateColumns;
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
             if (!i->IsFilterOnly()) {
                 break;
             }
             TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
-            {
-                auto intersectionIds = columnsFetch.Intersect(stepColumnIds);
-                if (intersectionIds.size()) {
-                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
-                    result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(intersection), "EF"));
-                    columnsFetch = columnsFetch - intersection;
-                }
-            }
+            acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
         }
-        AFL_VERIFY(columnsFetch.IsEmpty());
-        TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *ShardingColumns;
-        if (partialUsageByPredicate) {
-            columnsAdditionalFetch = columnsAdditionalFetch - *PredicateColumns;
-        }
-        if (columnsAdditionalFetch.GetColumnsCount()) {
-            result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
-        }
+        acc.AddFetchingStep(*result, *FFColumns);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     } else {
         result->SetBranchName("merge");
         TColumnsSet columnsFetch = *MergeColumns + *EFColumns - *ShardingColumns;
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));
-        result->AddStep(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
+        acc.AddFetchingStep(*result, columnsFetch);
+        acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
         if (needSnapshots) {
             result->AddStep(std::make_shared<TSnapshotFilter>());
         }
-        result->AddStep(std::make_shared<TAssemblerStep>(PKColumns, "PK"));
+        acc.AddAssembleStep(*result, *PKColumns, "PK", false);
         if (partialUsageByPredicate) {
             result->AddStep(std::make_shared<TPredicateFilter>());
         }
-        TColumnsSet columnsFetchEF = columnsFetch - *SpecColumns - *PKColumns;
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
             if (!i->IsFilterOnly()) {
                 break;
             }
             TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
-            {
-                auto intersectionIds = columnsFetchEF.Intersect(stepColumnIds);
-                if (intersectionIds.size()) {
-                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
-                    result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(intersection), "EF"));
-                    columnsFetchEF = columnsFetchEF - intersection;
-                }
-            }
+            acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
         }
-        AFL_VERIFY(columnsFetchEF.IsEmpty());
-        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns - *ShardingColumns;
-        if (columnsAdditionalFetch.GetColumnsCount()) {
-            result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
-        }
+        acc.AddFetchingStep(*result, *FFColumns);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     }
     return result;
 }

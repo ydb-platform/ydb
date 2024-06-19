@@ -3532,27 +3532,50 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus UntagWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureTaggedType(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTaggedExprType* taggedType;
+        bool isOptional;
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureTaggedType(input->Head().Pos(), *itemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            taggedType = itemType->Cast<TTaggedExprType>();
+            isOptional = true;
+        } else {
+            if (!EnsureTaggedType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            taggedType = input->Head().GetTypeAnn()->Cast<TTaggedExprType>();
+            isOptional = false;
         }
 
         if (!EnsureAtom(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto tagType = input->Head().GetTypeAnn()->Cast<TTaggedExprType>();
-        if (tagType->GetTag() != input->Tail().Content()) {
+        if (taggedType->GetTag() != input->Tail().Content()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() <<
-                "Expected tag: " << tagType->GetTag() << ", but got: " << input->Tail().Content()));
+                "Expected tag: " << taggedType->GetTag() << ", but got: " << input->Tail().Content()));
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(tagType->GetBaseType());
+        if (isOptional) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(taggedType->GetBaseType()));
+        } else {
+            input->SetTypeAnn(taggedType->GetBaseType());
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -4370,6 +4393,16 @@ namespace NTypeAnnImpl {
             << *sourceType << " into " << *targetType));
 
         return IGraphTransformer::TStatus::Error;
+    }
+
+    IGraphTransformer::TStatus VersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NKikimr::NUdf::EDataSlot::String));
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus WidenIntegralWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -12292,6 +12325,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RowNumber"] = &WinRowNumberWrapper;
         Functions["Rank"] = &WinRankWrapper;
         Functions["DenseRank"] = &WinRankWrapper;
+        Functions["PercentRank"] = &WinRankWrapper;
+        Functions["CumeDist"] = &WinCumeDistWrapper;
+        Functions["NTile"] = &WinNTileWrapper;
         Functions["Ascending"] = &PresortWrapper;
         Functions["Descending"] = &PresortWrapper;
         Functions["IsKeySwitch"] = &IsKeySwitchWrapper;
@@ -12359,6 +12395,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["PgIterate"] = &PgIterateWrapper;
+        Functions["PgIterateAll"] = &PgIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;
@@ -12471,6 +12509,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListFlatten"] = &ListFlattenWrapper;
         Functions["ListUniq"] = &ListUniqWrapper;
         Functions["ListUniqStable"] = &ListUniqStableWrapper;
+        Functions["ListTop"] = &ListTopSortWrapper;
+        Functions["ListTopAsc"] = &ListTopSortWrapper;
+        Functions["ListTopDesc"] = &ListTopSortWrapper;
+        Functions["ListTopSort"] = &ListTopSortWrapper;
+        Functions["ListTopSortAsc"] = &ListTopSortWrapper;
+        Functions["ListTopSortDesc"] = &ListTopSortWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;
@@ -12613,6 +12657,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
+        ExtFunctions["Version"] = &VersionWrapper;
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;
@@ -12623,6 +12668,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;

@@ -10,7 +10,9 @@ namespace NYT::NRpc::NBus {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Creates a channel implemented via Bus.
-IChannelPtr CreateBusChannel(NYT::NBus::IBusClientPtr client);
+IChannelPtr CreateBusChannel(
+    NYT::NBus::IBusClientPtr client,
+    IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
 //! Creates a factory for creating TCP Bus channels.
 IChannelFactoryPtr CreateTcpBusChannelFactory(

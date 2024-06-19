@@ -23,7 +23,7 @@ namespace NKqp {
 namespace {
 
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
-NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
+NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
@@ -160,8 +160,8 @@ private:
     };
 
 private:
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) final {}
-    void LoadState(const NYql::NDqProto::TSourceState&) final {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
+    void LoadState(const NYql::NDq::TSourceState&) final {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {

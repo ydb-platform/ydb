@@ -475,7 +475,7 @@ private:
     public:
         TPeerPoller(TImpl* owner, TString peerAddress)
             : Owner_(owner)
-            , Logger(owner->Logger.WithTag("Address: %v", peerAddress))
+            , Logger(owner->Logger().WithTag("Address: %v", peerAddress))
             , PeerAddress_(std::move(peerAddress))
         { }
 

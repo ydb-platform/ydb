@@ -22,6 +22,7 @@ JOIN_SRCS(
     datetime/base.cpp
     datetime/constants.cpp
     datetime/cputimer.cpp
+    datetime/process_uptime.cpp
     datetime/systime.cpp
     datetime/uptime.cpp
 )

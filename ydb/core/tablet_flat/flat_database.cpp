@@ -15,10 +15,6 @@
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 
-
-#define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
-
-
 namespace NKikimr {
 namespace NTable {
 
@@ -88,8 +84,6 @@ TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags,
         Y_ABORT("Don't know how to convert ELookup to ESeek mode");
     };
 
-    IteratedTables.insert(table);
-
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
 }
 
@@ -99,8 +93,6 @@ TAutoPtr<TTableIter> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef 
         const ITransactionObserverPtr& observer) const noexcept
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
-
-    IteratedTables.insert(table);
 
     auto iter = Require(table)->Iterate(key, tags, Env, ESeek::Exact, snapshot, visible, observer);
 
@@ -157,8 +149,6 @@ TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range,
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
-    IteratedTables.insert(table);
-
     ESeek seek = !range.MinKey || range.MinInclusive ? ESeek::Lower : ESeek::Upper;
 
     auto iter = Require(table)->Iterate(range.MinKey, tags, Env, seek, snapshot, visible, observer);
@@ -185,8 +175,6 @@ TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKe
 
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
-
-    IteratedTables.insert(table);
 
     ESeek seek = !range.MaxKey || range.MaxInclusive ? ESeek::Lower : ESeek::Upper;
 
@@ -672,18 +660,6 @@ size_t TDatabase::GetCommitRedoBytes() const
     return Redo->Bytes();
 }
 
-bool TDatabase::ValidateCommit(TString &err)
-{
-    if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {
-        err = TStringBuilder()
-            << "Redo commit of " << Redo->Bytes()
-            << " bytes is more than the allowed limit";
-        return false;
-    }
-
-    return true;
-}
-
 bool TDatabase::HasChanges() const
 {
     Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
@@ -714,18 +690,6 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     OnPersistent_.clear();
 
     TempIterators.clear();
-
-    if (IteratedTables) {
-        for (ui32 table : IteratedTables) {
-            if (auto& wrap = DatabaseImpl->Get(table, false)) {
-                if (auto* cache = wrap->GetErasedKeysCache()) {
-                    cache->CollectGarbage();
-                }
-            }
-        }
-
-        IteratedTables.clear();
-    }
 
     if (commit && HasChanges()) {
         Y_ABORT_UNLESS(stamp >= Change->Stamp);
@@ -809,6 +773,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     } else {
         DatabaseImpl->RollbackTransaction();
     }
+
+    DatabaseImpl->RunGC();
 
     Redo = nullptr;
     Annex = nullptr;

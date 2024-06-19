@@ -29,8 +29,8 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
-NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePeNodeCacheID(true);
+NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
+NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePerNodeCacheID(true);
 
 }
 
@@ -245,8 +245,11 @@ public:
                     sb << ", ";
                 }
             }
-            sb << "], "
-                << ", RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
+            sb << "], Points: [";
+            for(size_t i = 0; i < Points.size(); ++i) {
+                sb << "# " << i << ": " << DebugPrintPoint(keyTypes, Points[i].GetCells(), *AppData()->TypeRegistry);
+            }
+            sb << "], RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
             return sb;
         }
 
@@ -1324,9 +1327,9 @@ public:
     }
 
 
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) override {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) override {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {}
-    void LoadState(const NYql::NDqProto::TSourceState&) override {}
+    void LoadState(const NYql::NDq::TSourceState&) override {}
 
     void PassAway() override {
         Counters->ReadActorsCount->Dec();

@@ -101,6 +101,7 @@ message TReadTableTransaction {
         optional string Name = 2;
         optional uint32 TypeId = 3;
         optional NKikimrProto.TTypeInfo TypeInfo = 4;
+        optional bool NotNull = 5 [default = false]; //If not set datashard will treat not null type as nullable (for compatibility)
     }
 
     optional NKikimrDataEvents.TTableId TableId = 1;
@@ -768,6 +769,7 @@ message TEvGetTableStats {
     optional uint64 DataSizeResolution = 2;
     optional uint64 RowCountResolution = 3;
     optional bool CollectKeySample = 4;
+    optional uint32 HistogramBucketsCount = 5;
 }
 
 message TEvGetTableStatsResult {

@@ -87,4 +87,8 @@ std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::Tx
     return std::make_unique<TTxRemoveSession>(className, identifier, Adapter, Storage);
 }
 
+bool TSessionsManager::HasTask(const TTask& task) const {
+    return !!Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
+}
+
 }

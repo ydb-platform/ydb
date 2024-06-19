@@ -506,6 +506,8 @@ public:
             return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
         case T_AlterSeqStmt:
             return ParseAlterSeqStmt(CAST_NODE(AlterSeqStmt, node)) != nullptr;
+        case T_AlterTableStmt:
+            return ParseAlterTableStmt(CAST_NODE(AlterTableStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -918,7 +920,7 @@ public:
                     }
 
                     AddFrom(*p, fromList);
-                    joinOps.push_back(QL());
+                    joinOps.push_back(QL(QL(QA("push"))));
                 } else {
                     TTraverseNodeStack traverseNodeStack;
                     traverseNodeStack.push({ node, false });
@@ -934,6 +936,7 @@ public:
                             }
                             AddFrom(*p, fromList);
                             traverseNodeStack.pop();
+                            oneJoinGroup.push_back(QL(QA("push")));
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {
@@ -952,18 +955,8 @@ public:
                             }
 
                             if (!top.second) {
-                                if (NodeTag(join->rarg) != T_JoinExpr) {
-                                    traverseNodeStack.push({ join->rarg, false });
-                                }
-                                if (NodeTag(join->larg) != T_JoinExpr) {
-                                    traverseNodeStack.push({ join->larg, false });
-                                }
-                                if (NodeTag(join->rarg) == T_JoinExpr) {
-                                    traverseNodeStack.push({ join->rarg, false });
-                                }
-                                if (NodeTag(join->larg) == T_JoinExpr) {
-                                    traverseNodeStack.push({ join->larg, false });
-                                }
+                                traverseNodeStack.push({ join->rarg, false });
+                                traverseNodeStack.push({ join->larg, false });
                                 top.second = true;
                             } else {
                                 TString op;
@@ -2510,7 +2503,7 @@ public:
 
         setItemOptions.push_back(QL(QA("result"), QVL(CreatePgStarResultItem())));
         setItemOptions.push_back(QL(QA("from"), QVL(fromList.data(), fromList.size())));
-        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL())));
+        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL(QL(QA("push"))))));
 
         NYql::TAstNode* lambda = nullptr;
         if (whereFilter) {
@@ -2880,6 +2873,83 @@ public:
         if (value->for_identity) {
             options.push_back(QL(QA("for_identity")));
         }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
+
+        return State.Statements.back();
+    }
+
+    [[nodiscard]] 
+    TAstNode* ParseAlterTableStmt(const AlterTableStmt* value) {
+        std::vector<TAstNode*> options;
+        TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
+
+        options.push_back(QL(QA("mode"), QA(mode)));
+
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        std::vector<TAstNode*> alterColumns;
+        for (int i = 0; i < ListLength(value->cmds); ++i) {
+            auto rawNode = ListNodeNth(value->cmds, i);
+
+            const auto* cmd = CAST_NODE(AlterTableCmd, rawNode);
+            switch (cmd->subtype) {
+                case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
+                    const auto* def = cmd->def;
+                    const auto* colName = cmd->name;
+                    switch (NodeTag(def)) {
+                        case T_FuncCall: {
+                            const auto* newDefault = CAST_NODE(FuncCall, def);
+                            const auto* funcName = ListNodeNth(newDefault->funcname, 0);
+                            if (NodeTag(funcName) != T_String) {
+                                NodeNotImplemented(newDefault, funcName);
+                                return nullptr;
+                            }
+                            auto strFuncName = StrVal(funcName);
+                            if (strcmp(strFuncName, "nextval") != 0) {
+                                NodeNotImplemented(newDefault, funcName);
+                                return nullptr;
+                            }
+                            const auto* rawArg = ListNodeNth(newDefault->args, 0);
+                            if (NodeTag(rawArg) != T_A_Const) {
+                                NodeNotImplemented(newDefault, rawArg);
+                                return nullptr;
+                            }
+                            const auto* arg = CAST_NODE(A_Const, rawArg);
+                            if (NodeTag(arg->val) != T_String) {
+                                ValueNotImplemented(newDefault, arg->val);
+                                return nullptr;
+                            }
+                            auto seqName = StrVal(arg->val);
+
+                            alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("nextval"), QA(seqName)))));
+                            break;
+                        }
+                        default:
+                            NodeNotImplemented(def);
+                            return nullptr;
+                    }
+			        break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        std::vector<TAstNode*> actions { QL(QA("alterColumns"), QVL(alterColumns.data(), alterColumns.size())) };
+
+        options.push_back(
+            QL(QA("actions"), 
+               QVL(actions.data(), actions.size())
+            )
+        );
 
         State.Statements.push_back(
                 L(A("let"), A("world"),
@@ -4699,18 +4769,21 @@ public:
         }
 
         auto lst = CAST_NODE(List, value->rexpr);
-        TVector<TAstNode*> listItems;
-        listItems.push_back(A("AsList"));
+
+        TVector<TAstNode*> children;
+        children.reserve(2 + ListLength(lst));
+
+        children.push_back(A("PgIn"));
+        children.push_back(lhs);
         for (int item = 0; item < ListLength(lst); ++item) {
             auto cell = ParseExpr(ListNodeNth(lst, item), settings);
             if (!cell) {
                 return nullptr;
             }
-
-            listItems.push_back(cell);
+            children.push_back(cell);
         }
 
-        auto ret = L(A("PgIn"), lhs, VL(listItems.data(), listItems.size()));
+        auto ret = VL(children.data(), children.size());
         if (op[0] == '<') {
             ret = L(A("PgNot"), ret);
         }

@@ -17,8 +17,6 @@ SRCS(
     run.h
     service_initializer.cpp
     service_initializer.h
-    cert_auth_props.h
-    cert_auth_props.cpp
 )
 
 PEERDIR(
@@ -70,7 +68,6 @@ PEERDIR(
     ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
     ydb/core/jaeger_tracing
@@ -112,6 +109,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
+    ydb/core/tx/limiter/service
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
@@ -137,6 +135,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/yql/providers/s3/actors
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -153,8 +152,6 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata/ds_table
     ydb/services/metadata
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ext_index/service
     ydb/services/ext_index/metadata
     ydb/services/monitoring
@@ -162,6 +159,7 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/replication
     ydb/services/ydb
 )
 

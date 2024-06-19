@@ -7,7 +7,6 @@ import base64
 import itertools
 import json
 import logging
-import ntpath
 import optparse
 import os
 import posixpath
@@ -45,6 +44,7 @@ ANDROID_API_DEFAULT = 21
 LINUX_SDK_DEFAULT = "ubuntu-14"
 
 MACOS_VERSION_MIN = "11.0"
+MACOS_VERSION_MIN_AS_INT = "110000"
 IOS_VERSION_MIN = "13.0"
 WINDOWS_VERSION_MIN = WindowsVersion.Windows07
 
@@ -118,7 +118,9 @@ class Platform(object):
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
 
-        self.is_xtensa = self.arch in ('xtensa_hifi5',)
+        self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
+        self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
 
         self.armv7_float_abi = None
         if self.is_armv7:
@@ -223,6 +225,8 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
+            (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
@@ -265,10 +269,7 @@ class Platform(object):
             return os
 
     def exe(self, *paths):
-        if self.is_windows:
-            return ntpath.join(*itertools.chain(paths[:-1], (paths[-1] + '.exe',)))
-        else:
-            return posixpath.join(*paths)
+        return posixpath.join(*paths)
 
     def __str__(self):
         return '{name}-{os}-{arch}'.format(name=self.name, os=self.os, arch=self.arch)
@@ -1031,6 +1032,9 @@ class ToolchainOptions(object):
     def version_at_least(self, *args):
         return args <= tuple(self.compiler_version_list)
 
+    def version_below(self, *args):
+        return args > tuple(self.compiler_version_list)
+
     def version_exactly(self, *args):
         if not args or len(args) > len(self.compiler_version_list):
             return False
@@ -1353,7 +1357,6 @@ class GnuToolchain(Toolchain):
             self.platform_projects.append('build/internal/platform/macos_system_stl')
         if target.is_macos:
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-            self.platform_projects.append('build/internal/platform/macos_system_stl')
 
     def setup_apple_local_sdk(self, target):
         def get_output(*args):
@@ -1492,6 +1495,13 @@ class GnuCompiler(Compiler):
             '-D_THREAD_SAFE', '-D_PTHREADS', '-D_REENTRANT',
             '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS',
         ])
+
+        if self.target.is_macos and self.tc.version_below(17):
+            # OS-versioning macros for Darwin-based OSes were generalized in
+            # https://github.com/llvm/llvm-project/commit/c8e2dd8c6f490b68e41fe663b44535a8a21dfeab
+            #
+            # This PR was released in llvm-17. Provide similar behaviour manually.
+            self.c_defines.append("-D__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__=" + MACOS_VERSION_MIN_AS_INT)
 
         if not self.target.is_android:
             # There is no usable _FILE_OFFSET_BITS=64 support in Androids until API 21. And it's incomplete until at least API 24.
@@ -2337,6 +2347,7 @@ class Cuda(object):
         self.have_cuda = Setting('HAVE_CUDA', auto=self.auto_have_cuda, convert=to_bool)
 
         self.cuda_root = Setting('CUDA_ROOT')
+        self.cuda_target_root = Setting('CUDA_TARGET_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
         self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
@@ -2363,6 +2374,9 @@ class Cuda(object):
             "--expt-relaxed-constexpr",
             # Allow to use newer compilers than CUDA Toolkit officially supports
             "--allow-unsupported-compiler",
+            # Set paths explicitly
+            "--dont-use-profile",
+            "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
         ]
 
         if not self.have_cuda.value:
@@ -2373,6 +2387,13 @@ class Cuda(object):
 
         if self.use_arcadia_cuda.value:
             self.cuda_root.value = '$CUDA_RESOURCE_GLOBAL'
+
+            host, target = self.build.host_target
+
+            if host == target:
+                self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
+            else:
+                self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
 
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
@@ -2394,6 +2415,7 @@ class Cuda(object):
         self.setup_vc_root()
 
         self.cuda_root.emit()
+        self.cuda_target_root.emit()
         self.cuda_version.emit()
         self.cuda_architectures.emit()
         self.use_arcadia_cuda.emit()
@@ -2409,13 +2431,14 @@ class Cuda(object):
         emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
+        emit('NVCC_ENV', format_env({'PATH': '$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin'}))
 
     def print_macros(self):
         mtime = ' '
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER_OLD --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 
@@ -2437,6 +2460,8 @@ class Cuda(object):
                 return False
 
         if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
+            return True
+        elif self.cuda_version.value in ('10.2',) and target.is_linux_armv8:
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))

@@ -3,6 +3,8 @@
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/port.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <util/generic/hash_set.h>
 
 #include <library/cpp/yt/misc/preprocessor.h>
@@ -61,8 +63,15 @@ private:
     void CheckCodesAgainstRanges() const;
 };
 
-TString ToString(const TErrorCodeRegistry::TErrorCodeInfo& errorCodeInfo);
-TString ToString(const TErrorCodeRegistry::TErrorCodeRangeInfo& errorCodeInfo);
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TErrorCodeRegistry::TErrorCodeInfo& errorCodeInfo,
+    TStringBuf spec);
+
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TErrorCodeRegistry::TErrorCodeRangeInfo& errorCodeInfo,
+    TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

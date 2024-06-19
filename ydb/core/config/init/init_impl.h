@@ -489,6 +489,21 @@ struct TCommonAppOptions {
             nmConfig.SetHost(env.HostName());
         }
 
+         // YQ-3253: derive Connector endpoint from YDB's Interconnect Port
+        if (appConfig.GetQueryServiceConfig().HasConnector() && InterconnectPort) {
+            auto& connectorConfig = *appConfig.MutableQueryServiceConfig()->MutableConnector();
+
+            auto offset = connectorConfig.GetInterconnectPortOffset();
+            if (offset) {
+                connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
+
+                // Assign default hostname (connector is usually deployed to the same host as the dynamic node)
+                if (connectorConfig.GetEndpoint().host().Empty()) {
+
+                }
+            }
+        }
+
         if (SuppressVersionCheck) {
             if (appConfig.HasNameserviceConfig()) {
                 appConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);

@@ -303,7 +303,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             scheduled.SetDuration(request.GetDuration());
         scheduled.SetTenantPolicy(request.GetTenantPolicy());
         scheduled.SetAvailabilityMode(request.GetAvailabilityMode());
-        scheduled.SetPriority(request.GetPriority());
+        if (request.HasPriority()) {
+            scheduled.SetPriority(request.GetPriority());
+        }
     }
 
     LOG_INFO_S(ctx, NKikimrServices::CMS,
@@ -1467,7 +1469,7 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
         }
     }
 
-    if (rec.GetPriority() && !EnableCMSRequestPriorities) {
+    if (rec.HasPriority() && !EnableCMSRequestPriorities) {
         if (rec.GetUser() == WALLE_CMS_USER) {
             rec.ClearPriority();
         } else {

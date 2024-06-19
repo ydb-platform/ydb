@@ -135,7 +135,7 @@ public:
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
 
-    static constexpr char ActorName[] = "YQ_ROW_DISPATCHER";
+    static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
 
 private:
 

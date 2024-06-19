@@ -154,9 +154,9 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Coordinator: new leader " << ev->Get()->LeaderActorId);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator: new leader " << ev->Get()->CoordinatorActorId);
 
-    IsLeader = SelfId() == ev->Get()->LeaderActorId;
+    IsLeader = SelfId() == ev->Get()->CoordinatorActorId;
     LOG_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
 }
 

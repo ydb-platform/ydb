@@ -224,7 +224,7 @@ void TLeaderElection::Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev) {
 
 void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: TEvCoordinatorChanged ");
-    Send(CoordinatorId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->LeaderActorId));
+    Send(CoordinatorId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
 }
 
 } // namespace

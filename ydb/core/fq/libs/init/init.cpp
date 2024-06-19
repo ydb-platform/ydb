@@ -201,17 +201,6 @@ void Init(
         connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
     }
 
-    if (protoConfig.GetTokenAccessor().GetEnabled()) {
-        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
-
-        TString caContent;
-        if (const auto& path = tokenAccessorConfig.GetSslCaCert()) {
-            caContent = TUnbufferedFileInput(path).ReadAll();
-        }
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
-    }
-
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {

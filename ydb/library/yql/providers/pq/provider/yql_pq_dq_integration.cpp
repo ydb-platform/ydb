@@ -234,7 +234,7 @@ public:
                 }
 
                 protoSettings.PackFrom(srcDesc);
-                sourceType = useRowDispatcher ? "PqSource" : "PqRdSource";
+                sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
               //  sourceType = "PqSource";
             }
         }

@@ -150,7 +150,7 @@ public:
         const TString& token,
         bool addBearerToToken);
 
-    void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
@@ -160,7 +160,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
-        hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherResult, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
         
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -217,8 +217,6 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Token(token)
         , AddBearerToToken(addBearerToToken)
 {
-    std::cerr << "TDqPqRdReadActor::TDqPqRdReadActor " << std::this_thread::get_id() << std::endl;
-
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
     for (const auto& fieldName : SourceParams.GetMetadataFields()) {
@@ -438,8 +436,8 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     return res;
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherResult::TPtr &ev) {
-    SRC_LOG_D("TEvRowDispatcherResult = " << ev->Get()->CoordinatorActorId);
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {
+    SRC_LOG_D("TEvCoordinatorChanged = " << ev->Get()->CoordinatorActorId);
 
     if (CoordinatorActorId
         && CoordinatorActorId != ev->Get()->CoordinatorActorId)  
@@ -515,12 +513,8 @@ std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TStrin
     i64 usedSpace = 0;
     NUdf::TUnboxedValuePod item;
     if (MetadataFields.empty()) {
-        std::cerr << "CreateItem size " << data.Size() << std::endl;
-
         item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
         usedSpace += data.Size();
-            std::cerr << "CreateItem end" << std::this_thread::get_id() << std::endl;
-
     } else {
   /*      NUdf::TUnboxedValue* itemPtr;
         item = HolderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
@@ -561,8 +555,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
 
-    std::cerr << "new TDqPqRdReadActor" << std::endl;
-
     TDqPqRdReadActor* actor = new TDqPqRdReadActor(
         inputIndex,
         statsLevel,
@@ -585,7 +577,7 @@ void RegisterDqPqRdReadActorFactory(
     TDqAsyncIoFactory& factory,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
         [credentialsFactory = std::move(credentialsFactory), credentialsProviderFactory = std::move(credentialsProviderFactory)](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)

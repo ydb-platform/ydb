@@ -30,10 +30,10 @@ struct TEvRowDispatcher {
     };
 
     struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCoordinatorChanged> {
-        TEvCoordinatorChanged(NActors::TActorId leaderActorId)
-            : LeaderActorId(leaderActorId) {
+        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId)
+            : CoordinatorActorId(coordinatorActorId) {
         }
-        NActors::TActorId LeaderActorId;
+        NActors::TActorId CoordinatorActorId;
     };
 
     // struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
@@ -51,12 +51,12 @@ struct TEvRowDispatcher {
 
     struct TEvRowDispatcherRequest : public NActors::TEventLocal<TEvRowDispatcherRequest, EEv::EvRowDispatcherRequest> {};
 
-    struct TEvRowDispatcherResult : public NActors::TEventLocal<TEvRowDispatcherResult, EEv::EvRowDispatcherResult> {
-        TEvRowDispatcherResult(TMaybe<NActors::TActorId> coordinatorActorId)
-            : CoordinatorActorId(coordinatorActorId) {}
+    // struct TEvRowDispatcherResult : public NActors::TEventLocal<TEvRowDispatcherResult, EEv::EvRowDispatcherResult> {
+    //     TEvRowDispatcherResult(TMaybe<NActors::TActorId> coordinatorActorId)
+    //         : CoordinatorActorId(coordinatorActorId) {}
 
-        TMaybe<NActors::TActorId> CoordinatorActorId;
-    };
+    //     TMaybe<NActors::TActorId> CoordinatorActorId;
+    // };
 
     // Read actor <-> coordinator : get row_dispatcher actorId (which is responsible for processing) by topic/partition.
 

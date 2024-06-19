@@ -98,12 +98,12 @@ TRowDispatcher::TRowDispatcher(
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
-    , LogPrefix("TRowDispatcher: ")  {
+    , LogPrefix("RowDispatcher: ")  {
 }
 
 void TRowDispatcher::Bootstrap() {
     Become(&TRowDispatcher::StateFunc);
-    LOG_ROW_DISPATCHER_DEBUG("RD: Successfully bootstrapped row dispatcher, id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId());
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
@@ -113,42 +113,48 @@ void TRowDispatcher::Bootstrap() {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: Coordinator changed, new leader " << ev->Get()->LeaderActorId);
+    LOG_ROW_DISPATCHER_DEBUG("Coordinator changed, new leader " << ev->Get()->CoordinatorActorId);
 
-    LeaderActorId = ev->Get()->LeaderActorId;
-    Send(*LeaderActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    CoordinatorActorId = ev->Get()->CoordinatorActorId;
+    if (!CoordinatorActorId) {
+
+    }
+    Send(CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     for (auto actorId : CoordinatorChangedSubscribers) {
-        Send(actorId, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(*LeaderActorId)); // TODO FlagTrackDelivery
+        Send(
+            actorId,
+            new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 }
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: EvNodeConnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
 }
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvNodeDisconnected " << ev->Get()->NodeId);
+    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, ev: " << ev->Get()->ToString());
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, Reason: " << ev->Get()->Reason);
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvUndelivered, Data: " << ev->Get()->Data);
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Reason: " << ev->Get()->Reason);
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, Data: " << ev->Get()->Data);
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvWakeup, send start session to " << *LeaderActorId);
+    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup, send start session to " << *LeaderActorId);
     Send(*LeaderActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: NActors::TEvents::TEvPong ");
+    LOG_ROW_DISPATCHER_DEBUG("NActors::TEvents::TEvPong ");
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("RD: TEvRowDispatcherRequest ");
-    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvRowDispatcherResult(LeaderActorId));
+    LOG_ROW_DISPATCHER_DEBUG("TEvRowDispatcherRequest ");
+    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     CoordinatorChangedSubscribers.insert(ev->Sender);
 }
 
@@ -159,7 +165,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
-        LOG_ROW_DISPATCHER_DEBUG("RD: readOffset " << readOffset);
+        LOG_ROW_DISPATCHER_DEBUG("readOffset " << readOffset);
     }
 
 

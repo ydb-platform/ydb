@@ -383,7 +383,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
 
         i32 priority = opts.priority();
         if (priority != 0) {
-            cmsRequest.SetPriority(opts.priority());
+            cmsRequest.SetPriority(priority);
         }
 
         for (const auto& group : request.action_groups()) {

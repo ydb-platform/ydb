@@ -508,6 +508,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
         //sessionInfo.Data.push_back(blob);
     }
     sessionInfo.LastOffset = ev->Get()->Record.GetLastOffset();
+
+    Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
     i64 usedSpace = 0;

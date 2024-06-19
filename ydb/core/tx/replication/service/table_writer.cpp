@@ -117,7 +117,11 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason())
                 << ", error# " << record.GetErrorDescription());
-            return Leave(IsHardError(record.GetReason()));
+            if (IsHardError(record.GetReason())) {
+                return Leave(true);
+            } else {
+                return DelayedLeave();
+            }
         }
     }
 
@@ -134,8 +138,13 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         if (TabletId == ev->Get()->TabletId && ev->Cookie == SubscribeCookie) {
-            Leave();
+            DelayedLeave();
         }
+    }
+
+    void DelayedLeave() {
+        static constexpr TDuration delay = TDuration::MilliSeconds(50);
+        this->Schedule(delay, new TEvents::TEvWakeup());
     }
 
     void Leave(bool hardError = false) {
@@ -177,6 +186,7 @@ public:
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            sFunc(TEvents::TEvWakeup, Leave);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

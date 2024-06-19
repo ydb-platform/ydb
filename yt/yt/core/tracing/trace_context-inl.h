@@ -194,14 +194,13 @@ Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContex
 {
     if (Active_) {
         OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
-        OldLocation_ = NConcurrency::SwitchPropagatingStorageModifyLocation(location);
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
     }
 }
 
 Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other)
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
-    , OldLocation_(other.OldLocation_)
 {
     other.Active_ = false;
 }
@@ -220,7 +219,7 @@ Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
-        NConcurrency::SwitchPropagatingStorageModifyLocation(OldLocation_);
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
         Active_ = false;
     }
 }
@@ -235,13 +234,13 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
     , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
-    , OldLocation_(NConcurrency::SwitchPropagatingStorageModifyLocation(location))
-{ }
+{
+    NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
+}
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
-    , OldLocation_(other.OldLocation_)
 {
     other.Active_ = false;
 }
@@ -260,7 +259,7 @@ Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
-        NConcurrency::SwitchPropagatingStorageModifyLocation(OldLocation_);
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
         Active_ = false;
     }
 }

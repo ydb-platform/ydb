@@ -5,6 +5,7 @@ SRCS(
     events.cpp
     query.cpp
     script_executions.cpp
+    workload_service.cpp
 )
 
 PEERDIR(

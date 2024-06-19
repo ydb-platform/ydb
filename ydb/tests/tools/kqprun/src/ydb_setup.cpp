@@ -322,6 +322,7 @@ private:
         request->SetAction(action);
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(Settings_.DomainName);
+        request->SetPoolId(Settings_.DefaultPoolId);
     }
 
     void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {

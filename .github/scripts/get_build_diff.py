@@ -77,7 +77,7 @@ def main():
             f"||{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
             f"|:--- | ---: | ---: | ---: | ---: |\n"
             f"|ydbd build|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
-            f"|ydbd stripped build|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n"
+            f"|ydbd stripped build|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
             "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n"
 
         )

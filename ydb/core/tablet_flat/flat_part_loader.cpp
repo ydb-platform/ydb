@@ -153,16 +153,38 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ABORT_UNLESS(Packs && Packs.front());
 
-    TVector<TPageId> load;
-    for (auto page: { SchemeId, GlobsId,
-                        SmallId, LargeId, ByKeyId,
-                        GarbageStatsId, TxIdStatsId }) {
-        if (page != Max<TPageId>() && !Packs[0]->Lookup(page))
-            load.push_back(page);
+    TVector<TPageId> indexPages;
+    if (BTreeGroupIndexes) {
+        // Note: preload root nodes only because we don't want to have multiple restarts here
+        for (const auto& meta : BTreeGroupIndexes) {
+            indexPages.push_back(meta.PageId);
+        }
+        for (const auto& meta : BTreeHistoricIndexes) {
+            indexPages.push_back(meta.PageId);
+        }
+    } else if (FlatGroupIndexes) {
+        for (auto indexPage : FlatGroupIndexes) {
+            indexPages.push_back(indexPage);
+        }
+        for (auto indexPage : FlatHistoricIndexes) {
+            indexPages.push_back(indexPage);
+        }
     }
-
-    if (load) {
-        return new NPageCollection::TFetch{ 0, Packs[0]->PageCollection, std::move(load) };
+    
+    TVector<TPageId> toLoad;
+    for (auto pageId: { SchemeId, GlobsId, SmallId, LargeId, ByKeyId, GarbageStatsId, TxIdStatsId }) {
+        if (pageId != Max<TPageId>() && !Packs[0]->Lookup(pageId)) {
+            Y_ABORT_UNLESS(NeedIn(Packs[0]->GetPageType(pageId)));
+            toLoad.push_back(pageId);
+        }
+    }
+    for (auto pageId : indexPages) {
+        if (!Packs[0]->Lookup(pageId)) {
+            toLoad.push_back(pageId);
+        }
+    }
+    if (toLoad) {
+        return new NPageCollection::TFetch{ 0, Packs[0]->PageCollection, std::move(toLoad) };
     }
 
     auto *scheme = GetPage(SchemeId);
@@ -198,7 +220,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
         for (auto indexPage : FlatGroupIndexes) {
-            indexesRawSize += GetPageSize(indexPage);
+            indexesRawSize += Packs[0]->GetPageSize(indexPage);
         }
     }
 
@@ -288,16 +310,17 @@ void TLoader::StageDeltas() noexcept
     }
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept
+void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages) noexcept
 {
     Y_ABORT_UNLESS(cookie == 0, "Only the leader pack is used on load");
 
     if (Stage == EStage::PartView) {
-        for (auto& loaded : blocks) {
-            Packs[0]->Fill(std::move(loaded), true);
+        for (auto& page : loadedPages) {
+            auto type = Packs[0]->GetPageType(page.PageId);
+            Packs[0]->Fill(std::move(page), NeedIn(type));
         }
     } else if (Stage == EStage::Slice) {
-        for (auto& loaded : blocks) {
+        for (auto& loaded : loadedPages) {
             KeysEnv->Save(cookie, std::move(loaded));
         }
     } else {

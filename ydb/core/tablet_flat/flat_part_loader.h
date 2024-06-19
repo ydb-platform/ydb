@@ -145,11 +145,6 @@ namespace NTable {
             return page == Max<TPageId>() ? nullptr : Packs[0]->Lookup(page);
         }
 
-        size_t GetPageSize(TPageId page) noexcept
-        {
-            return Packs[0]->PageCollection->Page(page).Size;
-        }
-
         void ParseMeta(TArrayRef<const char> plain) noexcept
         {
             TMemoryInput stream(plain.data(), plain.size());

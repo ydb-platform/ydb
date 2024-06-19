@@ -1941,7 +1941,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
                     << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
                 for (auto i : xrange(pages.size())) {
                     if (i != 0) logl << ", ";
-                    logl << pages[i] << " " << pageCollectionInfo->PageCollection->Page(pages[i]).Type;
+                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
                 }
                 logl << "]";
             }

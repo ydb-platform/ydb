@@ -95,6 +95,24 @@ namespace NProtoAST {
         TString Name;
     };
 
+} // namespace NProtoAST
+
+namespace antlr4 {
+    class ANTLR4CPP_PUBLIC YqlErrorListener : public BaseErrorListener {
+        NProtoAST::IErrorCollector* errors;
+        bool* error;
+    public:
+        static ConsoleErrorListener INSTANCE;
+
+        YqlErrorListener(NProtoAST::IErrorCollector* errors, bool* error);
+
+        virtual void syntaxError(Recognizer *recognizer, Token * offendingSymbol, size_t line, size_t charPositionInLine,
+                                const std::string &msg, std::exception_ptr e) override;
+    };
+}
+
+namespace NProtoAST {
+
     template <typename TParser, typename TLexer,  bool IsAntlr4 = IsDerivedFromLexer<TLexer>::value && IsDerivedFromParser<TParser>::value>
     class TProtoASTBuilder;
 
@@ -150,12 +168,21 @@ namespace NProtoAST {
 
         google::protobuf::Message* BuildAST(IErrorCollector& errors) {
             // TODO: find a better way to break on lexer errors
+            typename antlr4::YqlErrorListener listener(&errors, &Parser.error);
+            Parser.addErrorListener(&listener);
             try {
-                return Parser.Parse();
+                auto result = Parser.Parse(&errors);
+                Parser.removeErrorListener(&listener);
+                Parser.error = false;
+                return result;
             } catch (const TTooManyErrors&) {
+                Parser.removeErrorListener(&listener);
+                Parser.error = false;
                 return nullptr;
             } catch (const yexception& e) {
                 errors.Error(0, 0, e.what());
+                Parser.removeErrorListener(&listener);
+                Parser.error = false;
                 return nullptr;
             }
         }

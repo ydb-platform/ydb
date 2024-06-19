@@ -4961,14 +4961,14 @@ Y_UNIT_TEST_SUITE(JsonValue) {
         NYql::TAstParseResult res = SqlToYql("select JSON_VALUE(CAST(@@{\"key\": 1238}@@ as Json));");
 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:49: Error: Unexpected token ')' : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:49: Error: mismatched input ')' expecting ','\n");
     }
 
     Y_UNIT_TEST(JsonValueJsonPathMustBeLiteralString) {
         NYql::TAstParseResult res = SqlToYql("$jsonPath = \"strict $.key\"; select JSON_VALUE(CAST(@@{\"key\": 1238}@@ as Json), $jsonPath);");
 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Error: Unexpected token absence : Missing STRING_VALUE \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Error: mismatched input '$' expecting STRING_VALUE\n");
     }
 
     Y_UNIT_TEST(JsonValueTranslation) {
@@ -5174,7 +5174,7 @@ Y_UNIT_TEST_SUITE(JsonExists) {
         )");
 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:53: Error: Unexpected token absence : Missing RPAREN \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:53: Error: mismatched input '$' expecting {')', ERROR, FALSE, TRUE, UNKNOWN}\n");
     }
 
     Y_UNIT_TEST(JsonExistsNullInput) {
@@ -6039,7 +6039,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource;
-            )sql" , "<main>:3:56: Error: Unexpected token ';' : syntax error...\n\n");
+            )sql" , "<main>:3:56: Error: mismatched input ';' expecting WITH\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
@@ -6444,7 +6444,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable;
-            )sql" , "<main>:3:45: Error: Unexpected token ';' : syntax error...\n\n");
+            )sql" , "<main>:3:45: Error: mismatched input ';' expecting '('\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;

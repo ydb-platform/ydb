@@ -94,27 +94,15 @@ RuleSempredFunction(r, actions) ::= <<
 RuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,namedActions,finallyAction,postamble,exceptions) ::= <<
 // rule $ANTLR start "<currentRule.name>"
 message TRule_<currentRule.name> {
-    <if(rest(code))>
-    <code:{e | <element(e, i)>}; separator="\n">
-    <else>
-    <if(first(code).alts)>
-    <if(rest(first(code).alts))>
-    // some alt block
+    <if((!rest(code))&&first(code).alts&&rest(first(code).alts))>
+    // some multiple alt block
     <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
     oneof Alt {
         <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
     }
     <else>
-    // some star block
     <code:{e | <element(e, i)>}; separator="\n">
-    <endif>
-    <else>
-    <if(first(code).ops)>
-    <code:{e | <element(e, i)>}; separator="\n">
-    <else>
-    // shit happened
-    <endif>
-    <endif>
+    <defineDescr(code)>
     <endif>
 }
 // $ANTLR end "<currentRule.name>"
@@ -125,27 +113,16 @@ LeftRecursiveRuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,
 <<
 // rule $ANTLR start "<currentRule.name>"
 message TRule_<currentRule.name> {
-    <if(rest(code))>
-    <code:{e | <element(e, i)>}; separator="\n">
-    <else>
-    <if(first(code).alts)>
-    <if(rest(first(code).alts))>
-    // some alt block
+    <if((!rest(code))&&first(code).alts&&rest(first(code).alts))>
+    // some multiple alt block
     <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
     oneof Alt {
         <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
     }
     <else>
-    // some star block
+    // some common block
     <code:{e | <element(e, i)>}; separator="\n">
-    <endif>
-    <else>
-    <if(first(code).ops)>
-    <code:{e | <element(e, i)>}; separator="\n">
-    <else>
-    // shit happened
-    <endif>
-    <endif>
+    <defineDescr(code)>
     <endif>
 }
 >>
@@ -246,8 +223,7 @@ message TBlock<elemId> {
     }
 <else>
     <alts>
-
-    string Descr = 1000;
+    <defineDescr(alts)>
 <endif>
 }
 >>
@@ -255,8 +231,26 @@ message TBlock<elemId> {
 altDecl(alt,altNum) ::= <<
 message TAlt<altNum> {
     <alt>
-    string Descr = 1000;
+    <defineDescr(alt)>
 }
+>>
+
+defineDescr(alt) ::= <<
+<if(rest(alt) || !alt.ops)>
+string Descr = <length([alt, file])>;
+<else>
+<if(first(alt.ops).ops)>
+<if(first(first(alt.ops).ops).ops)>
+// CodeBlockForOuterMostAlt -> CodeBlockForAlt -> CodeBlockForAlt
+string Descr = <length([first(first(alt.ops).ops).ops, file])>;
+<else>
+// CodeBlockForAlt -> CodeBlockForAlt
+string Descr = <length([first(alt.ops).ops, file])>;
+<endif>
+<else>
+string Descr = <length([alt.ops, file])>;
+<endif>
+<endif>
 >>
 
 Sync(s) ::= ""

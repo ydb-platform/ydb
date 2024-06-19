@@ -69,15 +69,15 @@ def main():
         else:
             stripped_sign = ""
 
-        summary_start = f"ydbd build size **{human_readable_size}** changed by **{sign}{human_readable_size_diff}**, which is"
+        summary_start = f"ydbd size **{human_readable_size}** changed by **{sign}{human_readable_size_diff}**, which is"
         summary = f"{summary_start}{summary_core}"
 
         comment = (
             f"{summary}\n"
             f"|[ydbd size dash](https://datalens.yandex/cu6hzmpaki700)|{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
             f"|:--- | ---: | ---: | ---: | ---: |\n"
-            f"|ydbd build|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
-            f"|ydbd stripped build|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
+            f"|ydbd size|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
+            f"|ydbd stripped size|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
         )
         print(f"{color};;;{comment}")
     else:

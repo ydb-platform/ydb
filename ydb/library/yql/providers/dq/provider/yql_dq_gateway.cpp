@@ -83,7 +83,7 @@ public:
         }
     }
  
-    void Print(const NDqs::TPlan& plan) {
+    TString Print(const NDqs::TPlan& plan) {
         b.clear();
         b << "digraph G {\n";
         for (const auto& task : plan.Tasks) {
@@ -94,7 +94,7 @@ public:
             PrintTask(task);
         }
         b << "}\n";
-        YQL_CLOG(INFO, ProviderDq) << b;
+        return b;
     }
 };
 
@@ -340,7 +340,7 @@ public:
         }
         settings->Save(queryPB);
 
-        TPlanPrinter().Print(plan);
+        YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
 
         {
             auto& secParams = *queryPB.MutableSecureParams();

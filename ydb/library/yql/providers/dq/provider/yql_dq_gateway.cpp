@@ -29,8 +29,20 @@ class TPlanPrinter {
 public:
     TStringBuilder b;
 
-    void PrintChannel(const auto& ch, const auto& inputName) {
-        b << "T" << ch.GetSrcTaskId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"Ch" << ch.GetId() << "," << inputName << "\"];\n";
+    void DescribeChannel(const auto& ch, bool spilling) {
+        if (spilling) {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\", color=\"red\"];";
+        } else {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\"];";
+        }
+    }
+
+    void PrintInputChannel(const auto& ch, const auto& type) {
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintOutputChannel(const auto& ch, const auto& type) {
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
     }
 
     void PrintSource(auto taskId, auto sourceIndex) {
@@ -54,7 +66,7 @@ public:
                 PrintSource(task.GetId(), index);
             } else {
                 for (const auto& ch : input.GetChannels()) {
-                    PrintChannel(ch, inputName);
+                    PrintInputChannel(ch, inputName);
                 }
             }
             index ++;
@@ -67,7 +79,7 @@ public:
             else if (output.HasBroadcast()) { outputName = "Broadcast"; }
             // TODO: effects, sink
             for (const auto& ch : output.GetChannels()) {
-                PrintChannel(ch, outputName);
+                PrintOutputChannel(ch, outputName);
             }
         }
     }
@@ -80,6 +92,11 @@ public:
                 DescribeSource(task.GetId(), index);
             }
             index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            for (const auto& ch : output.GetChannels()) {
+                DescribeChannel(ch, task.GetEnableSpilling());
+            }
         }
     }
  

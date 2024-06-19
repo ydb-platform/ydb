@@ -1653,14 +1653,8 @@ public:
 
         if (replyQueryParameters) {
             YQL_ENSURE(QueryState->PreparedQuery);
-            THashSet<TString> requestParams;
-            for (auto& param : QueryState->GetYdbParameters()) {
-                requestParams.emplace(param.first);
-            }
-            for (auto& param : QueryState->PreparedQuery->GetParameters()) {
-                if (requestParams.find(param.GetName()) != requestParams.end()) {
-                    *response->AddQueryParameters() = param;
-                }
+            for (auto& param : QueryState->GetResultParams()) {
+                *response->AddQueryParameters() = param;
             }
         }
 
@@ -1865,7 +1859,9 @@ public:
             response.SetPreparedQuery(compileResult->Uid);
 
             auto& preparedQuery = compileResult->PreparedQuery;
-            response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
+            for (auto& param : QueryState->GetResultParams()) {
+                *response.AddQueryParameters() = param;
+            }
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());

@@ -159,6 +159,12 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }
+    for (const auto& param : PreparedQuery->GetParameters()) {
+        const auto& ast = CompileResult->Ast;
+        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->contains(param.GetName())) {
+            ResultParams.push_back(param);
+        }
+    }
     return true;
 }
 

@@ -317,7 +317,7 @@ private:
     TDynBitMap FreeIds;
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
-    bool EnableDynamicNodeNameGeneration = false;
+    bool EnableStableNodeNames = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.
@@ -328,7 +328,7 @@ private:
     TDuration EpochDuration;
     TVector<std::pair<ui32, ui32>> BannedIds;
     ui64 ConfigSubscriptionId;
-    TString NodeNamePrefix;
+    TString StableNodeNamePrefix;
 
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
@@ -346,7 +346,7 @@ public:
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , EpochDuration(TDuration::Hours(1))
         , ConfigSubscriptionId(0)
-        , NodeNamePrefix("slot-")
+        , StableNodeNamePrefix("slot-")
         , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
     {
     }

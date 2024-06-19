@@ -177,7 +177,7 @@ void SetupServices(TTestActorRuntime &runtime,
 
     dnConfig->MaxDynamicNodeId = 1024 + (singleDomainMode ? (maxDynNodes - 1) : 32 * (maxDynNodes - 1));
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(singleDomainMode);
-    runtime.GetAppData().FeatureFlags.SetEnableDynamicNodeNameGeneration(true);
+    runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;

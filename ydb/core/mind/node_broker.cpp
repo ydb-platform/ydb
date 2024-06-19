@@ -67,7 +67,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
-    EnableDynamicNodeNameGeneration = appData->FeatureFlags.GetEnableDynamicNodeNameGeneration();
+    EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
 
     ClearState();
 
@@ -110,7 +110,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
                 << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
                 << "  EpochDuration: " << EpochDuration << Endl
-                << "  NodeNamePrefix: " << NodeNamePrefix << Endl
+                << "  StableNodeNamePrefix: " << StableNodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
@@ -366,8 +366,8 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
 void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
-    if (EnableDynamicNodeNameGeneration && slotIndex.has_value()) {
-        const TString name = TStringBuilder() << NodeNamePrefix << slotIndex.value();
+    if (EnableStableNodeNames && slotIndex.has_value()) {
+        const TString name = TStringBuilder() << StableNodeNamePrefix << slotIndex.value();
         info.SetName(name);
     }
 }
@@ -508,7 +508,7 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
         EpochDuration = MIN_LEASE_DURATION;
     }
 
-    NodeNamePrefix = config.GetNodeNamePrefix();
+    StableNodeNamePrefix = config.GetStableNodeNamePrefix();
 
     BannedIds.clear();
     for (auto &banned : config.GetBannedNodeIds())
@@ -817,7 +817,7 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {   
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        EnableDynamicNodeNameGeneration = appConfig.GetFeatureFlags().GetEnableDynamicNodeNameGeneration();
+        EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {

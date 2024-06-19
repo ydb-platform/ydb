@@ -48,43 +48,44 @@ def main():
         human_readable_size = bytes_to_human_iec(current_size_bytes)
         human_readable_size_diff = bytes_to_human_iec(bytes_diff)
         human_readable_stripped_size_diff = bytes_to_human_iec(stripped_bytes_diff)
-        summary = f"ydbd build size {human_readable_size} changed by {human_readable_size_diff}, which is"
         if bytes_diff > 0:
             sign = "+"
             if bytes_diff >= red_treshold:
                 color = "red"
-                summary = f'{summary} >= {bytes_to_human_iec(red_treshold)}  (Alert treshold)'
+                summary_core = f">= {bytes_to_human_iec(red_treshold)} vs {branch} (Alert treshold)"
             elif bytes_diff >= yellow_treshold:
                 color = "yellow"
-                summary = f'{summary} >= {bytes_to_human_iec(yellow_treshold)} (Warning treshold)'
+                summary_core = f">= {bytes_to_human_iec(yellow_treshold)} vs {branch} (Warning treshold)"
             else:
                 color = "green"
-                summary = f'{summary} <= {bytes_to_human_iec(yellow_treshold)} (OK treshold)'
+                summary_core = f"<= {bytes_to_human_iec(yellow_treshold)} vs {branch} (OK treshold)"
         else:
             sign = ""
             color = "green"
-            summary = f'{summary} <= 0 Bytes (OK treshold)'
-
-        summary = f'{summary} vs {branch}'
+            summary_core = f" <= 0 Bytes (OK treshold)"
 
         if stripped_diff_perc > 0:
             stripped_sign = "+"
         else:
             stripped_sign = ""
 
-        comment = ( 
+        summary_start = f"ydbd build size **{human_readable_size}** changed by **{sign}{human_readable_size_diff}**, which is"
+        summary = f"{summary_start}{summary_core}"
+
+        comment = (
             f"{summary}\n"
             f"||{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
             f"|:--- | ---: | ---: | ---: | ---: |\n"
             f"|ydbd build|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
             f"|ydbd stripped build|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
             "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n"
-
         )
         print(f"{color};;;{comment}")
     else:
-        print(f'Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}')   
-    
+        print(
+            f"Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}"
+        )
+
 
 if __name__ == "__main__":
     main()

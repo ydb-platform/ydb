@@ -9,8 +9,6 @@
 
 namespace NKikimr::NCms {
 
-using namespace NKikimrCms;
-
 namespace {
 
 template<typename T>
@@ -104,7 +102,7 @@ public:
             request.Owner = owner;
             request.Order = order;
             request.Priority = priority;
-            ParseFromStringSafe<TPermissionRequest>(requestStr, &request.Request);
+            ParseFromStringSafe(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
                       id.data(), owner.data(), requestStr.data());
@@ -162,7 +160,7 @@ public:
             permission.PermissionId = id;
             permission.RequestId = requestId;
             permission.Owner = owner;
-            ParseFromStringSafe<TAction>(actionStr, &permission.Action);
+            ParseFromStringSafe(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
@@ -198,7 +196,7 @@ public:
             TNotificationInfo notification;
             notification.NotificationId = id;
             notification.Owner = owner;
-            ParseFromStringSafe<TNotification>(notificationStr, &notification.Notification);
+            ParseFromStringSafe(notificationStr, &notification.Notification);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
                       id.data(), owner.data(), notificationStr.data());

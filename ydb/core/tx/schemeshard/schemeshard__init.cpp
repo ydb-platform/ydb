@@ -2488,8 +2488,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 alterData->TotalGroupCount = rowset.GetValue<Schema::PersQueueGroupAlters::TotalGroupCount>();
                 alterData->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->TotalGroupCount);
                 alterData->BootstrapConfig = rowset.GetValue<Schema::PersQueueGroupAlters::BootstrapConfig>();
-                alterData->SplitMergeWasDisabled = rowset.GetValue<Schema::PersQueueGroupAlters::SplitMergeWasDisabled>();
-                alterData->SplitMergeWasEnabled = rowset.GetValue<Schema::PersQueueGroupAlters::SplitMergeWasEnabled>();
 
                 const bool ok = alterData->FillKeySchema(alterData->TabletConfig);
                 Y_ABORT_UNLESS(ok);

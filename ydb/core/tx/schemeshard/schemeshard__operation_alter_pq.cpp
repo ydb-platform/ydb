@@ -255,7 +255,9 @@ public:
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
-            TOperationContext& context)
+            TOperationContext& context,
+            const NKikimrPQ::TPQTabletConfig& tabletConfig,
+            const NKikimrPQ::TPQTabletConfig& newTabletConfig)
     {
         TPathElement::TPtr item = path.Base();
         NIceDb::TNiceDb db(context.GetDB());
@@ -271,7 +273,12 @@ public:
             context.SS->PersistUpdateNextShardIdx(db);
         }
 
-        if (pqGroup->AlterData->SplitMergeWasEnabled) {
+        bool splitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+        bool splitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+
+        if (splitMergeWasEnabled) {
             auto partitions = pqGroup->GetPartitions();
 
             TString prevBound;
@@ -295,7 +302,7 @@ public:
         } else {
             for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
                 for (const auto& partitionInfo : tabletInfo->Partitions) {
-                    if (pqGroup->AlterData->SplitMergeWasDisabled) {
+                    if (splitMergeWasDisabled) {
                         // clear all splitmerge fields
                         TTopicTabletInfo::TTopicPartitionInfo newPartitionInfo;
                         newPartitionInfo.PqId = partitionInfo->PqId;
@@ -547,12 +554,8 @@ public:
             return result;
         }
 
-        NKikimrPQ::TPQTabletConfig tabletConfig, newTabletConfig;
-        if (!topic->TabletConfig.empty()) {
-            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, topic->TabletConfig);
-            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
-        }
-        newTabletConfig = tabletConfig;
+        NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
+        NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
@@ -579,10 +582,6 @@ public:
 
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-        alterData->SplitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-                && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-        alterData->SplitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
         if (splitMergeEnabled) {
@@ -848,8 +847,8 @@ public:
         }
 
         topic->PrepareAlter(alterData);
-        const TTxState& txState =
-            PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding, pqChannelsBinding, context);
+        const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
+                pqChannelsBinding, context, tabletConfig, newTabletConfig);
 
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());

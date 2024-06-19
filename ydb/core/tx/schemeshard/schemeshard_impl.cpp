@@ -2798,10 +2798,7 @@ void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pa
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::TotalGroupCount>(alterData->TotalGroupCount),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->NextPartitionId),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::BootstrapConfig>(alterData->BootstrapConfig),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::SplitMergeWasDisabled>(alterData->SplitMergeWasDisabled),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::SplitMergeWasEnabled>(alterData->SplitMergeWasEnabled)
-        );
+        NIceDb::TUpdate<Schema::PersQueueGroupAlters::BootstrapConfig>(alterData->BootstrapConfig));
 }
 
 void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pathId) {

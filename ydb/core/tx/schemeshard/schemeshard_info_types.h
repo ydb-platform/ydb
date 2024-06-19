@@ -8,6 +8,7 @@
 #include "schemeshard_schema.h"
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
+#include "ydb/core/util/pb.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -1111,8 +1112,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 NextPartitionId = 0;
     THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
-    bool SplitMergeWasDisabled = false;
-    bool SplitMergeWasEnabled = false;
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
@@ -1205,6 +1204,15 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         return partitions;
     }
 
+    NKikimrPQ::TPQTabletConfig GetTabletConfig() const {
+        NKikimrPQ::TPQTabletConfig tabletConfig;
+        if (!TabletConfig.empty()) {
+            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, TabletConfig);
+            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
+        }
+        return tabletConfig;
+    }
+
     void PrepareAlter(TTopicInfo::TPtr alterData) {
         Y_ABORT_UNLESS(alterData, "No alter data at Alter prepare");
         alterData->AlterVersion = AlterVersion + 1;
@@ -1220,12 +1228,22 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
 
     void FinishAlter() {
         Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
+
+        NKikimrPQ::TPQTabletConfig tabletConfig = GetTabletConfig();
+        NKikimrPQ::TPQTabletConfig newTabletConfig = AlterData->TabletConfig.empty() ? tabletConfig : AlterData->GetTabletConfig();
+
+        bool splitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+            && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+        bool splitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+            && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
+
         TotalGroupCount = AlterData->TotalGroupCount;
         NextPartitionId = AlterData->NextPartitionId;
         TotalPartitionCount = AlterData->TotalPartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
-        if (!AlterData->TabletConfig.empty())
-            TabletConfig = AlterData->TabletConfig;
+        if (!AlterData->TabletConfig.empty()) {
+            TabletConfig = std::move(AlterData->TabletConfig);
+        }
         ++AlterVersion;
         Y_ABORT_UNLESS(BalancerTabletID == AlterData->BalancerTabletID || !HasBalancer());
         Y_ABORT_UNLESS(AlterData->HasBalancer());
@@ -1235,7 +1253,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         BalancerShardIdx = AlterData->BalancerShardIdx;
 
         Partitions.clear();
-        if (AlterData->SplitMergeWasEnabled) {
+        if (splitMergeWasEnabled) {
             auto partitions = GetPartitions();
 
             TString prevBound;
@@ -1259,7 +1277,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
             for (const auto& [_, shard] : Shards) {
                 for (auto& partition : shard->Partitions) {
                     Partitions[partition->PqId] = partition.Get();
-                    if (AlterData->SplitMergeWasDisabled) {
+                    if (splitMergeWasDisabled) {
                         partition.Get()->Status = NKikimrPQ::ETopicPartitionStatus::Active;
                         partition.Get()->KeyRange.Clear();
                         partition.Get()->ChildPartitionIds.clear();

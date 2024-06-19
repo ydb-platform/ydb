@@ -444,15 +444,13 @@ struct Schema : NIceDb::Schema {
     };
 
     struct PersQueueGroupAlters : Table<12> {
-        struct PathId :                Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TabletConfig :          Column<2, NScheme::NTypeIds::Utf8> {};
-        struct MaxPQPerShard :         Column<3, NScheme::NTypeIds::Uint32> {};
-        struct AlterVersion :          Column<4, NScheme::NTypeIds::Uint64> {};
-        struct NextPartitionId :       Column<6, NScheme::NTypeIds::Uint32> {};
-        struct TotalGroupCount :       Column<5, NScheme::NTypeIds::Uint32> {};
-        struct BootstrapConfig :       Column<7, NScheme::NTypeIds::String> { using Type = TString; };
-        struct SplitMergeWasDisabled : Column<8, NScheme::NTypeIds::Bool> {};
-        struct SplitMergeWasEnabled :  Column<9, NScheme::NTypeIds::Bool> {};
+        struct PathId :          Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TabletConfig :    Column<2, NScheme::NTypeIds::Utf8> {};
+        struct MaxPQPerShard :   Column<3, NScheme::NTypeIds::Uint32> {};
+        struct AlterVersion :    Column<4, NScheme::NTypeIds::Uint64> {};
+        struct NextPartitionId : Column<6, NScheme::NTypeIds::Uint32> {};
+        struct TotalGroupCount : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct BootstrapConfig : Column<7, NScheme::NTypeIds::String> { using Type = TString; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -462,9 +460,7 @@ struct Schema : NIceDb::Schema {
             AlterVersion,
             NextPartitionId,
             TotalGroupCount,
-            BootstrapConfig,
-            SplitMergeWasDisabled,
-            SplitMergeWasEnabled
+            BootstrapConfig
         >;
     };
 

@@ -44,6 +44,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     TMaybe<bool> MonotonicKeys;
     size_t WriteValidateCount = 0;
     TMaybe<TString> Hash;
+    TString ColumnGroupSpec;
 
     bool Fill(
         const TString& cluster, const TString& table, TExprContext& ctx,

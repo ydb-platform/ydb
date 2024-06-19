@@ -762,6 +762,13 @@
             "uri": "https://{canondata_backend}/1880306/2e8e9a7d810193a7d6a738472ab44a20d6a303b4/resource.tar.gz#test.test_blocks-top_sort_two_asc--Results_/results.txt"
         }
     ],
+    "test.test[column_group-hint_empty_grp_fail--Debug]": [],
+    "test.test[column_group-hint_empty_grp_fail--Plan]": [],
+    "test.test[column_group-hint_empty_grp_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_empty_grp_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-select_distinct_star-default.txt-Debug]": [
         {
             "checksum": "730582b186d3fa68a5b69dc368b05ff6",

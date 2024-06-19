@@ -811,6 +811,20 @@
             "uri": "https://{canondata_backend}/1881367/f7c9625b9d66b51a2a5927015bd3050c9cb7f8d2/resource.tar.gz#test.test_coalesce-coalesce_few_opt--Results_/results.txt"
         }
     ],
+    "test.test[column_group-hint_dup_def_fail--Debug]": [],
+    "test.test[column_group-hint_dup_def_fail--Plan]": [],
+    "test.test[column_group-hint_dup_def_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_dup_def_fail--Results_/extracted"
+        }
+    ],
+    "test.test[column_group-hint_non_map_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_map_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_map_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_map_yson_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-select_orderby-default.txt-Debug]": [
         {
             "checksum": "7db040a655fbc5ad5b7695ffeb13c0db",

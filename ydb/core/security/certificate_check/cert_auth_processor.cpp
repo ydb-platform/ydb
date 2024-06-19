@@ -5,6 +5,7 @@
 #include <openssl/bio.h>
 #include <openssl/objects.h>
 #include <openssl/obj_mac.h>
+#include <openssl/sha.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/map.h>
@@ -100,12 +101,12 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(cons
 }
 
 TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
-    unsigned char fingerprint[128];
-    unsigned int len = 0;
-    if (X509_digest(x509.get(), EVP_sha1(), fingerprint, &len) <= 0) {
+    static constexpr size_t FINGERPRINT_LENGTH = SHA_DIGEST_LENGTH;
+    unsigned char fingerprint[FINGERPRINT_LENGTH];
+    if (X509_digest(x509.get(), EVP_sha1(), fingerprint, nullptr) <= 0) {
         return "";
     }
-    return HexEncode(fingerprint, len);
+    return HexEncode(fingerprint, FINGERPRINT_LENGTH);
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, bool requireSameIssuer, const std::vector<TString>& groups)

@@ -34,7 +34,7 @@ struct TOptions {
     ui64 TopK = 0;
     ui16 Levels = 2;
     ui16 Clusters = 80;
-    ui16 Iterations = 5;
+    ui16 Iterations = 10;
     bool LastLevelEmbeddings = false;
 };
 

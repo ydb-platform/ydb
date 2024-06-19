@@ -1,6 +1,7 @@
 #include "clusterizer.h"
 #include "vector_index.h"
 #include <format>
+#include <library/cpp/dot_product/dot_product.h>
 
 template <>
 struct std::formatter<TString>: std::formatter<std::string_view> {
@@ -307,16 +308,9 @@ static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
     Y_ASSERT(lhs.size() == rhs.size());
     auto* l = lhs.data();
     auto* r = rhs.data();
-    float dot = 0.f;
-    float lNorm = 0.f;
-    float rNorm = 0.f;
-    for (size_t i = 0; i < lhs.size(); ++i) {
-        lNorm += l[i] * l[i];
-        rNorm += r[i] * r[i];
-        dot += l[i] * r[i];
-    }
-    auto norm = std::sqrt(lNorm * rNorm);
-    return norm != 0 ? 1 - (dot / norm) : 1;
+    auto res = TriWayDotProduct(l, r, lhs.size());
+    auto norm = std::sqrt(res.LL * res.RR);
+    return norm != 0 ? 1 - (res.LR / norm) : 1;
 }
 
 struct TBulkWriter {

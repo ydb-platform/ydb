@@ -472,14 +472,15 @@ public:
             return;
         }
 
+        const TString& poolId = QueryState->UserRequestContext->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
-            ReplyQueryError(ev->Get()->Status, "Query failed during adding/waiting in workload pool", issues);
+            ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
             return;
         }
 
-        LOG_D("continue request, pool id: " << QueryState->UserRequestContext->PoolId);
+        LOG_D("continue request, pool id: " << poolId);
         CompileQuery();
     }
 

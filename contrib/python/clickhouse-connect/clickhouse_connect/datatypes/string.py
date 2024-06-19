@@ -80,6 +80,11 @@ class FixedString(ClickHouseType):
             return source.read_fixed_str_col(self.byte_size, num_rows, ctx.encoding or self.encoding )
         return source.read_bytes_col(self.byte_size, num_rows)
 
+    def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
+        if ctx.use_extended_dtypes and self.read_format(ctx) == 'string':
+            return pd.array(column, dtype=pd.StringDtype())
+        return column
+
     # pylint: disable=too-many-branches,duplicate-code
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         ext = dest.extend

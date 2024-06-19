@@ -52,17 +52,17 @@ def main():
             sign = "+"
             if bytes_diff >= red_treshold:
                 color = "red"
-                summary_core = f">= {bytes_to_human_iec(red_treshold)} vs {branch} (Alert treshold)"
+                summary_core = f" >= {bytes_to_human_iec(red_treshold)} vs {branch}: **Alert**"
             elif bytes_diff >= yellow_treshold:
                 color = "yellow"
-                summary_core = f">= {bytes_to_human_iec(yellow_treshold)} vs {branch} (Warning treshold)"
+                summary_core = f" >= {bytes_to_human_iec(yellow_treshold)} vs {branch}: **Warning**"
             else:
                 color = "green"
-                summary_core = f"<= {bytes_to_human_iec(yellow_treshold)} vs {branch} (OK treshold)"
+                summary_core = f" < {bytes_to_human_iec(yellow_treshold)} vs {branch}: **OK**"
         else:
             sign = ""
             color = "green"
-            summary_core = f" <= 0 Bytes (OK treshold)"
+            summary_core = f" <= 0 Bytes vs {branch}: **OK**"
 
         if stripped_diff_perc > 0:
             stripped_sign = "+"
@@ -74,11 +74,10 @@ def main():
 
         comment = (
             f"{summary}\n"
-            f"||{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
+            f"|[ydbd size dash](https://datalens.yandex/cu6hzmpaki700)|{branch}: {main_github_sha} |merge: {current_pr_commit_sha} |diff | diff %%|\n"
             f"|:--- | ---: | ---: | ---: | ---: |\n"
             f"|ydbd build|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
             f"|ydbd stripped build|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
-            "[ydbd size dashboard](https://datalens.yandex/cu6hzmpaki700)\n"
         )
         print(f"{color};;;{comment}")
     else:

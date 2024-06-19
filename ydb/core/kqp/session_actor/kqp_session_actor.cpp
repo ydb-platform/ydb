@@ -1653,8 +1653,15 @@ public:
 
         if (replyQueryParameters) {
             YQL_ENSURE(QueryState->PreparedQuery);
-            response->MutableQueryParameters()->CopyFrom(
-                    QueryState->PreparedQuery->GetParameters());
+            THashSet<TString> requestParams;
+            for (auto& param : QueryState->GetYdbParameters()) {
+                requestParams.emplace(param.first);
+            }
+            for (auto& param : QueryState->PreparedQuery->GetParameters()) {
+                if (requestParams.find(param.GetName()) != requestParams.end()) {
+                    *response->AddQueryParameters() = param;
+                }
+            }
         }
 
         if (replyQueryId) {

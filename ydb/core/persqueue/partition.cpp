@@ -21,7 +21,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -412,16 +411,13 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;
             }
-            DBGTRACE_LOG("delete by size. bodySize=" << bodySize << ", limit=" << partConfig.GetStorageLimitBytes());
         } else {
             if (now < firstKey.Timestamp + lifetimeLimit) {
                 break;
             }
-            DBGTRACE_LOG("delete by time. now=" << now << ", key.Timestamp=" << firstKey.Timestamp << ", limit=" << lifetimeLimit);
         }
 
         BodySize -= firstKey.Size;
-        DBGTRACE_LOG("delete key " << firstKey.Key.ToString() << ", size=" << firstKey.Size);
         DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
@@ -1214,7 +1210,6 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
 }
 
 void TPartition::CheckHeadConsistency() const {
-    DBGTRACE("TPartition::CheckHeadConsistency");
     ui32 p = 0;
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
         ui32 s = 0;
@@ -1227,15 +1222,6 @@ void TPartition::CheckHeadConsistency() const {
             ++p;
         }
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
-    }
-    if (!(DataKeysBody.empty() ||
-          Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount())) {
-        DBGTRACE_LOG("Head.Offset=" << Head.Offset);
-        DBGTRACE_LOG("DataKeysBody.back().Key.Offset=" << DataKeysBody.back().Key.GetOffset());
-        DBGTRACE_LOG("DataKeysBody.back().Key.Count=" << DataKeysBody.back().Key.GetCount());
-        for (const auto& dk : DataKeysBody) {
-            DBGTRACE_LOG(dk.Key.ToString());
-        }
     }
     Y_ABORT_UNLESS(DataKeysBody.empty() ||
              Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
@@ -1545,7 +1531,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                 "OnWrite topic '" << TopicName() << "' partition " << Partition
                     << " commands are not processed at all, reason: " << response.DebugString()
         );
-        DBGTRACE_LOG("send TEvPoisonPill");
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         //TODO: if status is DISK IS FULL, is global status MSTATUS_OK? it will be good if it is true
         return;
@@ -1559,7 +1544,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                             << " delete range error"
                 );
                 //TODO: if disk is full, could this be ok? delete must be ok, of course
-                DBGTRACE_LOG("send TEvPoisonPill");
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
                 return;
             }
@@ -1575,7 +1559,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                         "OnWrite  topic '" << TopicName() << "' partition " << Partition
                             << " write error"
                 );
-                DBGTRACE_LOG("send TEvPoisonPill");
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
                 return;
             }
@@ -1592,7 +1575,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                     "OnWrite  topic '" << TopicName() << "' partition " << Partition
                         << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus()
             );
-            DBGTRACE_LOG("send TEvPoisonPill");
             ctx.Send(Tablet, new TEvents::TEvPoisonPill());
             return;
         }
@@ -2093,7 +2075,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
-    DBGTRACE("TPartition::CommitWriteOperations");
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2152,7 +2133,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
         NewHead.PartNo = first.GetPartNo();
-        DBGTRACE_LOG("NewHead=" << NewHead);
 
         Parameters->CurOffset = NewHead.Offset;
         Parameters->HeadCleared = !t.WriteInfo->BodyKeys.empty();

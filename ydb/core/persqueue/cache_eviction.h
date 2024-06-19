@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -112,11 +111,6 @@ namespace NPQ {
 
         void Verify(const TRequestedBlob& blob) const {
             TKey key(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, false);
-            if (!(blob.Value.size() == blob.Size)) {
-                DBGTRACE_LOG("key=" << key.ToString());
-                DBGTRACE_LOG("blob.Value.size=" << blob.Value.size());
-                DBGTRACE_LOG("blob.Size=" << blob.Size);
-            }
             Y_ABORT_UNLESS(blob.Value.size() == blob.Size);
             TClientBlob::CheckBlob(key, blob.Value);
         }

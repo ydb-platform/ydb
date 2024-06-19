@@ -22,7 +22,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -567,14 +566,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
-
-    for (const auto& dk : DataKeysBody) {
-        DBGTRACE_LOG("D: " << dk.Key.ToString());
-    }
-    for (const auto& hk : HeadKeys) {
-        DBGTRACE_LOG("H: " << hk.Key.ToString());
-    }
-    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
@@ -1025,8 +1016,6 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
                              TEvKeyValue::TEvRequest* request,
                              const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::AddCmdWrite");
-    DBGTRACE_LOG("WRITE: " << newWrite->Key.ToString());
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.ToString());
     write->SetValue(newWrite->Value);
@@ -1047,11 +1036,9 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
                                    TEvKeyValue::TEvRequest* request,
                                    const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::RenameFormedBlobs");
     for (ui32 i = 0; i < formedBlobs.size(); ++i) {
         const auto& x = formedBlobs[i];
         if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
-            DBGTRACE_LOG("RENAME: " << x.OldKey.ToString() << " " << x.NewKey.ToString());
             auto rename = request->Record.AddCmdRename();
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
@@ -1066,7 +1053,6 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
                     << " " << x.OldKey.ToString() << " size " << x.Size << " WTime " << ctx.Now().MilliSeconds()
                    );
 
-        DBGTRACE_LOG("compacted key: " << x.NewKey.ToString() << " (" << x.OldKey.ToString() << ")");
         CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
 
@@ -1082,12 +1068,10 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
 
 ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 {
-    DBGTRACE("TPartition::RenameTmpCmdWrites");
     ui32 curWrites = 0;
     for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
         TKey key(request->Record.GetCmdWrite(i).GetKey());
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
-            DBGTRACE_LOG("TYPE: " << key.ToString());
             key.SetType(TKeyPrefix::TypeData);
             request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
             ++curWrites;
@@ -1097,7 +1081,6 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
-    DBGTRACE("TPartition::ExecRequest(TWriteMsg)");
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -1254,7 +1237,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        DBGTRACE_LOG("send TEvPoisonPill");
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         return false;
     }
@@ -1272,8 +1254,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     TMaybe<TPartData> partData;
-    DBGTRACE_LOG("p.Msg.PartNo=" << p.Msg.PartNo);
-    DBGTRACE_LOG("p.Msg.TotalParts=" << p.Msg.TotalParts);
     if (p.Msg.TotalParts > 1) { //this is multi-part message
         partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
     }
@@ -1295,7 +1275,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
     }
     bool lastBlobPart = blob.IsLastPart();
-    DBGTRACE_LOG("lastBlobPart=" << lastBlobPart);
 
     //will return compacted tmp blob
     auto newWrite = PartitionedBlob.Add(std::move(blob));
@@ -1317,10 +1296,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (lastBlobPart) {
         Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
         ui32 curWrites = RenameTmpCmdWrites(request);
-        if (!(curWrites <= PartitionedBlob.GetFormedBlobs().size())) {
-            DBGTRACE_LOG("curWrites=" << curWrites);
-            DBGTRACE_LOG("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
-        }
         Y_ABORT_UNLESS(curWrites <= PartitionedBlob.GetFormedBlobs().size());
         RenameFormedBlobs(PartitionedBlob.GetFormedBlobs(),
                           parameters,
@@ -1328,7 +1303,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           request,
                           ctx);
         ui32 countOfLastParts = 0;
-        DBGTRACE_LOG("PartitionedBlob.ClientBlobs.size=" << PartitionedBlob.GetClientBlobs().size());
         for (auto& x : PartitionedBlob.GetClientBlobs()) {
             if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
                 NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
@@ -1348,7 +1322,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
             }
         }
-        DBGTRACE_LOG("NewHead=" << NewHead);
 
         Y_ABORT_UNLESS(countOfLastParts == 1);
 
@@ -1401,7 +1374,6 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
 std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     bool needCompaction = false;
     ui32 HeadSize = headCleared ? 0 : Head.PackedSize;
-    DBGTRACE_LOG("HeadSize=" << HeadSize);
     if (HeadSize + NewHead.PackedSize > 0 && HeadSize + NewHead.PackedSize
                                                         >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
         needCompaction = true;
@@ -1410,10 +1382,6 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
         needCompaction = false;
     }
 
-    if (!(NewHead.PackedSize > 0 || needCompaction)) {
-        DBGTRACE_LOG("NewHead.PackedSize=" << NewHead.PackedSize);
-        DBGTRACE_LOG("needCompaction=" << needCompaction);
-    }
     Y_ABORT_UNLESS(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
 
     return GetNewWriteKeyImpl(headCleared, needCompaction, HeadSize);
@@ -1427,9 +1395,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     TString valueD;
     valueD.reserve(res.second);
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
-    DBGTRACE_LOG("pp=" << pp);
-    DBGTRACE_LOG("key.Offset=" << key.GetOffset() << ", key.PartNo=" << key.GetPartNo());
-    DBGTRACE_LOG("EndOffset=" << EndOffset);
     if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
         Y_ABORT_UNLESS(pp < Head.Batches.size());
         Y_ABORT_UNLESS(Head.Batches[pp].GetOffset() == key.GetOffset());
@@ -1444,10 +1409,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         b.SerializeTo(valueD);
     }
 
-    if (!(res.second >= valueD.size())) {
-        DBGTRACE_LOG("res.second=" << res.second);
-        DBGTRACE_LOG("valueD.size=" << valueD.size());
-    }
     Y_ABORT_UNLESS(res.second >= valueD.size());
 
     if (res.second > valueD.size() && res.first.IsHead()) { //change to real size if real packed size is smaller

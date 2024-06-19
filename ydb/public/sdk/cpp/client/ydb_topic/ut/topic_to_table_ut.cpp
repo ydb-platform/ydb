@@ -12,7 +12,6 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -1590,9 +1589,9 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
         ++newHeadMsgCount;
     }
 
-    DBGTRACE_LOG("oldHeadMsgCount=" << oldHeadMsgCount);
-    DBGTRACE_LOG("bigBlobMsgCount=" << bigBlobMsgCount);
-    DBGTRACE_LOG("newHeadMsgCount=" << newHeadMsgCount);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
 
     auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount);

@@ -142,4 +142,5 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = false];
     optional bool EnableResourcePools  = 129 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = false];
 }

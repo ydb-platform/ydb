@@ -1061,7 +1061,11 @@ public:
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
-        SessionCtx->SetTempTables(std::move(tempTablesState));
+        if (tempTablesState) {
+            Cerr << "TEMP:: " << tempTablesState->SessionId << Endl;
+            SessionCtx->SetSessionId(tempTablesState->SessionId);
+            SessionCtx->SetTempTables(std::move(tempTablesState));
+        }
 
         if (FederatedQuerySetup) {
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},

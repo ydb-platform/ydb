@@ -74,6 +74,8 @@ public:
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
+        Cerr << "CREATED Scheme EXE" << Endl;
+
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
             nullptr,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);

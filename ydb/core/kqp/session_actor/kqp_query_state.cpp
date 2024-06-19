@@ -317,6 +317,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         statementAst = Statements[CurrentStatementId];
     }
 
+    Cerr << "BuildCompileSplittedRequest >> " << NextSplittedExpr << Endl;
+
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
@@ -348,6 +350,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     }
 
     ++NextSplittedExpr;
+    Cerr << "PrepareNextStatementPart " << NextSplittedExpr << Endl;
     return true;
 }
 

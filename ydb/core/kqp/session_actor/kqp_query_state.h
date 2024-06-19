@@ -226,6 +226,14 @@ public:
         return RequestEv->GetDatabase();
     }
 
+    bool IsSplitted() const {
+        return !SplittedExprs.empty();
+    }
+
+    bool IsCreateTableAs() const {
+        return IsSplitted();
+    }
+
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {

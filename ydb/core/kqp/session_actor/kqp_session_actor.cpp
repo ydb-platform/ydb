@@ -762,6 +762,7 @@ public:
                     break;
             }
         } else {
+            Cerr << "TEST:2: " << "ISOLATION_LEVEL_UNDEFINED" << Endl;
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -1043,7 +1044,7 @@ public:
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
-
+                    Cerr << "TYPE SCHEME" << Endl;
                     if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
@@ -1056,6 +1057,7 @@ public:
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                    Cerr << "TYPE_GENERIC" << Endl;
                     if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Data operations cannot be executed outside of transaction");
@@ -1189,8 +1191,9 @@ public:
 
         auto userToken = QueryState->UserToken;
         const TString requestType = QueryState->GetRequestType();
-        bool temporary = GetTemporaryTableInfo(tx).has_value();
+        const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
+        Cerr << "SCHEME EXECUTER" << Endl;
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
@@ -1330,6 +1333,9 @@ public:
         }
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx - 1);
         if (!tx) {
+            return;
+        }
+        if (QueryState->IsCreateTableAs()) {
             return;
         }
 

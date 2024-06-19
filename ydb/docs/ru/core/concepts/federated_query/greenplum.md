@@ -66,7 +66,7 @@ SELECT * FROM greenplum_datasource.<table_name>
 |`float4`|`Optional<Float>`||
 |`double precision`|`Optional<Double>`||
 |`float8`|`Optional<Double>`||
-|`Json`|`Optional<Json>`||
+|`json`|`Optional<Json>`||
 |`date`|`Optional<Date>`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона возвращается `NULL`.|
 |`timestamp`|`Optional<Timestamp>`|Допустимый диапазон времени с 1970-01-01 00:00:00 и до 2105-12-31 23:59:59. При выходе значения за границы диапазона возвращается значение `NULL`.|
 |`bytea`|`Optional<String>`||

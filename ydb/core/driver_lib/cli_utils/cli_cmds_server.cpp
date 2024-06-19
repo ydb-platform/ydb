@@ -1037,6 +1037,11 @@ protected:
                 result = TryToRegisterDynamicNodeViaDiscoveryService(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
                 if (result.IsSuccess()) {
                     Cout << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    Cout << "Node name: ";
+                    if (result.HasNodeName()) {
+                        Cout << result.GetNodeName();
+                    }
+                    Cout << Endl;
                     break;
                 }
                 Cerr << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;

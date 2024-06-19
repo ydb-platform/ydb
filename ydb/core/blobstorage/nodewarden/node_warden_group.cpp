@@ -228,6 +228,26 @@ namespace NKikimr::NStorage {
                     UpdateGroupInfoForDisk(vdisk, info);
                 }
             }
+
+            if (const auto it = GroupPendingQueue.find(groupId); it != GroupPendingQueue.end()) {
+                auto& queue = it->second;
+                Y_ABORT_UNLESS(!queue.empty());
+
+                if (!group.ProxyId) {
+                    StartLocalProxy(groupId);
+                }
+
+                const auto& [timestamp, _] = queue.front();
+                const size_t numErased = TimeoutToQueue.erase(std::make_tuple(timestamp, &*it));
+                Y_ABORT_UNLESS(numErased == 1);
+
+                for (auto& [timestamp, ev] : queue) {
+                    THolder<IEventHandle> tmp(ev.release());
+                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                }
+
+                GroupPendingQueue.erase(it);
+            }
         }
     }
 

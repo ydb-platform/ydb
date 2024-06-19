@@ -253,6 +253,8 @@ void TNodeWarden::Bootstrap() {
     StartInvalidGroupProxy();
 
     StartDistributedConfigKeeper();
+
+    HandleGroupPendingQueueTick();
 }
 
 void TNodeWarden::HandleReadCache() {

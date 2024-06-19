@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     Y_UNIT_TEST(CompositeActionGroupSameStorageGroup) {
         TCmsTestEnv env(8);
 
-        auto response = env.CheckMaintenanceTaskCreate("task-2", Ydb::StatusIds::BAD_REQUEST,
+        env.CheckMaintenanceTaskCreate("task-2", Ydb::StatusIds::BAD_REQUEST,
             MakeActionGroup(
                 MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10)),
                 MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))

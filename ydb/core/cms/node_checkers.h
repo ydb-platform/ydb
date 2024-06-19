@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "error_info.h"
 
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
@@ -26,6 +27,39 @@ public:
         NODE_STATE_DOWN /* "Down" */
     };
 
+    class TTryToLockResult {
+    public:
+        static TTryToLockResult Success() {
+            return TTryToLockResult(true);
+        }
+
+        static TTryToLockResult Fail(const TReason &reason) {
+            return TTryToLockResult(false, reason);
+        };
+
+        bool IsSuccess() const {
+            return IsSuccess_;
+        }
+
+        TReason GetReason() const {
+            return Reason;
+        }
+
+    private:
+        TTryToLockResult(bool isSuccess, const TReason &reason)
+        : IsSuccess_(isSuccess)
+        , Reason(reason)
+        {}
+
+        explicit TTryToLockResult(bool isSuccess)
+        : IsSuccess_(isSuccess)
+        {}
+
+    private:
+        bool IsSuccess_ = false;
+        TReason Reason;
+    };
+
 protected:
     static ENodeState NodeState(NKikimrCms::EState state);
 
@@ -39,7 +73,7 @@ public:
     virtual void LockNode(ui32 nodeId) = 0;
     virtual void UnlockNode(ui32 nodeId) = 0;
 
-    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const = 0;
+    virtual TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
 };
 
 /**
@@ -80,7 +114,13 @@ protected:
     ui32 DisabledNodesLimit;
     ui32 DisabledNodesRatioLimit;
 
-    virtual TString ReasonPrefix(ui32 nodeId) const = 0;
+    virtual TString ReasonPrefix(ui32 nodeId) const {
+         return TStringBuilder() << "Cannot lock node '" << nodeId << "'";
+    }
+    
+    virtual TReason::EType DisabledNodesLimitReachedReasonType() const {
+        return TReason::EType::DISABLED_NODES_LIMIT_REACHED;
+    };
 
 public:
     explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
@@ -94,7 +134,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const override final;
+    TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -106,6 +146,10 @@ protected:
         return TStringBuilder() << "Cannot lock node '" << nodeId << "' of tenant '" << TenantName << "'";
     }
 
+    TReason::EType DisabledNodesLimitReachedReasonType() const override final {
+        return TReason::EType::TENANT_DISABLED_NODES_LIMIT_REACHED;
+    }
+
 public:
     explicit TTenantLimitsCounter(const TString& tenantName, ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
         : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
@@ -115,11 +159,6 @@ public:
 };
 
 class TClusterLimitsCounter : public TNodesLimitsCounterBase {
-protected:
-    TString ReasonPrefix(ui32 nodeId) const override final {
-        return TStringBuilder() << "Cannot lock node '" << nodeId << "'";
-    }
-
 public:
     explicit TClusterLimitsCounter(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
         : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
@@ -143,7 +182,7 @@ public:
     {
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const override final;
+    TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
 };
 
 } // namespace NKikimr::NCms

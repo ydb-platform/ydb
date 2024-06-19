@@ -39,7 +39,7 @@ public:
             Response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
         } else {
             Response->Record.MutableStatus()->SetCode(error.Code);
-            Response->Record.MutableStatus()->SetReason(error.Reason);
+            Response->Record.MutableStatus()->SetReason(error.Reason.GetMessage());
         }
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Response status: %s %s",

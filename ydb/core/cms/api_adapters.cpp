@@ -54,11 +54,31 @@ namespace {
         }
     }
 
+    Ydb::Maintenance::ActionState::ActionReason ConvertReason(NKikimrCms::TAction::EStatus cmsActionStatus) {
+        switch (cmsActionStatus) {
+            case NKikimrCms::TAction::OK:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_OK;
+            case NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_VDISKS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+            case NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS;
+            case NKikimrCms::TAction::DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_DISABLED_NODES_LIMIT_REACHED;
+            case NKikimrCms::TAction::TENANT_DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED;
+            case NKikimrCms::TAction::SYS_TABLETS_NODE_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED;
+            case NKikimrCms::TAction::STATUS_UNSPECIFIED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
+        }
+        return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
+    }
+
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::ActionState& actionState) {
         ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         // FIXME: specify action_uid
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
-        actionState.set_reason(Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED); // FIXME: specify
+        actionState.set_reason(ConvertReason(cmsAction.GetStatus()));
     }
 
     void ConvertActionUid(const TString& taskUid, const TString& permissionId,

@@ -589,16 +589,16 @@
     ],
     "test.test[column_group-groups-single-Debug]": [
         {
-            "checksum": "c959d5a675e3948d96f08c1f4dc2e434",
-            "size": 2599,
-            "uri": "https://{canondata_backend}/1942671/ac1614a59d38931e49dcae7569c477edc09b1ed0/resource.tar.gz#test.test_column_group-groups-single-Debug_/opt.yql"
+            "checksum": "e38c8b8e9b462a7639862f55b72f4312",
+            "size": 2676,
+            "uri": "https://{canondata_backend}/1903280/6513ce3d3496dad440926c6388274ab336422ca4/resource.tar.gz#test.test_column_group-groups-single-Debug_/opt.yql"
         }
     ],
     "test.test[column_group-groups-single-Plan]": [
         {
-            "checksum": "59557f1fa925c757680d8362683e4c37",
-            "size": 7481,
-            "uri": "https://{canondata_backend}/1942671/ac1614a59d38931e49dcae7569c477edc09b1ed0/resource.tar.gz#test.test_column_group-groups-single-Plan_/plan.txt"
+            "checksum": "83e49b8421e500542843c5245e957d9c",
+            "size": 7486,
+            "uri": "https://{canondata_backend}/1903280/6513ce3d3496dad440926c6388274ab336422ca4/resource.tar.gz#test.test_column_group-groups-single-Plan_/plan.txt"
         }
     ],
     "test.test[column_group-groups-single-Results]": [
@@ -610,16 +610,16 @@
     ],
     "test.test[column_group-length-perusage-Debug]": [
         {
-            "checksum": "92f9bc273492e4dc664c9c2d70bc23bd",
-            "size": 2911,
-            "uri": "https://{canondata_backend}/1942671/ac1614a59d38931e49dcae7569c477edc09b1ed0/resource.tar.gz#test.test_column_group-length-perusage-Debug_/opt.yql"
+            "checksum": "98bac5055bb801d1df5c761676401d58",
+            "size": 2988,
+            "uri": "https://{canondata_backend}/1903280/6513ce3d3496dad440926c6388274ab336422ca4/resource.tar.gz#test.test_column_group-length-perusage-Debug_/opt.yql"
         }
     ],
     "test.test[column_group-length-perusage-Plan]": [
         {
-            "checksum": "570243c6e64a5ef40d5431941a114357",
+            "checksum": "d47e776006b9c395cfc8d83942e5c704",
             "size": 8045,
-            "uri": "https://{canondata_backend}/1942671/ac1614a59d38931e49dcae7569c477edc09b1ed0/resource.tar.gz#test.test_column_group-length-perusage-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1903280/6513ce3d3496dad440926c6388274ab336422ca4/resource.tar.gz#test.test_column_group-length-perusage-Plan_/plan.txt"
         }
     ],
     "test.test[column_group-length-perusage-Results]": [

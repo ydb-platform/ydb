@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
@@ -238,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
         NWorkload::TWorkloadManagerConfig workloadManagerConfig;
-        workloadManagerConfig.Pools.insert({"sample_pool_id", NWorkload::TWorkloadManagerConfig::TPoolConfig()});
+        workloadManagerConfig.Pools.insert({"sample_pool_id", NResourcePool::TPoolSettings()});
         SetWorkloadManagerConfig(workloadManagerConfig);
 
         NKikimrConfig::TAppConfig config;

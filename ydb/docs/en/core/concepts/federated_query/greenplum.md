@@ -1,13 +1,13 @@
 # Working with Greenplum databases
 
-This section provides basic information on working with external [Greenplum](https://greenplum.org) databases.
+This section provides basic information on working with external [Greenplum](https://greenplum.org) databases. Since Greenplum is based on PostgreSQL technology, some of their points are the same, so some links may lead to PostgreSQL documentation.
 
 Follow these steps to work with an external Greenplum database:
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
     ```sql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific database within the Greenplum cluster. In the `LOCATION` parameter, pass the network address of the [master node](https://www.greenplumdba.com/greenplum-master) of Greenplum. By default, the [namespace](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific database within the Greenplum cluster. In the `LOCATION` parameter, pass the network address of the [master node](https://greenplum.org/introduction-to-greenplum-architecture/) of Greenplum. By default, the [namespace](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
     ```sql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (
         SOURCE_TYPE="Greenplum",
@@ -45,11 +45,11 @@ When working with Greenplum clusters, there are a number of limitations:
 
 ## Supported data types
 
-In the Greenplum database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](https://ydb.tech/docs/ru/yql/reference/types/optional) types.
+In the Greenplum database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic Greenplum types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](https://ydb.tech/docs/ru/yql/reference/types/optional) types.
 
-Below is a correspondence table between PostgreSQL and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
+Below is a correspondence table between Greenplum and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 
-| PostgreSQL Data Type | {{ ydb-full-name }} Data Type | Notes |
+| Greenplum Data Type | {{ ydb-full-name }} Data Type | Notes |
 |---|----|------|
 | `boolean` | `Optional<Bool>` ||
 | `smallint` | `Optional<Int16>` ||

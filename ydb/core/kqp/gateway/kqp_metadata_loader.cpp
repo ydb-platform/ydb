@@ -479,7 +479,6 @@ NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
         return NExternalSource::NAuth::MakeAws(metadata.AwsAccessKeyId, metadata.AwsSecretAccessKey, metadata.DataSourceAuth.GetAws().GetAwsRegion());
     case NKikimrSchemeOp::TAuth::kBasic:
     case NKikimrSchemeOp::TAuth::kMdbBasic:
-    case NKikimrSchemeOp::TAuth::kToken:
         Y_ABORT("Unimplemented external source auth: %d", metadata.DataSourceAuth.identity_case());
         break;
     }

@@ -67,7 +67,7 @@ bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
         resType.set_type_id(Ydb::Type::DATE);
         return true;
     case arrow::Type::DATE64: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::DATETIME64);
+        resType.set_type_id(Ydb::Type::DATETIME);
         return true;
     case arrow::Type::TIMESTAMP:
         resType.set_type_id(Ydb::Type::TIMESTAMP);
@@ -79,7 +79,7 @@ bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
     case arrow::Type::INTERVAL_MONTHS: // TODO: is it true?
         return false;
     case arrow::Type::INTERVAL_DAY_TIME: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL64);
+        resType.set_type_id(Ydb::Type::INTERVAL);
         return true;
     case arrow::Type::DECIMAL128: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DOUBLE);
@@ -126,7 +126,7 @@ bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
     case arrow::Type::EXTENSION: // TODO: is representable?
         return false;
     case arrow::Type::DURATION: // TODO: is it true?
-        resType.set_type_id(Ydb::Type::INTERVAL64);
+        resType.set_type_id(Ydb::Type::INTERVAL);
         return true;
     case arrow::Type::LARGE_STRING: // TODO: is it true?
         resType.set_type_id(Ydb::Type::UTF8);

@@ -21,6 +21,10 @@ def main():
     yellow_treshold = int(os.environ.get("yellow_treshold"))
     red_treshold = int(os.environ.get("red_treshold"))
 
+    github_srv = os.environ.get("GITHUB_SERVER_URL")
+    repo_name = os.environ.get("GITHUB_REPOSITORY")
+    repo_url= f"{github_srv}/{repo_name}/"
+
     branch = os.environ.get("branch_to_compare")
     current_pr_commit_sha = os.environ.get("commit_git_sha")
 
@@ -64,12 +68,12 @@ def main():
             color = "green"
             summary_core = f" <= 0 Bytes vs {branch}: **OK**"
 
-        if stripped_diff_perc > 0:
+        if stripped_bytes_diff > 0:
             stripped_sign = "+"
         else:
             stripped_sign = ""
 
-        summary_start = f"ydbd size **{human_readable_size}** changed by **{sign}{human_readable_size_diff}**, which is"
+        summary_start = f"ydbd size **{human_readable_size}** changed* by **{sign}{human_readable_size_diff}**, which is"
         summary = f"{summary_start}{summary_core}"
 
         comment = (
@@ -78,6 +82,7 @@ def main():
             f"|:--- | ---: | ---: | ---: | ---: |\n"
             f"|ydbd size|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
             f"|ydbd stripped size|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
+            f"<sup>*please be aware that the difference is based on comparing your commit and the last completed build from the post-commit, check [comparation]({repo_url}compare/{main_github_sha}..{current_pr_commit_sha})</sup>"
         )
         print(f"{color};;;{comment}")
     else:

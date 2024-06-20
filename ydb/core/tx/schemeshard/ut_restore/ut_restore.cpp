@@ -1179,29 +1179,29 @@ value {
         NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
 
         const TVector<TCell> values = {
-            TCell::Make<i32>(-1),                           // Int32
-            TCell::Make<ui32>(2),                           // Uint32
-            TCell::Make<i64>(-3),                           // Int64
-            TCell::Make<ui64>(4),                           // Uint64
-            TCell::Make<ui8>(5),                            // Uint8
-            TCell::Make<bool>(true),                        // Bool
-            TCell::Make<double>(6.66),                         // Double
-            TCell::Make<float>(7.77),                          // Float
-            TCell::Make<ui16>(8),                           // Date
-            TCell::Make<ui32>(9),                           // Datetime
-            TCell::Make<ui64>(10),                          // Timestamp
-            TCell::Make<i64>(-11),                          // Interval
-            TCell::Make<i32>(-12),                          // Date32
-            TCell::Make<i64>(-13),                          // Datetime64
-            TCell::Make<i64>(-14),                          // Timestamp64
-            TCell::Make<i64>(-15),                          // Interval64
-            TCell::Make<std::pair<ui64, ui64>>(decimal),    // Decimal
-            TCell(dynumber.data(), dynumber.size()),        // Dynumber
-            TCell(string.data(), string.size()),            // String
-            TCell(string.data(), string.size()),            // Utf8
-            TCell(json.data(), json.size()),                // Json
-            TCell(binaryJson->Data(), binaryJson->Size()),  // JsonDocument
-            TCell(uuid, sizeof(uuid)),                      // Uuid
+            TCell::Make<i32>(-1), // Int32
+            TCell::Make<ui32>(2), // Uint32
+            TCell::Make<i64>(-3), // Int64
+            TCell::Make<ui64>(4), // Uint64
+            TCell::Make<ui8>(5), // Uint8
+            TCell::Make<bool>(true), // Bool
+            TCell::Make<double>(6.66), // Double
+            TCell::Make<float>(7.77), // Float
+            TCell::Make<ui16>(8), // Date
+            TCell::Make<ui32>(9), // Datetime
+            TCell::Make<ui64>(10), // Timestamp
+            TCell::Make<i64>(-11), // Interval
+            TCell::Make<i32>(-12), // Date32
+            TCell::Make<i64>(-13), // Datetime64
+            TCell::Make<i64>(-14), // Timestamp64
+            TCell::Make<i64>(-15), // Interval64
+            TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+            TCell(dynumber.data(), dynumber.size()), // Dynumber
+            TCell(string.data(), string.size()), // String
+            TCell(string.data(), string.size()), // Utf8
+            TCell(json.data(), json.size()), // Json
+            TCell(binaryJson->Data(), binaryJson->Size()), // JsonDocument
+            TCell(uuid, sizeof(uuid)), // Uuid
         };
 
         const TVector<ui32> keyTags = {1};

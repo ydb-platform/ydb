@@ -60,6 +60,19 @@ public:
         }
     }
 
+    TEnv(const TFeatureFlags& featureFlags, bool init = true)
+        : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
+            .SetDomainName(DomainName)
+            .SetFeatureFlags(featureFlags)
+        )
+        , Server(Settings)
+        , Client(Settings)
+    {
+        if (init) {
+            Init();
+        }
+    }
+
     explicit TEnv(const TString& builtin)
         : TEnv(false)
     {

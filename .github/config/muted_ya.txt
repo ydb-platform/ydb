@@ -52,6 +52,7 @@ ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
 ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
 ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
+ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/fq/ut_integration Yq_1.*
 ydb/services/keyvalue/ut KeyValueGRPCService.*
 ydb/services/keyvalue/ut sole*

@@ -90,7 +90,7 @@ namespace NYql {
             return timestampStatistics.lowValue <= greatestTimestamp && timestampStatistics.highValue >= leastTimestamp ? Triple::True : Triple::False;
         }
 
-      Triple ComparatorTimestamp(const TMaybe<TColumnStatistics>& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const Ydb::TypedValue& rValue, int64_t multiplier) {
+        Triple ComparatorTimestamp(const TMaybe<TColumnStatistics>& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const Ydb::TypedValue& rValue, int64_t multiplier) {
             if (!lValue || !lValue->Timestamp || !lValue->Timestamp->lowValue || !lValue->Timestamp->highValue) {
                 return Triple::Unknown;
             }
@@ -138,11 +138,11 @@ namespace NYql {
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::EQ:
                     return timestampStatistics.lowValue <= leftValueTimestamp && leftValueTimestamp <= timestampStatistics.highValue ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::LE:
-                    return leftValueTimestamp <= timestampStatistics.highValue  ? Triple::True : Triple::False;
+                    return leftValueTimestamp <= timestampStatistics.highValue ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::L:
                     return leftValueTimestamp < timestampStatistics.highValue ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::GE:
-                    return  timestampStatistics.lowValue <= leftValueTimestamp ? Triple::True : Triple::False;
+                    return timestampStatistics.lowValue <= leftValueTimestamp ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::G:
                     return timestampStatistics.lowValue < leftValueTimestamp ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::NE:

@@ -76,7 +76,7 @@ namespace NTest {
         void Make(IPages *env) noexcept
         {
             Ready = EReady::Gone;
-            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
+            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env, false);
         }
 
         EReady Seek(TRawVals key_, ESeek seek) noexcept

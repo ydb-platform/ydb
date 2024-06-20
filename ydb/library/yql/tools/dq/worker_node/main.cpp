@@ -402,9 +402,9 @@ int main(int argc, char** argv) {
             : TTaskRunnerInvokerFactory::TPtr(new TConcurrentInvokerFactory(2*capacity));
         YQL_ENSURE(functionRegistry);
         lwmOptions.TaskRunnerActorFactory = disablePipe
-            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger)
+            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
-                    return lwmOptions.Factory->Get(alloc, task, statsMode, logger);
+                    return lwmOptions.Factory->Get(alloc, task, statsMode);
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;

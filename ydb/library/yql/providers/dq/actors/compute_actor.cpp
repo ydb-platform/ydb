@@ -57,7 +57,8 @@ IActor* CreateComputeActor(
     }
 
     auto taskRunnerFactory = [factory = options.Factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger) {
-        return factory->Get(alloc, task, statsMode, logger, {});
+        Y_UNUSED(logger);
+        return factory->Get(alloc, task, statsMode, {});
     };
 
     if (computeActorType.empty() || computeActorType == "old" || computeActorType == "sync") {

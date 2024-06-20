@@ -89,6 +89,10 @@ public:
     }
 
     void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
+        ui64 rowsInMemory = PackedRowCount + ChunkRowCount;
+
+        LOG("Push request, rows in memory: " << rowsInMemory << ", bytesInMemory: " << (PackedDataSize + Packer.PackedSizeEstimate())
+            << ", finished: " << Finished);
         YQL_ENSURE(!IsFull());
 
         if (Finished) {
@@ -174,6 +178,8 @@ public:
 
     [[nodiscard]]
     bool Pop(TDqSerializedBatch& data) override {
+        LOG("Pop request, rows in memory: " << GetValuesCount() << ", finished: " << Finished);
+
         if (!HasData()) {
             PushStats.TryPause();
             if (Finished) {
@@ -208,6 +214,8 @@ public:
             data.SetPayload(FinishPackAndCheckSize());
             ChunkRowCount = 0;
         }
+
+        DLOG("Took " << data.RowCount() << " rows");
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();

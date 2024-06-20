@@ -221,10 +221,10 @@ public:
     }
 
     ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, const TString& traceId) override {
-        return new TLocalTaskRunner(task, Get(alloc, task, NDqProto::DQ_STATS_MODE_BASIC, {}, traceId));
+        return new TLocalTaskRunner(task, Get(alloc, task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger, const TString& traceId) override {
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
@@ -262,7 +262,10 @@ public:
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(alloc, ctx, settings, logger);
+        return MakeDqTaskRunner(alloc, ctx, settings, [taskId = task.GetId(), traceId = traceId](const TString& message) {
+            YQL_LOG(DEBUG) << "traceId: " << traceId
+                << ", task: " << taskId << ": " << message;
+        });
     }
 
 private:

@@ -1938,11 +1938,10 @@ public:
         return new TTaskRunner(alloc, task, std::move(filesHolder), std::move(result), stageId, traceId);
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& logger, const TString& traceId) override
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
     {
         Y_UNUSED(statsMode);
         Y_UNUSED(alloc);
-        Y_UNUSED(logger);
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
 

@@ -6032,13 +6032,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto checkDisabled = [&session](const TString& query) {
             Cerr << "Check query:\n" << query << "\n";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled. Please contact your system administrator to enable it");
         };
 
         // CREATE RESOURCE POOL
         checkDisabled(R"(
-            CREATE RESOURCE POOL `MyResourcePool` WITH (
+            CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUERY_CANCEL_AFTER_SECONDS=86400,
                 QUERY_COUNT_LIMIT=1000
@@ -6046,18 +6046,24 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // ALTER RESOURCE POOL
         checkDisabled(R"(
-            ALTER RESOURCE POOL `MyResourcePool`
+            ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30),
                 SET QUERY_COUNT_LIMIT 100,
                 RESET (QUERY_CANCEL_AFTER_SECONDS);
             )");
 
         // DROP RESOURCE POOL
-        checkDisabled("DROP RESOURCE POOL `MyResourcePool`;");
+        checkDisabled("DROP RESOURCE POOL MyResourcePool;");
     }
 
     Y_UNIT_TEST(ResourcePoolsValidation) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(true));
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -6067,6 +6073,219 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol");
+
+        result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                ANOTHER_LIMIT=20
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit");
+
+        result = session.ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET ANOTHER_LIMIT 5,
+                RESET (SOME_LIMIT);
+            )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit, some_limit");
+
+        result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT="StringValue"
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to parse property concurrent_query_limit:");
+    }
+
+    Y_UNIT_TEST(CreateResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUERY_CANCEL_AFTER_SECONDS=86400,
+                QUERY_COUNT_LIMIT=1000,
+                QUERY_MEMORY_LIMIT_RATIO_PER_NODE=95
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+        UNIT_ASSERT(resourcePool.ResourcePoolInfo);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetPoolId(), "MyResourcePool");
+        const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "1000");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+    }
+
+    Y_UNIT_TEST(DoubleCreateResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ResultSet.at(0).Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+        }
+
+        {
+            auto query = R"(
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    QUERY_CANCEL_AFTER_SECONDS=86400
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/.resource_pools/MyResourcePool', error: path exist");
+        }
+    }
+
+    Y_UNIT_TEST(AlterResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20,
+                    QUERY_CANCEL_AFTER_SECONDS=86400,
+                    QUERY_MEMORY_LIMIT_RATIO_PER_NODE=95
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
+            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+        }
+
+        {
+            auto query = R"(
+                ALTER RESOURCE POOL MyResourcePool
+                    SET (CONCURRENT_QUERY_LIMIT = 30),
+                    SET QUERY_COUNT_LIMIT 100,
+                    RESET (QUERY_CANCEL_AFTER_SECONDS);
+                )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
+            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "0");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "100");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+        }
+    }
+
+    Y_UNIT_TEST(AlterNonExistingResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30),
+                SET QUERY_COUNT_LIMIT 100,
+                RESET (QUERY_CANCEL_AFTER_SECONDS);
+            )";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DropResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE RESOURCE POOL MyResourcePool WITH (
+                    CONCURRENT_QUERY_LIMIT=20
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = "DROP RESOURCE POOL MyResourcePool";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ErrorCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+    }
+
+    Y_UNIT_TEST(DropNonExistingResourcePool) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = "DROP RESOURCE POOL MyResourcePool";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
     }
 }
 

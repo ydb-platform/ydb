@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
 
 
@@ -18,7 +17,6 @@ namespace NQueue {
 class IState : public TThrRefBase {
 public:
     virtual bool TablesRequired() const = 0;
-    virtual bool HasAccess(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) const = 0;
     virtual ui64 GetLocalPoolSize() const = 0;
 
     virtual void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) = 0;

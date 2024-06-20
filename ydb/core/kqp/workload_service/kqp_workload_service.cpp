@@ -118,11 +118,6 @@ public:
             return;
         }
 
-        if (!poolState->HasAccess(ev->Get()->UserToken)) {
-            ReplyContinueError(workerActorId, Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You do not have access permissions for pool " << poolId);
-            return;
-        }
-
         if (poolState->PlaceRequest(workerActorId, ev->Get()->SessionId) && poolState->TablesRequired()) {
             ScheduleLeaseUpdate();
             PrepareWorkloadServiceTables();

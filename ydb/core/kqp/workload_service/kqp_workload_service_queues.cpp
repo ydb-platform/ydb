@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/services.h>
 
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
 
 
@@ -24,33 +23,6 @@ using namespace NActors;
 
 
 class TStateBase : public IState {
-    class TAccessChecker {
-    public:
-        TAccessChecker(const TString& poolId, const TString& acl) {
-            if (acl) {
-                SecurityObject = NACLib::TSecurityObject();
-                try {
-                    SecurityObject->FromString(acl);
-                } catch (const yexception& error) {
-                    Y_ENSURE(false, "Invalid ACL format for pool " << poolId << ": " << error.what());
-                }
-            }
-        }
-
-        bool HasAccess(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) const {
-            if (!SecurityObject) {
-                return true;
-            }
-            if (!userToken) {
-                return false;
-            }
-            return SecurityObject->CheckAccess(NACLib::EAccessRights::GenericUse, *userToken);
-        }
-
-    private:
-        std::optional<NACLib::TSecurityObject> SecurityObject;
-    };
-
 protected:
     struct TRequest {
         enum class EState {
@@ -82,13 +54,8 @@ public:
         , CancelAfter(poolConfig.QueryCancelAfter)
         , PoolSizeLimit(GetMaxPoolSize(poolConfig))
         , InFlightLimit(GetMaxInFlight(poolConfig))
-        , AccessChecker(poolId, poolConfig.ACL)
     {
         RegisterCounters();
-    }
-
-    bool HasAccess(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) const final {
-        return AccessChecker.HasAccess(userToken);
     }
 
     ui64 GetLocalPoolSize() const final {
@@ -286,8 +253,6 @@ protected:
     const ui64 InFlightLimit;
 
 private:
-    const TAccessChecker AccessChecker;
-
     ui64 LocalInFlight = 0;
     std::unordered_map<TString, TRequest> LocalSessions;
 

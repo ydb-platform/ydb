@@ -11,8 +11,6 @@ struct TPoolSettings {
     TDuration QueryCancelAfter = TDuration::Days(1);
 
     double QueryMemoryLimitRatioPerNode = 100;  // Percent from node memory capacity
-
-    TString ACL = "";  // empty = full access for all users
 };
 
 }  // namespace NKikimr::NResourcePool

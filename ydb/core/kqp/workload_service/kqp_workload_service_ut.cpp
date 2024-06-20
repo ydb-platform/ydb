@@ -21,7 +21,7 @@ using namespace Tests;
 
 namespace  {
 
-constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Minutes(4);
+constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Minutes(2);
 
 
 // Query runner
@@ -286,7 +286,7 @@ struct TYdbSetupSettings {
     FLUENT_FIELD_DEFAULT(TString, PoolId, "sample_pool_id");
     FLUENT_FIELD_DEFAULT(ui64, ConcurrentQueryLimit, 0);
     FLUENT_FIELD_DEFAULT(ui64, QueryCountLimit, 0);
-    FLUENT_FIELD_DEFAULT(TDuration, QueryCancelAfter, TDuration::Days(1));
+    FLUENT_FIELD_DEFAULT(TDuration, QueryCancelAfter, TDuration::Zero());
 };
 
 class TWorkloadServiceYdbSetup {

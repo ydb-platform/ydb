@@ -92,13 +92,15 @@ private:
             {
                 Col("database", NScheme::NTypeIds::Text),
                 Col("pool_id", NScheme::NTypeIds::Text),
+                Col("start_time", NScheme::NTypeIds::Timestamp),
                 Col("session_id", NScheme::NTypeIds::Text),
                 Col("node_id", NScheme::NTypeIds::Uint32),
                 Col("wait_deadline", NScheme::NTypeIds::Timestamp),
+                Col("lease_deadline", NScheme::NTypeIds::Timestamp),
             },
-            { "database", "pool_id", "wait_deadline", "session_id" },
+            { "database", "pool_id", "start_time", "session_id" },
             NKikimrServices::KQP_WORKLOAD_SERVICE,
-            TtlCol("wait_deadline", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
+            TtlCol("lease_deadline", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
@@ -338,18 +340,32 @@ public:
     void OnRunQuery() override {
         TString sql = TStringBuilder() << R"(
             -- TRefreshPoolStateQuery::OnRunQuery
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
             DECLARE $node_id AS Uint32;
             DECLARE $lease_duration AS Interval;
 
+            UPDATE `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
+            SET lease_deadline = CurrentUtcTimestamp() + $lease_duration
+            WHERE database = $database
+              AND pool_id = $pool_id
+              AND node_id = $node_id
+              AND (wait_deadline IS NULL OR wait_deadline >= CurrentUtcTimestamp())
+              AND lease_deadline >= CurrentUtcTimestamp();
+
             UPDATE `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
             SET lease_deadline = CurrentUtcTimestamp() + $lease_duration
-            WHERE pool_id = $pool_id
-              AND node_id = $node_id;
+            WHERE database = $database
+              AND pool_id = $pool_id
+              AND node_id = $node_id
+              AND lease_deadline >= CurrentUtcTimestamp();
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
@@ -367,21 +383,28 @@ public:
     void OnLeaseUpdated() {
         TString sql = TStringBuilder() << R"(
             -- TRefreshPoolStateQuery::OnLeaseUpdated
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
 
             SELECT COUNT(*) AS delayed_requests
             FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
-              AND wait_deadline >= CurrentUtcTimestamp();
+            WHERE database = $database
+              AND pool_id = $pool_id
+              AND (wait_deadline IS NULL OR wait_deadline >= CurrentUtcTimestamp())
+              AND lease_deadline >= CurrentUtcTimestamp();
 
             SELECT COUNT(*) AS running_requests
             FROM `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
+            WHERE database = $database
+              AND pool_id = $pool_id
               AND lease_deadline >= CurrentUtcTimestamp();
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build();
@@ -433,11 +456,13 @@ private:
 
 class TDelayRequestQuery : public TQueryBase {
 public:
-    TDelayRequestQuery(const TString& poolId, const TString& sessionId, TInstant waitDeadline, NMonitoring::TDynamicCounterPtr counters)
+    TDelayRequestQuery(const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
         : TQueryBase(__func__, poolId, sessionId, counters)
         , PoolId(poolId)
         , SessionId(sessionId)
+        , StartTime(startTime)
         , WaitDeadline(waitDeadline)
+        , LeaseDuration(leaseDuration)
     {}
 
     void OnRunQuery() override {
@@ -445,14 +470,17 @@ public:
             -- TDelayRequestQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
+            DECLARE $start_time AS Timestamp;
             DECLARE $session_id AS Text;
             DECLARE $node_id AS Uint32;
-            DECLARE $wait_deadline AS Timestamp;
+            DECLARE $wait_deadline AS Optional<Timestamp>;
+            DECLARE $lease_duration AS Interval;
 
             UPSERT INTO `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-                (database, pool_id, session_id, node_id, wait_deadline)
+                (database, pool_id, start_time, session_id, node_id, wait_deadline, lease_deadline)
             VALUES (
-                $database, $pool_id, $session_id, $node_id, $wait_deadline
+                $database, $pool_id, $start_time, $session_id, $node_id, $wait_deadline,
+                CurrentUtcTimestamp() + $lease_duration
             );
         )";
 
@@ -464,6 +492,9 @@ public:
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
+            .AddParam("$start_time")
+                .Timestamp(StartTime)
+                .Build()
             .AddParam("$session_id")
                 .Utf8(SessionId)
                 .Build()
@@ -471,7 +502,10 @@ public:
                 .Uint32(SelfId().NodeId())
                 .Build()
             .AddParam("$wait_deadline")
-                .Timestamp(WaitDeadline)
+                .OptionalTimestamp(WaitDeadline)
+                .Build()
+            .AddParam("$lease_duration")
+                .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -488,7 +522,9 @@ public:
 private:
     const TString PoolId;
     const TString SessionId;
-    const TInstant WaitDeadline;
+    const TInstant StartTime;
+    const TMaybe<TInstant> WaitDeadline;
+    const TDuration LeaseDuration;
 };
 
 
@@ -503,18 +539,24 @@ public:
     void OnRunQuery() override {
         TString sql = TStringBuilder() << R"(
             -- TStartFirstDelayedRequestQuery::OnRunQuery
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
 
-            SELECT pool_id, wait_deadline, session_id, node_id
+            SELECT database, pool_id, start_time, session_id, node_id
             FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
-              AND wait_deadline >= CurrentUtcTimestamp()
-            ORDER BY pool_id, wait_deadline
+            WHERE database = $database
+              AND pool_id = $pool_id
+              AND (wait_deadline IS NULL OR wait_deadline >= CurrentUtcTimestamp())
+              AND lease_deadline >= CurrentUtcTimestamp()
+            ORDER BY database, pool_id, start_time
             LIMIT 1;
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build();
@@ -556,13 +598,13 @@ public:
         RequestSessionId = *sessionId;
         UpdateLogInfo(PoolId, RequestSessionId);
 
-        TMaybe<TInstant> waitDeadline = result.ColumnParser("wait_deadline").GetOptionalTimestamp();
-        if (!waitDeadline) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Wait deadline is not specified for delayed request");
+        TMaybe<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
+        if (!startTime) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Start time is not specified for delayed request");
             return;
         }
 
-        RequestWaitDeadline = *waitDeadline;
+        RequestStartTime = *startTime;
         StartQueuedRequest();
     }
 
@@ -571,14 +613,15 @@ public:
             -- TStartFirstDelayedRequestQuery::StartQueuedRequest
             DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
+            DECLARE $start_time AS Timestamp;
             DECLARE $session_id AS Text;
             DECLARE $node_id AS Uint32;
-            DECLARE $wait_deadline AS Timestamp;
             DECLARE $lease_duration AS Interval;
 
             DELETE FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
-              AND wait_deadline = $wait_deadline
+            WHERE database = $database
+              AND pool_id = $pool_id
+              AND start_time = $start_time
               AND session_id = $session_id;
 
             UPSERT INTO `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
@@ -597,14 +640,14 @@ public:
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
+            .AddParam("$start_time")
+                .Timestamp(RequestStartTime)
+                .Build()
             .AddParam("$session_id")
                 .Utf8(RequestSessionId)
                 .Build()
             .AddParam("$node_id")
                 .Uint32(SelfId().NodeId())
-                .Build()
-            .AddParam("$wait_deadline")
-                .Timestamp(RequestWaitDeadline)
                 .Build()
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
@@ -628,7 +671,7 @@ private:
 
     ui32 RequestNodeId = 0;
     TString RequestSessionId;
-    TInstant RequestWaitDeadline;
+    TInstant RequestStartTime;
 };
 
 class TStartRequestQuery : public TQueryBase {
@@ -743,22 +786,28 @@ public:
             -- TCleanupRequestsQuery::OnRunQuery
             PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
+            DECLARE $database AS Text;
             DECLARE $pool_id AS Text;
             DECLARE $node_id AS Uint32;
             DECLARE $session_ids AS List<Text>;
 
             DELETE FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
+            WHERE database = $database
+              AND pool_id = $pool_id
               AND session_id IN $session_ids;
 
             DELETE FROM `)" << TTablesCreator::GetRunningRequestsPath() << R"(`
-            WHERE pool_id = $pool_id
+            WHERE database = $database
+              AND pool_id = $pool_id
               AND node_id = $node_id
               AND session_id IN $session_ids;
         )";
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$database")
+                .Utf8(GetDefaultDatabase())
+                .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
                 .Build()
@@ -808,8 +857,8 @@ IActor* CreateRefreshPoolStateActor(const TActorId& replyActorId, const TString&
     return new TQueryRetryActor<TRefreshPoolStateQuery, TEvPrivate::TEvRefreshPoolStateResponse, TString, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, leaseDuration, counters);
 }
 
-IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& poolId, const TString& sessionId, TInstant waitDeadline, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TInstant, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, sessionId, waitDeadline, counters);
+IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TInstant, TMaybe<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
 }
 
 IActor* CreateStartRequestActor(const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {

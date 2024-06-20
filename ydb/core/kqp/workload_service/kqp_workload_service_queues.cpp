@@ -48,12 +48,12 @@ protected:
 public:
     TStateBase(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : Counters(counters)
-        , PoolConfig(poolConfig)
         , ActorContext(actorContext)
         , PoolId(poolId)
-        , CancelAfter(poolConfig.QueryCancelAfter)
         , PoolSizeLimit(GetMaxPoolSize(poolConfig))
         , InFlightLimit(GetMaxInFlight(poolConfig))
+        , PoolConfig(poolConfig)
+        , CancelAfter(poolConfig.QueryCancelAfter)
     {
         RegisterCounters();
     }
@@ -69,7 +69,9 @@ public:
         }
 
         LOG_D("received new request, worker id: " << workerActorId << ", session id: " << sessionId);
-        ActorContext.Schedule(CancelAfter, new TEvPrivate::TEvCancelRequest(PoolId, sessionId));
+        if (CancelAfter) {
+            ActorContext.Schedule(CancelAfter, new TEvPrivate::TEvCancelRequest(PoolId, sessionId));
+        }
 
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId)}).first->second;
         LocalDelayedRequests->Inc();
@@ -145,7 +147,7 @@ public:
         if (!request->Started && request->State != TRequest::EState::Finishing) {
             if (request->State == TRequest::EState::Canceling && status == Ydb::StatusIds::SUCCESS) {
                 status = Ydb::StatusIds::CANCELLED;
-                issues.AddIssue("Delay deadline exceeded");
+                issues.AddIssue(TStringBuilder() << "Delay deadline exceeded in pool " << PoolId);
             }
             ReplyContinue(request, status, issues);
             return;
@@ -188,6 +190,21 @@ protected:
 
     ui64 GetLocalInFlight() const {
         return LocalInFlight;
+    }
+
+    TMaybe<TInstant> GetWaitDeadline(TInstant startTime) {
+        if (!CancelAfter) {
+            return Nothing();
+        }
+        return startTime + CancelAfter;
+    }
+
+    NYql::TIssue GroupIssues(const TString& message, NYql::TIssues issues) {
+        NYql::TIssue rootIssue(message);
+        for (const NYql::TIssue& issue : issues) {
+            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
+        return rootIssue;
     }
 
     TString LogPrefix() const {
@@ -245,14 +262,15 @@ private:
 protected:
     NMonitoring::TDynamicCounterPtr Counters;
 
-    const NResourcePool::TPoolSettings PoolConfig;
     const TActorContext ActorContext;
     const TString PoolId;
-    const TDuration CancelAfter;
     const ui64 PoolSizeLimit;
     const ui64 InFlightLimit;
 
 private:
+    const NResourcePool::TPoolSettings PoolConfig;
+    const TDuration CancelAfter;
+
     ui64 LocalInFlight = 0;
     std::unordered_map<TString, TRequest> LocalSessions;
 
@@ -337,9 +355,12 @@ public:
 
     void RefreshState(bool refreshRequired = false) override {
         RefreshRequired |= refreshRequired;
-        DoCleanupRequests();
+        if (!PreparingFinished) {
+            return;
+        }
 
-        if (RunningOperation || !PreparingFinished) {
+        DoCleanupRequests();
+        if (RunningOperation) {
             return;
         }
 
@@ -418,17 +439,17 @@ public:
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed to delay request " << ev->Get()->Status << ", session id: " << ev->Get()->SessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            ForUnfinished(ev->Get()->SessionId, [this, ev](TRequest* request) {
-                ReplyContinue(request, ev->Get()->Status, ev->Get()->Issues);
+            NYql::TIssue issue = GroupIssues("Failed to put request in queue", ev->Get()->Issues);
+            ForUnfinished(ev->Get()->SessionId, [this, ev, issue](TRequest* request) {
+                ReplyContinue(request, ev->Get()->Status, {issue});
             });
             RefreshRequired = true;
             return;
         }
 
-        LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
-
         GlobalState.DelayedRequests++;
         GlobalDelayedRequests->Inc();
+        LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
 
         DoStartDelayedRequest();
         RefreshState();
@@ -440,9 +461,10 @@ public:
         const TString& sessionId = ev->Get()->SessionId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed start request " << ev->Get()->Status << ", session id: " << sessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            ForUnfinished(sessionId, [this, ev](TRequest* request) {
+            NYql::TIssue issue = GroupIssues("Failed to start request", ev->Get()->Issues);
+            ForUnfinished(sessionId, [this, ev, issue](TRequest* request) {
                 AddFinishedRequest(request->SessionId);
-                ReplyContinue(request, ev->Get()->Status, ev->Get()->Issues);
+                ReplyContinue(request, ev->Get()->Status, {issue});
             });
             RefreshState();
             return;
@@ -467,8 +489,9 @@ public:
                     GlobalInFly->Inc();
                     ReplyContinue(request);
                 } else {
-                    AddFinishedRequest(request->SessionId);
-                    request->State = TRequest::EState::Canceling;
+                    // Request was dropped due to lease expiration 
+                    PendingRequests.emplace_front(request->SessionId);
+                    PendingRequestsCount->Inc();
                 }
             });
             DelayedRequests.pop_front();
@@ -533,9 +556,10 @@ private:
         if (!PendingRequests.empty()) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
-            ActorContext.Register(CreateDelayRequestActor(ActorContext.SelfID, PoolId, sessionId, GetRequest(sessionId)->StartTime + CancelAfter, Counters));
+            TRequest* request = GetRequest(sessionId);
+            ActorContext.Register(CreateDelayRequestActor(ActorContext.SelfID, PoolId, sessionId, request->StartTime, GetWaitDeadline(request->StartTime), LEASE_DURATION, Counters));
             DelayedRequests.emplace_back(sessionId);
-            GetRequest(sessionId)->CleanupRequired = true;
+            request->CleanupRequired = true;
         }
     }
 
@@ -547,7 +571,6 @@ private:
         if (!FinishedRequests.empty()) {
             RunningOperation = true;
             ActorContext.Register(CreateCleanupRequestsActor(ActorContext.SelfID, PoolId, FinishedRequests, Counters));
-
             FinishedRequests.clear();
             FinishingRequestsCount->Set(0);
         }

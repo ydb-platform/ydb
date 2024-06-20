@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         std::map<TString, TString> paramSources;
         TCsvParser parser(std::move(header), ',', "", &paramTypes, &paramSources);
         TParamsBuilder paramBuilder;
-        parser.GetParams(std::move(data), paramBuilder);
+        parser.GetParams(0, std::move(data), paramBuilder);
         auto values = paramBuilder.Build().GetValues();
         UNIT_ASSERT_EQUAL(values.size(), result.size());
         for (const auto& [name, value] : result) {
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
 
         TCsvParser parser(std::move(header), ',', "", &paramTypes, nullptr);
         TValueBuilder valueBuilder;
-        parser.GetValue(std::move(data), valueBuilder, result.GetType());
+        parser.GetValue(0, std::move(data), valueBuilder, result.GetType());
         UNIT_ASSERT(CompareValues(valueBuilder.Build(), result));
     }
 

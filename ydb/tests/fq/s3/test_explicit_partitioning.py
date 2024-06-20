@@ -1277,3 +1277,22 @@ Banana,3,100'''
         assert result_set.rows[1].items[2].int32_value == 2
         assert result_set.rows[2].items[2].int32_value == 1
         assert result_set.rows[3].items[2].int32_value == 2
+
+        sql = fR'''
+            select foo, bar, x from `{storage_connection_name}`.`part/`
+            with(
+                format = "parquet",
+                schema = (
+                    foo String not NULL,
+                    bar Int32 not NUll,
+                    x Float not NUll
+                )
+            )
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert 'BAD_REQUEST' in issues
+        assert 'Mismatch type for field: foo, expected: binary, got: int32' in issues

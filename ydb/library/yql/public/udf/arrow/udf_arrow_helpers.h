@@ -27,12 +27,12 @@ using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::comp
 
 class TUdfKernelState : public arrow::compute::KernelState {
 public:
-    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IValueBuilder* valueBuilder)
+    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IPgBuilder& pgBuilder)
         : ArgTypes_(argTypes)
         , OutputType_(outputType)
         , OnlyScalars_(onlyScalars)
         , TypeInfoHelper_(typeInfoHelper)
-        , ValueBuilder_(valueBuilder)
+        , PgBuilder_(pgBuilder)
     {
         Readers_.resize(ArgTypes_.size());
     }
@@ -48,7 +48,7 @@ public:
     IArrayBuilder& GetArrayBuilder() {
         Y_ENSURE(!OnlyScalars_);
         if (!ArrayBuilder_) {
-            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &ValueBuilder_->GetPgBuilder());
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *GetYqlMemoryPool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &PgBuilder_);
         }
 
         return *ArrayBuilder_;
@@ -62,18 +62,13 @@ public:
 
         return *ScalarBuilder_;
     }
-    
-    const IValueBuilder& GetValueBuilder() {
-        Y_ENSURE(ValueBuilder_);
-        return *ValueBuilder_;
-    }
 
 private:
     const TVector<const TType*> ArgTypes_;
     const TType* OutputType_;
     const bool OnlyScalars_;
     const ITypeInfoHelper* TypeInfoHelper_;
-    const IValueBuilder* ValueBuilder_;
+    const IPgBuilder& PgBuilder_;  
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     std::unique_ptr<IArrayBuilder> ArrayBuilder_;
     std::unique_ptr<IScalarBuilder> ScalarBuilder_;
@@ -162,8 +157,8 @@ public:
                 }
             }
 
-            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder);
-            arrow::compute::ExecContext execContext;
+            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder->GetPgBuilder());
+            arrow::compute::ExecContext execContext(GetYqlMemoryPool());
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);
 
@@ -327,54 +322,33 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     }
 }
 
-template <typename TDerived, typename TReader = IBlockReader, typename TBuilder = IArrayBuilder>
+template <typename TDerived>
 struct TUnaryKernelExec {
-
-static_assert(std::is_base_of_v<IBlockReader, TReader>);
-static_assert(std::is_base_of_v<IArrayBuilder, TBuilder>);
-
-template<typename TSink>
-static void Process(const TBlockItem& arg, TUdfKernelState& state, const TSink& sink) {
-    if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TUdfKernelState&, TSink&>) {
-        TDerived::Process(arg, state, sink);
-    } else {
-        TDerived::Process(arg, sink);
-    }
-}
-
-static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
         auto& reader = state.GetReader(0);
-
-        auto* readerImpl = dynamic_cast<TReader*>(&reader);
-        Y_ENSURE(readerImpl, TStringBuilder() << "Got " << typeid(reader).name() << " as BlockReader");
-
         const auto& arg = batch.values[0];
         if (arg.is_scalar()) {
             auto& builder = state.GetScalarBuilder();
-            auto item = readerImpl->GetScalarItem(*arg.scalar());
-            Process(item, state, [&](auto out) {
+            auto item = reader.GetScalarItem(*arg.scalar());
+            TDerived::Process(item, [&](TBlockItem out) {
                 *res = builder.Build(out);
             });
         }
         else {
             auto& array = *arg.array();
             auto& builder = state.GetArrayBuilder();
-
-            auto* builderImpl = dynamic_cast<TBuilder*>(&builder);
-            Y_ENSURE(builderImpl, TStringBuilder() << "Got " << typeid(builder).name() << " as ArrayBuilder");
-
-            size_t maxBlockLength = builderImpl->MaxLength();
+            size_t maxBlockLength = builder.MaxLength();
             Y_ENSURE(maxBlockLength > 0);
             TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
             for (int64_t i = 0; i < array.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array.length; ++j, ++i) {
-                    auto item = readerImpl->GetItem(array, i);
-                    Process(item, state, [&](auto out) {
-                        builderImpl->Add(out);
+                    auto item = reader.GetItem(array, i);
+                    TDerived::Process(item, [&](TBlockItem out) {
+                        builder.Add(out);
                     });
                 }
-                auto outputDatum = builderImpl->Build(false);
+                auto outputDatum = builder.Build(false);
                 ForEachArrayData(outputDatum, [&](const auto& arr) { outputArrays.push_back(arr); });
             }
 
@@ -385,40 +359,24 @@ static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute
     }
 };
 
-template <typename TDerived, typename TReader1 = IBlockReader, typename TReader2 = IBlockReader, typename TBuilder = IArrayBuilder>
+template <typename TDerived>
 struct TBinaryKernelExec {
-    template<typename TSink>
-    static void Process(const TBlockItem& arg1, const TBlockItem& arg2, TUdfKernelState& state, const TSink& sink) {
-        if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TBlockItem, TUdfKernelState&, TSink&>) {
-            TDerived::Process(arg1, arg2, state, sink);
-        } else {
-            TDerived::Process(arg1, arg2, sink);
-        }
-    }
-
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
-
         auto& reader1 = state.GetReader(0);
-        auto* reader1Impl = dynamic_cast<TReader1*>(&reader1);
-        Y_ENSURE(reader1Impl, TStringBuilder() << "Got " << typeid(reader1).name() << " as BlockReader");
-
         auto& reader2 = state.GetReader(1);
-        auto* reader2Impl = dynamic_cast<TReader2*>(&reader2);
-        Y_ENSURE(reader2Impl, TStringBuilder() << "Got " << typeid(reader2).name() << " as BlockReader");
-
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         if (arg1.is_scalar() && arg2.is_scalar()) {
             auto& builder = state.GetScalarBuilder();
-            auto item1 = reader1Impl->GetScalarItem(*arg1.scalar());
-            auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
-            Process(item1, item2, state, [&](TBlockItem out) {
+            auto item1 = reader1.GetScalarItem(*arg1.scalar());
+            auto item2 = reader2.GetScalarItem(*arg2.scalar());
+            TDerived::Process(item1, item2, [&](TBlockItem out) {
                 *res = builder.Build(out);
             });
         }
         else if (arg1.is_scalar() && arg2.is_array()) {
-            auto item1 = reader1Impl->GetScalarItem(*arg1.scalar());
+            auto item1 = reader1.GetScalarItem(*arg1.scalar());
             auto& array2 = *arg2.array();
             auto& builder = state.GetArrayBuilder();
             size_t maxBlockLength = builder.MaxLength();
@@ -426,8 +384,8 @@ struct TBinaryKernelExec {
             TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
             for (int64_t i = 0; i < array2.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array2.length; ++j, ++i) {
-                    auto item2 = reader2Impl->GetItem(array2, i);
-                    Process(item1, item2, state, [&](TBlockItem out) {
+                    auto item2 = reader2.GetItem(array2, i);
+                    TDerived::Process(item1, item2, [&](TBlockItem out) {
                         builder.Add(out);
                     });
                 }
@@ -438,15 +396,15 @@ struct TBinaryKernelExec {
             *res = MakeArray(outputArrays);
         } else if (arg1.is_array() && arg2.is_scalar()) {
             auto& array1 = *arg1.array();            
-            auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
+            auto item2 = reader2.GetScalarItem(*arg2.scalar());
             auto& builder = state.GetArrayBuilder();
             size_t maxBlockLength = builder.MaxLength();
             Y_ENSURE(maxBlockLength > 0);
             TVector<std::shared_ptr<arrow::ArrayData>> outputArrays;
             for (int64_t i = 0; i < array1.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
-                    auto item1 = reader1Impl->GetItem(array1, i);
-                    Process(item1, item2, state, [&](TBlockItem out) {
+                    auto item1 = reader1.GetItem(array1, i);
+                    TDerived::Process(item1, item2, [&](TBlockItem out) {
                         builder.Add(out);
                     });
                 }
@@ -468,7 +426,7 @@ struct TBinaryKernelExec {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
                     auto item1 = reader1.GetItem(array1, i);
                     auto item2 = reader2.GetItem(array2, i);
-                    Process(item1, item2, state, [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, [&](TBlockItem out) {
                         builder.Add(out);
                     });
                 }
@@ -609,7 +567,7 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
         auto& outArray = res->array();
         auto* outValues = outArray->GetMutableValues<TOutput>(1);
 
-        TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
+        TTypedBufferBuilder<uint8_t> nullBuilder(GetYqlMemoryPool());
         nullBuilder.Reserve(length);
 
         bool isAllNull = inArray->GetNullCount() == length;
@@ -623,11 +581,11 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
             nullBuilder.UnsafeAppend(length, 0);
         }
         auto validMask = nullBuilder.Finish();
-        validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
+        validMask = MakeDenseBitmap(validMask->data(), length, GetYqlMemoryPool());
         
         auto inMask = inArray->buffers[0];
         if (inMask) {
-            outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
+            outArray->buffers[0] = AllocateBitmapWithReserve(length, GetYqlMemoryPool());
             arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
         } else {
             outArray->buffers[0] = std::move(validMask);
@@ -685,11 +643,11 @@ public:
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, true) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\

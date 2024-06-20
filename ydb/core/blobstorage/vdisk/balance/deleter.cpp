@@ -26,19 +26,21 @@ namespace {
         TReplQuoter::TPtr Quoter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
+        NMonGroup::TBalancingGroup& MonGroup;
 
         TVector<TPartOnMain> Result;
         ui32 Responses;
         ui32 ExpectedResponses;
     public:
 
-        TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr)
+        TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
             : NotifyId(notifyId)
             , BatchSize(batchSize)
             , Parts(std::move(parts))
             , Quoter(quoter)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
+            , MonGroup(monGroup)
             , Result(Reserve(BatchSize))
             , Responses(0)
             , ExpectedResponses(0)
@@ -77,6 +79,7 @@ namespace {
                     std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
                     msgSize
                 );
+                ++MonGroup.CandidatesToDeleteAskedFromMain();
                 ++ExpectedResponses;
             }
         }
@@ -92,6 +95,7 @@ namespace {
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
             ++Responses;
+            ++MonGroup.CandidatesToDeleteAskedFromMainResponse();
             auto msg = ev->Get()->Record;
             if (msg.GetStatus() != NKikimrProto::EReplyStatus::OK) {
                 return;
@@ -179,12 +183,15 @@ namespace {
                 (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
 
             Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++, epoch));
+
+            ++Ctx->MonGroup.MarkedReadyToDelete();
+            Ctx->MonGroup.MarkedReadyToDeleteBytes() += GInfo->GetTopology().GType.PartSize(key);
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             Stats.PartsMarkedDeleted++;
-            ++Ctx->MonGroup.MarkedReadyToDelete();
-            Ctx->MonGroup.MarkedReadyToDeleteBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
+            ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
+            Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
             ui64 epoch = ev->Get()->Cookie;
             Mngr.PartJobDone(epoch);
             TryCompleteBatch(epoch);
@@ -220,7 +227,7 @@ namespace {
             : NotifyId(notifyId)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr)
+            , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
             , Mngr{.ServiceId=DELETER_ID}
         {
         }

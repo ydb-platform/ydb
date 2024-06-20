@@ -23,18 +23,20 @@ namespace {
         TQueue<TPartInfo> Parts;
         TReplQuoter::TPtr Quoter;
         const TBlobStorageGroupType GType;
+        NMonGroup::TBalancingGroup& MonGroup;
 
         TVector<TPart> Result;
         ui32 Responses;
         ui32 ExpectedResponses;
     public:
 
-        TReader(size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType)
+        TReader(size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
             : BatchSize(batchSize)
             , PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
             , GType(gType)
+            , MonGroup(monGroup)
             , Result(Reserve(BatchSize))
             , Responses(0)
             , ExpectedResponses(0)
@@ -73,6 +75,7 @@ namespace {
                             std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
                             diskPart.Size
                         );
+                        MonGroup.ReadFromHandoffBytes() += diskPart.Size;
                     }
                 }, item.PartData);
                 ++ExpectedResponses;
@@ -99,12 +102,16 @@ namespace {
             auto data = TRope(msg->Data.ToString());
             auto localParts = Result[i].PartsMask;
             auto diskBlob = TDiskBlob(&data, localParts, GType, key);
+            ui32 readSize = 0;
 
             for (ui8 partIdx = localParts.FirstPosition(); partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx)) {
                 TRope result;
                 result = diskBlob.GetPart(partIdx, &result);
+                readSize += result.size();
                 Result[i].PartsData.emplace_back(std::move(result));
             }
+
+            MonGroup.ReadFromHandoffResponseBytes() += readSize;
         }
     };
 
@@ -183,6 +190,7 @@ namespace {
                             std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
                             data.size()
                         );
+                        Ctx->MonGroup.SentOnMainBytes() += data.size();
                     } else {
                         STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
                             (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
@@ -212,6 +220,7 @@ namespace {
                     std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
                     blobsSize
                 );
+                Ctx->MonGroup.SentOnMainBytes() += blobsSize;
             }
 
             return partsSent;
@@ -224,7 +233,7 @@ namespace {
                 STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
             } else {
                 ++Ctx->MonGroup.SentOnMain();
-                Ctx->MonGroup.SentOnMainBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
+                Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
             }
             ui64 epoch = ev->Get()->Record.GetCookie();
@@ -280,7 +289,7 @@ namespace {
             , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType)
+            , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType, Ctx->MonGroup)
             , Mngr{.ServiceId=SENDER_ID}
         {}
 

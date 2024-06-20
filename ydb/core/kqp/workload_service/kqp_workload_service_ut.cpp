@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -19,7 +21,7 @@ using namespace Tests;
 
 namespace  {
 
-constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Minutes(4);
+constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Minutes(2);
 
 
 // Query runner
@@ -284,18 +286,16 @@ struct TYdbSetupSettings {
     FLUENT_FIELD_DEFAULT(TString, PoolId, "sample_pool_id");
     FLUENT_FIELD_DEFAULT(ui64, ConcurrentQueryLimit, 0);
     FLUENT_FIELD_DEFAULT(ui64, QueryCountLimit, 0);
-    FLUENT_FIELD_DEFAULT(TDuration, QueryCancelAfter, TDuration::Days(1));
-    FLUENT_FIELD_DEFAULT(TString, ACL, "");
+    FLUENT_FIELD_DEFAULT(TDuration, QueryCancelAfter, TDuration::Zero());
 };
 
 class TWorkloadServiceYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
-        TWorkloadManagerConfig::TPoolConfig defaultPoolConfig;
+        NResourcePool::TPoolSettings defaultPoolConfig;
         defaultPoolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
         defaultPoolConfig.QueryCountLimit = Settings_.QueryCountLimit_;
         defaultPoolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
-        defaultPoolConfig.ACL = Settings_.ACL_;
 
         TWorkloadManagerConfig workloadManagerConfig;
         workloadManagerConfig.Pools.insert({Settings_.PoolId_, defaultPoolConfig});
@@ -468,31 +468,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
         TWorkloadServiceYdbSetup ydb(TYdbSetupSettings().EnableResourcePools(false));
         TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, "another_pool_id"));
-    }
-
-    Y_UNIT_TEST(ValidationOfPoolACL) {
-        auto settings = TYdbSetupSettings().ACL(TStringBuilder() << "+U:" << BUILTIN_ACL_ROOT);
-        TWorkloadServiceYdbSetup ydb(settings);
-
-        auto checkFail = [settings](const auto& result) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "You do not have access permissions for pool " << settings.PoolId_);
-        };
-
-        // Auth fail without token
-        checkFail(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
-
-        // Successful auth
-        TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQuery(
-            TSampleQueries::TSelect42::Query,
-            TQueryRunnerSettings().UserSID(BUILTIN_ACL_ROOT)
-        ));
-
-        // Auth fail with invalid token
-        checkFail(ydb.ExecuteQuery(
-            TSampleQueries::TSelect42::Query,
-            TQueryRunnerSettings().UserSID("invalid@sid")
-        ));
     }
 
     Y_UNIT_TEST(ValidationOfQueryCountLimit) {

@@ -124,9 +124,11 @@ struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplic
 
 struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, EvResolveBoard> {
     const TString Path;
+    const bool Subscribe;
 
-    TEvResolveBoard(const TString &path)
+    TEvResolveBoard(const TString &path, bool subscribe = false)
         : Path(path)
+        , Subscribe(subscribe)
     {}
 };
 

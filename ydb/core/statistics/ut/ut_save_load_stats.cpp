@@ -26,23 +26,23 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
 
         TPathId pathId(1, 1);
         ui64 statType = 1;
-        std::vector<TString> columnNames = {"colA", "colB"};
+        std::vector<ui32> columnTags = {1, 2};
         std::vector<TString> data = {"dataA", "dataB"};
 
         runtime.Register(CreateSaveStatisticsQuery(
-            pathId, statType, std::move(columnNames), std::move(data)),
+            pathId, statType, std::move(columnTags), std::move(data)),
             0, 0, TMailboxType::Simple, 0, sender);
         auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA", 1),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, 1, 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseA->Get()->Success);
         UNIT_ASSERT(loadResponseA->Get()->Data);
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colB", 1),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, 2, 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseB = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseB->Get()->Success);
@@ -68,11 +68,11 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
 
         TPathId pathId(1, 1);
         ui64 statType = 1;
-        std::vector<TString> columnNames = {"colA", "colB"};
+        std::vector<ui32> columnTags = {1, 2};
         std::vector<TString> data = {"dataA", "dataB"};
 
         runtime.Register(CreateSaveStatisticsQuery(
-            pathId, statType, std::move(columnNames), std::move(data)),
+            pathId, statType, std::move(columnTags), std::move(data)),
             0, 0, TMailboxType::Simple, 0, sender);
         auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto deleteResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvDeleteStatisticsQueryResponse>(sender);
         UNIT_ASSERT(deleteResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA", 1),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, 1, 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(!loadResponseA->Get()->Success);

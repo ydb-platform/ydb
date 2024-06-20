@@ -497,9 +497,10 @@ struct TCommonAppOptions {
             if (offset) {
                 connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
 
-                // Assign default hostname (connector is usually deployed to the same host as the dynamic node)
+                // Assign default hostname 'localhost', because 
+                // connector is usually deployed to the same host as the dynamic node.
                 if (connectorConfig.GetEndpoint().host().Empty()) {
-
+                    connectorConfig.MutableEndpoint()->Sethost("localhost");
                 }
             }
         }

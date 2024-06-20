@@ -788,6 +788,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         const auto *msg = ev->Get();
         const ui64 pathHash = CityHash64(msg->Path);
 
+        if (msg->Subscribe) {
+            Subscriptions.try_emplace(std::make_tuple(ev->Sender, ev->Cookie), pathHash, &TThis::BoardInfo);
+        }
+
         ResolveReplicas(ev, pathHash, BoardInfo);
     }
 

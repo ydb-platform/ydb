@@ -744,7 +744,7 @@ void TTraceContextHandler::UpdateTraceContext()
 std::optional<TTracingAttributes> TTraceContextHandler::GetTracingAttributes() const
 {
     return TraceContext_
-        ? std::make_optional<TTracingAttributes>(TraceContext_->GetTraceId(), TraceContext_->GetSpanId())
+        ? std::make_optional<TTracingAttributes>({.TraceId = TraceContext_->GetTraceId(), .SpanId = TraceContext_->GetSpanId()})
         : std::nullopt;
 }
 

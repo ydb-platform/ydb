@@ -322,7 +322,6 @@ public:
 
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
-
         if (!Commit) {
             return false;
         }

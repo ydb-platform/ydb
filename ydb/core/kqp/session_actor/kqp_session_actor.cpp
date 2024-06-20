@@ -572,6 +572,8 @@ public:
     bool ExecuteNextStatementPart() {
         if (QueryState->PrepareNextStatementPart()) {
             CompileSplittedQuery();
+            // Splitted transaction commits after each statement, because it's ddl+dml.
+            //QueryState->Commit = true;
             return true;
         }
         return false;
@@ -762,7 +764,6 @@ public:
                     break;
             }
         } else {
-            Cerr << "TEST:2: " << "ISOLATION_LEVEL_UNDEFINED" << Endl;
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);

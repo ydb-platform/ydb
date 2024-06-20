@@ -2579,6 +2579,7 @@ public:
         databaseStatus.set_name(path);
         FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
         FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});
+        FillTimeDifference(state, {&dbContext, "NODES_TIME_DIFFERENCE"});
         if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
                 && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
@@ -2599,38 +2600,50 @@ public:
     const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
-    void FillNodesSyncStatus(TOverallStateContext& context) {
+    void FillTimeDifference(TDatabaseState& databaseState, TSelfCheckContext context) {
         long maxClockSkewUs = 0;
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
-        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
-                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
-                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
-                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
-                maxClockSkewNodeId = nodeId;
+
+        TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
+        if (databaseState.ResourcePathId
+            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
+        {
+            auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
+            if (itDatabase != FilterDomainKey.end()) {
+                const TString& sharedDatabaseName = itDatabase->second;
+                TDatabaseState& sharedDatabase = DatabaseState[sharedDatabaseName];
+                computeNodeIds = &sharedDatabase.ComputeNodeIds;
             }
         }
+
+        for (TNodeId nodeId : *computeNodeIds) {
+            auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+            if (itNodeSystemState != MergedNodeSystemState.end()) {
+                if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(itNodeSystemState->second->GetMaxClockSkewPeerId())
+                        && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+                    maxClockSkewUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
+                    maxClockSkewPeerId = itNodeSystemState->second->GetMaxClockSkewPeerId();
+                    maxClockSkewNodeId = nodeId;
+                }
+            }
+        }
+
         if (!maxClockSkewNodeId) {
             return;
         }
 
-        TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_TIME_DIFFERENCE";
-        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
-        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
+        FillNodeInfo(maxClockSkewNodeId, context.Location.mutable_node());
+        FillNodeInfo(maxClockSkewPeerId, context.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
         if (maxClockSkewTime > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
-
-        context.UpdateMaxStatus(syncContext.GetOverallStatus());
-        context.AddIssues(syncContext.IssueRecords);
     }
 
     void FillResult(TOverallStateContext context) {
@@ -2641,7 +2654,6 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
-        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;

@@ -13,13 +13,15 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         , std::shared_ptr<IKqpNodeState> state
         , ui64 txId
         , ui64 taskId
-        , ui64 limit)
+        , ui64 limit
+        , ui64 reasonableSpillingTreshold)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
     , State(std::move(state))
     , TxId(txId)
     , TaskId(taskId)
+    , ReasonableSpillingTreshold(reasonableSpillingTreshold)
     {
     }
 
@@ -42,6 +44,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
             return false;
         }
 
+        TotalQueryAllocationsSize = result.TotalAllocatedQueryMemory;
+
         return true;
     }
 
@@ -49,6 +53,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         ResourceManager->FreeResources(TxId, TaskId,
             NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize}
         );
+    }
+
+    bool IsReasonableToUseSpilling() const override {
+        return TotalQueryAllocationsSize >= ReasonableSpillingTreshold;
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
@@ -64,6 +72,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     ui64 TxId;
     ui64 TaskId;
     bool Success = true;
+    ui64 TotalQueryAllocationsSize = 0;
+    ui64 ReasonableSpillingTreshold = 0;
 };
 
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
@@ -123,7 +133,8 @@ public:
             std::move(state),
             txId,
             dqTask->GetId(),
-            limit);
+            limit,
+            Config.GetReasonableSpillingTreshold());
 
         auto runtimeSettings = settings;
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;

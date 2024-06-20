@@ -1,5 +1,26 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.9.0 {#2-9-0}
+
+Released on April 25, 2024. To update to version **2.9.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Improved tables with query logical plans: added colors, more information, fixed some bugs.
+* Verbose option '-v' is supported for `ydb workload` commands to provide debug information.
+* Added an option to run `ydb workload tpch` with s3 source to measure federated query performance.
+* Added `--rate` parameter for ydb workload command to control transactions (or requests) per second limit.
+* Added `--use-virtual-addressing` option for s3 import/export allowing to switch s3 path layout. @nilnaz
+* Improved `ydb scheme ls` performance due to listing directories in parallel.
+
+**Bug fixes:**
+
+* Fixed a bug with cutting off extra chars when transferring a line in a table.
+* Fixed invalid memory access in `tools restore`.
+* Fixed ignoring `--timeout` option in generic and scan queries and import command.
+* Added 60s timeout to version check and cli binary download to prevent infinite waiting.
+* Fixed minor bugs: typos, empty config file handling, etc.
+
 ## Version 2.8.0 {#2-8-0}
 
 Released on January 12, 2024. To update to version **2.8.0**, select the [Downloads](downloads/index.md#ydb-cli) section.

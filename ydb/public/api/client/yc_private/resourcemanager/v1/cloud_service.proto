@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.resourcemanager.v1;
 
-import "ydb/public/api/client/yc_private/resourcemanager/cloud.proto";
+import "ydb/public/api/client/yc_private/resourcemanager/v1/cloud.proto";
 
 service CloudService {
 

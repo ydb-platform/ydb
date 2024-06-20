@@ -4,8 +4,8 @@ package yandex.cloud.priv.oauth.v1;
 
 import "google/protobuf/timestamp.proto";
 import "ydb/public/api/client/yc_private/oauth/claims.proto";
-import "ydb/public/api/client/yc_private/oauth/cloud_user.proto";
-import "ydb/public/api/client/yc_private/iam/iam_token.proto";
+import "ydb/public/api/client/yc_private/oauth/v1/cloud_user.proto";
+import "ydb/public/api/client/yc_private/iam/v1/iam_token.proto";
 
 service SessionService {
     // Verify the identity of a subject for services, authenticated via Yandex.Cloud IdP.

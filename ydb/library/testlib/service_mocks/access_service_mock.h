@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
-#include <ydb/public/api/client/yc_private/accessservice/access_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/servicecontrol/v1/access_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/v2/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

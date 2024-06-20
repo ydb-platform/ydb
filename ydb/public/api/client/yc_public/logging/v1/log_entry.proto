@@ -4,8 +4,7 @@ package yandex.cloud.logging.v1;
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "ydb/public/api/client/yc_public/logging/log_resource.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/logging/v1/log_resource.proto";
 
 option java_package = "yandex.cloud.api.logging.v1";
 
@@ -44,12 +43,12 @@ message LogEntry {
   google.protobuf.Struct json_payload = 8;
 
   // Entry stream name.
-  string stream_name = 9 [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
+  string stream_name = 9; // [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
 }
 
 message IncomingLogEntry {
   // Timestamp of the entry.
-  google.protobuf.Timestamp timestamp = 1 [(required) = true];
+  google.protobuf.Timestamp timestamp = 1; // [(required) = true];
 
   // Entry severity.
   //
@@ -57,13 +56,13 @@ message IncomingLogEntry {
   LogLevel.Level level = 2;
 
   // Entry text message.
-  string message = 3 [(bytes) = "<=65536"];
+  string message = 3; // [(bytes) = "<=65536"];
 
   // Entry annotation.
-  google.protobuf.Struct json_payload = 4 [(bytes) = "<=65536"];
+  google.protobuf.Struct json_payload = 4; // [(bytes) = "<=65536"];
 
   // Entry stream name.
-  string stream_name = 5 [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
+  string stream_name = 5; // [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
 }
 
 message LogEntryDefaults {
@@ -76,22 +75,22 @@ message LogEntryDefaults {
   // Default entry annotation.
   // Will be merged with entry annotation.
   // Any conflict will be resolved in favor of entry own annotation.
-  google.protobuf.Struct json_payload = 4 [(bytes) = "<=65536"];
+  google.protobuf.Struct json_payload = 4; // [(bytes) = "<=65536"];
 
   // Entry stream name.
-  string stream_name = 5 [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
+  string stream_name = 5; // [(pattern) = "|[a-zA-Z][-a-zA-Z0-9_.]{0,63}"];
 }
 
 message Destination {
   // Entry destination.
   oneof destination {
-    option (exactly_one) = true;
+    // option (exactly_one) = true;
 
     // Entry should be written to log group resolved by ID.
-    string log_group_id = 1 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+    string log_group_id = 1; // [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
 
     // Entry should be written to default log group for the folder.
-    string folder_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+    string folder_id = 2; // [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
   }
 }
 

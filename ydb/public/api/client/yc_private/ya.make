@@ -4,6 +4,7 @@ RECURSE(
     compute
     iam
     kms
+    oauth
     operation
     quota
     resourcemanager

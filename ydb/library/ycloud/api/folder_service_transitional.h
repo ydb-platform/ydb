@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/public/api/client/yc_private/resourcemanager/transitional/folder_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/resourcemanager/v1/transitional/folder_service.grpc.pb.h>
 #include "events.h"
 
 namespace NCloud {

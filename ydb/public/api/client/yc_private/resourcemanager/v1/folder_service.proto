@@ -3,7 +3,7 @@ syntax = "proto3";
 package yandex.cloud.priv.resourcemanager.v1;
 
 import "google/protobuf/field_mask.proto";
-import "ydb/public/api/client/yc_private/resourcemanager/folder.proto";
+import "ydb/public/api/client/yc_private/resourcemanager/v1/folder.proto";
 
 service FolderService {
 

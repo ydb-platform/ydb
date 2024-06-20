@@ -1,6 +1,6 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/public/api/client/yc_private/resourcemanager/transitional/folder_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/resourcemanager/v1/transitional/folder_service.grpc.pb.h>
 #include "folder_service_transitional.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>

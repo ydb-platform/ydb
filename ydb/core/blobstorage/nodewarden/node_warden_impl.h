@@ -582,6 +582,8 @@ namespace NKikimr::NStorage {
         IActor *CreateGroupResolverActor(ui32 groupId);
         void Handle(TEvNodeWardenQueryGroupInfo::TPtr ev);
 
+        bool VDiskStatusChanged = false;
+
         STATEFN(StateOnline) {
             switch (ev->GetTypeRewrite()) {
                 fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
@@ -662,6 +664,11 @@ namespace NKikimr::NStorage {
                 default:
                     EnqueuePendingMessage(ev);
                     break;
+            }
+
+            if (VDiskStatusChanged) {
+                SendDiskMetrics(false);
+                VDiskStatusChanged = false;
             }
         }
     };

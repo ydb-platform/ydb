@@ -89,6 +89,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::AccountResourceUsageLeaseMap ||
         type == EObjectType::SchedulerPoolTreeMap ||
         type == EObjectType::Link ||
+        type == EObjectType::SequoiaLink ||
         type == EObjectType::Document ||
         type == EObjectType::LockMap ||
         type == EObjectType::TabletMap ||

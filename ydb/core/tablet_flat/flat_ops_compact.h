@@ -454,7 +454,7 @@ namespace NTabletFlatExecutor {
             }
 
             if (ok) {
-                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId, msg.Id));
+                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId.GetRawId(), msg.Id));
 
                 while (!WriteQueue.empty() && Writing < MaxFlight) {
                     SendToBs(std::move(WriteQueue.front()));

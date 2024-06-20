@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/base/blobstorage_common.h>
 #include "layout_helpers.h"
 #include "group_geometry_info.h"
 #include "group_mapper.h"
@@ -297,7 +297,7 @@ public:
         if (!result.Disks.empty()) {
             status = ESanitizeResult::FAIL;
             for (auto vdisk : result.Disks) {
-                auto target = mapper.TargetMisplacedVDisk(groupId, group.Group, vdisk,
+                auto target = mapper.TargetMisplacedVDisk(TGroupId::FromValue(groupId), group.Group, vdisk,
                     std::move(forbid), 0, requireOperational, error);
                 if (target) {
                     status = ESanitizeResult::SUCCESS;

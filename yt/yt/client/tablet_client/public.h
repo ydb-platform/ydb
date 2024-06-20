@@ -228,6 +228,7 @@ DEFINE_ENUM(ERowMergerType,
     ((Watermark)            (1))
 );
 
+struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////

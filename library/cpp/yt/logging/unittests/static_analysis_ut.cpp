@@ -7,32 +7,30 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStaticAnalysis, ValidFormats)
-{
-    // Mock for actual error -- we only care that
-    // it is some runtime object.
-    [[maybe_unused]] struct TError
-    { } error;
+const TLogger Logger{};
 
-    YT_LOG_CHECK_FORMAT("Hello");
-    YT_LOG_CHECK_FORMAT("Hello %v", "World!");
-    YT_LOG_CHECK_FORMAT("Hello %qv", "World!");
-    YT_LOG_CHECK_FORMAT(error);
-    YT_LOG_CHECK_FORMAT(error, "Hello");
-    YT_LOG_CHECK_FORMAT(error, "Hello %Qhs", "World!");
-    YT_LOG_CHECK_FORMAT("Hello %%");
-    YT_LOG_CHECK_FORMAT("Hello %" PRIu64, 42);
+TEST(TStaticAnalysisTest, ValidFormats)
+{
+    YT_LOG_INFO("Hello");
+    YT_LOG_INFO("Hello %v", "World!");
+    YT_LOG_INFO("Hello %qv", "World!");
+    YT_LOG_INFO(42);
+    YT_LOG_INFO("Hello %%");
+    YT_LOG_INFO("Hello %" PRIu64, 42);
+
+    TStringBuf msg = "Hello";
+    YT_LOG_INFO(msg);
 }
 
 // Uncomment this test to see that we don't have false negatives!
-// TEST(TStaticAnalysis, InvalidFormats)
+// TEST(TStaticAnalysisTest, InvalidFormats)
 // {
-//     YT_LOG_CHECK_FORMAT("Hello", 1);
-//     YT_LOG_CHECK_FORMAT("Hello %");
-//     YT_LOG_CHECK_FORMAT("Hello %false");
-//     YT_LOG_CHECK_FORMAT("Hello ", "World");
-//     YT_LOG_CHECK_FORMAT("Hello ", "(World: %v)", 42);
-//     YT_LOG_CHECK_FORMAT("Hello %lbov", 42); // There is no 'b' flag.
+//     YT_LOG_INFO("Hello", 1);
+//     YT_LOG_INFO("Hello %");
+//     YT_LOG_INFO("Hello %false");
+//     YT_LOG_INFO("Hello ", "World");
+//     YT_LOG_INFO("Hello ", "(World: %v)", 42);
+//     YT_LOG_INFO("Hello %lbov", 42); // There is no 'b' flag.
 // }
 
 ////////////////////////////////////////////////////////////////////////////////

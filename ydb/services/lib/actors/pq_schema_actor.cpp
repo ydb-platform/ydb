@@ -1259,7 +1259,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (request.has_alter_partitioning_settings()) {
             const auto& settings = request.alter_partitioning_settings();
             if (settings.has_set_min_active_partitions()) {
-                auto minParts = IfEqualThenDefault(settings.set_min_active_partitions(), 0L, 1L);
+                auto minParts = IfEqualThenDefault<i64>(settings.set_min_active_partitions(), 0L, 1L);
                 pqDescr.SetTotalGroupCount(minParts);
                 if (splitMergeFeatureEnabled) {
                     pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);

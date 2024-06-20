@@ -2625,7 +2625,7 @@ private:
             columnUsage.resize(outTypes.size());
             std::vector<bool> fullUsage;
             fullUsage.resize(outTypes.size());
-            std::vector<bool> publishUsage;
+            std::vector<std::unordered_set<TString>> publishUsage;
             publishUsage.resize(outTypes.size());
             // Collect column usage per consumer
             for (auto& item: x.second) {
@@ -2636,8 +2636,10 @@ private:
                     if (TYtLength::Match(std::get<0>(item))) {
                         continue;
                     }
-                    if (TYtPublish::Match(std::get<0>(item))) {
-                        publishUsage.at(outIndex) = true;
+                    if (auto maybePublish = TMaybeNode<TYtPublish>(std::get<0>(item))) {
+                        TYtTableInfo dstInfo = maybePublish.Cast().Publish();
+                        const auto& desc = State_->TablesData->GetTable(dstInfo.Cluster, dstInfo.Name, dstInfo.CommitEpoch);
+                        publishUsage.at(outIndex).insert(desc.ColumnGroupSpec);
                     } else {
                         fullUsage.at(outIndex) = true;
                     }
@@ -2661,12 +2663,17 @@ private:
 
             std::map<size_t, TString> groupSpecs;
             for (size_t i = 0; i < columnUsage.size(); ++i) {
-                if (publishUsage[i]) {
+                if (!publishUsage[i].empty()) {
+                    if (publishUsage[i].size() == 1) {
+                        if (auto spec = *publishUsage[i].cbegin(); !spec.empty()) {
+                            groupSpecs[i] = spec;
+                        }
+                    }
                     continue;
                 }
                 if (EColumnGroupMode::Single == mode) {
                     if (fullUsage[i]) {
-                        groupSpecs[i] = NYT::NodeToYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+                        groupSpecs[i] = NYT::NodeToCanonicalYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
                     }
                 } else {
                     if (fullUsage[i]) {
@@ -2731,7 +2738,7 @@ private:
                             }
                         }
                         if (!groupSpec.IsUndefined()) {
-                            groupSpecs[i] = NYT::NodeToYsonString(groupSpec, NYson::EYsonFormat::Text);
+                            groupSpecs[i] = NYT::NodeToCanonicalYsonString(groupSpec, NYson::EYsonFormat::Text);
                         }
                     }
                 }

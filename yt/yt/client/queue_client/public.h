@@ -11,6 +11,9 @@ namespace NYT::NQueueClient {
 
 YT_DEFINE_ERROR_ENUM(
     ((ConsumerOffsetConflict)            (3100))
+    ((InvalidEpoch)                      (3101))
+    ((ZombieEpoch)                       (3102))
+    ((InvalidRowSequenceNumbers)         (3103))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

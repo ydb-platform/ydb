@@ -336,11 +336,6 @@ void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TSt
     builder->AppendChar('}');
 }
 
-TString ToString(const TComparator& comparator)
-{
-    return ToStringViaBuilder(comparator);
-}
-
 void Serialize(const TComparator& comparator, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)

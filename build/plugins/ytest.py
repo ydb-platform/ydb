@@ -80,6 +80,10 @@ def validate_test(unit, kw):
     errors = []
     warnings = []
 
+    mandatory_fields = {"SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME"}
+    for field in mandatory_fields - valid_kw.keys():
+        errors.append(f"Mandatory field {field!r} is not set in DART")
+
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
         if not project_path.startswith(
@@ -333,12 +337,8 @@ def validate_test(unit, kw):
     return valid_kw, warnings, errors
 
 
-def dump_test(unit, kw, trim_falsy_fields=True):
-    if trim_falsy_fields:
-        # "SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME" are required to distinguish dart files
-        # TODO remove "TEST-FILES", "FILES" once defaults are moved to tests suites
-        dont_trim = ("SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME", "TEST-FILES", "FILES")
-        kw = {k: v for k, v in kw.items() if k in dont_trim or v and (not isinstance(v, (str, bytes)) or v.strip())}
+def dump_test(unit, kw):
+    kw = {k: v for k, v in kw.items() if v and (not isinstance(v, str | bytes) or v.strip())}
     valid_kw, warnings, errors = validate_test(unit, kw)
     for w in warnings:
         unit.message(['warn', w])
@@ -403,14 +403,14 @@ def implies(a, b):
 
 
 def match_coverage_extractor_requirements(unit):
-    # we shouldn't add test if
+    # we add test if
     return all(
         (
-            # tests are not requested
+            # tests are requested
             unit.get("TESTS_REQUESTED") == "yes",
-            # build doesn't imply clang coverage, which supports segment extraction from the binaries
+            # build implies clang coverage, which supports segment extraction from the binaries
             unit.get("CLANG_COVERAGE") == "yes",
-            # contrib wasn't requested
+            # contrib was requested
             implies(
                 _common.get_norm_unit_path(unit).startswith("contrib/"), unit.get("ENABLE_CONTRIB_COVERAGE") == "yes"
             ),
@@ -632,7 +632,7 @@ def ktlint(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
-        'MODULE_LANG': consts.ModuleLang.KOTLIN,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
     test_record.update(extra_test_dart_data)
 
@@ -699,7 +699,7 @@ def java_style(unit, *args):
         'TEST-FILES': serialized_test_files,
         'JDK_LATEST_VERSION': unit.get('JDK_LATEST_VERSION'),
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
-        'MODULE_LANG': consts.ModuleLang.JAVA,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -746,7 +746,7 @@ def gofmt(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
-        'MODULE_LANG': consts.ModuleLang.GO,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -788,7 +788,7 @@ def govet(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
-        'MODULE_LANG': consts.ModuleLang.GO,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -859,7 +859,7 @@ def onadd_check_py_imports(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': test_files,
         'TEST-FILES': test_files,
-        'MODULE_LANG': consts.ModuleLang.PY,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE') != "None":
         test_record["NO-CHECK"] = serialize_list(get_values_list(unit, 'NO_CHECK_IMPORTS_FOR_VALUE') or ["*"])
@@ -939,7 +939,7 @@ def onadd_pytest_bin(unit, *args):
         'BUILD-FOLDER-PATH': _common.strip_roots(unit_path),
         'BLOB': unit.get('TEST_BLOB_DATA'),
         'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH'),
-        'MODULE_LANG': consts.ModuleLang.PY,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
     if binary_path:
         test_record['BINARY-PATH'] = _common.strip_roots(binary_path)
@@ -1053,7 +1053,7 @@ def onjava_test(unit, *args):
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT') + '_FOR_TESTS',
         'YT-SPEC': serialize_list(yt_spec_values),
-        'MODULE_LANG': consts.ModuleLang.JAVA,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
     test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
     if test_classpath_origins:
@@ -1095,7 +1095,7 @@ def onjava_test_deps(unit, *args):
         'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')),
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'MODULE_LANG': consts.ModuleLang.JAVA,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
     if mode == 'strict':
         test_record['STRICT_CLASSPATH_CLASH'] = 'yes'
@@ -1384,7 +1384,7 @@ def on_add_linter_check(unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def clang_tidy(unit, *args, from_other_type=False):
+def clang_tidy(unit, *args):
     keywords = {
         "DEPENDS": -1,
         "DATA": -1,
@@ -1396,34 +1396,6 @@ def clang_tidy(unit, *args, from_other_type=False):
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
-    # TODO see if we can get rid of 'from_other_type' parameter
-    if from_other_type:
-        if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
-            unit.ondata_files(_common.get_norm_unit_path(unit))
-
-        if flat_args[1] == "boost.test":
-            unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
-
-        flat_args[1] = "clang_tidy"
-        test_size = 'SMALL'
-        test_tags = ''
-        test_timeout = "60"
-        test_requirements = []
-        unit.set(["TEST_YT_SPEC_VALUE", ""])
-    else:
-        unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
-
-        test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
-        test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-        test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
-        test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-
-    test_data = sorted(
-        _common.filter_out_by_keyword(
-            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
-        )
-    )
-
     if unit.get("TIDY_CONFIG"):
         default_config_path = unit.get("TIDY_CONFIG")
         project_config_path = unit.get("TIDY_CONFIG")
@@ -1433,14 +1405,6 @@ def clang_tidy(unit, *args, from_other_type=False):
 
     unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
     unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
-
-    fork_mode = []
-    if 'FORK_SUBTESTS' in spec_args:
-        fork_mode.append('subtests')
-    if 'FORK_TESTS' in spec_args:
-        fork_mode.append('tests')
-    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
-    fork_mode = ' '.join(fork_mode) if fork_mode else ''
 
     unit_path = _common.get_norm_unit_path(unit)
 
@@ -1458,21 +1422,14 @@ def clang_tidy(unit, *args, from_other_type=False):
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(sorted(test_data)),
-        'TEST-TIMEOUT': test_timeout,
-        'FORK-MODE': fork_mode,
         'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
-        'SIZE': test_size,
-        'TAG': test_tags,
-        'REQUIREMENTS': serialize_list(test_requirements),
         'TEST-CWD': unit.get('TEST_CWD_VALUE'),
-        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
         'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.CPP,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -1545,7 +1502,7 @@ def unittest_py(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.CPP,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -1618,7 +1575,7 @@ def gunittest(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.CPP,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -1691,7 +1648,7 @@ def g_benchmark(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.CPP,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -1772,7 +1729,7 @@ def go_test(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.GO,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     data = dump_test(unit, test_record)
@@ -2005,7 +1962,7 @@ def y_benchmark(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
-        'MODULE_LANG': consts.ModuleLang.CPP,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -2152,7 +2109,7 @@ def go_bench(unit, *args):
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
         'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT'),
-        'MODULE_LANG': consts.ModuleLang.GO,
+        'MODULE_LANG': unit.get("MODULE_LANG").lower() or consts.ModuleLang.UNKNOWN,
     }
 
     if "ya:run_go_benchmark" not in test_record["TAG"]:
@@ -2178,23 +2135,13 @@ def onadd_ytest(unit, *args):
     flat_args, *_ = _common.sort_by_keywords(keywords, args)
     test_type = flat_args[1]
 
-    if unit.get("TIDY_ENABLED") == "yes" and test_type in (
-        "unittest.py",
-        "gunittest",
-        "g_benchmark",
-        "boost.test",
-    ):
-        clang_tidy(unit, *args, from_other_type=True)
-    elif unit.get("TIDY_ENABLED") == "yes" and test_type not in (
-        "clang_tidy",
-        "unittest.py",
-        "gunittest",
-        "g_benchmark",
-        "boost.test",
-    ):
+    # TIDY not supported for module
+    if unit.get("TIDY_ENABLED") == "yes" and test_type != "clang_tidy":
         return
+    # TIDY explicitly disabled for module in ymake.core.conf
     elif test_type == "clang_tidy" and unit.get("TIDY_ENABLED") != "yes":
         return
+    # TIDY disabled for module in ya.make
     elif unit.get("TIDY") == "yes" and unit.get("TIDY_ENABLED") != "yes":
         return
     elif test_type == "no.test":

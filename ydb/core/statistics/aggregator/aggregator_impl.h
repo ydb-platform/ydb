@@ -115,7 +115,7 @@ private:
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
     void Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev);
 
-    void Initialize();
+    void InitializeStatisticsTable();
     void Navigate();
     void Resolve();
     void NextRange();
@@ -179,6 +179,7 @@ private:
     std::mt19937_64 RandomGenerator;
 
     bool EnableStatistics = false;
+    bool EnableColumnStatistics = false;
 
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message

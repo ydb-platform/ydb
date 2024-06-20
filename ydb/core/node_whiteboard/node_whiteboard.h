@@ -302,7 +302,7 @@ struct TEvWhiteboard{
         TEvBSGroupStateUpdate() = default;
 
         TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
-            Record.SetGroupID(groupInfo->GroupID);
+            Record.SetGroupID(groupInfo->GroupID.GetRawId());
             Record.SetGroupGeneration(groupInfo->GroupGeneration);
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
             if (ui32 numVDisks = groupInfo->GetTotalVDisksNum()) {

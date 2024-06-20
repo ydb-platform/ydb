@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <yt/yt/core/concurrency/propagating_storage.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 #include <atomic>
@@ -187,17 +189,19 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
 
 } // namespace NDetail
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext, TSourceLocation location)
     : Active_(static_cast<bool>(traceContext))
 {
     if (Active_) {
         OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
+        OldLocation_ = NConcurrency::SwitchPropagatingStorageModifyLocation(location);
     }
 }
 
 Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other)
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
+    , OldLocation_(other.OldLocation_)
 {
     other.Active_ = false;
 }
@@ -216,6 +220,7 @@ Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NConcurrency::SwitchPropagatingStorageModifyLocation(OldLocation_);
         Active_ = false;
     }
 }
@@ -227,14 +232,16 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
     , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
+    , OldLocation_(NConcurrency::SwitchPropagatingStorageModifyLocation(location))
 { }
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
     : Active_(other.Active_)
     , OldTraceContext_(std::move(other.OldTraceContext_))
+    , OldLocation_(other.OldLocation_)
 {
     other.Active_ = false;
 }
@@ -253,6 +260,7 @@ Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NConcurrency::SwitchPropagatingStorageModifyLocation(OldLocation_);
         Active_ = false;
     }
 }

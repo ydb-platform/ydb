@@ -86,7 +86,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TPropagatingStorage& GetCurrentPropagatingStorage();
-const TPropagatingStorage& GetPropagatingStorage(const NConcurrency::TFls& fls);
+const TPropagatingStorage* TryGetPropagatingStorage(const NConcurrency::TFls& fls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -103,7 +103,8 @@ void InstallGlobalPropagatingStorageSwitchHandler(
 class TPropagatingStorageGuard
 {
 public:
-    explicit TPropagatingStorageGuard(TPropagatingStorage storage);
+    explicit TPropagatingStorageGuard(
+        TPropagatingStorage storage, TSourceLocation loc = FROM_HERE);
     ~TPropagatingStorageGuard();
 
     TPropagatingStorageGuard(const TPropagatingStorageGuard& other) = delete;
@@ -115,6 +116,7 @@ public:
 
 private:
     TPropagatingStorage OldStorage_;
+    TSourceLocation OldLocation_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,7 +125,7 @@ class TNullPropagatingStorageGuard
     : public TPropagatingStorageGuard
 {
 public:
-    TNullPropagatingStorageGuard();
+    TNullPropagatingStorageGuard(TSourceLocation loc = FROM_HERE);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,6 +145,13 @@ public:
 private:
     std::optional<T> OldValue_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc);
+TSourceLocation SwitchPropagatingStorageModifyLocation(TSourceLocation loc);
+
+void PrintLocationToStderr();
 
 ////////////////////////////////////////////////////////////////////////////////
 

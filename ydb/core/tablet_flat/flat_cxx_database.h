@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/templates.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
@@ -361,6 +362,22 @@ struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TIdWrapper conversion
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TRawTypeValue, TIdWrapper<T, Tag>> {
+    typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
+    TTypeValue Value;
+    TConvertValue(const TIdWrapper<T, Tag> & value) : Storage(value.GetRawId()), Value(Storage, TColumnType::ColumnType) {}
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template <typename TColumnType, typename T, typename Tag>
+struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
+    TTypeValue Value;
+    TConvertValue(const TRawTypeValue & value) : Value(value) {}
+    operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
 
 template <typename TColumnType, typename SourceType>
 struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
@@ -757,13 +774,10 @@ struct Schema {
                 return *this;
             }
 
-            auto Key(typename KeyColumns::Type... keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues...);
-            }
-
-            auto Key(const KeyValuesType& keyValues) {
-                return KeyOperations<TableType, KeyValuesType>(*Database, keyValues);
-            }
+            template<typename... Keys>
+            auto Key(Keys&&... keyValues) {
+                return KeyOperations<TableType, KeyValuesType>(*Database, std::forward<Keys>(keyValues)...);
+             }
 
             template <typename... Keys>
             auto Range(Keys... keyValues) {

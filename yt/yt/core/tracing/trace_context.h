@@ -33,7 +33,6 @@ struct TSpanContext
 };
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
-TString ToString(const TSpanContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -272,8 +271,6 @@ DEFINE_REFCOUNTED_TYPE(TTraceContext)
 
 void FormatValue(TStringBuilderBase* builder, const TTraceContextPtr& context, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTraceContext* context, TStringBuf spec);
-TString ToString(const TTraceContextPtr& context);
-TString ToString(const TTraceContextPtr* context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -299,7 +296,9 @@ TTraceContextPtr CreateTraceContextFromCurrent(TString spanName);
 class TCurrentTraceContextGuard
 {
 public:
-    explicit TCurrentTraceContextGuard(TTraceContextPtr traceContext);
+    explicit TCurrentTraceContextGuard(
+        TTraceContextPtr traceContext,
+        TSourceLocation location = FROM_HERE);
     TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
     ~TCurrentTraceContextGuard();
 
@@ -311,6 +310,7 @@ public:
 private:
     bool Active_;
     TTraceContextPtr OldTraceContext_;
+    TSourceLocation OldLocation_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -319,7 +319,7 @@ private:
 class TNullTraceContextGuard
 {
 public:
-    TNullTraceContextGuard();
+    TNullTraceContextGuard(TSourceLocation location = FROM_HERE);
     TNullTraceContextGuard(TNullTraceContextGuard&& other);
     ~TNullTraceContextGuard();
 
@@ -331,6 +331,7 @@ public:
 private:
     bool Active_;
     TTraceContextPtr OldTraceContext_;
+    TSourceLocation OldLocation_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

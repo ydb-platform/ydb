@@ -35,9 +35,9 @@ public:
         Self->ReadGroups(groupIDsToRead, true, Response.get(), NodeId);
 
         auto& node = Self->GetNode(NodeId);
-        for (TGroupId groupId : v) {
-            node.GroupsRequested.insert(groupId);
-            Self->GroupToNode.emplace(groupId, NodeId);
+        for (ui32 groupId : v) {
+            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
+            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), NodeId);
         }
 
         return true;

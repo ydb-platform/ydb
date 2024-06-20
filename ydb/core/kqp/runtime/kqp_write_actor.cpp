@@ -568,7 +568,7 @@ private:
 
         for (size_t payloadIndex : serializationResult.PayloadIndexes) {
             evWrite->AddOperation(
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+                GetOperation(),
                 {
                     Settings.GetTable().GetOwnerId(),
                     Settings.GetTable().GetTableId(),
@@ -602,6 +602,23 @@ private:
                     new TEvPrivate::TEvShardRequestTimeout(shardId),
                     0,
                     metadata->Cookie));
+        }
+    }
+
+    NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation() {
+        switch (Settings.GetType()) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+        default:
+            RuntimeError(
+                TStringBuilder() << "Unknown operation.",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
     }
 

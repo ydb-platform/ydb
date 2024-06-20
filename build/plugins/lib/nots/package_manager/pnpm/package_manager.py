@@ -87,6 +87,30 @@ class PnpmPackageManager(BasePackageManager):
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
             )
 
+    def calc_prepare_deps_inouts_and_resources(
+        self, store_path: str, has_deps: bool
+    ) -> tuple[list[str], list[str], list[str]]:
+        ins = [
+            s_rooted(build_pj_path(self.module_path)),
+            s_rooted(build_lockfile_path(self.module_path)),
+        ]
+        outs = [
+            b_rooted(build_ws_config_path(self.module_path)),
+            b_rooted(build_pre_lockfile_path(self.module_path)),
+        ]
+        resources = []
+
+        if has_deps:
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_ws_config_path(dep_path)))
+                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
+
+            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
+                resources.append(pkg.to_uri())
+                outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
+
+        return ins, outs, resources
+
     # TODO: FBP-1254
     # def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> (list[str], list[str]):
     def calc_prepare_deps_inouts(self, store_path, has_deps):

@@ -80,6 +80,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             },
             .ReplicationConfig = Nothing(),
         }));
+
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
@@ -91,6 +92,38 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto desc = env.GetDescription("/Root/Replicated");
         const auto& replicatedSelf = desc.GetPathDescription().GetSelf();
         UNIT_ASSERT_VALUES_EQUAL(replicatedSelf.GetOwner(), "user@builtin");
+    }
+
+    Y_UNIT_TEST(SamePartitionCount) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        env.CreateTable("/Root", *MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+            .UniformPartitions = 2,
+        }));
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto originalDesc = env.GetDescription("/Root/Table");
+        const auto& originalTable = originalDesc.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(originalTable.TablePartitionsSize(), 2);
+
+        auto replicatedDesc = env.GetDescription("/Root/Replicated");
+        const auto& replicatedTable = replicatedDesc.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(originalTable.TablePartitionsSize(), replicatedTable.TablePartitionsSize());
     }
 
     Y_UNIT_TEST(NonExistentSrc) {

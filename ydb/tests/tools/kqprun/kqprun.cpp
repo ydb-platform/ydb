@@ -408,6 +408,10 @@ protected:
             .DefaultValue(1000)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
+        options.AddLongOption("pool", "Workload manager pool in which queries will be executed")
+            .RequiredArgument("pool-id")
+            .StoreResult(&RunnerOptions.YdbSettings.DefaultPoolId);
+
         // Cluster settings
 
         options.AddLongOption('N', "node-count", "Number of nodes to create")

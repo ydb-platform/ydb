@@ -12,6 +12,7 @@ namespace NKikimr::NKqp {
         TString SessionId;
         TString CurrentExecutionId;
         TString CustomerSuppliedId;
+        TString PoolId;
 
         TUserRequestContext() = default;
 

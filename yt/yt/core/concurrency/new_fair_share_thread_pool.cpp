@@ -775,9 +775,11 @@ public:
             }
         }
 
+        InvokeQueue_.DequeueAll();
+
+        guard.Release();
         actions.clear();
 
-        InvokeQueue_.DequeueAll();
     }
 
     void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)

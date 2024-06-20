@@ -356,7 +356,8 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
 #endif
 
     if (clientSocket == INVALID_SOCKET) {
-        if (LastSystemError() != EAGAIN && LastSystemError() != EWOULDBLOCK && LastSystemError() != ECONNABORTED) {
+        auto error = LastSystemError();
+        if (error != EAGAIN && error != EWOULDBLOCK && error != ECONNABORTED && error != EMFILE) {
             // ECONNABORTED means, that a socket on the listen
             // queue was closed before we Accept()ed it; ignore it.
             THROW_ERROR_EXCEPTION(

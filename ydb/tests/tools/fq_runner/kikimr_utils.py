@@ -132,8 +132,6 @@ class YQv2Extension(ExtensionPoint):
             'enable_script_execution_operations',
             'enable_external_source_schema_inference',
         ]
-        if self.is_replace_if_exists:
-            extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
 
         if isinstance(configuration.node_count, dict):
             configuration.node_count["/compute"].tenant_type = TenantType.YDB

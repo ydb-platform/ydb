@@ -487,32 +487,8 @@ struct TBinaryKernelExec {
     }
 };
 
-// Makes a std::tuple<IBlockReader...> type from the given number of arguments
-template<size_t Argc>
-struct TGenericIReaderTuple {
-    template <typename = std::make_index_sequence<Argc>>
-    struct TImpl;
-    
-    template <size_t... Is>
-    struct TImpl<std::index_sequence<Is...>> {
-        template <size_t>
-        using TWrap = IBlockReader;
-
-        using type = std::tuple<TWrap<Is>...>;
-    };
-
-public:
-    using type = typename TImpl<>::type;
-};
-
-template <typename TDerived, size_t Argc, typename TBuilder = IArrayBuilder, typename TReadersTuple = TGenericIReaderTuple<Argc>>
+template <typename TDerived, size_t Argc, typename TBuilder = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TGenericKernelExec {
-    template <size_t Index>
-    static auto* TupleCastToBlockReaderImpl(IBlockReader& reader) {
-        using TReader = std::tuple_element<Index, TReadersTuple>::type;
-        return CastToBlockReaderImpl<TReader>(reader);
-    }
-
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
         Y_ENSURE(batch.num_values() == Argc);
@@ -547,12 +523,11 @@ struct TGenericKernelExec {
         // Specialize the case, when all given arguments are scalar.
         if (alength == arrow::Datum::kUnknownLength) {
             auto& builder = state.GetScalarBuilder();
-            auto* builderImpl = CastToScalarBuilderImpl<TBuilder>(builder);
+            auto* builderImpl = CastToScalarBuilderImpl<TScalarBuilderImpl>(builder);
 
             for (size_t k = 0; k < Argc; k++) {
                 auto& reader = state.GetReader(k);
-                auto* readerImpl = TupleCastToBlockReaderImpl<0>(reader);
-                args[k] = readerImpl->GetScalarItem(*batch[k].scalar());
+                args[k] = reader.GetScalarItem(*batch[k].scalar());
             }
             TDerived::Process(items, [&](TBlockItem out) {
                 *res = builderImpl->Build(out);
@@ -570,9 +545,8 @@ struct TGenericKernelExec {
                     continue;
                 }
                 auto& reader = state.GetReader(k);
-                auto* readerImpl = TupleCastToBlockReaderImpl<0>(reader);
 
-                args[k] = readerImpl->GetScalarItem(*batch[k].scalar());
+                args[k] = reader.GetScalarItem(*batch[k].scalar());
             }
             for (int64_t i = 0; i < alength;) {
                 for (size_t j = 0; j < maxBlockLength && i < alength; ++j, ++i) {
@@ -582,9 +556,8 @@ struct TGenericKernelExec {
                             continue;
                         }
                         auto& reader = state.GetReader(k);
-                        auto* readerImpl = TupleCastToBlockReaderImpl<0>(reader);
 
-                        args[k] = readerImpl->GetItem(*batch[k].array(), i);
+                        args[k] = reader.GetItem(*batch[k].array(), i);
                     }
                     TDerived::Process(items, [&](TBlockItem out) {
                         builderImpl->Add(out);

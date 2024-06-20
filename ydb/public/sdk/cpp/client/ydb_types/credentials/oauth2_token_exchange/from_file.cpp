@@ -128,8 +128,8 @@ struct TJwtTokenSourceParamsForParsing : public TJwtTokenSourceParams {
 std::shared_ptr<ITokenSource> ParseFixedTokenSource(const NJson::TJsonValue& cfg) {
     const auto& map = cfg.GetMapSafe();
     TFixedTokenSourceParamsForParsing result;
-    PROCESS_JSON_STRING_PARAM("token", Token, true);
-    PROCESS_JSON_STRING_PARAM("token-type", TokenType, true);
+    PROCESS_JSON_STRING_PARAM("token", Token, true); // required
+    PROCESS_JSON_STRING_PARAM("token-type", TokenType, true); // required
     return CreateFixedTokenSource(result.Token_, result.TokenType_);
 }
 
@@ -144,8 +144,8 @@ std::shared_ptr<ITokenSource> ParseJwtTokenSource(const NJson::TJsonValue& cfg) 
 
     // special fields
     PROCESS_JSON_STRING_PARAM("ttl", TtlStr, false);
-    PROCESS_JSON_STRING_PARAM("alg", AlgStr, false);
-    PROCESS_JSON_STRING_PARAM("private-key", PrivateKeyStr, false);
+    PROCESS_JSON_STRING_PARAM("alg", AlgStr, true); // required
+    PROCESS_JSON_STRING_PARAM("private-key", PrivateKeyStr, true); // required
 
     try {
         if (result.TtlStr_) {
@@ -154,10 +154,6 @@ std::shared_ptr<ITokenSource> ParseJwtTokenSource(const NJson::TJsonValue& cfg) 
     } catch (const std::exception& ex) {
         throw std::runtime_error(TStringBuilder()
             << "Failed to parse \"ttl\": " << ex.what());
-    }
-
-    if (!result.AlgStr_ || !result.PrivateKeyStr_) {
-        throw std::runtime_error("\"alg\" and \"private-key\" params are required");
     }
 
     const auto jwtAlgIt = JwtAlgorithmsFactory.find(result.AlgStr_);
@@ -203,7 +199,7 @@ TOauth2TokenExchangeParams ReadOauth2ConfigJson(const TString& configJson, const
         if (tokenEndpoint) {
             result.TokenEndpoint(tokenEndpoint);
         } else {
-            PROCESS_JSON_STRING_PARAM("token-endpoint", TokenEndpoint, false);
+            PROCESS_JSON_STRING_PARAM("token-endpoint", TokenEndpoint, false); // there is an explicit check in provider params after parsing
         }
 
         PROCESS_JSON_STRING_PARAM("grant-type", GrantType, false);

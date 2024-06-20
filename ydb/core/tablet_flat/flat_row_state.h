@@ -35,6 +35,7 @@ namespace NTable {
         ui32 Need() const noexcept { return Need_; }
         ui32 Left() const noexcept { return Left_; }
         TPos Size() const noexcept { return Cells.size(); }
+        ui64 ExternalBlobSize() const noexcept { return ExternalBlobSize_; }
 
         bool operator==(ERowOp rop) const noexcept
         {
@@ -120,6 +121,10 @@ namespace NTable {
             }
         }
 
+        void SetExternalBlobSize(ui32 externalBlobSize) noexcept {
+            ExternalBlobSize_ = externalBlobSize;
+        }
+
         TArrayRef<const TCell> operator*() const noexcept
         {
             return Cells;
@@ -153,6 +158,7 @@ namespace NTable {
         ui32 Left_ = 0;     /* Cells with unknown state */
         TStackVec<TCellOp, 64> State;
         TSmallVec<TCell> Cells;
+        ui32 ExternalBlobSize_ = 0;
     };
 
 }

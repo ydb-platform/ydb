@@ -493,7 +493,7 @@ struct TCommonAppOptions {
         if (appConfig.GetQueryServiceConfig().HasConnector() && InterconnectPort) {
             auto& connectorConfig = *appConfig.MutableQueryServiceConfig()->MutableConnector();
 
-            auto offset = connectorConfig.GetInterconnectPortOffset();
+            auto offset = connectorConfig.GetOffsetFromICPort();
             if (offset) {
                 connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
 

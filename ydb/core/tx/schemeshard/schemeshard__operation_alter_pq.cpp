@@ -283,36 +283,33 @@ public:
 
             TString prevBound;
             for (size_t i = 0; i < partitions.size(); ++i) {
-                auto* newPartitionInfo = partitions[i].second;
+                auto* partitionInfo = partitions[i].second;
                 if (i) {
-                    newPartitionInfo->KeyRange.ConstructInPlace();
-                    newPartitionInfo->KeyRange->FromBound = prevBound;
+                    partitionInfo->KeyRange.ConstructInPlace();
+                    partitionInfo->KeyRange->FromBound = prevBound;
                 }
                 if (i != (partitions.size() - 1)) {
-                    if (!newPartitionInfo->KeyRange) {
-                        newPartitionInfo->KeyRange.ConstructInPlace();
+                    if (!partitionInfo->KeyRange) {
+                        partitionInfo->KeyRange.ConstructInPlace();
                     }
                     auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
                     prevBound = NPQ::AsKeyBound(range.End);
-                    newPartitionInfo->KeyRange->ToBound = prevBound;
+                    partitionInfo->KeyRange->ToBound = prevBound;
                 }
 
-                context.SS->PersistPersQueue(db, item->PathId, partitions[i].first, *newPartitionInfo);
+                context.SS->PersistPersQueue(db, item->PathId, partitions[i].first, *partitionInfo);
             }
         } else {
             for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
                 for (const auto& partitionInfo : tabletInfo->Partitions) {
                     if (splitMergeWasDisabled) {
                         // clear all splitmerge fields
-                        TTopicTabletInfo::TTopicPartitionInfo newPartitionInfo;
-                        newPartitionInfo.PqId = partitionInfo->PqId;
-                        newPartitionInfo.GroupId = partitionInfo->GroupId;
-                        newPartitionInfo.AlterVersion = partitionInfo->AlterVersion;
-                        newPartitionInfo.CreateVersion = partitionInfo->CreateVersion;
-                        context.SS->PersistPersQueue(db, item->PathId, shardIdx, newPartitionInfo);
-                    } else {
-                        context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
+                        partitionInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+                        partitionInfo->KeyRange.Clear();
+                        partitionInfo->ParentPartitionIds.clear();
+                        partitionInfo->ChildPartitionIds.clear();
                     }
+                    context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
                 }
             }
         }

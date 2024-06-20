@@ -1228,22 +1228,12 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
 
     void FinishAlter() {
         Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
-
-        NKikimrPQ::TPQTabletConfig tabletConfig = GetTabletConfig();
-        NKikimrPQ::TPQTabletConfig newTabletConfig = AlterData->TabletConfig.empty() ? tabletConfig : AlterData->GetTabletConfig();
-
-        bool splitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-            && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-        bool splitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-            && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-
         TotalGroupCount = AlterData->TotalGroupCount;
         NextPartitionId = AlterData->NextPartitionId;
         TotalPartitionCount = AlterData->TotalPartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
-        if (!AlterData->TabletConfig.empty()) {
+        if (!AlterData->TabletConfig.empty())
             TabletConfig = std::move(AlterData->TabletConfig);
-        }
         ++AlterVersion;
         Y_ABORT_UNLESS(BalancerTabletID == AlterData->BalancerTabletID || !HasBalancer());
         Y_ABORT_UNLESS(AlterData->HasBalancer());
@@ -1251,43 +1241,14 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         KeySchema = AlterData->KeySchema;
         BalancerTabletID = AlterData->BalancerTabletID;
         BalancerShardIdx = AlterData->BalancerShardIdx;
+        AlterData.Reset();
 
         Partitions.clear();
-        if (splitMergeWasEnabled) {
-            auto partitions = GetPartitions();
-
-            TString prevBound;
-            for (size_t i = 0; i < partitions.size(); ++i) {
-                auto* partitionInfo = partitions[i].second;
-                Partitions[partitionInfo->PqId] = partitionInfo;
-                if (i) {
-                    partitionInfo->KeyRange.ConstructInPlace();
-                    partitionInfo->KeyRange->FromBound = prevBound;
-                }
-                if (i != (partitions.size() - 1)) {
-                    if (!partitionInfo->KeyRange) {
-                        partitionInfo->KeyRange.ConstructInPlace();
-                    }
-                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
-                    prevBound = NPQ::AsKeyBound(range.End);
-                    partitionInfo->KeyRange->ToBound = prevBound;
-                }
-            }
-        } else {
-            for (const auto& [_, shard] : Shards) {
-                for (auto& partition : shard->Partitions) {
-                    Partitions[partition->PqId] = partition.Get();
-                    if (splitMergeWasDisabled) {
-                        partition.Get()->Status = NKikimrPQ::ETopicPartitionStatus::Active;
-                        partition.Get()->KeyRange.Clear();
-                        partition.Get()->ChildPartitionIds.clear();
-                        partition.Get()->ParentPartitionIds.clear();
-                    }
-                }
+        for (const auto& [_, shard] : Shards) {
+            for (auto& partition : shard->Partitions) {
+                Partitions[partition->PqId] = partition.Get();
             }
         }
-
-        AlterData.Reset();
 
         InitSplitMergeGraph();
     }

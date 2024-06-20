@@ -1201,8 +1201,8 @@ value {
             TCell(string.data(), string.size()),            // Utf8
             TCell(json.data(), json.size()),                // Json
             TCell(binaryJson->Data(), binaryJson->Size()),  // JsonDocument
-            TCell(uuid, sizeof(uuid))                       // Uuid
-            };
+            TCell(uuid, sizeof(uuid)),                      // Uuid
+        };
 
         const TVector<ui32> keyTags = {1};
         TVector<ui32> valueTags(values.size());
@@ -1296,7 +1296,7 @@ value {
             "utf8_value",
             "json_value",
             "jsondoc_value",
-            "uuid_value"
+            "uuid_value",
         };
         
         auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);

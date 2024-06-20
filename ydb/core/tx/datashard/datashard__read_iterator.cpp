@@ -762,18 +762,18 @@ private:
             BytesInResult >= State.Quota.Bytes;
     }
 
-    bool OutOfQuota(ui64 keysRead) const {
-        return (RowsRead + keysRead) >= State.Quota.Rows ||
-            BlockBuilder.Bytes() >= State.Quota.Bytes||
-            BytesInResult >= State.Quota.Bytes;
+    bool OutOfQuota(ui64 precharged, ui64 bytesPrecharged) const {
+        return (RowsRead + precharged) >= State.Quota.Rows ||
+            BlockBuilder.Bytes() + bytesPrecharged >= State.Quota.Bytes||
+            BytesInResult + bytesPrecharged >= State.Quota.Bytes;
     }
 
     bool HasMaxRowsInResult() const {
         return RowsRead >= State.MaxRowsInResult;
     }
 
-    bool HasMaxRowsInResult(ui64 keysRead) const {
-        return RowsRead + keysRead >= State.MaxRowsInResult;
+    bool HasMaxRowsInResult(ui64 precharged) const {
+        return RowsRead + precharged >= State.MaxRowsInResult;
     }
 
     bool ReachedTotalRowsLimit() const {
@@ -784,12 +784,12 @@ private:
         return State.TotalRows + RowsRead >= State.TotalRowsLimit;
     }
 
-    bool ReachedTotalRowsLimit(ui64 keysRead) const {
+    bool ReachedTotalRowsLimit(ui64 precharged) const {
         if (State.TotalRowsLimit == Max<ui64>()) {
             return false;
         }
 
-        return State.TotalRows + RowsRead + keysRead >= State.TotalRowsLimit;
+        return State.TotalRows + RowsRead + precharged >= State.TotalRowsLimit;
     }
 
     ui64 GetTotalRowsLeft() const {
@@ -813,17 +813,12 @@ private:
         return OutOfQuota() || HasMaxRowsInResult() || ShouldStopByElapsedTime();
     }
 
-    bool ShouldStopReadingKeys(ui64 keysRead) {
+    bool ShouldStopPrecharging(ui64 precharged, ui64 bytesPrecharged) {
         if (!CanResume()) {
             return false;
         }
 
-        return OutOfQuota(keysRead) || HasMaxRowsInResult(keysRead) || ShouldStopByElapsedTime();
-    }
-
-    bool ShouldStopPrecharging(ui64 bytesPrecharged) {
-        return (BlockBuilder.Bytes() + bytesPrecharged) >= State.Quota.Bytes||
-            (BytesInResult + bytesPrecharged) >= State.Quota.Bytes;
+        return OutOfQuota(precharged, bytesPrecharged) || HasMaxRowsInResult(precharged) || ShouldStopByElapsedTime();
     }
 
     ui64 GetRowsLeft() {
@@ -918,17 +913,7 @@ private:
 
                 prechargedSize += size;
 
-                // We are only precharging, meaning that data will be out of order.
-                // Let's add it to ResultSet on the next iteration
-                if (ShouldStopPrecharging(prechargedSize)) {
-                    break;
-                }
-
-                if (ReachedTotalRowsLimit(prechargedCount)) {
-                    break;
-                }
-
-                if (ShouldStopReadingKeys(prechargedCount)) {
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStopPrecharging(prechargedCount, prechargedSize)) {
                     break;
                 }
 

@@ -595,6 +595,20 @@
             "uri": "https://{canondata_backend}/212715/6f6bf2bb89b40fafbd6da226e87aee6b3a8a07d5/resource.tar.gz#test.test_blocks-interval_mul--Results_/results.txt"
         }
     ],
+    "test.test[column_group-hint_non_str_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_str_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_str_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_str_yson_fail--Results_/extracted"
+        }
+    ],
+    "test.test[column_group-hint_non_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_yson_fail--Results_/extracted"
+        }
+    ],
     "test.test[column_order-insert--Debug]": [
         {
             "checksum": "e4030a85259a67fc2ab749b257ad91e9",

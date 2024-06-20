@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting column_groups
+    	with column_groups="{g1=[3;a]}"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Expected string value in list, found int64_node, group: "g1"
+        	with column_groups="{g1=[3;a]}"
+	                   ^

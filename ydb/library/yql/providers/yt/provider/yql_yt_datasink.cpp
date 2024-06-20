@@ -263,11 +263,22 @@ public:
                     ctx);
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, std::move(settings));
             }
+            if (auto columnGroup = NYql::GetSetting(*res->Child(TYtWriteTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+                const TString normalized = NormalizeColumnGroupSpec(columnGroup->Tail().Content());
+                res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
+                    NYql::UpdateSettingValue(*res->Child(TYtWriteTable::idx_Settings),
+                        EYtSettingType::ColumnGroups,
+                        ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), normalized, TNodeFlags::MultilineContent),
+                        ctx)
+                    );
+            }
             auto mutationId = ++NextMutationId_;
             res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
                 NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
                     EYtSettingType::MutationId,
-                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), ToString(mutationId)), ctx));
+                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), mutationId),
+                    ctx)
+                );
             if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Content,
                     ctx.Builder(node->Pos())

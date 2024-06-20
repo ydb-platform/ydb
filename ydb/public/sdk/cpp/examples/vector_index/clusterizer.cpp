@@ -213,11 +213,14 @@ bool TClusterizer::Step(float neededDiff) {
             Update(ToFill.Min[i], embedding);
         }
     };
+    auto batchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
     It.Iterate([&](ui32 rows, TRawEmbedding rawEmbedding) {
-        Progress.Report(1);
-        ToFill.RawData.emplace_back(std::move(rawEmbedding));
-        ToFill.Min.emplace_back();
-        if (ToFill.RawData.size() == rows) {
+        if (rows > 0) {
+            Progress.Report(1);
+            ToFill.RawData.emplace_back(std::move(rawEmbedding));
+            ToFill.Min.emplace_back();
+        }
+        if (ToFill.RawData.size() >= batchSize) {
             ComputeBatch(update);
         }
     });
@@ -281,12 +284,15 @@ void TClusterizer::Finalize() {
             Create(parentId, id, std::move(ToFill.RawData[i]));
         }
     };
+    auto batchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
     It.Iterate([&](ui32 rows, TId id, TRawEmbedding rawEmbedding) {
-        Progress.Report(1);
-        ToFill.IdData.emplace_back(id);
-        ToFill.RawData.emplace_back(std::move(rawEmbedding));
-        ToFill.Min.emplace_back();
-        if (ToFill.RawData.size() == rows) {
+        if (rows > 0) {
+            Progress.Report(1);
+            ToFill.IdData.emplace_back(id);
+            ToFill.RawData.emplace_back(std::move(rawEmbedding));
+            ToFill.Min.emplace_back();
+        }
+        if (ToFill.RawData.size() >= batchSize) {
             ComputeBatch(update);
         }
     });

@@ -151,7 +151,42 @@ public:
     TTableIterator(const TOptions& options, TTableClient& client)
         : Options{options}
         , Client{client}
+        , Reader{[&] {
+            std::unique_lock lock{M};
+            while (true) {
+                while (!It) {
+                    Start.wait(lock);
+                    if (Stop) {
+                        return;
+                    }
+                }
+                auto it = std::move(*It);
+                It.reset();
+                lock.unlock();
+                for (bool wasGood = true; wasGood;) {
+                    auto next = it.ReadNext();
+                    auto part = next.ExtractValueSync();
+                    wasGood = part.IsSuccess();
+                    lock.lock();
+                    Queue.push(std::move(part));
+                    if (Queue.size() == 1) {
+                        Finish.notify_one();
+                    }
+                    lock.unlock();
+                }
+                lock.lock();
+            }
+        }}
     {
+    }
+
+    ~TTableIterator() {
+        {
+            std::lock_guard lock{M};
+            Stop = true;
+        }
+        Start.notify_one();
+        Reader.join();
     }
 
     void UseLevel(ui8 level, TId parentId, ui64 rows) {
@@ -167,6 +202,7 @@ public:
         if (newTable != Table) {
             Table = newTable;
         }
+        Embeddings.clear();
     }
 
     ui64 Rows() const final {
@@ -211,10 +247,25 @@ public:
     }
 
     void Iterate(std::function<void(ui32, TRawEmbedding)> cb) final {
-        IterateImpl<false>(cb);
+        if (Rows() <= 20'000) {
+            if (Embeddings.empty()) {
+                Embeddings.reserve(20'000);
+                IterateImpl<false>([&](ui32 rows, TRawEmbedding embedding) {
+                    if (rows > 0) {
+                        Embeddings.push_back(std::move(embedding));
+                    }
+                });
+            }
+            for (auto embedding : Embeddings) {
+                cb(1, std::move(embedding));
+            }
+        } else {
+            IterateImpl<false>(cb);
+        }
     }
 
     void Iterate(std::function<void(ui32, TId, TRawEmbedding)> cb) final {
+        Embeddings.clear();
         IterateImpl<true>(cb);
     }
 
@@ -242,6 +293,7 @@ private:
             pk.EndTuple();
             settings.To(TKeyBound::Exclusive(pk.Build()));
         }
+
         ThrowOnError(Client.RetryOperationSync([&](TSession session) {
             auto fit = session.ReadTable(FullName(Options, Table), settings);
             ReadImpl<WithPK>(fit.ExtractValueSync(), cb);
@@ -254,47 +306,71 @@ private:
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
-        // There is no possibility of parallel ReadNext, so we cannot prefetch :(
-        // At least we can start next read right after previous read finished
-        auto next = it.ReadNext();
+        std::unique_lock lock{M};
+        It = std::move(it);
+        Start.notify_one();
         while (true) {
-            auto part = next.ExtractValueSync();
-            if (!part.IsSuccess()) {
-                if (part.EOS()) {
-                    return;
+            if (Queue.empty()) {
+                lock.unlock();
+                if constexpr (WithPK) {
+                    cb(0, 0, "");
+                    cb(0, 0, "");
+                } else {
+                    cb(0, "");
+                    cb(0, "");
                 }
-                ythrow TVectorException{std::move(part)};
+                lock.lock();
             }
-            next = it.ReadNext();
-            TResultSetParser batch(part.ExtractPart());
-            ui32 rows = batch.RowsCount();
-            if (!batch.TryNextRow()) {
-                continue;
+            while (Queue.empty()) {
+                Finish.wait(lock);
             }
-            if constexpr (WithPK) {
-                Y_ASSERT(batch.ColumnsCount() == 2);
-                auto primaryKeyIdx = batch.ColumnIndex(Options.PrimaryKey);
-                auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
-                auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
-                auto& embedding = batch.ColumnParser(embeddingIdx);
-                do {
-                    TId pk = 0;
-                    if (ParentId == 0) {
-                        pk = *primaryKey.GetOptionalUint64();
-                    } else {
-                        pk = *primaryKey.GetOptionalUint32();
-                    }
-                    cb(rows, pk, *embedding.GetOptionalString());
-                } while (batch.TryNextRow());
-            } else {
-                Y_ASSERT(batch.ColumnsCount() == 1);
-                auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
-                auto& embedding = batch.ColumnParser(embeddingIdx);
-                do {
-                    cb(rows, *embedding.GetOptionalString());
-                } while (batch.TryNextRow());
+            auto part = std::move(Queue.front());
+            Queue.pop();
+            lock.unlock();
+            if (!ProcessPart<WithPK>(std::move(part), cb)) {
+                return;
             }
+            lock.lock();
         }
+    }
+
+    template <bool WithPK>
+    bool ProcessPart(TSimpleStreamPart<TResultSet>&& part, auto&& cb) {
+        if (!part.IsSuccess()) {
+            if (part.EOS()) {
+                return false;
+            }
+            ythrow TVectorException{std::move(part)};
+        }
+        TResultSetParser batch(part.ExtractPart());
+        ui32 rows = batch.RowsCount();
+        if (!batch.TryNextRow()) {
+            return true;
+        }
+        if constexpr (WithPK) {
+            Y_ASSERT(batch.ColumnsCount() == 2);
+            auto primaryKeyIdx = batch.ColumnIndex(Options.PrimaryKey);
+            auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+            auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
+            auto& embedding = batch.ColumnParser(embeddingIdx);
+            do {
+                TId pk = 0;
+                if (ParentId == 0) {
+                    pk = *primaryKey.GetOptionalUint64();
+                } else {
+                    pk = *primaryKey.GetOptionalUint32();
+                }
+                cb(rows, pk, *embedding.GetOptionalString());
+            } while (batch.TryNextRow());
+        } else {
+            Y_ASSERT(batch.ColumnsCount() == 1);
+            auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
+            auto& embedding = batch.ColumnParser(embeddingIdx);
+            do {
+                cb(rows, *embedding.GetOptionalString());
+            } while (batch.TryNextRow());
+        }
+        return true;
     }
 
     const TOptions& Options;
@@ -302,6 +378,16 @@ private:
     TString Table;
     TId ParentId = 0;
     ui64 RowsCount = 0;
+
+    bool Stop = false;
+    std::optional<TTablePartIterator> It;
+    std::mutex M;
+    std::condition_variable Start;
+    std::condition_variable Finish;
+    std::thread Reader;
+    std::queue<TSimpleStreamPart<TResultSet>> Queue;
+
+    std::vector<TString> Embeddings;
 };
 
 static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {

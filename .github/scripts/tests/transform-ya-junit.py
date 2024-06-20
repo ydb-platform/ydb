@@ -92,7 +92,7 @@ class YTestReportTrace:
     def get_logs(self, cls, name):
         trace = self.traces.get((cls, name))
 
-        if not trace:
+        if not trace or 'logs' not in trace:
             return {}
 
         logs = trace["logs"]

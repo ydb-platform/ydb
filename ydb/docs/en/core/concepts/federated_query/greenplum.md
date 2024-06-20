@@ -2,7 +2,7 @@
 
 This section provides basic information on working with external [Greenplum](https://greenplum.org) databases.
 
-To work with an external Greenplum database, you need to follow these steps:
+Follow these steps to work with an external Greenplum database:
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
     ```sql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");

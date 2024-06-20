@@ -120,6 +120,7 @@ dir_includes="set"
 [attrs.target]
 # DEPRECATED - Skipped old hardcoded-cmake attributes
 set_target_property="skip"
+append_target_property="skip"
 
 # DEPRECATED - target multiple calls macroses
 generate_enum_serilization="skip"

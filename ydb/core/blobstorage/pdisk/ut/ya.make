@@ -36,6 +36,7 @@ SRCS(
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp
     blobstorage_pdisk_restore_ut.cpp
+    blobstorage_pdisk_ut_color_limits.cpp
     mock/pdisk_mock.cpp
 )
 

@@ -191,6 +191,27 @@
             "uri": "file://test.test_action-select_from_subquery_with_orderby-default.txt-Results_/extracted"
         }
     ],
+    "test.test[action-subquery_merge_nested_subquery--Debug]": [
+        {
+            "checksum": "1dc78c0483e5fa3351b051e8e9de8679",
+            "size": 399,
+            "uri": "https://{canondata_backend}/212715/cc5ee013b273c884275432811061575095a2455d/resource.tar.gz#test.test_action-subquery_merge_nested_subquery--Debug_/opt.yql"
+        }
+    ],
+    "test.test[action-subquery_merge_nested_subquery--Plan]": [
+        {
+            "checksum": "212be881133a20b5b73ef1250dbeda51",
+            "size": 960,
+            "uri": "https://{canondata_backend}/212715/cc5ee013b273c884275432811061575095a2455d/resource.tar.gz#test.test_action-subquery_merge_nested_subquery--Plan_/plan.txt"
+        }
+    ],
+    "test.test[action-subquery_merge_nested_subquery--Results]": [
+        {
+            "checksum": "ab3678f99412b6d14f44db6b69d41e5f",
+            "size": 668,
+            "uri": "https://{canondata_backend}/212715/cc5ee013b273c884275432811061575095a2455d/resource.tar.gz#test.test_action-subquery_merge_nested_subquery--Results_/results.txt"
+        }
+    ],
     "test.test[action-subquery_orderby1-default.txt-Debug]": [
         {
             "checksum": "4834fccb931cfc37a48edb73d5a98505",

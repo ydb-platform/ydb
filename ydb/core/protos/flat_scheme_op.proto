@@ -974,7 +974,7 @@ enum EIndexState {
 }
 
 message TExplicitPartitions {
-    repeated TSplitBoundary SplitBoundaries = 1;
+    repeated TSplitBoundary SplitBoundary = 1;
 }
 
 message TIndexDescription {

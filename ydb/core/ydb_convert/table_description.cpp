@@ -812,7 +812,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
         break;
     case NKikimrSchemeOp::TIndexDescription::kExplicitPartitions:
         FillTableBoundaryImpl(*settings.mutable_partition_at_keys(),
-            tableIndex.GetExplicitPartitions().GetSplitBoundaries(),
+            tableIndex.GetExplicitPartitions().GetSplitBoundary(),
             splitKeyType
         );
         break;

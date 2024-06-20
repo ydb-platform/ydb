@@ -1227,7 +1227,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     if (const auto& explicitPartitions = indexImplTable->TableDescription.GetSplitBoundary();
         !explicitPartitions.empty()
     ) {
-        *entry.MutableExplicitPartitions()->MutableSplitBoundaries() = explicitPartitions;
+        *entry.MutableExplicitPartitions()->MutableSplitBoundary() = explicitPartitions;
     }
 }
 

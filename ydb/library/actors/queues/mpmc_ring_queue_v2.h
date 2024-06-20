@@ -102,6 +102,11 @@ struct TMPMCRingQueueV2 {
         }
     }
 
+    bool CheckPushOvertaken(ui64 tail) {
+        ui64 currentHead = Head.load(std::memory_order_acquire) & ~HasOvertakenSlotsBit;
+        return currentHead + MaxSize <= tail + std::min<ui64>(4096, MaxSize - 1);
+    }
+
     bool TryPush(ui32 val) {
         // Cerr << "TryPush\n";
         for (ui32 it = 0;; ++it) {
@@ -109,7 +114,15 @@ struct TMPMCRingQueueV2 {
             OBSERVE_WITH_CONDITION(LongPush100It, it == 100);
             OBSERVE_WITH_CONDITION(LongPush1000It, it == 1000);
             // Cerr << "it: " << it << Endl;
-            ui64 currentTail = Tail.fetch_add(1, std::memory_order_relaxed);
+            ui64 prevTail = Tail.load(std::memory_order_acquire);
+            if (prevTail & HasOvertakenSlotsBit) {
+                if (CheckPushOvertaken(prevTail ^ HasOvertakenSlotsBit)) {
+                    OBSERVE(FailedPush);
+                    return false;
+                }
+                Tail.compare_exchange_strong(prevTail, prevTail ^ HasOvertakenSlotsBit, std::memory_order_acq_rel);
+            }
+            ui64 currentTail = Tail.fetch_add(1, std::memory_order_relaxed) & ~HasOvertakenSlotsBit;
             ui64 generation = currentTail / MaxSize;
             OBSERVE(AfterReserveSlotInFastPush);
 
@@ -126,11 +139,9 @@ struct TMPMCRingQueueV2 {
             // Cerr << "slot.IsEmpty: " << (slot.IsEmpty ? "yes" : "no") << " slot.IsOvertaken: " << (slot.IsOvertaken ? "yes" : "no") << " slot.Generation: " << slot.Generation << " generation: " << generation << Endl;
 
             if (!slot.IsEmpty) {
-                ui64 currentHead = Head.load(std::memory_order_acquire) & ~HasOvertakenSlotsBit;
-                if (currentHead + MaxSize <= currentTail + std::min<ui64>(4096, MaxSize - 1)) {
+                if (CheckPushOvertaken(currentTail)) {
                     OBSERVE(FailedPush);
-                    currentTail++;
-                    Tail.compare_exchange_strong(currentTail, currentTail - 1, std::memory_order_acq_rel);
+                    Tail.compare_exchange_strong(currentTail, prevTail | HasOvertakenSlotsBit, std::memory_order_acq_rel);
                     return false;
                 }
             }
@@ -185,10 +196,11 @@ struct TMPMCRingQueueV2 {
             ui64 prevHead = Head.load(std::memory_order_acquire);
             if (prevHead & HasOvertakenSlotsBit) {
                 if (auto value = TryPopFromOvertakenSlots(prevHead ^ HasOvertakenSlotsBit)) {
+                    OBSERVE(SuccessFastPop);
                     return value;
                 }
-                prevHead = Head.load(std::memory_order_acquire) & ~HasOvertakenSlotsBit;;
-                ui64 currentTail = Tail.load(std::memory_order_acquire);
+                prevHead = Head.load(std::memory_order_acquire) & ~HasOvertakenSlotsBit;
+                ui64 currentTail = Tail.load(std::memory_order_acquire) & ~HasOvertakenSlotsBit;;
                 if (prevHead >= currentTail) {
                     OBSERVE(FailedSlowPop);
                     return std::nullopt;
@@ -212,6 +224,7 @@ struct TMPMCRingQueueV2 {
                         // Cerr << "Changed generation at " << currentHead % MaxSize << " to " << generation << Endl;
                         if (!OvertakenBuffer.Push(slotIdx)) {
                             if (auto value = InvalidateSlot(currentSlot, generation)) {
+                                OBSERVE(SuccessFastPop);
                                 return value;
                             }
                         } else {
@@ -251,7 +264,7 @@ struct TMPMCRingQueueV2 {
                 continue;
             }
 
-            ui64 currentTail = Tail.load(std::memory_order_acquire);
+            ui64 currentTail = Tail.load(std::memory_order_acquire)  & ~HasOvertakenSlotsBit;;
             if (currentTail <= currentHead) {
                 OBSERVE(FailedFastPop);
                 return std::nullopt;

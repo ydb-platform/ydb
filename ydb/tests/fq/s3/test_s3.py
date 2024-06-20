@@ -3,9 +3,9 @@
 
 import boto3
 import logging
-import os
 import pytest
 import time
+import uuid
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.tests.library.common.yatest_common as yatest_common
@@ -84,7 +84,8 @@ Pear,15,33'''
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_inference(self, kikimr, s3, client, unique_prefix):
+    def test_inference(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -354,8 +355,7 @@ Pear,15,33,2024-05-06'''
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_checkpoints_on_join_s3_with_yds(self, kikimr, s3, client, unique_prefix):
+    def test_checkpoints_on_join_s3_with_yds(self, kikimr, s3, client):
         # Prepare S3
         resource = boto3.resource(
             "s3",

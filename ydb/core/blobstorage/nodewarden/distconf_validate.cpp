@@ -39,7 +39,7 @@ namespace NKikimr::NStorage {
         THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64>> vdisks;
         for (const auto& vslot : current.GetVDisks()) {
             TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
-            const auto it = currentGroupGens.find(vdiskId.GroupID);
+            const auto it = currentGroupGens.find(vdiskId.GroupID.GetRawId());
             if (it == currentGroupGens.end() || it->second != vdiskId.GroupGeneration) {
                 continue;
             }
@@ -60,7 +60,7 @@ namespace NKikimr::NStorage {
         THashSet<ui32> changedGroups;
         for (const auto& vslot : proposed.GetVDisks()) {
             TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
-            const auto groupIt = proposedGroupGens.find(vdiskId.GroupID);
+            const auto groupIt = proposedGroupGens.find(vdiskId.GroupID.GetRawId());
             if (groupIt == proposedGroupGens.end() || groupIt->second != vdiskId.GroupGeneration) {
                 continue;
             }
@@ -75,7 +75,7 @@ namespace NKikimr::NStorage {
             const bool changed = it->second != std::make_tuple(l.GetNodeID(), l.GetPDiskID(), l.GetVDiskSlotID(), l.GetPDiskGuid()) ||
                 invalidatedNodeIds.contains(l.GetNodeID()) ||
                 invalidatedPDiskIds.contains(std::make_tuple(l.GetNodeID(), l.GetPDiskID()));
-            if (changed && !changedGroups.emplace(vdiskId.GroupID).second) {
+            if (changed && !changedGroups.emplace(vdiskId.GroupID.GetRawId()).second) {
                 return "more than one slot has changed in group";
             }
 
@@ -318,7 +318,7 @@ namespace NKikimr::NStorage {
                         const ui32 vslotId = l.GetVDiskSlotID();
                         const ui64 pdiskGuid = l.GetPDiskGuid();
 
-                        const TVDiskID vdiskId(groupId, groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
+                        const TVDiskID vdiskId(TGroupId::FromValue(groupId), groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
 
                         if (const auto it = vdisks.find(vdiskId); it == vdisks.end()) {
                             return TStringBuilder() << "vslot with specific VDiskID is not found"

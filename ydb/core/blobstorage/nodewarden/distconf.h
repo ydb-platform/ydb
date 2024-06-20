@@ -605,7 +605,7 @@ namespace NKikimr::NStorage {
                 continue;
             }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            const auto it = groups.find(vdiskId.GroupID);
+            const auto it = groups.find(vdiskId.GroupID.GetRawId());
             if (it == groups.end()) {
                 return makeError(TStringBuilder() << "VDisk " << vdiskId << " does not match any static group");
             }
@@ -631,7 +631,7 @@ namespace NKikimr::NStorage {
             const auto [begin, end] = confirm.equal_range(key);
             for (auto it = begin; it != end; ++it) {
                 const TVDiskID& vdiskId = it->second;
-                TGroupRecord& group = groups.at(vdiskId.GroupID);
+                TGroupRecord& group = groups.at(vdiskId.GroupID.GetRawId());
                 group.Confirmed |= {&group.Info->GetTopology(), vdiskId};
             }
         });

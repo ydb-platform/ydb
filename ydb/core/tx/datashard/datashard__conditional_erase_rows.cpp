@@ -470,6 +470,9 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:
+    case NScheme::NTypeIds::Date32:
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
         if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
             return true;
         } else {

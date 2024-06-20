@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
@@ -4482,7 +4483,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     for (auto& ev : capturedCommits) {
         auto proxy = ev->Recipient;
         ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", groupId);
+        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
         runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 1, true);
     }
     capturedCommits.clear();

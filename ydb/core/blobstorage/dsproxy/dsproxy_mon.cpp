@@ -22,7 +22,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
 {
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
-        GroupIdGen = (ui64(dyn.GroupId) << 32) | dyn.GroupGeneration;
+        GroupIdGen = (ui64(dyn.GroupId.GetRawId()) << 32) | dyn.GroupGeneration;
     }
 
     BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1);

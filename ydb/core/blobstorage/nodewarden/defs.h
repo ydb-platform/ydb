@@ -16,6 +16,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>

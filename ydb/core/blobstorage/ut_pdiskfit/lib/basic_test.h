@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/protos/pdiskfit.pb.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <util/system/event.h>
@@ -60,7 +61,7 @@ public:
         CreatePDiskActor(ctx);
         TVector<TActorId> actors;
         for (ui32 i = 0; i < NumVDisks; ++i) {
-            TVDiskID vdiskId(i, 0, 0, 0, 0);
+            TVDiskID vdiskId(TGroupId::FromValue(i), 0, 0, 0, 0);
             TFakeVDiskParams params;
             if (InduceLogSplicing) {
                 params.LogCutProbability = 1e-3;

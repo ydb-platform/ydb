@@ -1,6 +1,7 @@
 #include "blobstorage_replrecoverymachine.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
@@ -64,7 +65,7 @@ namespace NKikimr {
             baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]);
             auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
+            auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(TGroupId::FromValue(0), 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
             auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
             auto replCtx = std::make_shared<TReplCtx>(

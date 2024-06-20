@@ -152,6 +152,12 @@ protected:
             return NJson::TJsonValue(TInstant::MicroSeconds(cell.AsValue<ui64>()).ToString());
         case NScheme::NTypeIds::Interval:
             return NJson::TJsonValue(cell.AsValue<i64>());
+        case NScheme::NTypeIds::Date32:
+            return NJson::TJsonValue(cell.AsValue<i32>());
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Interval64:
+        case NScheme::NTypeIds::Timestamp64:
+            return NJson::TJsonValue(cell.AsValue<i64>());            
         case NScheme::NTypeIds::Decimal:
             return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>()));
         case NScheme::NTypeIds::DyNumber:

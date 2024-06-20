@@ -50,4 +50,6 @@ TCertAndKey GenerateCA(const TProps& props);
 TCertAndKey GenerateSignedCert(const TCertAndKey& ca, const TProps& props);
 void VerifyCert(const std::string& cert, const std::string& caCert);
 
+std::string GetCertificateFingerprint(const std::string& certificate);
+
 } //namespace NKikimr

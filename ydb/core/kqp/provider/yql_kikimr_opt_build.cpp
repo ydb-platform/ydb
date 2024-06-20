@@ -854,6 +854,53 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     auto settings = NCommon::ParseCommitSettings(commit, ctx);
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
 
+    TNodeOnNodeOwnedMap replaces;
+    VisitExpr(node.Ptr(), [&replaces](const TExprNode::TPtr& input) -> bool {
+        if (input->IsCallable("PgTableContent")) {
+            TPgTableContent content(input);
+            if (content.Table() == "pg_tables") {
+                replaces[input.Get()] = nullptr;
+            }
+        }
+        return true;
+    });
+    if (!replaces.empty()) {
+        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), "/Root/.sys/pg_tables") });
+        auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
+        auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
+
+        for (auto& [key, _] : replaces) {
+            auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
+                .World<TCoWorld>().Build()
+                .DataSource<TCoDataSource>()
+                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
+                    .FreeArgs()
+                        .Add(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Build()
+                .FreeArgs()
+                    .Add(newKey)
+                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
+                    .Add(ctx.NewList(node.Pos(), {}))
+                .Build()
+            .Done().Ptr();
+
+            auto readData = Build<TCoRight>(ctx, node.Pos())
+                .Input(ydbSysTableRead)
+            .Done().Ptr();
+            replaces[key] = readData;
+        }
+        ctx.Step
+            .Repeat(TExprStep::ExprEval)
+            .Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), replaces);
+        return res;
+    }
+
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {

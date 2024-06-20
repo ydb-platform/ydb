@@ -349,7 +349,14 @@ public:
             if (monitoringEndpoint) {
                 clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, singleConfig.GetConnection().GetDatabase(), credentialsProvider).release());
             } else {
-                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), credentialsProvider).release());
+                clientActor = Register(
+                    CreateMonitoringSysViewServiceActor(
+                        singleConfig.GetConnection(),
+                        YqSharedResources,
+                        CredentialsProviderFactory
+                    ).release()
+                    // CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), credentialsProvider).release()
+                );
             }
             MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
         }
@@ -373,7 +380,14 @@ public:
                 if (monitoringEndpoint) {
                     clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(
+                        CreateMonitoringSysViewServiceActor(
+                            config.GetControlPlaneConnection(),
+                            YqSharedResources,
+                            CredentialsProviderFactory
+                        ).release()
+                        // CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release()
+                    );
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }
@@ -397,7 +411,14 @@ public:
                 if (monitoringEndpoint) {
                     clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(
+                        CreateMonitoringSysViewServiceActor(
+                            config.GetControlPlaneConnection(),
+                            YqSharedResources,
+                            CredentialsProviderFactory
+                        ).release()
+                        // CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release()
+                    );
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }

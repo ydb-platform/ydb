@@ -588,6 +588,8 @@ public:
             return;
         }
 
+
+        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
         OnSuccessCompileRequest();
     }
 

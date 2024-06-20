@@ -19,7 +19,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 MaxBatchBytes = 8_MB;
-constexpr ui64 MaxUnshardedBatchBytes = 4_MB;
+constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;
@@ -265,7 +265,7 @@ public:
     }
 
     void FlushUnsharded(bool force) {
-        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() >= MaxUnshardedBatchBytes) {
+        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() > MaxUnshardedBatchBytes) {
             const auto unshardedBatch = BatchBuilder.FlushBatch(true);
             YQL_ENSURE(unshardedBatch);
             ShardAndFlushBatch(unshardedBatch, force);

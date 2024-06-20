@@ -81,12 +81,12 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
-class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
-    using TBase = TActorBootstrapped<TKqpWriteActor>;
+class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
+    using TBase = TActorBootstrapped<TKqpDirectWriteActor>;
 
     class TResumeNotificationManager {
     public:
-        TResumeNotificationManager(TKqpWriteActor& writer)
+        TResumeNotificationManager(TKqpDirectWriteActor& writer)
             : Writer(writer) {
             CheckMemory();
         }
@@ -102,7 +102,7 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
         }
 
     private:
-        TKqpWriteActor& Writer;
+        TKqpDirectWriteActor& Writer;
         i64 LastFreeMemory = std::numeric_limits<i64>::max();
     };
 
@@ -127,7 +127,7 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
     };
 
 public:
-    TKqpWriteActor(
+    TKqpDirectWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters)
@@ -157,13 +157,13 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         ResolveTable();
-        Become(&TKqpWriteActor::StateFunc);
+        Become(&TKqpDirectWriteActor::StateFunc);
     }
 
     static constexpr char ActorName[] = "KQP_WRITE_ACTOR";
 
 private:
-    virtual ~TKqpWriteActor() {
+    virtual ~TKqpDirectWriteActor() {
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -669,7 +669,7 @@ private:
 
     void PassAway() override {
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-        TActorBootstrapped<TKqpWriteActor>::PassAway();
+        TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
     }
 
     void Prepare() {
@@ -721,7 +721,6 @@ private:
         Callbacks->ResumeExecution();
     }
 
-    NActors::TActorId TxProxyId = MakeTxProxyID();
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
@@ -754,8 +753,11 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
     factory.RegisterSink<NKikimrKqp::TKqpTableSinkSettings>(
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args) {
-            auto* actor = new TKqpWriteActor(std::move(settings), std::move(args), counters);
+            // for inconsistent Tx & olap
+            auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
+            // for oltp txs
+            // retunr TKqpForwardWriteActor(...)
         });
 }
 

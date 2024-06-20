@@ -609,7 +609,7 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
         auto& outArray = res->array();
         auto* outValues = outArray->GetMutableValues<TOutput>(1);
 
-        TTypedBufferBuilder<uint8_t> nullBuilder(GetYqlMemoryPool());
+        TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
         nullBuilder.Reserve(length);
 
         bool isAllNull = inArray->GetNullCount() == length;
@@ -623,11 +623,11 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
             nullBuilder.UnsafeAppend(length, 0);
         }
         auto validMask = nullBuilder.Finish();
-        validMask = MakeDenseBitmap(validMask->data(), length, GetYqlMemoryPool());
+        validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
         
         auto inMask = inArray->buffers[0];
         if (inMask) {
-            outArray->buffers[0] = AllocateBitmapWithReserve(length, GetYqlMemoryPool());
+            outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
             arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
         } else {
             outArray->buffers[0] = std::move(validMask);
@@ -685,11 +685,11 @@ public:
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, true) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\

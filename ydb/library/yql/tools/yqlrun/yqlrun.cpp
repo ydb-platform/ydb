@@ -516,7 +516,7 @@ int Main(int argc, const char *argv[])
         tablesDirMapping[clusterName] = dirPath;
         for (const auto& entry : std::filesystem::recursive_directory_iterator(std::string(dirPath))) {
             if (entry.is_regular_file() && entry.path().has_extension() && entry.path().extension() == ".txt") {
-                auto tableName = TString(clusterName) + '.' + std::filesystem::relative(entry.path(), std::string(dirPath));
+                auto tableName = TString(clusterName) + '.' + std::filesystem::relative(entry.path(), std::string(dirPath)).string();
                 tableName = tableName.substr(0, tableName.Size() - 4); // remove .txt extension
                 tablesMapping[tableName] = entry.path().string();
             }

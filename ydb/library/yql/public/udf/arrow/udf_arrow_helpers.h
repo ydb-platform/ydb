@@ -48,7 +48,7 @@ public:
     IArrayBuilder& GetArrayBuilder() {
         Y_ENSURE(!OnlyScalars_);
         if (!ArrayBuilder_) {
-            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *GetYqlMemoryPool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &ValueBuilder_->GetPgBuilder());
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &ValueBuilder_->GetPgBuilder());
         }
 
         return *ArrayBuilder_;
@@ -163,7 +163,7 @@ public:
             }
 
             TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder);
-            arrow::compute::ExecContext execContext(GetYqlMemoryPool());
+            arrow::compute::ExecContext execContext;
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);
 

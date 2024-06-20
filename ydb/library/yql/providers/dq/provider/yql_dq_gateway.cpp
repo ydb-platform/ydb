@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -660,9 +661,13 @@ public:
                 session = it->second;
             }
         }
+        TFailureInjector::Reach("dq_session_was_closed", [&] { session = nullptr; });
         if (!session) {
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+            auto res = NCommon::ResultFromException<TResult>(yexception() << "Session was closed");
+            res.Fallback = true;
+            res.SetSuccess();
+            return MakeFuture(res);
         }
         return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {

@@ -1,6 +1,6 @@
 # Working with Greenplum databases
 
-This section provides basic information on working with external [Greenplum](https://greenplum.org) databases. Since Greenplum is based on PostgreSQL technology, some of their points are the same, so some links may lead to PostgreSQL documentation.
+This section provides basic information on working with external [Greenplum](https://greenplum.org) databases. Since Greenplum is based on [PostgreSQL](postgresql.md), integrations with them are similar, and some links below may lead to PostgreSQL documentation.
 
 Follow these steps to work with an external Greenplum database:
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.

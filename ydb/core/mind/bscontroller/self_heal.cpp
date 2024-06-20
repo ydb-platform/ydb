@@ -170,7 +170,7 @@ namespace NKikimr::NBsController {
             if (VDiskToReplace) {
                 ev->SelfHeal = true;
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
-                cmd->SetGroupId(VDiskToReplace->GroupID);
+                cmd->SetGroupId(VDiskToReplace->GroupID.GetRawId());
                 cmd->SetGroupGeneration(VDiskToReplace->GroupGeneration);
                 cmd->SetFailRealmIdx(VDiskToReplace->FailRealm);
                 cmd->SetFailDomainIdx(VDiskToReplace->FailDomain);
@@ -178,7 +178,7 @@ namespace NKikimr::NBsController {
             } else {
                 ev->GroupLayoutSanitizer = true;
                 auto *cmd = request->AddCommand()->MutableSanitizeGroup();
-                cmd->SetGroupId(GroupId);
+                cmd->SetGroupId(GroupId.GetRawId());
             }
 
             Send(ControllerId, ev.Release());
@@ -930,7 +930,7 @@ namespace NKikimr::NBsController {
             const auto& settings = bsConfig.GetAutoconfigSettings();
             const auto& ss = bsConfig.GetServiceSet();
             for (const auto& group : ss.GetGroups()) {
-                auto& content = sh->GroupsToUpdate[group.GetGroupID()];
+                auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
@@ -938,9 +938,9 @@ namespace NKikimr::NBsController {
                     .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, settings.GetGeometry()),
                 };
 
-                const TVDiskID vdiskId(group.GetGroupID(), group.GetGroupGeneration(), 0, 0, 0);
+                const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);
                 for (auto it = StaticVDiskMap.lower_bound(vdiskId); it != StaticVDiskMap.end() &&
-                        it->first.GroupID == group.GetGroupID() &&
+                        it->first.GroupID.GetRawId() == group.GetGroupID() &&
                         it->first.GroupGeneration == group.GetGroupGeneration(); ++it) {
                     const TVSlotId vslotId = it->second;
                     auto& vdiskInfo = content->VDisks[it->first];

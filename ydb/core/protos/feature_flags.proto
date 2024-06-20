@@ -134,7 +134,7 @@ message TFeatureFlags {
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
     optional bool ExtendedVDiskCounters = 120 [default = true];
     optional bool ExtendedPDiskSensors = 121 [default = true];
-    optional bool EnableDynamicNodeNameGeneration = 122 [default = false];
+    optional bool EnableStableNodeNames = 122 [default = false];
     optional bool EnableBackupService = 123 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = false];
     optional bool EnableGraphShard = 125 [default = false];
@@ -142,4 +142,5 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = false];
     optional bool EnableResourcePools  = 129 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = false];
 }

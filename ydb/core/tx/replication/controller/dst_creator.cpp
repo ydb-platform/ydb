@@ -112,7 +112,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (bootstrap) {
                 GetTableProfiles();
             } else {
-                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, {}));
+                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
+                    .WithKeyShardBoundary(true)));
             }
             break;
         }

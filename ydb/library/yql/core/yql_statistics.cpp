@@ -106,10 +106,10 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
             auto column_name = colMap.at("name").GetStringSafe();
 
             if (auto numUniqueVals = colMap.find("n_unique_vals"); numUniqueVals != colMap.end()) {
-                cStat.NumUniqueVals = numUniqueVals->second.GetDoubleSafe();
+                cStat.NumUniqueVals = numUniqueVals->second.IsNull()? 0.0f: numUniqueVals->second.GetDoubleSafe();
             }
             if (auto hll = colMap.find("hyperloglog"); hll != colMap.end()) {
-                cStat.HyperLogLog = hll->second.GetDoubleSafe();
+                cStat.HyperLogLog = hll->second.IsNull()? 0.0f: hll->second.GetDoubleSafe();
             }
 
             res->ColumnStatistics->Data[column_name] = cStat;

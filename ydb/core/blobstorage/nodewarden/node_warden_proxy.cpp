@@ -22,7 +22,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 
     if (EnableProxyMock) {
         // create mock proxy
-        proxy.reset(CreateBlobStorageGroupProxyMockActor(groupId));
+        proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
     } else if (auto info = NeedGroupInfo(groupId)) {
         if (info->BlobDepotId) {
             TActorId proxyActorId;
@@ -85,7 +85,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
 
-    const bool noGroup = (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) || EjectedGroups.count(id);
+    const bool noGroup = EjectedGroups.count(id);
     STLOG(PRI_DEBUG, BS_NODE, NW46, "HandleForwarded", (GroupId, id), (EnableProxyMock, EnableProxyMock), (NoGroup, noGroup));
 
     if (id == Max<ui32>()) {
@@ -95,6 +95,15 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         TActivationContext::Forward(ev, errorProxy);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
+    } else if (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) {
+        const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
+        auto& queue = it->second;
+        TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
+        if (queue.empty()) {
+            TimeoutToQueue.emplace(expiration, &*it);
+        }
+        queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
+        return;
     } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
             StartVirtualGroupAgent(id);
@@ -103,6 +112,43 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         }
     }
     TActivationContext::Forward(ev, ev->GetForwardOnNondeliveryRecipient());
+}
+
+void TNodeWarden::HandleGroupPendingQueueTick() {
+    const TMonotonic now = TActivationContext::Monotonic();
+
+    std::set<std::tuple<TMonotonic, TGroupPendingQueue::value_type*>>::iterator it;
+    for (it = TimeoutToQueue.begin(); it != TimeoutToQueue.end(); ++it) {
+        const auto& [timestamp, ptr] = *it;
+        if (now < timestamp) {
+            break;
+        }
+
+        auto& [groupId, queue] = *ptr;
+        Y_ABORT_UNLESS(!queue.empty());
+
+        const TActorId errorProxy = StartEjectedProxy(groupId);
+        for (;;) {
+            auto& [timestamp, ev] = queue.front();
+            if (now < timestamp) {
+                TimeoutToQueue.emplace(timestamp, ptr);
+                break;
+            } else {
+                THolder<IEventHandle> tmp(ev.release());
+                TActivationContext::Forward(tmp, errorProxy);
+                queue.pop_front();
+                if (queue.empty()) {
+                    GroupPendingQueue.erase(groupId);
+                    break;
+                }
+            }
+        }
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
+    }
+    TimeoutToQueue.erase(TimeoutToQueue.begin(), it);
+
+    TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvGroupPendingQueueTick, 0,
+        SelfId(), {}, nullptr, 0));
 }
 
 void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev) {

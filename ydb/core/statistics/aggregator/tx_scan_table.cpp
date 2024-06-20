@@ -20,6 +20,10 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxScanTable::Execute");
 
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
         auto pathId = PathIdFromPathId(Record.GetPathId());
 
         auto itOp = Self->ScanOperationsByPathId.find(pathId);
@@ -50,6 +54,10 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxScanTable::Complete");
+
+        if (!Self->EnableColumnStatistics) {
+            return;
+        }
 
         auto accepted = std::make_unique<TEvStatistics::TEvScanTableAccepted>();
         accepted->Record.SetOperationId(OperationId);

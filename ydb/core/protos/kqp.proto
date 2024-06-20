@@ -727,6 +727,13 @@ message TKqpTableSinkLocks {
 }
 
 message TKqpTableSinkSettings {
+    enum EType {
+        MODE_REPLACE = 0;
+        MODE_UPSERT = 1;
+        MODE_INSERT = 2;
+        MODE_DELETE = 3;
+    }
+
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
     repeated TKqpColumnMetadataProto Columns = 5;
@@ -735,7 +742,8 @@ message TKqpTableSinkSettings {
     optional bool FinalTx = 8; // If tx is immediate then commit, otherwise send prepare
     optional bool ImmediateTx = 9; // Try to be immediate tx
     optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
-    optional TKqpTableSinkLocks Locks = 11;
+    optional EType Type = 11;
+    optional TKqpTableSinkLocks Locks = 12;
 }
 
 message TKqpStreamLookupSettings {
@@ -787,4 +795,9 @@ message TEvCheckAliveResponse {
 message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration OperationTtl = 1;
     optional google.protobuf.Duration ResultsTtl = 2;
+}
+
+/// KQP workload manager Events
+message TEvRefreshPoolState {
+    optional string PoolId = 1;
 }

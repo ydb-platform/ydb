@@ -222,7 +222,7 @@ namespace NKikimr::NStorage {
 
         // for dynamic groups -- start state aggregator
         if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-            StartAggregator(vdiskServiceId, groupInfo->GroupID);
+            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId());
         }
 
         Y_ABORT_UNLESS(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);

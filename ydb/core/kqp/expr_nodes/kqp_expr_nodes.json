@@ -328,12 +328,18 @@
         {
             "Name": "TKqlInsertRows",
             "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"}
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"},
+            "Children": [
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlInsertRowsIndex",
             "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"},
+            "Children": [
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlExternalEffect",
@@ -539,7 +545,8 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "InconsistentWrite", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "Mode", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

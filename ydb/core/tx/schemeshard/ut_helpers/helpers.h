@@ -235,8 +235,6 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup);
     GENERIC_HELPERS(DropPQGroup);
     DROP_BY_PATH_ID_HELPERS(DropPQGroup);
-    GENERIC_HELPERS(AllocatePQ);
-    GENERIC_HELPERS(DeallocatePQ);
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume);

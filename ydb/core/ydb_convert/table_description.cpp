@@ -810,9 +810,9 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     case NKikimrSchemeOp::TIndexDescription::kUniformPartitions:
         settings.set_uniform_partitions(tableIndex.GetUniformPartitions());
         break;
-    case NKikimrSchemeOp::TIndexDescription::kPartitionAtKeys:
+    case NKikimrSchemeOp::TIndexDescription::kExplicitPartitions:
         FillTableBoundaryImpl(*settings.mutable_partition_at_keys(),
-            tableIndex.GetPartitionAtKeys().GetSplitBoundary(),
+            tableIndex.GetExplicitPartitions().GetSplitBoundaries(),
             splitKeyType
         );
         break;
@@ -935,25 +935,6 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         if (!FillIndexTablePartitioning(*indexDesc->MutableIndexImplTableDescription(), index, status, error)) {
             return false;
         }
-
-        //Disabled for a while. Probably we need to allow set this profile to user
-/*
-        auto indexTableDesc = indexDesc->MutableIndexImplTableDescription();
-        if (index.has_global_index() && index.global_index().has_table_profile()) {
-            auto indexTableProfile = index.global_index().table_profile();
-            // Copy to common table profile to reuse common ApplyTableProfile method
-            Ydb::Table::TableProfile profile;
-            profile.mutable_partitioning_policy()->CopyFrom(indexTableProfile.partitioning_policy());
-
-            StatusIds::StatusCode code;
-            TString error;
-            if (!Profiles.ApplyTableProfile(profile, *indexTableDesc, code, error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
-        }
-*/
     }
 
     return true;

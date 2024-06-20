@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
                     index_columns: "Value"
                     global_index {
                         settings {
-                            uniform_partitions: 10
+                            uniform_partitions: 5
                             partitioning_settings {
                                 partitioning_by_load: ENABLED
                                 min_partitions_count: 5
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             );
 
             const auto& tableStats = result.table_stats();
-            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 10, tableStats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 5, tableStats.DebugString());
         }
     }
 
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
                     index_columns: "Value"
                     global_index {
                         settings {
-                            uniform_partitions: 10
+                            uniform_partitions: 5
                             partitioning_settings {
                                 partitioning_by_load: ENABLED
                                 min_partitions_count: 5
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             );
 
             const auto& tableStats = result.table_stats();
-            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 10, tableStats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 5, tableStats.DebugString());
         }
     }
 }

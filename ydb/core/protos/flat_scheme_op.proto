@@ -974,7 +974,7 @@ enum EIndexState {
 }
 
 message TExplicitPartitions {
-    repeated TSplitBoundary SplitBoundary = 1;
+    repeated TSplitBoundary SplitBoundaries = 1;
 }
 
 message TIndexDescription {
@@ -997,7 +997,7 @@ message TIndexDescription {
     // indexImplTable settings
     oneof Partitions {
         uint32 UniformPartitions = 10;
-        TExplicitPartitions PartitionAtKeys = 11;
+        TExplicitPartitions ExplicitPartitions = 11;
     }
     optional TPartitioningPolicy PartitioningPolicy = 12;
 }

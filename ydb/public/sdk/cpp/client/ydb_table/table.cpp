@@ -2280,15 +2280,16 @@ TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
 
 void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings) const {
     *settings.mutable_partitioning_settings() = PartitioningSettings.GetProto();
-    std::visit([&settings](auto&& partitions) {
-            using T = std::decay_t<decltype(partitions)>;
-            if constexpr (std::is_same_v<T, ui64>) {
-                settings.set_uniform_partitions(partitions);
-            } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
-                partitions.SerializeTo(*settings.mutable_partition_at_keys());
-            }
-        }, Partitions
-    );
+
+    auto variantVisitor = [&settings](auto&& partitions) {
+        using T = std::decay_t<decltype(partitions)>;
+        if constexpr (std::is_same_v<T, ui64>) {
+            settings.set_uniform_partitions(partitions);
+        } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
+            partitions.SerializeTo(*settings.mutable_partition_at_keys());
+        }
+    };
+    std::visit(std::move(variantVisitor), Partitions);
 }
 
 template <typename TProto>

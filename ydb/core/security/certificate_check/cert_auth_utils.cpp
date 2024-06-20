@@ -529,4 +529,14 @@ TProps TProps::AsClientServer() {
 
 TProps& TProps::WithValid(TDuration duration) { SecondsValid = duration.Seconds(); return *this; }
 
+std::string GetCertificateFingerprint(const std::string& certificate) {
+    const static std::string defaultFingerprint = "certificate";
+    X509CertificateReader::X509Ptr x509Cert = X509CertificateReader::ReadCertAsPEM(certificate);
+    if (!x509Cert) {
+        return defaultFingerprint;
+    }
+    std::string fingerprint = X509CertificateReader::GetFingerprint(x509Cert);
+    return (fingerprint.empty() ? defaultFingerprint : fingerprint);
+}
+
 }  //namespace NKikimr

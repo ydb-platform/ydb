@@ -55,6 +55,12 @@ public:
         return it->second;
     }
 
+    TWorkerId GetWorkerId(const TActorId& id) const {
+        auto it = ActorIdToWorkerId.find(id);
+        Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
+        return it->second;
+    }
+
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
         auto res = Workers.emplace(id, ops->Register(actor));
         Y_ABORT_UNLESS(res.second);
@@ -330,33 +336,49 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
-        auto wit = WorkerActorIdToSession.find(ev->Sender);
-        if (wit == WorkerActorIdToSession.end()) {
-            LOG_W("Unknown worker has gone"
-                << ": worker# " << ev->Sender);
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
             return;
         }
 
-        auto it = Sessions.find(wit->second);
-        if (it == Sessions.end()) {
-            LOG_E("Cannot find session"
-                << ": worker# " << ev->Sender
-                << ", session# " << wit->second);
-            return;
-        }
-
-        auto& session = it->second;
-        if (!session.HasWorker(ev->Sender)) {
+        if (!session->HasWorker(ev->Sender)) {
             LOG_E("Cannot find worker"
-                << ": worker# " << ev->Sender
-                << ", session# " << wit->second);
+                << ": worker# " << ev->Sender);
             return;
         }
 
         LOG_I("Worker has gone"
             << ": worker# " << ev->Sender);
         WorkerActorIdToSession.erase(ev->Sender);
-        session.StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
+        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
+    }
+
+    void Handle(TEvWorker::TEvStatus::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (session && session->HasWorker(ev->Sender)) {
+            session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+        }
+    }
+
+    TSessionInfo* SessionFromWorker(const TActorId& id) {
+        auto wit = WorkerActorIdToSession.find(id);
+        if (wit == WorkerActorIdToSession.end()) {
+            LOG_W("Unknown worker has gone"
+                << ": worker# " << id);
+            return nullptr;
+        }
+
+        auto it = Sessions.find(wit->second);
+        if (it == Sessions.end()) {
+            LOG_E("Cannot find session"
+                << ": worker# " << id
+                << ", session# " << wit->second);
+            return nullptr;
+        }
+
+        return &it->second;
     }
 
     static NKikimrReplication::TEvWorkerStatus::EReason ToReason(TEvWorker::TEvGone::EStatus status) {
@@ -400,6 +422,7 @@ public:
             hFunc(TEvService::TEvRunWorker, Handle);
             hFunc(TEvService::TEvStopWorker, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
+            hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

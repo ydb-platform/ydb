@@ -52,6 +52,11 @@ namespace NTest {
             return Store->GetPageSize(groupId.Index, pageId);
         }
 
+        ui64 GetExternalBlobSize(ui64, ELargeObj) const override
+        {
+            Y_ABORT("Unimplmeneted");
+        }
+
         NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
             return Store->GetPageType(groupId.Index, pageId);

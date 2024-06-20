@@ -39,15 +39,6 @@ namespace NTabletFlatExecutor {
             return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
         }
 
-        ui64 PageSize(const TPart* part, ui64 ref, ELargeObj lob) noexcept override
-        {   
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
-
-            auto* cache = partStore->Locate(lob, ref);
-
-            return cache->PageCollection->Page(ref).Size;
-        }
-
     private:
         const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
         {

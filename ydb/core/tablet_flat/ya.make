@@ -47,7 +47,6 @@ SRCS(
     flat_page_label.cpp
     flat_part_dump.cpp
     flat_part_index_iter_create.cpp
-    flat_part_iter.cpp
     flat_part_loader.cpp
     flat_part_overlay.cpp
     flat_part_outset.cpp

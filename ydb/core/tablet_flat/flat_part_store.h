@@ -79,6 +79,13 @@ public:
         return PageCollections[groupId.Index]->PageCollection->Page(pageId).Size;
     }
 
+    ui64 GetExternalBlobSize(ui64 ref, ELargeObj lob) const override
+    {
+        auto* cache = Locate(lob, ref);
+
+        return cache->PageCollection->Page(ref).Size;
+    }
+
     NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());

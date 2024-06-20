@@ -39,20 +39,20 @@ public:
     }
 
     void PrintInputChannel(const auto& ch, const auto& type) {
-        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"]; ";
     }
 
     void PrintOutputChannel(const auto& ch, const auto& type) {
-        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"]; ";
     }
 
     void PrintSource(auto taskId, auto sourceIndex) {
-        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"];\n";
+        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"]; ";
     }
 
     void DescribeSource(auto taskId, auto sourceIndex) {
         b << "S" << taskId << "_" << sourceIndex << " ";
-        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"];\n";
+        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"]; ";
     }
 
     void PrintTask(const auto& task) {
@@ -86,7 +86,7 @@ public:
     }
 
     void DescribeTask(const auto& task) {
-        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"];\n";
+        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"]; ";
         int index = 0;
         for (const auto& input : task.GetInputs()) {
             if (input.HasSource()) {
@@ -103,15 +103,15 @@ public:
  
     TString Print(const NDqs::TPlan& plan) {
         b.clear();
-        b << "digraph G {\n";
+        b << "digraph G {";
         for (const auto& task : plan.Tasks) {
             DescribeTask(task);
         }
-        b << "\n";
+        b << " ";
         for (const auto& task : plan.Tasks) {
             PrintTask(task);
         }
-        b << "}\n";
+        b << "} ";
         return b;
     }
 };

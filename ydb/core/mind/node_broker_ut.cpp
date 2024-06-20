@@ -1419,6 +1419,11 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           sharedScopeId);
     }
 
+    static constexpr ui32 NODE1 = 1024;
+    static constexpr ui32 NODE2 = 1056;
+    static constexpr ui32 NODE3 = 1088;
+    static constexpr ui32 NODE4 = 1120;
+
     Y_UNIT_TEST(NodeNameExpiration)
     {
         TTestBasicRuntime runtime(8, false);

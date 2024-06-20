@@ -5,6 +5,11 @@
 namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
+        TBoxId boxId = cmd.GetBoxId();
+        if (!boxId && Boxes.Get().size() == 1) {
+            boxId = Boxes.Get().begin()->first;
+        }
+
         ui64 storagePoolId = cmd.GetStoragePoolId();
         if (!storagePoolId) {
             ui64 maxPoolId = 0;
@@ -12,8 +17,8 @@ namespace NKikimr::NBsController {
             // TODO: optimize linear search
 
             const auto &pools = StoragePools.Get();
-            for (auto it = pools.lower_bound({cmd.GetBoxId(), 0});
-                 it != pools.end() && std::get<0>(it->first) == cmd.GetBoxId();
+            for (auto it = pools.lower_bound({boxId, 0});
+                 it != pools.end() && std::get<0>(it->first) == boxId;
                  ++it) {
                 const ui64 id = std::get<1>(it->first);
                 const TStoragePoolInfo &info = it->second;
@@ -39,7 +44,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        const TBoxStoragePoolId id(cmd.GetBoxId(), storagePoolId);
+        const TBoxStoragePoolId id(boxId, storagePoolId);
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
         TStoragePoolInfo storagePool;
@@ -90,12 +95,12 @@ namespace NKikimr::NBsController {
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
 
         for (const auto &userId : cmd.GetUserId()) {
-            storagePool.UserIds.emplace(cmd.GetBoxId(), storagePoolId, userId);
+            storagePool.UserIds.emplace(boxId, storagePoolId, userId);
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
             TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = cmd.GetBoxId();
+            filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
 
             bool hasTypeProperty = false;

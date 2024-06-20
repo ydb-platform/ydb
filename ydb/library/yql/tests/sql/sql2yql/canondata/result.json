@@ -35456,9 +35456,9 @@
     ],
     "test_sql_negative.test[weak_field-weak_field_list_type-default.txt]": [
         {
-            "checksum": "6130b3da2d0753b09f44f0da00d041b5",
-            "size": 498,
-            "uri": "https://{canondata_backend}/1931696/93d9f24986a9421972c6f6815c259f08a25a26cc/resource.tar.gz#test_sql_negative.test_weak_field-weak_field_list_type-default.txt_/err_file.out"
+            "checksum": "183eb472762118685fd1692edc85a12d",
+            "size": 537,
+            "uri": "https://{canondata_backend}/1900335/2368a128e7310bddf15695f3e4b4ff47025ef811/resource.tar.gz#test_sql_negative.test_weak_field-weak_field_list_type-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[window-table_funcs_spec_win_func-default.txt]": [

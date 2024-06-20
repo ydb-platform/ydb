@@ -323,6 +323,7 @@ message TSystemStateInfo {
     optional uint64 DisconnectTime = 34;
     optional TNodeSharedCache SharedCacheStats = 35;
     optional uint32 TotalSessions = 36;
+    optional string NodeName = 37;
 }
 
 message TEvSystemStateRequest {

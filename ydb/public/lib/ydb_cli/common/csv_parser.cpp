@@ -134,11 +134,13 @@ public:
             Builder.Interval(GetArithmetic<i64>(token));
             break;
         case EPrimitiveType::Date32:
-            Builder.Interval(GetArithmetic<i64>(token));
+            Builder.Int32(GetArithmetic<i32>(token));
         case EPrimitiveType::Datetime64:
+            Builder.Int64(GetArithmetic<i64>(token));
         case EPrimitiveType::Timestamp64:
+            Builder.Int64(GetArithmetic<i64>(token));
         case EPrimitiveType::Interval64:
-            Builder.Interval(GetArithmetic<i64>(token));
+            Builder.Int64(GetArithmetic<i64>(token));
             break;            
         case EPrimitiveType::TzDate:
             Builder.TzDate(token);

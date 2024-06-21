@@ -411,7 +411,7 @@ A **Skeleton** is an actor that provides an interface to a [VDisk](#vdisk).
 
 **SkeletonFront** is a proxy actor for Skeleton that controls the flow of messages coming to Skeleton.
 
-#### Controller {#ds-controller}
+#### Distributed storage controller {#ds-controller}
 
 The **distributed storage controller** or **DS controller** manages the dynamic configuration of distributed storage, including information about [PDisks](#pdisk), [VDisks](#vdisk), and [storage groups](#storage-group). It interacts with [node wardens](#node-warden) to launch various distributed storage components. It interacts with [Hive](#hive) to allocate [channels](#channel) to [tablets](#tablet).
 
@@ -433,9 +433,9 @@ A [storage group](#storage-group) is a set of [VDisks](#vdisk) combined into one
 
 A [Fail realm](#fail-realm) contains one or more **Fail domains**. The correlated failure of two [VDisks](#vdisk) within the same Fail domain is more likely than that of two VDisks from different Fail domains. A Fail domain usually corresponds to a [server rack](#rack) concept.
 
-#### Channel {#channel}
+#### Distributed storage channel {#channel}
 
-A **channel** is a logical connection between a [tablet](#tablet) and [Distributed storage](#distributed-storage). The tablet can write data to different channels, and each channel is mapped to a specific [storage group](#storage-group). Having multiple channels allows the tablet to:
+A **channel** is a logical connection between a [tablet](#tablet) and [Distributed storage](#distributed-storage) group. The tablet can write data to different channels, and each channel is mapped to a specific [storage group](#storage-group). Having multiple channels allows the tablet to:
 
 * Record more data than one storage group can contain.
 * Store different [LogoBlobs](#logoblobs) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
@@ -454,11 +454,11 @@ As in many other database management systems, {{ ydb-short-name }} queries can p
 
 #### Prepare stage {#prepare-stage}
 
-The **prepare stage** is the transaction phase, during which the transaction body is registered on all participating shards.
+The **prepare stage** is a phase of distributed transaction execution, during which the transaction body is registered on all participating shards.
 
 #### Execute stage {#execute-stage}
 
-The **execute stage** is the transaction phase in which the scheduled transaction is executed and the response is generated.
+The **execute stage** is a phase of distributed query execution in which the scheduled transaction is executed and the response is generated.
 
 In some cases, instead of [prepare](#prepare-stage) and execute, the transaction is immediately executed, and a response is generated.  For example, this happens for transactions involving only one shard or consistent reads from a snapshot.
 
@@ -468,7 +468,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of shards that will participate in executing a [distributed transaction](#distributed-transactions). It combines read-set shards, from which data will be read, and write-set shards, in which modifications will be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -488,7 +488,7 @@ The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execu
 
 #### Transaction order ID {#transaction-order-id}
 
-A **transaction order ID** is a unique identifier assigned to each transaction during planning.
+A **transaction order ID** is a unique identifier assigned to each transaction during planning. It consists of [Transaction ID](#txid) and [PlanStep](#planstep).
 
 #### PlanStep {#planstep}
 
@@ -496,7 +496,7 @@ A **transaction order ID** is a unique identifier assigned to each transaction d
 
 #### Mediator time {#mediator-time}
 
-**Mediator time** is the logical time before which (inclusive) the shard participant must know the entire execution plan. It is used to advance the time in the absence of transactions on a particular shard to determine whether it can read from a snapshot.
+During the distributed query execution, **mediator time** is the logical time before which (inclusive) the shard participant must know the entire execution plan. It is used to advance the time in the absence of transactions on a particular shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 

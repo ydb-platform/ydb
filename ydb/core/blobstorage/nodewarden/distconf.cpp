@@ -70,7 +70,7 @@ namespace NKikimr::NStorage {
                 ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
             if (IsSelfStatic) {
                 PersistConfig({});
-                ApplyConfigUpdateToDynamicNodes();
+                ApplyConfigUpdateToDynamicNodes(false);
             }
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&

@@ -305,6 +305,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigUnbind::TPtr ev);
         void UnbindNode(ui32 nodeId, const char *reason);
         ui32 GetRootNodeId() const;
+        bool PartOfNodeQuorum() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Root node operation
@@ -381,7 +382,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes
-        void ApplyConfigUpdateToDynamicNodes();
+        void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
         void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);

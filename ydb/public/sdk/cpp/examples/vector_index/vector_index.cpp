@@ -72,7 +72,7 @@ static TString FullName(const TOptions& options, const TString& name) {
 }
 
 static TString IndexName(const TOptions& options) {
-    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
+    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer, "_2");
 }
 
 static TString FullIndexName(const TOptions& options) {
@@ -575,7 +575,9 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
                                          writer.WritePosting(parentId, id, std::move(embedding));
                                      },
                                      0};
-            return makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
+            auto clusters = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
+            writer.Wait();
+            return clusters;
         }));
     };
     next.push_back({0, options.Rows});

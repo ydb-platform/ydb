@@ -490,20 +490,25 @@ struct TCommonAppOptions {
         }
 
          // YQ-3253: derive Connector endpoint from YDB's Interconnect Port
-        if (appConfig.GetQueryServiceConfig().HasConnector() && InterconnectPort) {
+            std::cout << "HERE 1 " << appConfig.HasQueryServiceConfig() << " " << appConfig.GetQueryServiceConfig().GetGeneric().HasConnector() << " " << InterconnectPort << std::endl;
+        if (appConfig.GetQueryServiceConfig().GetGeneric().HasConnector() && InterconnectPort) {
+            std::cout << "HERE 2" << std::endl;
             auto& connectorConfig = *appConfig.MutableQueryServiceConfig()->MutableConnector();
 
             auto offset = connectorConfig.GetOffsetFromICPort();
             if (offset) {
+            std::cout << "HERE 3" << std::endl;
                 connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
 
                 // Assign default hostname 'localhost', because 
                 // connector is usually deployed to the same host as the dynamic node.
                 if (connectorConfig.GetEndpoint().host().Empty()) {
+            std::cout << "HERE 4" << std::endl;
                     connectorConfig.MutableEndpoint()->Sethost("localhost");
                 }
             }
         }
+            std::cout << "HERE 5" << appConfig.GetQueryServiceConfig().GetGeneric().GetConnector().DebugString() << std::endl;
 
         if (SuppressVersionCheck) {
             if (appConfig.HasNameserviceConfig()) {

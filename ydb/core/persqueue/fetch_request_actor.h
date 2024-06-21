@@ -15,7 +15,7 @@ struct TPartitionFetchRequest {
     ui64 Offset;
     ui64 MaxBytes;
     ui64 ReadTimestampMs;
-    
+
     TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0, const TString& clientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER)
         : Topic(topic)
         , ClientId(clientId)
@@ -35,11 +35,12 @@ struct TFetchRequestSettings {
     ui64 MaxWaitTimeMs;
     ui64 TotalMaxBytes;
     TRlContext RlCtx;
+    bool RuPerRequest;
 
     ui64 RequestId = 0;
     TFetchRequestSettings(
             const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
-            const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0
+            const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0, bool ruPerRequest = false
     )
         : Database(database)
         , Partitions(partitions)
@@ -47,6 +48,7 @@ struct TFetchRequestSettings {
         , MaxWaitTimeMs(maxWaitTimeMs)
         , TotalMaxBytes(totalMaxBytes)
         , RlCtx(rlCtx)
+        , RuPerRequest(ruPerRequest)
         , RequestId(requestId)
     {}
 };

@@ -35,13 +35,22 @@ struct TReadSetKey {
         return TxId + (Origin << 16) + (From << 8) + To;
     }
 
-    explicit operator size_t () const {
+    explicit operator size_t() const {
         return Hash();
     }
 
-    bool operator == (const TReadSetKey& other) const {
-        return TxId == other.TxId && Origin == other.Origin && From == other.From && To == other.To;
-    }
+    friend bool operator==(const TReadSetKey& a, const TReadSetKey& b) = default;
+};
+
+struct TReadSetInfo : TReadSetKey {
+    ui64 Step = 0;
+    bool OnHold = false;
+
+    TReadSetInfo() = default;
+
+    explicit TReadSetInfo(const TReadSetKey& rsKey)
+        : TReadSetKey(rsKey)
+    {}
 };
 
 ///
@@ -54,7 +63,9 @@ public:
     {}
 
     bool LoadReadSets(NIceDb::TNiceDb& db);
-    void SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, TString body);
+    void SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body);
+    void RemoveReadSet(NIceDb::TNiceDb& db, ui64 seqNo);
+    TReadSetInfo ReplaceReadSet(NIceDb::TNiceDb& db, ui64 seqNo, const TString& body);
     void SaveAck(const TActorContext& ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev);
     void AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx);
     bool ResendRS(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, ui64 seqNo);
@@ -74,12 +85,30 @@ public:
     void ResendExpectations(ui64 target, const TActorContext& ctx);
     THashMap<ui64, ui64> RemoveExpectations(ui64 target);
 
+    /**
+     * Must be called after the database is reloaded.
+     *
+     * Matches readsets to uncommitted arbiter volatile transactions and puts
+     * them on hold. These readsets will not be sent until the transaction
+     * is committed.
+     */
+    void HoldArbiterReadSets();
+
+    /**
+     * Releases readsets that are currently on hold and schedules them for
+     * resending. This is called when an arbiter volatile transaction has
+     * determined it is going to be committed, and only after a restart.
+     * Readsets after initial execution are not on hold and are sent normally
+     * after volatile transaction commits.
+     */
+    void ReleaseOnHoldReadSets(const std::vector<ui64>& seqNos, const TActorContext& ctx);
+
 private:
     void UpdateMonCounter() const;
 
 private:
     TDataShard * Self;
-    THashMap<ui64, TReadSetKey> CurrentReadSets;      // SeqNo -> Info
+    THashMap<ui64, TReadSetInfo> CurrentReadSets;     // SeqNo -> Info
     THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo
     THashSet<ui64> AckedSeqno;
     TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;

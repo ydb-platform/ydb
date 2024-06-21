@@ -19,6 +19,7 @@ message TEvRegisterNode {
     repeated NKikimrSubDomains.TDomainKey ServicedDomains = 2;
     optional NActorsInterconnect.TNodeLocation SystemLocation = 3;
     repeated TTabletAvailability TabletAvailability = 4;
+    optional string Name = 5;
 }
 
 message TEvRegisterNodeResult {

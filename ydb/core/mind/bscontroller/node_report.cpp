@@ -22,6 +22,10 @@ public:
 
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXNR01, "TTxNodeReport execute");
 
+        if (!Self->ValidateIncomingNodeWardenEvent(*Event)) {
+            return true;
+        }
+
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
         State->CheckConsistency();
 

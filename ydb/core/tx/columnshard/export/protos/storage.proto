@@ -1,0 +1,21 @@
+import "ydb/core/protos/flat_scheme_op.proto";
+
+package NKikimrColumnShardExportProto;
+
+message TTierStorageInitializer {
+    optional string TierName = 1;
+}
+
+message TExternalS3StorageInitializer {
+    optional string StorageName = 1;
+    optional NKikimrSchemeOp.TS3Settings Settings = 2;
+}
+
+message TStorageInitializerContainer {
+    optional string ClassName = 1;
+
+    oneof Implementation {
+        TTierStorageInitializer Tier = 40;
+        TExternalS3StorageInitializer ExternalS3 = 41;
+    }
+}

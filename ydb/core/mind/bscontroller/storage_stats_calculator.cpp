@@ -136,16 +136,17 @@ public:
                         const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
                         if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
                             const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
+                            const bool usable = pdisk.GetDecommitStatus() == "DECOMMIT_NONE";
                             const bool ok = mapper.RegisterPDisk({
                                 .PDiskId = pdiskId,
                                 .Location = location,
-                                .Usable = true,
+                                .Usable = usable,
                                 .NumSlots = pdisk.GetNumActiveSlots(),
                                 .MaxSlots = pdisk.GetExpectedSlotCount(),
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,
-                                .Decommitted = false,
+                                .Decommitted = false, // this flag applies only to group reconfiguration
                             });
                             Y_ABORT_UNLESS(ok);
                             break;

@@ -102,6 +102,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
+    schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_bsv.cpp
@@ -258,6 +259,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
@@ -268,6 +270,7 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
+    ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks

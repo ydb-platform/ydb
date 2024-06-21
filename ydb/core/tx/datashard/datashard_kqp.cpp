@@ -764,6 +764,14 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
     return true;
 }
 
+bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks) {
+    return kqpLocks && kqpLocks->GetArbiterShard() != 0;
+}
+
+bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks) {
+    return KqpLocksHasArbiter(kqpLocks) && kqpLocks->GetArbiterShard() == tabletId;
+}
+
 bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
 
@@ -778,6 +786,9 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
     // We expect all stale data to be cleared on restarts
     Y_ABORT_UNLESS(tx->OutReadSets().empty());
     Y_ABORT_UNLESS(tx->AwaitingDecisions().empty());
+
+    const bool hasArbiter = KqpLocksHasArbiter(&kqpLocks);
+    const bool isArbiter = KqpLocksIsArbiter(origin, &kqpLocks);
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
@@ -808,6 +819,11 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
                 continue;
             }
 
+            if (hasArbiter && !isArbiter && dstTabletId != kqpLocks.GetArbiterShard()) {
+                // Non-arbiter shards only send locks to the arbiter
+                continue;
+            }
+
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from "
                 << origin << " to " << dstTabletId);
 
@@ -821,6 +837,8 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
             tx->OutReadSets()[key] = std::move(bodyStr);
         }
+    } else {
+        Y_ABORT_UNLESS(!isArbiter, "Arbiter is not in the sending shards set");
     }
 
     bool receiveLocks = ReceiveLocks(kqpLocks, origin);
@@ -830,6 +848,11 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
         for (ui64 srcTabletId : kqpLocks.GetSendingShards()) {
             if (srcTabletId == origin) {
                 // Don't await decision from ourselves
+                continue;
+            }
+
+            if (hasArbiter && !isArbiter && srcTabletId != kqpLocks.GetArbiterShard()) {
+                // Non-arbiter shards only await decision from the arbiter
                 continue;
             }
 
@@ -891,6 +914,8 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
             return false;
         }
+    } else {
+        Y_ABORT_UNLESS(!isArbiter, "Arbiter is not in the receiving shards set");
     }
 
     return true;

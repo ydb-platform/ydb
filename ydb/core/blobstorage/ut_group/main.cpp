@@ -417,6 +417,7 @@ private:
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = true;
+        vdiskConfig->UseCostTracker = false;
         auto counters = Counters->GetSubgroup("node", ToString(disk.NodeId))->GetSubgroup("vdisk", disk.VDiskId.ToString());
         const TActorId& actorId = runtime.Register(CreateVDisk(vdiskConfig, Info, counters), TActorId(), 0, std::nullopt, disk.NodeId);
         runtime.RegisterService(disk.VDiskActorId, actorId);

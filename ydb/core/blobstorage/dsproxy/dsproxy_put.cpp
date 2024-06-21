@@ -206,6 +206,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
         if (record.HasIncarnationGuid()) {
             HandleIncarnation(issue, orderNumber, record.GetIncarnationGuid());
+        } else if (record.GetStatus() != NKikimrProto::OK) { // we can't obtain status from the vdisk; assume it has not been written
+            Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
+            IncarnationRecords[orderNumber] = {};
+            PutImpl.InvalidatePartStates(orderNumber);
+            ++*Mon->NodeMon->IncarnationChanges;
         }
 
         Action();

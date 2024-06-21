@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/tx/columnshard/common/blob.h>
 
 namespace NKikimr::NTable {
 class TDatabase;
@@ -11,7 +12,7 @@ class TColumnChunkLoadContext;
 class TIndexChunkLoadContext;
 struct TInsertedData;
 class TInsertTableAccessor;
-struct TColumnRecord;
+class TColumnRecord;
 class TIndexChunk;
 struct TGranuleRecord;
 class IColumnEngine;

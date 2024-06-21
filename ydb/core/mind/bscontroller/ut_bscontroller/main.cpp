@@ -102,10 +102,18 @@ struct TEnvironmentSetup {
 
     void RegisterNode() {
         for (ui32 i = 1; i <= NodeCount; ++i) {
-            const TActorId self = Runtime->AllocateEdgeActor();
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
-            Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
-            auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            ui32 nodeIndex;
+            for (nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
+                if (Runtime->GetNodeId(nodeIndex) == i) {
+                    break;
+                }
+            }
+            if (nodeIndex != Runtime->GetNodeCount()) {
+                const TActorId self = Runtime->AllocateEdgeActor(nodeIndex);
+                auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
+                Runtime->SendToPipe(TabletId, self, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
+                auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            }
         }
     }
 

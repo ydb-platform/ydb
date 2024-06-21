@@ -51,6 +51,9 @@ namespace NActors {
         bool EnableExternalDataChannel = false;
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
+        TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
+        TDuration MaxErrorSleep = TDuration::Seconds(1);
+        double ErrorSleepRetryMultiplier = 4.0;
 
         ui32 GetSendBufferSize() const {
             ui32 res = 512 * 1024; // 512 kb is the default value for send buffer

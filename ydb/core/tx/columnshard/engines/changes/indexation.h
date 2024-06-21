@@ -2,8 +2,8 @@
 #include "abstract/abstract.h"
 #include "with_appended.h"
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <util/generic/hash.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 
@@ -14,11 +14,11 @@ private:
         const TIndexInfo& indexInfo, const TInsertedData& inserted) const;
     std::vector<NOlap::TInsertedData> DataToIndex;
 protected:
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+    virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
-    virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
@@ -28,21 +28,22 @@ protected:
         }
         return result;
     }
+
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        return nullptr;
+    }
+
 public:
-    THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
+    THashMap<ui64, std::vector<NArrow::NMerger::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
-    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext, StaticTypeName())
+    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSaverContext& saverContext)
+        : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
         , DataToIndex(std::move(dataToIndex))
     {
     }
 
     const std::vector<NOlap::TInsertedData>& GetDataToIndex() const {
         return DataToIndex;
-    }
-
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        return TBase::GetTouchedPortions();
     }
 
     static TString StaticTypeName() {

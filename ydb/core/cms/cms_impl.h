@@ -464,6 +464,8 @@ private:
 
     TInstant InfoCollectorStartTime;
 
+    bool EnableCMSRequestPriorities = false;
+
 private:
     TString GenerateStat();
     void GenerateNodeState(IOutputStream&);

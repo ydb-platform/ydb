@@ -1498,7 +1498,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateTable:
     case TTxState::TxCopyTable:
     case TTxState::TxCreatePQGroup:
-    case TTxState::TxAllocatePQ:
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
     case TTxState::TxCreateBlockStoreVolume:
@@ -1588,6 +1587,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMergeTablePartition:
         break;
     case TTxState::TxFillIndex:
+    case TTxState::TxAllocatePQ:
         Y_ABORT("deprecated");
     case TTxState::TxModifyACL:
     case TTxState::TxInvalid:

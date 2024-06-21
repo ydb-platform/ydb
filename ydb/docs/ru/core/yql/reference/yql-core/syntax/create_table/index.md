@@ -20,7 +20,7 @@ WITH (
 )
 ```
 
-{%endif%}
+{% endif %}
 
 ## Синтаксис CREATE TABLE
 

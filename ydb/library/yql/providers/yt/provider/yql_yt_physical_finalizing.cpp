@@ -2356,7 +2356,7 @@ private:
                         const auto outerMap = TYtMap(reader);
                         if ((outerMap.World().Ref().IsWorld() || outerMap.World().Raw() == op.World().Raw())
                             && outerMap.Input().Size() == 1
-                            && outerMap.Output().Size() + item.first.size() + opOutTables <= maxOutTables // fast check for too many operations
+                            && outerMap.Output().Size() + item.first.size() <= maxOutTables // fast check for too many operations
                             && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
                             && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
@@ -2400,11 +2400,11 @@ private:
                     TMap<TStringBuf, double> cpuUsage;
                     for (auto& item: maps) {
                         if (!item.second.first.empty()) {
-                            size_t otherTablesDelta = item.second.second.empty() ? 0 : 1;
+                            size_t otherTablesDelta = item.second.second.empty() ? 1 : 0;
                             for (auto it = item.second.first.begin(); it != item.second.first.end(); ) {
                                 const auto outerMap = TYtMap(*it);
 
-                                const size_t outTablesDelta = outerMap.Output().Size() + otherTablesDelta;
+                                const size_t outTablesDelta = outerMap.Output().Size() - otherTablesDelta;
 
                                 updatedBody = outerMap.Mapper().Body().Ptr();
                                 if (maxJobMemoryLimit) {
@@ -2422,7 +2422,7 @@ private:
                                 cpuUsage.clear();
                                 ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, pMemUsage, &cpuUsage, &newCurrenFiles);
 
-                                auto usedMemory = Accumulate(memUsage.begin(), memUsage.end(), switchLimit,
+                                auto usedMemory = Accumulate(newMemUsage.begin(), newMemUsage.end(), switchLimit,
                                     [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
 
                                 // Take into account codec input/output buffers (one for all inputs and one per output)
@@ -2458,7 +2458,7 @@ private:
                                     // Move to other usages
                                     it = item.second.first.erase(it);
                                     if (item.second.second.empty()) {
-                                        otherTablesDelta = 1;
+                                        ++currOutTables;
                                     }
                                     item.second.second.push_back(outerMap.Input().Item(0).Paths().Item(0).Table().Raw());
                                     continue;

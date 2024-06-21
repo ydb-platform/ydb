@@ -309,15 +309,10 @@ private:
             for (const auto& req : request.StatRequests) {
                 auto& response = request.StatResponses.emplace_back();
                 response.Req = req;
-                if (!req.ColumnName) {
-                    response.Success = false;
-                    ++reqIndex;
-                    continue;
-                }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
                 Register(CreateLoadStatisticsQuery(req.PathId, request.StatType,
-                    *req.ColumnName, loadCookie));
+                    *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;
             }

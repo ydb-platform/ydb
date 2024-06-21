@@ -1,10 +1,10 @@
 ## UNION {#union}
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [olap_warning](../../../../../_includes/not_allow_for_olap.md) %}
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 Объединение результатов нескольких подзапросов с удалением дубликатов.
 Поведение идентично последовательному исполнению `UNION ALL` и `SELECT DISTINCT *`.

@@ -1,10 +1,10 @@
 # UPSERT INTO
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 UPSERT (расшифровывается как UPDATE or INSERT) обновляет или добавляет множество строк в строковой таблице на основании сравнения по первичному ключу. Отсутствующие строки добавляются. В присутствующих строках обновляются значения заданных столбцов, значения остальных столбцов остаются неизменными.
 

@@ -1,10 +1,10 @@
 # TABLESAMPLE и SAMPLE
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [olap_warning](../../../../../_includes/not_allow_for_olap.md) %}
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 Построение случайной выборки из указанного во `FROM` источника данных.
 

@@ -1,8 +1,10 @@
 # DELETE FROM
 
+{% if backend_name == "YDB" %}
+
 {% note warning %}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
 {% cut "Удаление данных из таблиц с помощью TTL" %}
 
@@ -11,6 +13,8 @@
 {% endcut %}
 
 {% endnote %}
+
+{% endif %}
 
 Удаляет строки из строковой таблицы, подходящие под условия, заданные в `WHERE`.{% if feature_mapreduce %}  Таблица ищется по имени в базе данных, заданной оператором [USE](../use.md).{% endif %}
 

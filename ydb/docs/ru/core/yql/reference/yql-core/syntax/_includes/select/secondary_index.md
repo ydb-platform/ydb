@@ -1,10 +1,10 @@
 # VIEW (INDEX)
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [OLAP_not_allow](../../../../../_includes/not_allow_for_olap.md) %}
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 Чтобы сделать запрос `SELECT` по вторичному индексу строковой таблицы, используйте конструкцию:
 

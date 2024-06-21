@@ -191,7 +191,7 @@ enum class ECostBasedOptimizerType {
     Disable /* "disable" */,
     PG /* "pg" */,
     Native /* "native" */
-}; 
+};
 
 enum class EMatchRecognizeStreamingMode {
     Disable,
@@ -254,6 +254,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 PgIterateLimit = 500;
     bool PullUpFlatMapOverJoin = true;
     bool FilterPushdownOverJoinOptionalSide = false;
+    bool RotateJoinTree = true;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;

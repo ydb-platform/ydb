@@ -283,6 +283,7 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
+        std::cerr << "GetAsyncInputData " << std::this_thread::get_id() << std::endl;
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
@@ -304,7 +305,6 @@ private:
                     batchItemsEstimatedCount += val->GetMessages().size();
                 }
             }
-
             for (auto& event : events) {
                 std::visit(TTopicEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
             }

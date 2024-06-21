@@ -44,7 +44,9 @@ PY_SRCS(
     s3_helpers.py
 )
 
-DATA(arcadia/ydb/tests/fq/s3)
+DATA(
+    arcadia/ydb/tests/fq/s3
+)
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     TIMEOUT(3600)

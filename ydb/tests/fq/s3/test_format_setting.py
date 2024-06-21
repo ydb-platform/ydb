@@ -31,20 +31,14 @@ class TestS3(TestYdsBase):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_interval_unit(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit;Price;Duration
@@ -59,15 +53,14 @@ Pear;15;33'''
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INTERVAL))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path="fruits.csv",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[fruitType, priceType, intervalType],
-                                             format_setting={
-                                                 "data.interval.unit": "SECONDS",
-                                                 "csv_delimiter": ";"
-                                             })
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="fruits.csv",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[fruitType, priceType, intervalType],
+            format_setting={"data.interval.unit": "SECONDS", "csv_delimiter": ";"},
+        )
 
         sql = fR'''
             SELECT *
@@ -107,15 +100,18 @@ Pear;15;33'''
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INTERVAL))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="fruits.csv",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[fruitType, priceType, intervalType],
-                                                                format_setting={"data.interval.unit": "SEKUNDA"},
-                                                                check_issues=False)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="fruits.csv",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[fruitType, priceType, intervalType],
+            format_setting={"data.interval.unit": "SEKUNDA"},
+            check_issues=False,
+        )
         assert "unknown value for data.interval.unit SEKUNDA" in str(binding_response.issues), str(
-            binding_response.issues)
+            binding_response.issues
+        )
 
     def validate_timestamp_iso_result(self, result_set):
         logging.debug(str(result_set))
@@ -226,10 +222,7 @@ Pear;15;33'''
 
     def canonize_result(self, s3, s3_path, filename):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
@@ -246,7 +239,9 @@ Pear;15;33'''
                     f.write(str_value)
                 return yatest.common.canonical_file(canonical_path, local=True)
 
-    def create_source_timestamp_binding(self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None):
+    def create_source_timestamp_binding(
+        self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None
+    ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.TIMESTAMP))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -256,15 +251,19 @@ Pear;15;33'''
         else:
             format_setting = {"data.timestamp.format": format}
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path=filename,
-                                             format=type_format,
-                                             connection_id=connection_id,
-                                             columns=[timeType, fruitType, priceType, weightType],
-                                             format_setting=format_setting)
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=filename,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[timeType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
         return storage_binding_name
 
-    def create_sink_timestamp_binding(self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None):
+    def create_sink_timestamp_binding(
+        self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None
+    ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.TIMESTAMP))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -274,15 +273,19 @@ Pear;15;33'''
         else:
             format_setting = {"data.timestamp.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path=prefix,
-                                             format=type_format,
-                                             connection_id=connection_id,
-                                             columns=[timeType, fruitType, priceType, weightType],
-                                             format_setting=format_setting)
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=prefix,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[timeType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
         return storage_binding_name
 
-    def create_source_date_time_binding(self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None):
+    def create_source_date_time_binding(
+        self, unique_prefix, client, connection_id, filename, type_format, format_name=None, format=None
+    ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -292,15 +295,19 @@ Pear;15;33'''
         else:
             format_setting = {"data.datetime.format": format}
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path=filename,
-                                             format=type_format,
-                                             connection_id=connection_id,
-                                             columns=[timeType, fruitType, priceType, weightType],
-                                             format_setting=format_setting)
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=filename,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[timeType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
         return storage_binding_name
 
-    def create_sink_date_time_binding(self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None):
+    def create_sink_date_time_binding(
+        self, unique_prefix, client, connection_id, prefix, type_format, format_name=None, format=None
+    ):
         timeType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -310,26 +317,33 @@ Pear;15;33'''
         else:
             format_setting = {"data.datetime.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path=prefix,
-                                             format=type_format,
-                                             connection_id=connection_id,
-                                             columns=[timeType, fruitType, priceType, weightType],
-                                             format_setting=format_setting)
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=prefix,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[timeType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
         return storage_binding_name
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("timestamp/simple_iso/test.csv", "csv_with_names"),
-        ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
-        ("timestamp/simple_iso/test.json", "json_each_row"),
-        ("timestamp/simple_iso/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("timestamp/simple_iso/test.csv", "csv_with_names"),
+            ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
+            ("timestamp/simple_iso/test.json", "json_each_row"),
+            ("timestamp/simple_iso/test.parquet", "parquet"),
+        ],
+    )
     def test_timestamp_simple_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
 
         sql = f'''
             SELECT *
@@ -344,18 +358,30 @@ Pear;15;33'''
         self.validate_timestamp_iso_result(result_set)
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("timestamp/simple_iso/test.csv", "csv_with_names"),
-        ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
-        ("timestamp/simple_iso/test.json", "json_each_row"),
-        ("timestamp/simple_iso/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("timestamp/simple_iso/test.csv", "csv_with_names"),
+            ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
+            ("timestamp/simple_iso/test.json", "json_each_row"),
+            ("timestamp/simple_iso/test.parquet", "parquet"),
+        ],
+    )
     def test_timestamp_simple_iso_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
-        storage_sink_binding_name = self.create_sink_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, "timestamp/simple_iso/" + type_format + "/", type_format, "ISO")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
+        storage_sink_binding_name = self.create_sink_timestamp_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "timestamp/simple_iso/" + type_format + "/",
+            type_format,
+            "ISO",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -369,17 +395,22 @@ Pear;15;33'''
         return self.canonize_result(s3, "timestamp/simple_iso/" + type_format + "/", filename.replace('/', '_'))
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_posix/test.csv", "csv_with_names"),
-        ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row"),
-        ("common/simple_posix/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_posix/test.csv", "csv_with_names"),
+            ("common/simple_posix/test.tsv", "tsv_with_names"),
+            ("common/simple_posix/test.json", "json_each_row"),
+            ("common/simple_posix/test.parquet", "parquet"),
+        ],
+    )
     def test_timestamp_simple_posix(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+        )
 
         sql = f'''
             SELECT *
@@ -394,19 +425,30 @@ Pear;15;33'''
         self.validate_timestamp_posix_result(result_set)
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_posix/test.csv", "csv_with_names"),
-        ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row"),
-        ("common/simple_posix/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_posix/test.csv", "csv_with_names"),
+            ("common/simple_posix/test.tsv", "tsv_with_names"),
+            ("common/simple_posix/test.json", "json_each_row"),
+            ("common/simple_posix/test.parquet", "parquet"),
+        ],
+    )
     def test_timestamp_simple_posix_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX")
-        storage_sink_binding_name = self.create_sink_timestamp_binding(unique_prefix, client, connection_response.result.connection_id,
-                                                                       "timestamp/simple_posix/" + type_format + "/", type_format, "POSIX")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+        )
+        storage_sink_binding_name = self.create_sink_timestamp_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "timestamp/simple_posix/" + type_format + "/",
+            type_format,
+            "POSIX",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -420,17 +462,22 @@ Pear;15;33'''
         return self.canonize_result(s3, "timestamp/simple_posix/" + type_format + "/", filename.replace('/', '_'))
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("date_time/simple_iso/test.csv", "csv_with_names"),
-        ("date_time/simple_iso/test.tsv", "tsv_with_names"),
-        ("date_time/simple_iso/test.json", "json_each_row"),
-        ("date_time/simple_iso/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("date_time/simple_iso/test.csv", "csv_with_names"),
+            ("date_time/simple_iso/test.tsv", "tsv_with_names"),
+            ("date_time/simple_iso/test.json", "json_each_row"),
+            ("date_time/simple_iso/test.parquet", "parquet"),
+        ],
+    )
     def test_date_time_simple_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
 
         sql = f'''
             SELECT *
@@ -445,18 +492,30 @@ Pear;15;33'''
         self.validate_date_time_iso_result(result_set)
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("date_time/simple_iso/test.csv", "csv_with_names"),
-        ("date_time/simple_iso/test.tsv", "tsv_with_names"),
-        ("date_time/simple_iso/test.json", "json_each_row"),
-        ("date_time/simple_iso/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("date_time/simple_iso/test.csv", "csv_with_names"),
+            ("date_time/simple_iso/test.tsv", "tsv_with_names"),
+            ("date_time/simple_iso/test.json", "json_each_row"),
+            ("date_time/simple_iso/test.parquet", "parquet"),
+        ],
+    )
     def test_date_time_simple_iso_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
-        storage_sink_binding_name = self.create_sink_date_time_binding(unique_prefix, client, connection_response.result.connection_id, "date_time/simple_iso/" + type_format + "/", type_format, "ISO")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
+        storage_sink_binding_name = self.create_sink_date_time_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "date_time/simple_iso/" + type_format + "/",
+            type_format,
+            "ISO",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -470,17 +529,22 @@ Pear;15;33'''
         return self.canonize_result(s3, "date_time/simple_iso/" + type_format + "/", filename.replace('/', '_'))
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_posix/test.csv", "csv_with_names"),
-        ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row"),
-        ("common/simple_posix/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_posix/test.csv", "csv_with_names"),
+            ("common/simple_posix/test.tsv", "tsv_with_names"),
+            ("common/simple_posix/test.json", "json_each_row"),
+            ("common/simple_posix/test.parquet", "parquet"),
+        ],
+    )
     def test_date_time_simple_posix(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+        )
 
         sql = f'''
             SELECT *
@@ -495,19 +559,30 @@ Pear;15;33'''
         self.validate_date_time_posix_result(result_set)
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_posix/test.csv", "csv_with_names"),
-        ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row"),
-        ("common/simple_posix/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_posix/test.csv", "csv_with_names"),
+            ("common/simple_posix/test.tsv", "tsv_with_names"),
+            ("common/simple_posix/test.json", "json_each_row"),
+            ("common/simple_posix/test.parquet", "parquet"),
+        ],
+    )
     def test_date_time_simple_posix_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX")
-        storage_sink_binding_name = self.create_sink_date_time_binding(unique_prefix, client, connection_response.result.connection_id,
-                                                                       "datetime/simple_posix/" + type_format + "/", type_format, "POSIX")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "POSIX"
+        )
+        storage_sink_binding_name = self.create_sink_date_time_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "datetime/simple_posix/" + type_format + "/",
+            type_format,
+            "POSIX",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -521,20 +596,35 @@ Pear;15;33'''
         return self.canonize_result(s3, "datetime/simple_posix/" + type_format + "/", filename.replace('/', '_'))
 
     @yq_all
-    @pytest.mark.parametrize("timestamp_format", ["UNIX_TIME_SECONDS", "UNIX_TIME_MICROSECONDS", "UNIX_TIME_MILLISECONDS"])
-    @pytest.mark.parametrize("filename, type_format", [
-        ("timestamp/unix_time/test.csv", "csv_with_names"),
-        ("timestamp/unix_time/test.tsv", "tsv_with_names"),
-        ("timestamp/unix_time/test.json", "json_each_row"),
-        ("timestamp/unix_time/test.parquet", "parquet")
-    ])
-    def test_timestamp_unix_time_insert(self, kikimr, s3, client, filename, type_format, timestamp_format, unique_prefix):
+    @pytest.mark.parametrize(
+        "timestamp_format", ["UNIX_TIME_SECONDS", "UNIX_TIME_MICROSECONDS", "UNIX_TIME_MILLISECONDS"]
+    )
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("timestamp/unix_time/test.csv", "csv_with_names"),
+            ("timestamp/unix_time/test.tsv", "tsv_with_names"),
+            ("timestamp/unix_time/test.json", "json_each_row"),
+            ("timestamp/unix_time/test.parquet", "parquet"),
+        ],
+    )
+    def test_timestamp_unix_time_insert(
+        self, kikimr, s3, client, filename, type_format, timestamp_format, unique_prefix
+    ):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, timestamp_format)
-        storage_sink_binding_name = self.create_sink_timestamp_binding(unique_prefix, client, connection_response.result.connection_id,
-                                                                       "timestamp/unix_time/" + type_format + "/", type_format, timestamp_format)
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, timestamp_format
+        )
+        storage_sink_binding_name = self.create_sink_timestamp_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "timestamp/unix_time/" + type_format + "/",
+            type_format,
+            timestamp_format,
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -545,22 +635,35 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        return self.canonize_result(s3, "timestamp/unix_time/" + type_format + "/", timestamp_format + "_" + filename.replace('/', '_'))
+        return self.canonize_result(
+            s3, "timestamp/unix_time/" + type_format + "/", timestamp_format + "_" + filename.replace('/', '_')
+        )
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_format/test.csv", "csv_with_names"),
-        ("common/simple_format/test.tsv", "tsv_with_names"),
-        ("common/simple_format/test.json", "json_each_row"),
-        ("common/simple_format/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_format/test.csv", "csv_with_names"),
+            ("common/simple_format/test.tsv", "tsv_with_names"),
+            ("common/simple_format/test.json", "json_each_row"),
+            ("common/simple_format/test.parquet", "parquet"),
+        ],
+    )
     def test_timestamp_simple_format_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d")
-        storage_sink_binding_name = self.create_sink_timestamp_binding(unique_prefix, client, connection_response.result.connection_id,
-                                                                       "common/simple_format/" + type_format + "/", type_format, format="%Y-%m-%d")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d"
+        )
+        storage_sink_binding_name = self.create_sink_timestamp_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "common/simple_format/" + type_format + "/",
+            type_format,
+            format="%Y-%m-%d",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -571,22 +674,35 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        return self.canonize_result(s3, "common/simple_format/" + type_format + "/", "timestamp_format_" + filename.replace('/', '_'))
+        return self.canonize_result(
+            s3, "common/simple_format/" + type_format + "/", "timestamp_format_" + filename.replace('/', '_')
+        )
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("common/simple_format/test.csv", "csv_with_names"),
-        ("common/simple_format/test.tsv", "tsv_with_names"),
-        ("common/simple_format/test.json", "json_each_row"),
-        ("common/simple_format/test.parquet", "parquet")
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("common/simple_format/test.csv", "csv_with_names"),
+            ("common/simple_format/test.tsv", "tsv_with_names"),
+            ("common/simple_format/test.json", "json_each_row"),
+            ("common/simple_format/test.parquet", "parquet"),
+        ],
+    )
     def test_date_time_simple_format_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d")
-        storage_sink_binding_name = self.create_sink_date_time_binding(unique_prefix, client, connection_response.result.connection_id,
-                                                                       "common/simple_format/" + type_format + "/", type_format, format="%Y-%m-%d")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, format="%Y-%m-%d"
+        )
+        storage_sink_binding_name = self.create_sink_date_time_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "common/simple_format/" + type_format + "/",
+            type_format,
+            format="%Y-%m-%d",
+        )
 
         sql = f'''
             INSERT INTO bindings.`{storage_sink_binding_name}`
@@ -597,27 +713,40 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        return self.canonize_result(s3, "common/simple_format/" + type_format + "/", "date_time_format_" + filename.replace('/', '_'))
+        return self.canonize_result(
+            s3, "common/simple_format/" + type_format + "/", "date_time_format_" + filename.replace('/', '_')
+        )
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format, format_name", [
-        ("common/simple_posix/big.csv", "csv_with_names", "POSIX"),
-        ("common/simple_format/big.csv", "csv_with_names", "%Y-%m-%d"),
-        ("date_time/simple_iso/big.csv", "csv_with_names", "ISO")
-    ])
-    def test_date_time_simple_posix_big_file(self, kikimr, s3, client, filename, type_format, format_name, unique_prefix):
+    @pytest.mark.parametrize(
+        "filename, type_format, format_name",
+        [
+            ("common/simple_posix/big.csv", "csv_with_names", "POSIX"),
+            ("common/simple_format/big.csv", "csv_with_names", "%Y-%m-%d"),
+            ("date_time/simple_iso/big.csv", "csv_with_names", "ISO"),
+        ],
+    )
+    def test_date_time_simple_posix_big_file(
+        self, kikimr, s3, client, filename, type_format, format_name, unique_prefix
+    ):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
         a = ydb.Column(name="tpep_pickup_datetime", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         b = ydb.Column(name="tpep_dropoff_datetime", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))
         storage_source_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_source_binding_name,
-                                             path=filename,
-                                             format=type_format,
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[a, b],
-                                             format_setting={"data.datetime.format" if format_name != "ISO" and format_name != "POSIX" else "data.datetime.format_name": format_name})
+        client.create_object_storage_binding(
+            name=storage_source_binding_name,
+            path=filename,
+            format=type_format,
+            connection_id=connection_response.result.connection_id,
+            columns=[a, b],
+            format_setting={
+                "data.datetime.format"
+                if format_name != "ISO" and format_name != "POSIX"
+                else "data.datetime.format_name": format_name
+            },
+        )
 
         sql = f'''
             SELECT *
@@ -636,10 +765,7 @@ Pear;15;33'''
             pytest.skip("pg syntax is only supported with pg types")
         test_suffix = "_{}_{}".format(1 if pg_syntax else 0, 1 if pg_types else 0)
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket_name = "precompute_with_pg_binding" + test_suffix
@@ -647,10 +773,7 @@ Pear;15;33'''
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         if pg_types:
@@ -663,14 +786,18 @@ Pear;15;33'''
         ids_data = R'''{"id": 42}'''
 
         s3_client.put_object(Body=ids_data, Bucket=bucket_name, Key='ids.json', ContentType='text/json')
-        connection_response = client.create_storage_connection(unique_prefix + "precompute_with_pg" + test_suffix, bucket_name)
+        connection_response = client.create_storage_connection(
+            unique_prefix + "precompute_with_pg" + test_suffix, bucket_name
+        )
 
         binding_for_ids_name = unique_prefix + "binding_for_ids" + test_suffix
-        client.create_object_storage_binding(name=binding_for_ids_name,
-                                             path="ids.json",
-                                             format="json_each_row",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[idType])
+        client.create_object_storage_binding(
+            name=binding_for_ids_name,
+            path="ids.json",
+            format="json_each_row",
+            connection_id=connection_response.result.connection_id,
+            columns=[idType],
+        )
 
         bucket.create(ACL='public-read')
 
@@ -679,11 +806,13 @@ Pear;15;33'''
 
         s3_client.put_object(Body=names_data, Bucket=bucket_name, Key='names.json', ContentType='text/json')
         binding_for_names_name = unique_prefix + "binding_for_names" + test_suffix
-        client.create_object_storage_binding(name=binding_for_names_name,
-                                             path="names.json",
-                                             format="json_each_row",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[idType, nameType])
+        client.create_object_storage_binding(
+            name=binding_for_names_name,
+            path="names.json",
+            format="json_each_row",
+            connection_id=connection_response.result.connection_id,
+            columns=[idType, nameType],
+        )
 
         kikimr.control_plane.wait_bootstrap(1)
 
@@ -695,10 +824,13 @@ Pear;15;33'''
                     id
                 FROM bindings.{}
             )
-            '''.format(binding_for_names_name, binding_for_ids_name)
+            '''.format(
+            binding_for_names_name, binding_for_ids_name
+        )
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS,
-                                       pg_syntax=pg_syntax).result.query_id
+        query_id = client.create_query(
+            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS, pg_syntax=pg_syntax
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)
@@ -718,14 +850,14 @@ Pear;15;33'''
             assert result_set.rows[0].items[1].bytes_value == b"hello"
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("timestamp/completeness_iso/test.csv", "csv_with_names")
-    ])
+    @pytest.mark.parametrize("filename, type_format", [("timestamp/completeness_iso/test.csv", "csv_with_names")])
     def test_timestamp_completeness_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_timestamp_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
+        storage_source_binding_name = self.create_source_timestamp_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
 
         sql = f'''
             SELECT *
@@ -752,14 +884,19 @@ Pear;15;33'''
         assert len(result_set.rows) == 36
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("date_time/completeness_iso/test.csv", "csv_with_names"),
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("date_time/completeness_iso/test.csv", "csv_with_names"),
+        ],
+    )
     def test_date_time_completeness_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
-        storage_source_binding_name = self.create_source_date_time_binding(unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO")
+        storage_source_binding_name = self.create_source_date_time_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "ISO"
+        )
 
         sql = f'''
             SELECT *
@@ -786,10 +923,7 @@ Pear;15;33'''
         assert len(result_set.rows) == 6
 
     @yq_all
-    @pytest.mark.parametrize("filename", [
-        ("date_null/as_default/test.csv"),
-        ("date_null/parse_error/test.csv")
-    ])
+    @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "hcpp"
@@ -811,13 +945,12 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(
+            data.result.result_set
+        )
 
     @yq_all
-    @pytest.mark.parametrize("filename", [
-        ("date_null/as_default/test.csv"),
-        ("date_null/parse_error/test.csv")
-    ])
+    @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null_with_not_null_type(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "hcpp"
@@ -845,10 +978,9 @@ Pear;15;33'''
         assert "is not like Date" in str(issues), str(describe_result)
 
     @yq_all
-    @pytest.mark.parametrize("filename", [
-        ("date_null/as_default/multi_null.csv"),
-        ("date_null/parse_error/multi_null.csv")
-    ])
+    @pytest.mark.parametrize(
+        "filename", [("date_null/as_default/multi_null.csv"), ("date_null/parse_error/multi_null.csv")]
+    )
     def test_date_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "hcpp"
@@ -872,15 +1004,20 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
-        assert data.result.result_set.rows[0].items[1].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
-        assert data.result.result_set.rows[0].items[2].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(
+            data.result.result_set
+        )
+        assert data.result.result_set.rows[0].items[1].null_flag_value == struct_pb2.NULL_VALUE, str(
+            data.result.result_set
+        )
+        assert data.result.result_set.rows[0].items[2].null_flag_value == struct_pb2.NULL_VALUE, str(
+            data.result.result_set
+        )
 
     @yq_all
-    @pytest.mark.parametrize("filename", [
-        ("date_null/as_default/multi_null.csv"),
-        ("date_null/parse_error/multi_null.csv")
-    ])
+    @pytest.mark.parametrize(
+        "filename", [("date_null/as_default/multi_null.csv"), ("date_null/parse_error/multi_null.csv")]
+    )
     def test_string_not_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "hcpp"
@@ -915,10 +1052,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ms'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ms'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_timestamp.parquet'
@@ -955,10 +1089,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('us'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('us'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -978,10 +1109,7 @@ Pear;15;33'''
         data = [['apple'], ['2024-04-02 12:01:00']]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.string())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.string())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1001,10 +1129,7 @@ Pear;15;33'''
         data = [['apple'], ['2024-04-02 12:01:00']]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.utf8())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.utf8())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1024,10 +1149,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('s'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('s'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1047,10 +1169,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ns'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ns'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1070,10 +1189,7 @@ Pear;15;33'''
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1093,10 +1209,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1116,10 +1229,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1152,10 +1262,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1188,10 +1295,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1224,10 +1328,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1260,10 +1361,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1296,10 +1394,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1319,10 +1414,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1355,10 +1447,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1391,10 +1480,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint16())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint16())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1427,10 +1513,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ms'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ms'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_datetime.parquet'
@@ -1465,10 +1548,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('us'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('us'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1486,10 +1566,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('s'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('s'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1507,10 +1584,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ns'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ns'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1528,10 +1602,7 @@ Pear;15;33'''
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1551,10 +1622,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1573,10 +1641,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1595,10 +1660,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.int64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1615,10 +1677,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1637,10 +1696,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1659,10 +1715,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.uint16())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint16())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1683,10 +1736,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ms'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ms'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_string.parquet'
@@ -1723,10 +1773,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('us'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('us'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1746,10 +1793,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('s'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('s'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1769,10 +1813,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ns'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ns'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1792,10 +1833,7 @@ Pear;15;33'''
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1815,10 +1853,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1839,10 +1874,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ms'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ms'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_utf8.parquet'
@@ -1879,10 +1911,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('us'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('us'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1902,10 +1931,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('s'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('s'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1925,10 +1951,7 @@ Pear;15;33'''
         data = [['apple'], [1712059260000000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.timestamp('ns'))
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.timestamp('ns'))])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1948,10 +1971,7 @@ Pear;15;33'''
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date64())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date64())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))
@@ -1971,10 +1991,7 @@ Pear;15;33'''
         data = [['apple'], [19815]]
 
         # Define the schema for the data
-        schema = pa.schema([
-            ('fruit', pa.string()),
-            ('ts', pa.date32())
-        ])
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
 
         table = pa.Table.from_arrays(data, schema=schema)
         pq.write_table(table, yatest_common.work_path(filename))

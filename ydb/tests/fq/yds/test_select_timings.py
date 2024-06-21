@@ -13,15 +13,11 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestSelectTimings(TestYdsBase):
     @yq_v1
-    @pytest.mark.parametrize(
-        "success",
-        [True, False],
-        ids=["finished", "aborted"]
-    )
+    @pytest.mark.parametrize("success", [True, False], ids=["finished", "aborted"])
     @pytest.mark.parametrize(
         "query_type",
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"]
+        ids=["analytics", "streaming"],
     )
     def test_select_timings(self, kikimr, client, success, query_type):
         suffix = (str(query_type)[0] + str(success)[0]).lower()

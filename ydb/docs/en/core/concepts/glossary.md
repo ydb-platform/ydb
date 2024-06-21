@@ -488,7 +488,7 @@ The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execu
 
 #### Transaction order ID {#transaction-order-id}
 
-A **transaction order ID** is a unique identifier assigned to each transaction during planning. It consists of [Transaction ID](#txid) and [PlanStep](#planstep).
+A **transaction order ID** is a unique identifier assigned to each transaction during planning. It consists of [PlanStep](#planstep) and [Transaction ID](#txid).
 
 #### PlanStep {#planstep}
 

@@ -2,6 +2,7 @@
 #include "mirrorer.h"
 #include "partition_util.h"
 #include "partition.h"
+#include "partition_log.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -80,7 +81,7 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "" << SelfId() << " " << state << " Partition: " << Partition << " ";
+    return TStringBuilder() << "[Partition:" << Partition << ", State:" << state << "] ";
 }
 
 bool TPartition::IsActive() const {
@@ -1091,11 +1092,13 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoResponse");
     WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
 }
 
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoError");
     WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
 }
 

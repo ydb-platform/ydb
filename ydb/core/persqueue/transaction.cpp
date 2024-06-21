@@ -60,6 +60,10 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
+        if (!o.HasBegin()) {
+            hasWriteOperations = true;
+        }
+
         Operations.push_back(o);
         Partitions.insert(o.GetPartitionId());
     }
@@ -133,7 +137,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
-    if (txBody.HasWriteId()) {
+    if (txBody.HasWriteId() && hasWriteOperations) {
         WriteId = txBody.GetWriteId();
     } else {
         WriteId = Nothing();

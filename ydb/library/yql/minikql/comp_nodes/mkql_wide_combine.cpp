@@ -370,8 +370,14 @@ public:
         return InputStatus != EFetchResult::Finish;
     }
 
+    bool HasAnyData() const {
+        return SpilledBuckets.size();
+    }
+
     bool IsProcessingRequired() const {
-        return true;
+        if (InputStatus != EFetchResult::Finish) return true;
+
+        return HasDataForProcessing;
     }
 
     bool UpdateSpillingAndWait() {
@@ -528,41 +534,8 @@ public:
         return false;
     }
 
-    void DoCalculate() {
-        switch(GetMode()) {
-            case EOperatingMode::InMemory: {
-                DoCalculateInMemory();
-                break;
-            }
-            case EOperatingMode::Spilling: {
-                DoCalculateWithSpilling();
-                break;
-            }
-            default:
-                MKQL_ENSURE(false, "Internal logic error");  
-
-        }
-    }
-
-    EFetchResult Finish(NUdf::TUnboxedValue*const* output) {
-        switch(GetMode()) {
-            case EOperatingMode::InMemory: {
-                if (const auto values = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
-                    Nodes.FinishItem(Ctx, values, output);
-                    return EFetchResult::One;
-                }
-                break;
-            }
-            case EOperatingMode::ProcessSpilled: {
-                return ProcessSpilledData(output);
-            }
-            default:
-                MKQL_ENSURE(false, "Internal logic error");  
-        }
-        return EFetchResult::Finish;
-    }
-
     EFetchResult InputStatus = EFetchResult::One;
+    bool HasDataForProcessing = false;
 private:
     void SplitStateIntoBuckets() {
 
@@ -655,48 +628,8 @@ private:
         return false;
     }
 
-    void DoCalculateWithSpilling() {
-        auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-        BufferForKeyAnsState.resize(KeyWidth);
-        Nodes.ExtractKey(Ctx, fields, static_cast<NUdf::TUnboxedValue *>(BufferForKeyAnsState.data()));
 
-        auto hash = Hasher(BufferForKeyAnsState.data());
-
-        auto bucketId = hash % SpilledBucketCount;
-
-        auto& bucket = SpilledBuckets[bucketId];
-
-        if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            for (size_t i = 0; i < KeyWidth; ++i) {
-            //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
-            }
-            auto isNew = bucket.InMemoryProcessingState->TasteIt();
-            BufferForKeyAnsState.resize(0); //for freeing allocated key value asap
-
-            Nodes.ProcessItem(
-                Ctx,
-                isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue),
-                static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Throat)
-            );
-        } else {
-            BufferForKeyAnsState.resize(0);
-            MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-            for (size_t i = 0; i < Nodes.ItemNodes.size(); ++i) {
-                if (fields[i]) {
-                    BufferForUsedInputItems.push_back(*fields[i]);
-                }
-            }
-            if (bucket.AsyncWriteOperation.has_value()) {
-                BufferForUsedInputItemsBucketId = bucketId;
-                return;
-            }
-            bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-            BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
-        }
-    }
-
-    bool ProcessSpilledData(){
+    bool ProcessSpilledData() {
         if (AsyncReadOperation) {
             if (!AsyncReadOperation->HasValue()) return true;
             if (RecoverState) {
@@ -747,12 +680,12 @@ private:
                     }
                 }
                 
-                IsProcessingRequired = true;
+                HasDataForProcessing = true;
                 return false;
             }
+            HasDataForProcessing = false;
         }
 
-        IsFinished = true;
         return false;
     }
 
@@ -1349,9 +1282,11 @@ public:
                     Nodes.FinishItem(ctx, values, output);
                     return EFetchResult::One;
                 }
-            }
 
-            return EFetchResult::Finish;
+                if (!ptr->HasAnyData()) {
+                    return EFetchResult::Finish;
+                }
+            }
         }
         Y_UNREACHABLE();
     }

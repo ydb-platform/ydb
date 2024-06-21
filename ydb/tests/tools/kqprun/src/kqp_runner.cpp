@@ -38,11 +38,11 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
-        if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
+        if (propery.Contains("Bytes")) {
             valueString = NKikimr::NBlobDepot::FormatByteSize(value);
-        } else if (propery.find("TimeUs") != TString::npos) {
+        } else if (propery.Contains("TimeUs")) {
             valueString = NFq::FormatDurationUs(value);
-        } else if (propery.find("TimeMs") != TString::npos) {
+        } else if (propery.Contains("TimeMs")) {
             valueString = NFq::FormatDurationMs(value);
         } else {
             valueString = FormatNumber(value);

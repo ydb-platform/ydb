@@ -139,7 +139,20 @@ protected:
 
     void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
 
-protected:
+    struct TTableRecord {
+        TString Key;
+        TString Value;
+    };
+
+    TVector<TTableRecord> MakeTableRecords();
+    TString MakeJsonDoc(const TVector<TTableRecord>& records);
+
+    void CreateTable(const TString& path);
+    void WriteToTable(const TString& tablePath,
+                      const TVector<TTableRecord>& records,
+                      NTable::TTransaction* tx);
+    size_t GetTableRecordsCount(const TString& tablePath);
+
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
@@ -164,8 +177,6 @@ private:
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                               ui64 tabletId,
                                               ui64 writeId);
-
-    void CheckTabletKeys(const TString& topicName);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;

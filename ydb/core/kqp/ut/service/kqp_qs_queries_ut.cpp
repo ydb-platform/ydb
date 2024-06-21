@@ -3498,6 +3498,278 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 R"([[8u]])");
         }
     }
+
+    Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"sql(
+            CREATE TABLE `/Root/test/alterNullInvalid` (
+                id Int32 NOT NULL,
+                value Int32,
+                PRIMARY KEY (id)
+            );
+        )sql";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNullInvalid` (id, value)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, 1000 ),
+                ( 5, NULL ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        {
+            auto setNotNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNullInvalid`
+                ALTER COLUMN value SET NOT NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"sql(
+            CREATE TABLE `/Root/test/alterNotNull` (
+                id Int32 NOT NULL,
+                value Int32,
+                PRIMARY KEY (id)
+            );
+        )sql";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNotNull` (id, value)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, 1000 ),
+                ( 5, 10000 ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        // {
+        //     auto setDefault = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN value SET DEFAULT 0;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(setDefault.IsSuccess(), setDefault.GetIssues().ToString());
+        // }
+
+        {
+            auto setNotNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull`
+                ALTER COLUMN value SET NOT NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            // change
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        }
+
+        // {
+        //     auto initNullValues = client.ExecuteQuery(R"sql(
+        //         REPLACE INTO `/Root/test/alterNotNull` (id, value)
+        //         VALUES
+        //         ( 1, NULL ),
+        //         ( 2, NULL );
+        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        // }
+    }
+
+    Y_UNIT_TEST(AlterTable_SetNull_Valid) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        // auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNull` (
+                    id Int32 NOT NULL,
+                    val Int32 NOT NULL,
+                    PRIMARY KEY (id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNull` (id, val)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, 1000 ),
+                ( 5, 10000 ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        {
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNull` (id, val)
+                VALUES
+                ( 1, NULL ),
+                ( 2, NULL );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
+
+        {
+            auto setNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNull`
+                ALTER COLUMN val SET NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+        }
+
+        {
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNull` (id, val)
+                VALUES
+                ( 1, NULL ),
+                ( 2, NULL );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTable_SetNull_WithSetFamily_Valid) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        // auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNullwithSetFamily` (
+                    id Int32 NOT NULL,
+                    val1 Int32 FAMILY Family1 NOT NULL,
+                    val2 Int32,
+                    PRIMARY KEY (id),
+
+                    FAMILY default (
+                        DATA = "test",
+                        COMPRESSION = "lz4"
+                    ),
+                    FAMILY Family1 (
+                        DATA = "test",
+                        COMPRESSION = "off"
+                    )
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNullwithSetFamily` (id, val1, val2)
+                VALUES
+                ( 1, 1, 1 ),
+                ( 2, 10, 10 ),
+                ( 3, 100, 100 ),
+                ( 4, 1000, 1000 ),
+                ( 5, 10000, 10000 ),
+                ( 6, 100000, 100000 ),
+                ( 7, 1000000, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        {
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNullwithSetFamily` (id, val1, val2)
+                VALUES
+                ( 1, NULL, 1 ),
+                ( 2, NULL, 2 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
+
+        {
+            auto setNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNullwithSetFamily`
+                ALTER COLUMN val1 SET NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+        }
+
+        {
+            auto setNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNullwithSetFamily`
+                ALTER COLUMN val1 SET FAMILY Family1;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+        }
+
+        {
+            auto initNullValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNullwithSetFamily` (id, val1, val2)
+                VALUES
+                ( 1, NULL, 1 ),
+                ( 2, NULL, 2 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

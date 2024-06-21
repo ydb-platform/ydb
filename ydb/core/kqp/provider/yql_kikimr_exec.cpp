@@ -1323,7 +1323,7 @@ public:
                         bool hasNotNull = false;
                         if (columnTuple.Size() > 2) {
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                            for (const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                                 if (constraint.Name().Value() == "serial") {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
@@ -1416,6 +1416,33 @@ public:
                             for (auto family : families) {
                                 alter_columns->set_family(TString(family.Value()));
                             }
+                        } else if (alterColumnAction == "setColumnConstraints") {
+                            auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                            if (constraintsList.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder() 
+                                    << "\". Several column constrains for a single column are not yet supported"));
+                                return SyncError();
+                            }
+
+                            auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                            if (constraint.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() 
+                                    << "setColumnConstraints can get exactly one token \\in {\"null\", \"not_null\"}"));
+                                return SyncError();
+                            }
+
+                            auto value = TString(constraint.Item(0).Cast<TCoAtom>());
+                            auto notNull = (value == "not_null");
+
+                            if (notNull) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder() 
+                                    << "SET NOT NULL is currently not supported."));
+                                return SyncError();
+                            }
+
+                            alter_columns->set_not_null(notNull);
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column"));
@@ -1826,7 +1853,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 });
-
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {

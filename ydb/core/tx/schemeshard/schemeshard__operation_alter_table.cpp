@@ -363,6 +363,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+
         table->FinishAlter();
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
@@ -606,7 +607,8 @@ public:
 
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context
+        );
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

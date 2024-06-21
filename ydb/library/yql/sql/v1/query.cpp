@@ -1329,15 +1329,35 @@ public:
         if (Params.AlterColumns) {
             auto columns = Y();
             for (auto& col : Params.AlterColumns) {
-                auto columnDesc = Y();
-                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
-                auto familiesDesc = Y();
-                for (const auto& family : col.Families) {
-                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
-                }
+                if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNullConstraint) {
+                    auto columnDesc = Y();
+                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
 
-                columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
-                columns = L(columns, Q(columnDesc));
+                    auto columnConstraints = Y();
+
+                    if (!col.Nullable) {
+                        columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+                    } else {
+                        columnConstraints = L(columnConstraints, Q(Y(Q("null"))));
+                    }
+
+                    columnDesc = L(columnDesc, Q(Y(Q("setColumnConstraints"), Q(columnConstraints))));
+                    columns = L(columns, Q(columnDesc));
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamaly) {
+                    auto columnDesc = Y();
+                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
+                    auto familiesDesc = Y();
+                    for (const auto& family : col.Families) {
+                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                    }
+
+                    columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
+                    columns = L(columns, Q(columnDesc));
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::Nothing) {
+                    // do nothing
+                } else {
+                    ctx.Error(Pos) << " action is not supported";
+                }
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
         }

@@ -1560,10 +1560,21 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         }
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction17: {
+        // ALTER COLUMN id SET (NOT NULL | NULL)
+        const auto& alterRule = node.GetAlt_alter_table_action17().GetRule_alter_table_alter_column_set_null1();
 
-    case TRule_alter_table_action::ALT_NOT_SET:
+        if (!AlterTableAlterColumnSetNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
+
+    case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
         return false;
+    }
     }
     return true;
 }
@@ -1651,7 +1662,7 @@ bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr);
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr, TColumnSchema::ETypeOfChange::SetFamaly);
     return true;
 }
 
@@ -1820,6 +1831,24 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         return false;
     }
 
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetNull(const TRule_alter_table_alter_column_set_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    auto blockNull = node.GetBlock5();
+    bool nullable;
+
+    if (blockNull.HasAlt1()) { // null
+        nullable = true;
+    } else if (blockNull.HasAlt2()) { // not null
+        nullable = false;
+    } else {
+        return false;
+    }
+
+    params.AlterColumns.emplace_back(pos, name, nullptr, nullable, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNullConstraint);
     return true;
 }
 

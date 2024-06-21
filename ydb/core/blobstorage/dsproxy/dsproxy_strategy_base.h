@@ -52,7 +52,8 @@ protected:
             TBlobStorageGroupType::TPartPlacement &outPartPlacement);
     // Sets IsSlow for the slow disk, resets for other disks.
     // Returns -1 if there is no slow disk, or subgroupIdx of the slow disk.
-    ui32 MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard, bool isPut);
+    ui32 MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard, bool isPut,
+            float slowDiskThreshold);
 };
 
 

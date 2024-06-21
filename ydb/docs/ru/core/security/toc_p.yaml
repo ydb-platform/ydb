@@ -7,11 +7,11 @@ items:
   items:
     - name: Общие сведения и включение
       href: audit-log.md
+    - name: Клиентские соединения
+      href: audit-log-conn.md
     - name: Схемные операции
       href: audit-log-scheme.md
     - name: DML-операции
       href: audit-log-dml.md
-    - name: Клиентские соединения
-      href: audit-log-conn.md
 - name: Краткая запись управления доступом
   href: short-access-control-notation.md

@@ -6,7 +6,7 @@ Audit log makes it possible to monitor activities with [schema entities](audit-l
 
 ## Audit log records and attributes
 
-Information about actions or operations is recorded in the audit log in the form of records. Each record consists of a set of fields or attributes. Some attributes are the same for all records, others are determined by the type of activity or the type of operation described.
+Information about actions or operations is persisted as audit log records. Each record consists of a set of fields or attributes. Some attributes are the same for all records, and others are determined by the type of activity or the type of operation described.
 
 | __Attribute__ | __Description__ |
 |:----|:----|
@@ -53,42 +53,40 @@ Audit logging subsystem supports recording the stream to:
 * standard error stream `stderr`;
 * [Unified Agent](https://cloud.yandex.com/en/docs/monitoring/concepts/data-collection/unified-agent/) &mdash; agent for delivering metrics and logs.
 
-It is possible to use any of the listed destinations, as well as their combination.
+It is possible to use any of the destinations listed above, as well as their combination.
 
-Writing to a file or unified-agent is recommended for use in production installations. In the case of writing to a file, access to the audit log is set by file-system rights.
+Writing to a file or unified-agent is recommended for use in production installations. In the case of writing to a file, access to the audit log is set by file-system rights. {{ ydb-short-name }} does not handle logfile compression or rotation.
 
 Writing to `stderr` is recommended for test installations. Further processing of `stderr` may be affected by the settings of the [logging](../devops/manual/logging.md) subsystem.
 
 ### Settings
 
-Audit logging require configuration at the {{ ydb-short-name }} cluster level.
+The audit logging require configuration at the {{ ydb-short-name }} cluster level.
 
-It should be configured by adding `audit_config` section with a set of destination backends to the [cluster configuration](../deploy/configuration/config.md):
+It should be configured by adding the `audit_config` section with a set of destination backends to the [cluster configuration](../deploy/configuration/config.md):
 
 ```yaml
 audit_config:
   file_backend:
-    format: OUTPUT_FORMAT
+    format: <OUTPUT_FORMAT>
     file_path: "path_to_file"
   unified_agent_backend:
-    format: OUTPUT_FORMAT
+    format: <OUTPUT_FORMAT>
     log_name: session_meta_log_name
   stderr_backend:
-    format: OUTPUT_FORMAT
+    format: <OUTPUT_FORMAT>
 ```
 
-The`audit_config` section should not be empty.
-
-All backends (`file_backend`, `unified_agent_backend`, `stderr_backend`) are optional.
+Each backend (`file_backend`, `unified_agent_backend`, `stderr_backend`) is optional, but at least one should be present. Thus, the `audit_config` section should not be empty.
 
 | Key | Description |
 --- | ---
-| `*.format` | Audit log format. <br>Acceptable values:<ul><li>`JSON`: Serialized [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`TXT`: Text format.</ul>_Optional_.<br>Default value: `JSON`.
+| `*.format` | Audit log format. <br>Supported values:<ul><li>`JSON` — serialized [JSON](https://{{ lang }}.wikipedia.org/wiki/JSON).</li><li>`TXT` — plain text (comma-separated `<field>=<value>` pairs, see example below).</ul>_Optional_.<br>Default value: `JSON`.
+| `stderr_backend` | `stderr` backend.
 | `file_backend` | Local file backend.
-| `file_backend.file_path` | Path to a file. Any path component that is missing will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br>_Required for `file_backend`_.
+| `file_backend.file_path` | Path to a file. Any missing path component will be created on each node at node startup. If the file exists, the data will be appended to it.<br>_Required for `file_backend`_.
 | `unified_agent_backend` | Unified Agent backend.<br>Unified Agent client should be configured by `uaclient_config` section in the [cluster configuration](../deploy/configuration/config.md).
 | `unified_agent_backend.log_name` | A field in the Unified Agent session metadata that will be passed along with the messages. Allows log stream dispatch to one or more child channels according to the condition `_log_name: "session_meta_log_name"`.<br>_Optional_.<br>Default value: value of `uaclient_config.log_name`.
-| `stderr_backend` | `stderr` backend.
 
 ### How to enable {#enabling-audit-log}
 
@@ -96,7 +94,7 @@ Audit logging is disabled by default.
 
 Adding `audit_config` section to the [cluster configuration](../deploy/configuration/config.md) is enough to enable audit logging.
 
-Additional requirements for enabling logging of individual activities are described in the relevant sections.
+Additional requirements for enabling logging of individual activities are described in the relevant sections: [Client connections](./audit-log-conn.md#how-to-enable), [Schema operations](./audit-log-scheme.md#how-to-enable), [DML operations](./audit-log-dml.md#how-to-enable).
 
 Example configuration for writing audit log to the file `/var/log/ydb-audit.log` in `TXT` format:
 

@@ -1,12 +1,12 @@
-# Client connections
+# Client connections audit
 
-Client connection logging makes it possible to determine from which IP addresses the client requests come from and on behalf of what users.
+Client connections logging allows to monitor origin IP addresses and identities of the users who make client requests.
 
 ## Record attributes
 
 | __Attribute__ | __Description__ |
 |:----|:----|
-| `component` | `grpc-conn`. |
+| `component` | Logging component name, always `grpc-conn`. |
 | `remote_address` | IP address of the client who sent the request. |
 | `subject` | User SID (account name) of the user on whose behalf the operation is performed. |
 | `database` | Path of the database in which the operation is performed. |
@@ -14,9 +14,9 @@ Client connection logging makes it possible to determine from which IP addresses
 
 ## How to enable
 
-Audit log must be [enabled](audit-log.md#enabling-audit-log) on a cluster level.
+The audit logging must be [enabled](audit-log.md#enabling-audit-log) on the cluster level.
 
-Client connection logging is enabled by the `feature_flags.enable_grpc_audit` flag through changing the [cluster configuration](../maintenance/manual/config-overview.md).
+Client connections logging is enabled by the `feature_flags.enable_grpc_audit` flag through changing the [cluster configuration](../maintenance/manual/config-overview.md).
 
 [//]: # (TODO: add link to a feature-flags section, not exist atm)
 
@@ -29,7 +29,7 @@ Client connection logging is enabled by the `feature_flags.enable_grpc_audit` fl
 
 - The log only captures requests that have passed [authentication](../deploy/configuration/config#auth) and authorization checks against the database. When authentication is disabled, all requests are logged.
 
-## Record example
+## Log record example
 
 ```json
 {

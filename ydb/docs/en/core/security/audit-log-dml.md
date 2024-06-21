@@ -1,10 +1,10 @@
-# DML operations
+# DML operations audit
 
-DML operations logging makes it possible to monitor user access to the data.
+DML operations audit logging allows to monitor user access to the data.
 
 {% note info "" %}
 
-DML stands for [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) &mdash; subset of SQL-data statements, which modify or access data stored in the tables.
+DML stands for [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) &mdash; subset of SQL-data statements for modifying or accessing data stored in the tables.
 
 {% endnote %}
 
@@ -12,7 +12,7 @@ DML stands for [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_m
 
 | __Attribute__ | __Description__ |
 |:----|:----|
-| `component` | `grpc-proxy`.
+| `component` | Logging component name, always `grpc-proxy`.
 | `remote_address` | IP address of the client who sent the request.
 | `subject` | User SID (account name) of the user on whose behalf the operation is performed.
 | `database` | Path of the database in which the operation is performed.
@@ -40,17 +40,17 @@ DML stands for [Data Manipulation Language](https://en.wikipedia.org/wiki/Data_m
 || `begin_tx` | Request for implicit transaction start.
 || `commit_tx` | Request for implicit transaction commit upon query completion.
 | _BulkUpsert_ | `table` | Path of the modified table.
-|| `row_count` | Number of modified rows.
+|| `row_count` | Number of added and updated rows.
 
 ## Configuration
 
-Audit log must to be [enabled](audit-log.md#enabling-audit-log) on a cluster level.
+The audit logging must be [enabled](audit-log.md#enabling-audit-log) on the cluster level.
 
-Additionally, DML operations logging require configuration at the database level. It is not possible to enable DML logging globally or for a separate table.
+DML operations logging require additional configuration at the database level. It is not possible to enable DML logging globally or only for a specific table.
 
-Each database has:
-- `EnableDmlAudit` &mdash; flag for enabling logging (default value: false)
-- `ExpectedSubjects` &mdash; list of user SIDs, actions from which are expected, not of interest, and should not be included in the audit log (default value: empty)
+Each database has two settings:
+- `EnableDmlAudit` &mdash; a flag for enabling logging (default value: false)
+- `ExpectedSubjects` &mdash; a list of user SIDs, actions from which are expected (and thus are of no interest) and should not be included in the audit log (default value: empty)
 
 These settings are part of the database schema:
 - They are set and changed by DDL operations for creating and modifying the database.
@@ -104,7 +104,7 @@ The new value of `ExpectedSubjects` completely replaces the old one.
 
 - DML operation logging consumes both CPU resources and disk space, which might become an issue when there's a high rate of such queries. `EnableDmlAudit` and `ExpectedSubjects` at the database level help regulate the volume of audited events.
 
-- Logging occurs before query text gets parsed, so detailed information about the query (expression type or list of affected tables) is unavailable.
+- Request details are captured before query text gets parsed, so detailed information about the query (expression type or list of affected tables) is unavailable.
 
 - As a consequence, `SELECT` are also getting logged, along with `UPDATE`, `INSERT`, `DELETE` etc.
 
@@ -118,7 +118,7 @@ The new value of `ExpectedSubjects` completely replaces the old one.
 
 - Only user SIDs will work in the `ExpectedSubjects`, group SIDs will not.
 
-## Record examples
+## Log record examples
 
 ```json
 {

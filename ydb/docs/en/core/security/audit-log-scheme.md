@@ -1,17 +1,23 @@
-# Schema operations
+# Schema operations audit
 
-Schema (or DDL) operation logging makes it possible to monitor changes to schema entities made by users.
+Schema (or DDL) operations audit logging allows to monitor changes made to the schema objects.
 
-Logged operations include:
-- creating, modifying and deleting database objects, tables, directories, connections to external databases and the likes,
-- modifying schema entities access rights (ACL),
+{% note info "" %}
+
+DDL stands for [Data Definition Language](https://en.wikipedia.org/wiki/Data_definition_language) &mdash; subset of SQL statements for creating and modifying schema objects.
+
+{% endnote %}
+
+Schema operations include:
+- creating, modifying and deleting database objects, directories, tables, topics and other types of objects;
+- modifying access rights (ACL) on the objects;
 - creating, modifying and deleting users and groups for [login and password authentication](../concepts/auth.md#static-credentials) mode.
 
 ## Record attributes
 
 | __Attribute__ | __Description__ |
 |:----|:----|
-| `component` | `schemeshard`.
+| `component` | Logging component name, always `schemeshard`.
 | `remote_address` | IP address of the client who sent the request.
 | `subject` | User SID (account name) of the user on whose behalf the operation is performed.
 | `database` | Path of the database in which the operation is performed.
@@ -28,7 +34,7 @@ Schema operations:
 | __Kind__ | __Attribute__ | __Description__ |
 |:----|:----|:----|
 | _All_ ||
-|| `paths` | List of paths in the database that are changed by the operation (for example, `[/root/db/table-a, /root/db/table-b]`).<br>Required. |
+|| `paths` | List of object paths that are changed by the operation (for example, `[/root/db/table-a, /root/db/topic-b]`).<br>Required. |
 | _Ownership and permissions_ ||
 || `new_owner` | User SID of the new owner of the object when ownership is transferred.
 || `acl_add` | List of added permissions, in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).
@@ -46,9 +52,9 @@ Schema operations:
 
 ## How to enable
 
-Audit log must be [enabled](audit-log.md#enabling-audit-log) on a cluster level.
+The audit logging must be [enabled](audit-log.md#enabling-audit-log) on the cluster level.
 
-Scheme operation logging does not require anything else.
+Schema operations logging does not require any additional configuration.
 
 ## Things to know
 
@@ -57,11 +63,12 @@ Scheme operation logging does not require anything else.
 [//]: # (TODO: `start_time` and `end_time` mark start and end time of the operation.)
 - Logging occurs when schemeshard accepts operation for an execution.
 
-- Request to create schema object could generate a series of schema operations and could result in a multiple audit log records (one for each operation). All such records will have the same `tx_id`. This is the case when the object path contain intermediate elements which are also need to be created (for example, if path `root/a` is not exist, then request to create table `root/a/table` will be performed by two sequential operations: `create root/a` and then `create root/a/table`).
+- A request to create a schema object could generate a series of schema operations and could result in multiple audit log records (one for each operation). All such records will have the same `tx_id`. This is the case when the object path contains intermediate elements which are also need to be created. For example, if path `root/a` does not exist, then a request to create table `root/a/table` will be performed by two sequential operations: `create root/a` and then `create root/a/table`).
 
-- If [authentication](../deploy/configuration/config#auth) on a cluster is disabled, requests will be logged, `subject` value will be `{none}`.
+- The log only captures requests that have passed [authentication](../deploy/configuration/config#auth) and authorization checks against the database. When authentication is disabled, requests will be logged with `{none}` as a value of the `subject`.
 
-## Record examples
+
+## Log record examples
 
 ```json
 {
@@ -71,7 +78,7 @@ Scheme operation logging does not require anything else.
     "database": "/root/db",
     "operation": "DROP TABLE",
     "tx_id": "845026768199165",
-    "paths": "[/root/db/table1  ]",
+    "paths": "[/root/db/table1]",
     "status": "SUCCESS",
     "detailed_status": "StatusAccepted"
 }

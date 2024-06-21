@@ -46,6 +46,7 @@ namespace NKikimr::NStorage {
         CurrentProposedStorageConfig.reset();
         const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
         TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+        ApplyConfigUpdateToDynamicNodes(true);
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {

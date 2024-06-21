@@ -1121,14 +1121,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             NUdf::TUnboxedValue tuple;
 
             UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
             UNIT_ASSERT(!iterator.Next(tuple));
 
         }

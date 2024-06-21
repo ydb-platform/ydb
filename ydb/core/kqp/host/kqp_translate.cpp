@@ -188,14 +188,14 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
 }
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, NYql::TIssues& issues) {
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         ui16 actualSyntaxVersion = 0;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
-        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, issues, nullptr, &actualSyntaxVersion, &stmtParseInfo);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
@@ -209,7 +209,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     }
 }
 
-TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution) {
+TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution, NYql::TIssues& issues) {
     if (!perStatementExecution) {
         return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
     }
@@ -220,7 +220,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
     }
 
     NYql::TExprContext ctx;
-    return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder);
+    return ParseStatements(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, issues);
 }
 
 } // namespace NKqp

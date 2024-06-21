@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
 
         auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvStatisticsScanResponse>(sender);
         auto& record = response->Get()->Record;
-        UNIT_ASSERT(record.GetStatus() == NKikimrTxDataShard::TEvStatisticsScanResponse::SUCCESS);
+        UNIT_ASSERT(record.GetStatus() == NKikimrStat::TEvStatisticsScanResponse::SUCCESS);
         UNIT_ASSERT(record.ColumnsSize() == 2);
 
         for (ui32 i = 0; i < 2; ++i) {

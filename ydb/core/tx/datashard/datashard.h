@@ -11,6 +11,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
+#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -647,7 +648,7 @@ struct TEvDataShard {
                 TString result;
                 TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    out << Record.GetError(i).GetKind() << " (" 
+                    out << Record.GetError(i).GetKind() << " ("
                         << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
                         << ") |";
                 }
@@ -1707,14 +1708,14 @@ struct TEvDataShard {
 
     struct TEvStatisticsScanRequest
         : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrTxDataShard::TEvStatisticsScanRequest,
+                          NKikimrStat::TEvStatisticsScanRequest,
                           EvStatisticsScanRequest>
     {
     };
 
     struct TEvStatisticsScanResponse
         : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrTxDataShard::TEvStatisticsScanResponse,
+                          NKikimrStat::TEvStatisticsScanResponse,
                           EvStatisticsScanResponse>
     {
     };

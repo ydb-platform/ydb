@@ -3204,7 +3204,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
-            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);            
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
             for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {

@@ -1,4 +1,5 @@
 import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/core/protos/data_events.proto";
 
 package NKikimrStat;
 
@@ -88,4 +89,31 @@ message TEvGetScanStatusResponse {
         IN_PROGRESS = 2;
     }
     optional EStatus Status = 1;
+}
+
+message TEvStatisticsScanRequest {
+    optional NKikimrDataEvents.TTableId TableId = 1;
+    optional bytes StartKey = 2;
+    repeated uint32 ColumnTags = 3;
+}
+
+message TEvStatisticsScanResponse {
+    message TStatistic {
+        optional uint32 Type = 1;
+        optional bytes Data = 2;
+    }
+    message TColumn {
+        optional uint32 Tag = 1;
+        repeated TStatistic Statistics = 2;
+    }
+    repeated TColumn Columns = 1;
+
+    enum EStatus {
+        SUCCESS = 1;
+        ABORTED = 2;
+        ERROR = 3;
+    }
+    optional EStatus Status = 2;
+
+    optional fixed64 ShardTabletId = 3;
 }

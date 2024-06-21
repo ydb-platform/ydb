@@ -63,23 +63,29 @@ protected:
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
     TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
-                                                  const TString& messageGroupId);
+                                                  const TString& messageGroupId,
+                                                  TMaybe<ui32> partitionId);
     TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
-                                                    const TString& messageGroupId);
+                                                    const TString& messageGroupId,
+                                                    TMaybe<ui32> partitionId);
 
     TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
-                                                const TString& consumerName);
+                                                const TString& consumerName,
+                                                TMaybe<ui32> partitionId);
     TTopicReadSessionPtr GetTopicReadSession(const TString& topicPath,
-                                             const TString& consumerName);
+                                             const TString& consumerName,
+                                             TMaybe<ui32> partitionId);
 
     void WriteToTopic(const TString& topicPath,
                       const TString& messageGroupId,
                       const TString& message,
-                      NTable::TTransaction* tx = nullptr);
+                      NTable::TTransaction* tx = nullptr,
+                      TMaybe<ui32> partitionId = Nothing());
     TVector<TString> ReadFromTopic(const TString& topicPath,
                                    const TString& consumerName,
                                    const TDuration& duration,
-                                   NTable::TTransaction* tx = nullptr);
+                                   NTable::TTransaction* tx = nullptr,
+                                   TMaybe<ui32> partitionId = Nothing());
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
     void WaitForSessionClose(const TString& topicPath,
@@ -476,25 +482,28 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
 }
 
 auto TFixture::CreateTopicWriteSession(const TString& topicPath,
-                                       const TString& messageGroupId) -> TTopicWriteSessionPtr
+                                       const TString& messageGroupId,
+                                       TMaybe<ui32> partitionId) -> TTopicWriteSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TWriteSessionSettings options;
     options.Path(topicPath);
     options.ProducerId(messageGroupId);
     options.MessageGroupId(messageGroupId);
+    options.PartitionId(partitionId);
     return client.CreateWriteSession(options);
 }
 
 auto TFixture::GetTopicWriteSession(const TString& topicPath,
-                                    const TString& messageGroupId) -> TTopicWriteSessionContext&
+                                    const TString& messageGroupId,
+                                    TMaybe<ui32> partitionId) -> TTopicWriteSessionContext&
 {
     std::pair<TString, TString> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
 
     if (i == TopicWriteSessions.end()) {
         TTopicWriteSessionContext context;
-        context.Session = CreateTopicWriteSession(topicPath, messageGroupId);
+        context.Session = CreateTopicWriteSession(topicPath, messageGroupId, partitionId);
 
         TopicWriteSessions.emplace(key, std::move(context));
 
@@ -504,23 +513,45 @@ auto TFixture::GetTopicWriteSession(const TString& topicPath,
     return i->second;
 }
 
+NTopic::TTopicReadSettings MakeTopicReadSettings(const TString& topicPath,
+                                                 TMaybe<ui32> partitionId)
+{
+    TTopicReadSettings options;
+    options.Path(topicPath);
+    if (partitionId.Defined()) {
+        options.AppendPartitionIds(*partitionId);
+    }
+    return options;
+}
+
+NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const TString& topicPath,
+                                                          const TString& consumerName,
+                                                          TMaybe<ui32> partitionId)
+{
+    NTopic::TReadSessionSettings options;
+    options.AppendTopics(MakeTopicReadSettings(topicPath, partitionId));
+    options.ConsumerName(consumerName);
+    return options;
+}
+
 auto TFixture::CreateTopicReadSession(const TString& topicPath,
-                                      const TString& consumerName) -> TTopicReadSessionPtr
+                                      const TString& consumerName,
+                                      TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
-    NTopic::TReadSessionSettings options;
-    options.AppendTopics(topicPath);
-    options.ConsumerName(consumerName);
-    return client.CreateReadSession(options);
+    return client.CreateReadSession(MakeTopicReadSessionSettings(topicPath,
+                                                                 consumerName,
+                                                                 partitionId));
 }
 
 auto TFixture::GetTopicReadSession(const TString& topicPath,
-                                   const TString& consumerName) -> TTopicReadSessionPtr
+                                   const TString& consumerName,
+                                   TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
 {
     TTopicReadSessionPtr session;
 
     if (auto i = TopicReadSessions.find(topicPath); i == TopicReadSessions.end()) {
-        session = CreateTopicReadSession(topicPath, consumerName);
+        session = CreateTopicReadSession(topicPath, consumerName, partitionId);
         auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(session);
         event.Confirm();
         TopicReadSessions.emplace(topicPath, session);
@@ -583,10 +614,10 @@ void TFixture::CloseTopicWriteSession(const TString& topicPath,
 void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& messageGroupId,
                             const TString& message,
-                            NTable::TTransaction* tx)
+                            NTable::TTransaction* tx,
+                            TMaybe<ui32> partitionId)
 {
-    TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId);
-
+    TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId, partitionId);
     context.WaitForContinuationToken();
     UNIT_ASSERT(context.ContinuationToken.Defined());
     context.Write(message, tx);
@@ -595,14 +626,15 @@ void TFixture::WriteToTopic(const TString& topicPath,
 TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
                                          const TString& consumerName,
                                          const TDuration& duration,
-                                         NTable::TTransaction* tx)
+                                         NTable::TTransaction* tx,
+                                         TMaybe<ui32> partitionId)
 {
     TVector<TString> messages;
 
     TInstant end = TInstant::Now() + duration;
     TDuration remain = duration;
 
-    auto session = GetTopicReadSession(topicPath, consumerName);
+    auto session = GetTopicReadSession(topicPath, consumerName, partitionId);
 
     while (TInstant::Now() < end) {
         if (!session->WaitEvent().Wait(remain)) {
@@ -1611,6 +1643,35 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
     CommitTx(tx, EStatus::SUCCESS);
 
     messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
+{
+    const ui32 PARTITION_0 = 0;
+    const ui32 PARTITION_1 = 1;
+
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", nullptr, PARTITION_0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", nullptr, PARTITION_0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", nullptr, PARTITION_0);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, PARTITION_0);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+
+    for (const auto& m : messages) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, m, &tx, PARTITION_1);
+    }
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, PARTITION_1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
 }
 

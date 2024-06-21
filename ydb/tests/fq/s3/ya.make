@@ -32,6 +32,7 @@ TEST_SRCS(
     test_public_metrics.py
     test_push_down.py
     test_s3.py
+    test_streaming_join.py
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
@@ -44,7 +45,9 @@ PY_SRCS(
     s3_helpers.py
 )
 
-DATA(arcadia/ydb/tests/fq/s3)
+DATA(
+    arcadia/ydb/tests/fq/s3
+)
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     TIMEOUT(3600)

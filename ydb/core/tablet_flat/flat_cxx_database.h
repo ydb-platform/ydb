@@ -127,8 +127,8 @@ public:
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Int32 
-                  || Type() == NScheme::NTypeIds::Date32
+        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+                  || Type() == NScheme::NTypeIds::Date32)
                  && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;

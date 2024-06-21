@@ -102,7 +102,7 @@ repositories {
 
 }
 
-val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}/.hic_sunt_dracones{%- endif -%}"
 
 {%  if mainClass -%}
 application {

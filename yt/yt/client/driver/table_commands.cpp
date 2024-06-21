@@ -804,6 +804,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.ExecutionBackend;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
+        "versioned_read_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

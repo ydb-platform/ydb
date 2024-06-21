@@ -130,6 +130,26 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Calls #callback at the end of execution slice if it was longer than #threshold.
+class TFiberSliceTimer
+    : private NConcurrency::TContextSwitchGuard
+{
+public:
+    TFiberSliceTimer(TCpuDuration threshold, std::function<void(TCpuDuration)> callback);
+    ~TFiberSliceTimer();
+
+private:
+    const TCpuDuration Threshold_;
+    const std::function<void(TCpuDuration)> Callback_;
+
+    TCpuInstant LastInTime_;
+
+    void OnIn() noexcept;
+    void OnOut() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NProfiling
 
 #define TIMING_INL_H_

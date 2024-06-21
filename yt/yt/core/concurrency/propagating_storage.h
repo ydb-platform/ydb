@@ -67,6 +67,9 @@ public:
     template <class T>
     std::optional<T> Remove();
 
+    void RecordLocation(TSourceLocation loc);
+    void PrintModificationLocationsToStderr();
+
     DECLARE_SIGNAL(void(), OnAfterInstall);
     DECLARE_SIGNAL(void(), OnBeforeUninstall);
 
@@ -149,7 +152,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc);
-TSourceLocation SwitchPropagatingStorageModifyLocation(TSourceLocation loc);
 
 void PrintLocationToStderr();
 

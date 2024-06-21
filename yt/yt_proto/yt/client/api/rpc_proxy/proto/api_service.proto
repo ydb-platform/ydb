@@ -632,6 +632,7 @@ message TReqSelectRows
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
+    optional bytes versioned_read_options = 24; // YSON
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }

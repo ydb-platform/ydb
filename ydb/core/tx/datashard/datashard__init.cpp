@@ -707,6 +707,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     bool precharged = true;
     bool updated = false;
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
+        // txc.
+        // txc.DB.GetScheme().GetTableInfo(Schema::Sys::TableId)->PreloadData = true;
         if (!db.Table<Schema::Sys>().Precharge()) {
             precharged = false;
         }

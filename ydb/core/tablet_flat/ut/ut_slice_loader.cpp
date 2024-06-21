@@ -142,7 +142,7 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        TKeysEnv env(part.Get(), new TCache(pageCollection));
+        TLoaderEnv env(part.Get(), new TCache(pageCollection));
         TKeysLoader loader(part.Get(), &env);
 
         while (!(result.Run = loader.Do(screen))) {

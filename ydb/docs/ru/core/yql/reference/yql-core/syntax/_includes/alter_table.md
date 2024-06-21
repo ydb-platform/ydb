@@ -38,7 +38,11 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table#secondary_index)
 
-Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index#add) {{ ydb-short-name }} CLI.
+{% if backend_name == "YDB" %}
+
+Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
+
+{% endif %}
 
 ### Изменение параметров индекса {#alter-index}
 
@@ -46,7 +50,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 {% note info %}
 
-В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table#secondary_index).
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table.md#secondary_index).
 
 {% endnote %}
 
@@ -92,7 +96,11 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-Также удалить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index#drop) {{ ydb-short-name }} CLI.
+{% if backend_name == "YDB" %}
+
+Также удалить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) {{ ydb-short-name }} CLI.
+
+{% endif %}
 
 ### Переименование индекса {#rename-index}
 

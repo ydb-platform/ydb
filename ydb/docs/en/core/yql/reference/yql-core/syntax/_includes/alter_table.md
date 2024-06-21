@@ -38,7 +38,11 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 You can specify any index parameters from the [`CREATE TABLE`](../create_table#secondary_index) command.
 
-You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index#add) command.
+{% if backend_name == "YDB" %}
+
+You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
+
+{% endif %}
 
 ### Altering an index {#alter-index}
 
@@ -46,13 +50,13 @@ Indexes have type-specific parameters that can be tuned. Global indexes, whether
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table#secondary_index) clauses.
+Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table.md#secondary_index) statements.
 
 {% endnote %}
 
 ```sql
-ALTER TABLE table_name ALTER INDEX index_name SET partitioning_setting_name value;
-ALTER TABLE table_name ALTER INDEX index_name SET (partitioning_setting_name_1 = value_1, ...);
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
 
 * `table_name`: The name of the table whose index is to be altered.
@@ -72,11 +76,13 @@ These settings cannot be [reset](#additional-reset).
 
 {% endnote %}
 
-* `value`: The new value for the setting. Possible values include:
-    * `ENABLED` or `DISABLED` for `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
-    * integer of `Uint64` type for the other settings
+* `<value>`: The new value for the setting. Possible values include:
+    * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
+    * An integer of `Uint64` type for the other settings
 
-The code in the following example enables automatic partitioning by load for the index named `title_index` and sets the minimal partition count to 5:
+#### Example
+
+The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -92,7 +98,11 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-You can also remove a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index#drop) command.
+{% if backend_name == "YDB" %}
+
+You can also remove a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) command.
+
+{% endif %}
 
 ### Renaming an index {#rename-index}
 

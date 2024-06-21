@@ -18,30 +18,33 @@ class TestS3(TestYdsBase):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_partitioned_by(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100
 Apple,2,22
 Pear,15,33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='hive_format/year=2022/month=3/day=5/fruits.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='hive_format/year=2022/month=3/day=5/fruits.txt', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='fbucket',
+            Key='hive_format/year=2022/month=3/day=5/fruits.csv',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='fbucket',
+            Key='hive_format/year=2022/month=3/day=5/fruits.txt',
+            ContentType='text/plain',
+        )
 
         kikimr.control_plane.wait_bootstrap(1)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
@@ -53,15 +56,15 @@ Pear,15,33'''
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path="hive_format",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
-                                             partitioned_by=["year", "month", "day"],
-                                             format_setting={
-                                                 "file_pattern": "*t?.csv"
-                                             })
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="hive_format",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
+            partitioned_by=["year", "month", "day"],
+            format_setting={"file_pattern": "*t?.csv"},
+        )
 
         sql = f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -114,22 +117,15 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_projection(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
@@ -148,22 +144,24 @@ Banana,3,100'''
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path="/",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
-                                             projection={
-                                                 "projection.enabled": "true",
-                                                 "projection.year.type" : "enum",
-                                                 "projection.year.values" : "2022",
-                                                 "projection.month.type" : "enum",
-                                                 "projection.month.values" : "3",
-                                                 "projection.day.type" : "enum",
-                                                 "projection.day.values" : "5,6,7,8",
-                                                 "storage.location.template": "${year}/${month}/${day}"
-                                             },
-                                             partitioned_by=["year", "month", "day"])
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
+            projection={
+                "projection.enabled": "true",
+                "projection.year.type": "enum",
+                "projection.year.values": "2022",
+                "projection.month.type": "enum",
+                "projection.month.values": "3",
+                "projection.day.type": "enum",
+                "projection.day.values": "5,6,7,8",
+                "storage.location.template": "${year}/${month}/${day}",
+            },
+            partitioned_by=["year", "month", "day"],
+        )
 
         sql = f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -202,35 +200,58 @@ Banana,3,100'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_pruning(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("pbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='pbucket', Key='hive_format/year=2022/month=3/day=5/fruits.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits, Bucket='pbucket', Key='hive_format/year=2022/month=3/day=5/fruits.txt', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='pbucket',
+            Key='hive_format/year=2022/month=3/day=5/fruits.csv',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='pbucket',
+            Key='hive_format/year=2022/month=3/day=5/fruits.txt',
+            ContentType='text/plain',
+        )
         fruits2 = R'''Fruit,Price,Duration
 Apple,2,22'''
-        s3_client.put_object(Body=fruits2, Bucket='pbucket', Key='hive_format/year=2021/month=3/day=5/fruits2.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits2, Bucket='pbucket', Key='hive_format/year=2021/month=3/day=5/fruits2.txt', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits2,
+            Bucket='pbucket',
+            Key='hive_format/year=2021/month=3/day=5/fruits2.csv',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body=fruits2,
+            Bucket='pbucket',
+            Key='hive_format/year=2021/month=3/day=5/fruits2.txt',
+            ContentType='text/plain',
+        )
         fruits3 = R'''invalid data'''
-        s3_client.put_object(Body=fruits3, Bucket='pbucket', Key='hive_format/year=2020/month=3/day=5/fruits3.csv', ContentType='text/plain')
-        s3_client.put_object(Body=fruits3, Bucket='pbucket', Key='hive_format/year=2020/month=3/day=5/fruits3.txt', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits3,
+            Bucket='pbucket',
+            Key='hive_format/year=2020/month=3/day=5/fruits3.csv',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body=fruits3,
+            Bucket='pbucket',
+            Key='hive_format/year=2020/month=3/day=5/fruits3.txt',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "pbucket")
 
@@ -241,15 +262,15 @@ Apple,2,22'''
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path="hive_format",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
-                                             partitioned_by=["year", "month", "day"],
-                                             format_setting={
-                                                 "file_pattern": "*.csv"
-                                             })
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="hive_format",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
+            partitioned_by=["year", "month", "day"],
+            format_setting={"file_pattern": "*.csv"},
+        )
 
         sql = f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -302,20 +323,14 @@ Apple,2,22'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_validation(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
@@ -335,39 +350,31 @@ Pear,15,33'''
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="hive_format",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
-                                                                projection={
-                                                                    "projection.enab": "true",
-                                                                    "storage.location.template": "/${year}/${month}/${day}/"
-                                                                },
-                                                                partitioned_by=["year", "month", "day"],
-                                                                check_issues=False)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="hive_format",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[yearType, monthType, dayType, fruitType, priceType, intervalType],
+            projection={"projection.enab": "true", "storage.location.template": "/${year}/${month}/${day}/"},
+            partitioned_by=["year", "month", "day"],
+            check_issues=False,
+        )
         assert "Unknown key projection.enab" in str(binding_response.issues)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_no_schema_columns_except_partitioning_ones(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("json_bucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         json_body = "{}"
@@ -377,9 +384,11 @@ Pear,15,33'''
         storage_connection_name = unique_prefix + "json_bucket"
         client.create_storage_connection(storage_connection_name, "json_bucket")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection =
             @@
             {
@@ -399,7 +408,8 @@ Pear,15,33'''
                 "storage.location.template" : "${year}/${month}"
             }
             @@;
-            ''' + fR'''
+            '''
+            + fR'''
             SELECT
                 *
             FROM
@@ -416,6 +426,7 @@ Pear,15,33'''
                 projection=$projection
             )
         '''
+        )
 
         query_id = client.create_query("simple", sql).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -429,27 +440,22 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_projection_date(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection_date")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_projection_date', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits, Bucket='test_projection_date', Key='2022-03-05/fruits.csv', ContentType='text/plain'
+        )
         kikimr.control_plane.wait_bootstrap(1)
         connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "test_projection_date")
 
@@ -458,21 +464,23 @@ Banana,3,100'''
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
         storage_binding_name = unique_prefix + "my_binding"
-        client.create_object_storage_binding(name=storage_binding_name,
-                                             path="/",
-                                             format="csv_with_names",
-                                             connection_id=connection_response.result.connection_id,
-                                             columns=[dt, fruitType, priceType, intervalType],
-                                             projection={
-                                                 "projection.enabled": "true",
-                                                 "projection.dt.type" : "date",
-                                                 "projection.dt.min" : "2022-03-05",
-                                                 "projection.dt.max" : "2022-03-05",
-                                                 "projection.dt.format" : "%F",
-                                                 "projection.dt.unit" : "YEARS",
-                                                 "storage.location.template": "${dt}"
-                                             },
-                                             partitioned_by=["dt"])
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[dt, fruitType, priceType, intervalType],
+            projection={
+                "projection.enabled": "true",
+                "projection.dt.type": "date",
+                "projection.dt.min": "2022-03-05",
+                "projection.dt.max": "2022-03-05",
+                "projection.dt.format": "%F",
+                "projection.dt.unit": "YEARS",
+                "storage.location.template": "${dt}",
+            },
+            partitioned_by=["dt"],
+        )
 
         sql = f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -506,64 +514,58 @@ Banana,3,100'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_projection_validate_columns(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection_validate_columns")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_projection_validate_columns', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_projection_validate_columns',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "test_projection_validate_columns")
+        connection_response = client.create_storage_connection(
+            unique_prefix + "fruitbucket", "test_projection_validate_columns"
+        )
 
         dt = ydb.Column(name="dt", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         intervalType = ydb.Column(name="Duration", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="/",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[dt, fruitType, priceType, intervalType],
-                                                                projection={
-                                                                    "projection.enabled": "true",
-                                                                    "storage.location.template": "${dt}"
-                                                                },
-                                                                partitioned_by=["dt"], check_issues=False)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[dt, fruitType, priceType, intervalType],
+            projection={"projection.enabled": "true", "storage.location.template": "${dt}"},
+            partitioned_by=["dt"],
+            check_issues=False,
+        )
         assert "Projection column named dt does not exist for template ${dt}/" in str(binding_response.issues)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_no_paritioning_columns(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("logs2")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         json_body = '''
@@ -593,16 +595,22 @@ Banana,3,100'''
             "message":"PrivateGetTask - Owner: 567b6222-32b12b4a-5935e5fb-d937c12b376053, Host: yq-red-alpha-22, Tenant: root-alpha, Got CP::GetTask Response"
         }
         '''
-        s3_client.put_object(Body=json_body, Bucket='logs2', Key='logs/year=2023/month=01/day=16/obj1.json', ContentType='text/json')
-        s3_client.put_object(Body=json_body, Bucket='logs2', Key='logs/year=2023/month=01/day=16/obj2.json', ContentType='text/json')
+        s3_client.put_object(
+            Body=json_body, Bucket='logs2', Key='logs/year=2023/month=01/day=16/obj1.json', ContentType='text/json'
+        )
+        s3_client.put_object(
+            Body=json_body, Bucket='logs2', Key='logs/year=2023/month=01/day=16/obj2.json', ContentType='text/json'
+        )
 
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "logs2"
         client.create_storage_connection(storage_connection_name, "logs2")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection =
             @@ {
                 "projection.enabled" : "true",
@@ -615,7 +623,8 @@ Banana,3,100'''
                 "projection.date.unit" : "DAYS"
             }
             @@;
-            ''' + fR'''
+            '''
+            + fR'''
             SELECT
                 count(message)
             FROM
@@ -638,6 +647,7 @@ Banana,3,100'''
                 projection=$projection)
             LIMIT 10;
         '''
+        )
 
         query_id = client.create_query("simple", sql).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -655,52 +665,58 @@ Banana,3,100'''
         assert result_set.rows[0].items[0].uint64_value == 4
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, "year Int32 NOT NULL", True),
-        ({"folder_id": "my_folder2"}, "year Uint32 NOT NULL", True),
-        ({"folder_id": "my_folder3"}, "year Uint64 NOT NULL", True),
-        ({"folder_id": "my_folder4"}, "year Date NOT NULL", False),
-        ({"folder_id": "my_folder5"}, "year String NOT NULL", True),
-        ({"folder_id": "my_folder6"}, "year String", False),
-        ({"folder_id": "my_folder7"}, "year Utf8 NOT NULL", True),
-        ({"folder_id": "my_folder8"}, "year Utf8", False),
-        ({"folder_id": "my_folder9"}, "year Int32", False),
-        ({"folder_id": "my_folder10"}, "year Uint32", False),
-        ({"folder_id": "my_folder11"}, "year Int64 NOT NULL", True),
-        ({"folder_id": "my_folder12"}, "year Int64", False),
-        ({"folder_id": "my_folder13"}, "year Uint64", False),
-        ({"folder_id": "my_folder14"}, "year Date", False)
-    ], indirect=["client"])
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, "year Int32 NOT NULL", True),
+            ({"folder_id": "my_folder2"}, "year Uint32 NOT NULL", True),
+            ({"folder_id": "my_folder3"}, "year Uint64 NOT NULL", True),
+            ({"folder_id": "my_folder4"}, "year Date NOT NULL", False),
+            ({"folder_id": "my_folder5"}, "year String NOT NULL", True),
+            ({"folder_id": "my_folder6"}, "year String", False),
+            ({"folder_id": "my_folder7"}, "year Utf8 NOT NULL", True),
+            ({"folder_id": "my_folder8"}, "year Utf8", False),
+            ({"folder_id": "my_folder9"}, "year Int32", False),
+            ({"folder_id": "my_folder10"}, "year Uint32", False),
+            ({"folder_id": "my_folder11"}, "year Int64 NOT NULL", True),
+            ({"folder_id": "my_folder12"}, "year Int64", False),
+            ({"folder_id": "my_folder13"}, "year Uint64", False),
+            ({"folder_id": "my_folder14"}, "year Date", False),
+        ],
+        indirect=["client"],
+    )
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
-    def test_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix):
-
+    def test_projection_integer_type_validation(
+        self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix
+    ):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection_integer_type_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_projection_integer_type_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_projection_integer_type_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "test_projection_integer_type_validation")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection =
             @@
             {
@@ -714,7 +730,8 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + f'''
+            '''
+            + f'''
             SELECT *
             FROM `{storage_connection_name}`.`/` WITH
             (
@@ -728,6 +745,7 @@ Banana,3,100'''
                 projection=$projection
             )
             '''
+        )
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -744,55 +762,63 @@ Banana,3,100'''
             client.wait_query_status(query_id, fq.QueryMeta.FAILED)
             describe_result = client.describe_query(query_id).result
             logging.info("AST: {}".format(describe_result.query.ast.data))
-            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(describe_result.query.issue)
+            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(
+                describe_result.query.issue
+            )
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, "year Int32 NOT NULL", False),
-        ({"folder_id": "my_folder2"}, "year Uint32 NOT NULL", False),
-        ({"folder_id": "my_folder3"}, "year Uint64 NOT NULL", False),
-        ({"folder_id": "my_folder4"}, "year Date NOT NULL", False),
-        ({"folder_id": "my_folder5"}, "year Utf8 NOT NULL", False),
-        ({"folder_id": "my_folder6"}, "year Int64 NOT NULL", False),
-        ({"folder_id": "my_folder1"}, "year Int32", False),
-        ({"folder_id": "my_folder2"}, "year Uint32", False),
-        ({"folder_id": "my_folder3"}, "year Int64", False),
-        ({"folder_id": "my_folder4"}, "year Uint64", False),
-        ({"folder_id": "my_folder6"}, "year String NOT NULL", True),
-        ({"folder_id": "my_folder7"}, "year String", False),
-        ({"folder_id": "my_folder8"}, "year Utf8", False),
-        ({"folder_id": "my_folder9"}, "year Date", False),
-    ], indirect=["client"])
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, "year Int32 NOT NULL", False),
+            ({"folder_id": "my_folder2"}, "year Uint32 NOT NULL", False),
+            ({"folder_id": "my_folder3"}, "year Uint64 NOT NULL", False),
+            ({"folder_id": "my_folder4"}, "year Date NOT NULL", False),
+            ({"folder_id": "my_folder5"}, "year Utf8 NOT NULL", False),
+            ({"folder_id": "my_folder6"}, "year Int64 NOT NULL", False),
+            ({"folder_id": "my_folder1"}, "year Int32", False),
+            ({"folder_id": "my_folder2"}, "year Uint32", False),
+            ({"folder_id": "my_folder3"}, "year Int64", False),
+            ({"folder_id": "my_folder4"}, "year Uint64", False),
+            ({"folder_id": "my_folder6"}, "year String NOT NULL", True),
+            ({"folder_id": "my_folder7"}, "year String", False),
+            ({"folder_id": "my_folder8"}, "year Utf8", False),
+            ({"folder_id": "my_folder9"}, "year Date", False),
+        ],
+        indirect=["client"],
+    )
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
-    def test_projection_enum_type_invalid_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix):
-
+    def test_projection_enum_type_invalid_validation(
+        self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix
+    ):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection_enum_type_invalid_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_projection_enum_type_invalid_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_projection_enum_type_invalid_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "test_projection_enum_type_invalid_validation")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection =
             @@
             {
@@ -804,7 +830,8 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + f'''
+            '''
+            + f'''
             SELECT *
             FROM `{storage_connection_name}`.`/` WITH
             (
@@ -818,6 +845,7 @@ Banana,3,100'''
                 projection=$projection
             )
             '''
+        )
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -834,57 +862,65 @@ Banana,3,100'''
             client.wait_query_status(query_id, fq.QueryMeta.FAILED)
             describe_result = client.describe_query(query_id).result
             logging.info("AST: {}".format(describe_result.query.ast.data))
-            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(describe_result.query.issue)
+            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(
+                describe_result.query.issue
+            )
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, "year Int32", False),
-        ({"folder_id": "my_folder2"}, "year Int32 NOT NULL", False),
-        ({"folder_id": "my_folder3"}, "year Uint32", False),
-        ({"folder_id": "my_folder4"}, "year Uint32 NOT NULL", True),
-        ({"folder_id": "my_folder5"}, "year Int64", False),
-        ({"folder_id": "my_folder6"}, "year Int64 NOT NULL", False),
-        ({"folder_id": "my_folder7"}, "year Uint64", False),
-        ({"folder_id": "my_folder8"}, "year Uint64 NOT NULL", False),
-        ({"folder_id": "my_folder9"}, "year String NOT NULL", True),
-        ({"folder_id": "my_folder10"}, "year String", False),
-        ({"folder_id": "my_folder11"}, "year Utf8", False),
-        ({"folder_id": "my_folder12"}, "year Utf8 NOT NULL", True),
-        ({"folder_id": "my_folder13"}, "year Date", False),
-        ({"folder_id": "my_folder14"}, "year Date NOT NULL", True),
-        ({"folder_id": "my_folder15"}, "year Datetime", False),
-        ({"folder_id": "my_folder16"}, "year Datetime NOT NULL", True),
-    ], indirect=["client"])
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, "year Int32", False),
+            ({"folder_id": "my_folder2"}, "year Int32 NOT NULL", False),
+            ({"folder_id": "my_folder3"}, "year Uint32", False),
+            ({"folder_id": "my_folder4"}, "year Uint32 NOT NULL", True),
+            ({"folder_id": "my_folder5"}, "year Int64", False),
+            ({"folder_id": "my_folder6"}, "year Int64 NOT NULL", False),
+            ({"folder_id": "my_folder7"}, "year Uint64", False),
+            ({"folder_id": "my_folder8"}, "year Uint64 NOT NULL", False),
+            ({"folder_id": "my_folder9"}, "year String NOT NULL", True),
+            ({"folder_id": "my_folder10"}, "year String", False),
+            ({"folder_id": "my_folder11"}, "year Utf8", False),
+            ({"folder_id": "my_folder12"}, "year Utf8 NOT NULL", True),
+            ({"folder_id": "my_folder13"}, "year Date", False),
+            ({"folder_id": "my_folder14"}, "year Date NOT NULL", True),
+            ({"folder_id": "my_folder15"}, "year Datetime", False),
+            ({"folder_id": "my_folder16"}, "year Datetime NOT NULL", True),
+        ],
+        indirect=["client"],
+    )
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
-    def test_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix):
-
+    def test_projection_date_type_validation(
+        self, kikimr, s3, client, column_type, is_correct, runtime_listing, unique_prefix
+    ):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_projection_date_type_invalid_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_projection_date_type_invalid_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_projection_date_type_invalid_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "test_projection_date_type_invalid_validation")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection =
             @@
             {
@@ -900,7 +936,8 @@ Banana,3,100'''
                 "storage.location.template" : "${year}-03-05"
             }
             @@;
-            ''' + f'''
+            '''
+            + f'''
             SELECT *
             FROM `{storage_connection_name}`.`/` WITH
             (
@@ -914,6 +951,7 @@ Banana,3,100'''
                 projection=$projection
             )
             '''
+        )
 
         query_id = client.create_query("simple", sql).result.query_id
         if is_correct:
@@ -930,186 +968,302 @@ Banana,3,100'''
             client.wait_query_status(query_id, fq.QueryMeta.FAILED)
             describe_result = client.describe_query(query_id).result
             logging.info("AST: {}".format(describe_result.query.ast.data))
-            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(describe_result.query.issue)
+            assert "Projection column \\\"year\\\" has invalid type" in str(describe_result.query.issue), str(
+                describe_result.query.issue
+            )
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), True),
-        ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
-        ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), True),
-        ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
-        ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), True),
-        ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-        ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
-        ({"folder_id": "my_folder8"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
-        ({"folder_id": "my_folder9"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
-        ({"folder_id": "my_folder10"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
-        ({"folder_id": "my_folder11"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
-        ({"folder_id": "my_folder12"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
-        ({"folder_id": "my_folder13"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
-        ({"folder_id": "my_folder14"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
-    ], indirect=["client"])
-    def test_binding_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct, unique_prefix):
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), True),
+            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
+            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), True),
+            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
+            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), True),
+            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
+            (
+                {"folder_id": "my_folder8"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder9"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder10"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder11"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder12"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder13"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder14"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
+                False,
+            ),
+        ],
+        indirect=["client"],
+    )
+    def test_binding_projection_integer_type_validation(
+        self, kikimr, s3, client, column_type, is_correct, unique_prefix
+    ):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_binding_projection_integer_type_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_binding_projection_integer_type_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_binding_projection_integer_type_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "test_binding_projection_integer_type_validation")
+        connection_response = client.create_storage_connection(
+            unique_prefix + "fruitbucket", "test_binding_projection_integer_type_validation"
+        )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="/",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[year, fruitType],
-                                                                projection={
-                                                                    "projection.enabled": "true",
-                                                                    "projection.year.type" : "integer",
-                                                                    "projection.year.min" : "2022",
-                                                                    "projection.year.max" : "2022",
-                                                                    "storage.location.template": "${year}-03-05"
-                                                                },
-                                                                partitioned_by=["year"], check_issues=is_correct)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[year, fruitType],
+            projection={
+                "projection.enabled": "true",
+                "projection.year.type": "integer",
+                "projection.year.min": "2022",
+                "projection.year.max": "2022",
+                "storage.location.template": "${year}-03-05",
+            },
+            partitioned_by=["year"],
+            check_issues=is_correct,
+        )
         if not is_correct:
             assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
-        ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), False),
-        ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
-        ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
-        ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
-        ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-        ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), False),
-        ({"folder_id": "my_folder8"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
-        ({"folder_id": "my_folder9"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
-        ({"folder_id": "my_folder10"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
-        ({"folder_id": "my_folder11"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
-        ({"folder_id": "my_folder12"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
-        ({"folder_id": "my_folder13"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
-        ({"folder_id": "my_folder14"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
-    ], indirect=["client"])
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
+            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), False),
+            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
+            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), False),
+            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
+            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), False),
+            (
+                {"folder_id": "my_folder8"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder9"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder10"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder11"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder12"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder13"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder14"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
+                False,
+            ),
+        ],
+        indirect=["client"],
+    )
     def test_binding_projection_enum_type_validation(self, kikimr, s3, client, column_type, is_correct, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_binding_projection_enum_type_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_binding_projection_enum_type_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_binding_projection_enum_type_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "test_binding_projection_enum_type_validation")
+        connection_response = client.create_storage_connection(
+            unique_prefix + "fruitbucket", "test_binding_projection_enum_type_validation"
+        )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="/",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[year, fruitType],
-                                                                projection={
-                                                                    "projection.enabled": "true",
-                                                                    "projection.year.type" : "enum",
-                                                                    "projection.year.values" : "2022",
-                                                                    "storage.location.template": "${year}-03-05"
-                                                                },
-                                                                partitioned_by=["year"], check_issues=is_correct)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[year, fruitType],
+            projection={
+                "projection.enabled": "true",
+                "projection.year.type": "enum",
+                "projection.year.values": "2022",
+                "storage.location.template": "${year}-03-05",
+            },
+            partitioned_by=["year"],
+            check_issues=is_correct,
+        )
         if not is_correct:
             assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
 
     @yq_all
-    @pytest.mark.parametrize("client, column_type, is_correct", [
-        ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
-        ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
-        ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
-        ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), True),
-        ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME), True),
-        ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
-        ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
-        ({"folder_id": "my_folder8"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
-        ({"folder_id": "my_folder9"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))), False),
-        ({"folder_id": "my_folder10"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))), False),
-        ({"folder_id": "my_folder11"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))), False),
-        ({"folder_id": "my_folder12"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))), False),
-        ({"folder_id": "my_folder13"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))), False),
-        ({"folder_id": "my_folder14"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))), False),
-        ({"folder_id": "my_folder15"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))), False),
-        ({"folder_id": "my_folder16"}, ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))), False),
-    ], indirect=["client"])
+    @pytest.mark.parametrize(
+        "client, column_type, is_correct",
+        [
+            ({"folder_id": "my_folder1"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32), False),
+            ({"folder_id": "my_folder2"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32), True),
+            ({"folder_id": "my_folder3"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64), False),
+            ({"folder_id": "my_folder4"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE), True),
+            ({"folder_id": "my_folder5"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME), True),
+            ({"folder_id": "my_folder6"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64), False),
+            ({"folder_id": "my_folder7"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING), True),
+            ({"folder_id": "my_folder8"}, ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8), True),
+            (
+                {"folder_id": "my_folder9"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder10"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT32))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder11"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UINT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder12"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder13"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATETIME))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder14"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT64))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder15"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))),
+                False,
+            ),
+            (
+                {"folder_id": "my_folder16"},
+                ydb.Type(optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))),
+                False,
+            ),
+        ],
+        indirect=["client"],
+    )
     def test_binding_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("test_binding_projection_date_type_validation")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Duration
 Banana,3,100'''
-        s3_client.put_object(Body=fruits, Bucket='test_binding_projection_date_type_validation', Key='2022-03-05/fruits.csv', ContentType='text/plain')
+        s3_client.put_object(
+            Body=fruits,
+            Bucket='test_binding_projection_date_type_validation',
+            Key='2022-03-05/fruits.csv',
+            ContentType='text/plain',
+        )
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "test_binding_projection_date_type_validation")
+        connection_response = client.create_storage_connection(
+            unique_prefix + "fruitbucket", "test_binding_projection_date_type_validation"
+        )
 
         year = ydb.Column(name="year", type=column_type)
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
-                                                                path="/",
-                                                                format="csv_with_names",
-                                                                connection_id=connection_response.result.connection_id,
-                                                                columns=[year, fruitType],
-                                                                projection={
-                                                                    "projection.enabled": "true",
-                                                                    "projection.year.type" : "date",
-                                                                    "projection.year.min" : "2022-01-01",
-                                                                    "projection.year.max" : "2022-01-01",
-                                                                    "projection.year.format" : "%Y",
-                                                                    "projection.year.interval" : "1",
-                                                                    "projection.year.unit" : "DAYS",
-                                                                    "storage.location.template": "${year}-03-05"
-                                                                },
-                                                                partitioned_by=["year"], check_issues=is_correct)
+        binding_response = client.create_object_storage_binding(
+            name=unique_prefix + "my_binding",
+            path="/",
+            format="csv_with_names",
+            connection_id=connection_response.result.connection_id,
+            columns=[year, fruitType],
+            projection={
+                "projection.enabled": "true",
+                "projection.year.type": "date",
+                "projection.year.min": "2022-01-01",
+                "projection.year.max": "2022-01-01",
+                "projection.year.format": "%Y",
+                "projection.year.interval": "1",
+                "projection.year.unit": "DAYS",
+                "storage.location.template": "${year}-03-05",
+            },
+            partitioned_by=["year"],
+            check_issues=is_correct,
+        )
         if not is_correct:
             assert "Column \\\"year\\\" from projection does not support" in str(binding_response.issues)
 
@@ -1117,36 +1271,33 @@ Banana,3,100'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_raw_format(self, kikimr, s3, client, runtime_listing, yq_version, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("raw_bucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        s3_client.put_object(Body='text',
-                             Bucket='raw_bucket',
-                             Key='raw_format/year=2023/month=01/day=14/file1.txt',
-                             ContentType='text/plain')
+        s3_client.put_object(
+            Body='text',
+            Bucket='raw_bucket',
+            Key='raw_format/year=2023/month=01/day=14/file1.txt',
+            ContentType='text/plain',
+        )
 
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "rawbucket"
         client.create_storage_connection(storage_connection_name, "raw_bucket")
 
-        sql = f'''
+        sql = (
+            f'''
             pragma s3.UseRuntimeListing="{runtime_listing}";
-            ''' + R'''
+            '''
+            + R'''
             $projection = @@ {
                 "projection.enabled" : "true",
                 "storage.location.template" : "/${timestamp}",
@@ -1158,7 +1309,8 @@ Banana,3,100'''
                 "projection.timestamp.unit" : "DAYS"
             }
             @@;
-            ''' + fR'''
+            '''
+            + fR'''
             SELECT
                 data,
                 timestamp
@@ -1175,6 +1327,7 @@ Banana,3,100'''
                 projection=$projection
             )
         '''
+        )
 
         # temporary fix for dynamic listing
         if yq_version == "v1":
@@ -1203,12 +1356,8 @@ Banana,3,100'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     def test_parquet(self, kikimr, s3, client, runtime_listing, unique_prefix):
-
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("parquets")

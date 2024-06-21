@@ -8,7 +8,6 @@
 #include "schemeshard_schema.h"
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
-#include "ydb/core/util/pb.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -27,6 +26,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
+#include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
@@ -34,9 +34,9 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>

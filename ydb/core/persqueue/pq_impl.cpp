@@ -3123,6 +3123,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     case NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET:
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::ERROR,
+                                    "missing TxBody",
                                     ctx);
         break;
     }
@@ -3172,9 +3174,11 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (TabletState != NKikimrPQ::ENormal) {
-        PQ_LOG_D("tablet state " << NKikimrPQ::ETabletState_Name(TabletState));
+        PQ_LOG_D("invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::ERROR,
+                                    "invalid PQ tablet state",
                                     ctx);
         return;
     }
@@ -3184,26 +3188,32 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     //
 
     if (txBody.OperationsSize() <= 0) {
-        PQ_LOG_D("empty txBody.Operations");
+        PQ_LOG_D("empty list of operations");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "empty list of operations",
                                     ctx);
         return;
     }
 
     if (!CheckTxWriteOperations(txBody)) {
-        PQ_LOG_D("invalid WriteId");
+        PQ_LOG_D("invalid WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "invalid WriteId",
                                     ctx);
         return;
     }
 
     TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
     if (!partitionId.Defined()) {
-        PQ_LOG_D("invalid partition");
+        PQ_LOG_D("unknown partition for WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::INTERNAL,
+                                    "unknown supportive partition",
                                     ctx);
         return;
     }
@@ -3212,6 +3222,8 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         PQ_LOG_D("unknown partition " << *partitionId);
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
+                                    NKikimrPQ::TError::INTERNAL,
+                                    "unknown supportive partition",
                                     ctx);
         return;
     }
@@ -4229,6 +4241,8 @@ bool TPersQueue::AllTransactionsHaveBeenProcessed() const
 
 void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
                                              ui64 txId,
+                                             NKikimrPQ::TError::EKind kind,
+                                             const TString& reason,
                                              const TActorContext& ctx)
 {
     auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
@@ -4236,6 +4250,12 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ABORTED);
     event->Record.SetTxId(txId);
+
+    if (kind != NKikimrPQ::TError::OK) {
+        auto* error = event->Record.MutableErrors()->Add();
+        error->SetKind(kind);
+        error->SetReason(reason);
+    }
 
     PQ_LOG_D("send TEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()) <<

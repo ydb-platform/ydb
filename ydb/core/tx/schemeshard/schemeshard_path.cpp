@@ -848,7 +848,26 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
     return Fail(status, TStringBuilder() << "path is not a view"
         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
+}
 
+const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (allowCreateInTemporaryDir) {
+        return *this;
+    }
+
+    for (const auto& element : Path.Elements) {
+        if (element->IsTemporary()) {
+            return Fail(status, TStringBuilder() << "path is temporary"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
+    }
+
+    return *this;
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {

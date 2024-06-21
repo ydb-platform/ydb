@@ -639,63 +639,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
                        {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid adjacent partition status"}});
     } // Y_UNIT_TEST(MargeInactivePartitions)
 
-    Y_UNIT_TEST(AllocateAfterSplit) {
-        TTestBasicRuntime runtime;
-        TTestEnv env = CreateTestEnv(runtime);
-
-        ui64 txId = 100;
-
-        CreateSubDomain(runtime, env, ++txId);
-        CreateExtSubDomain(runtime, env, ++txId, "USER_2");
-
-        ui64 tenantSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_2"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("USER_2"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
-        Y_ASSERT(tenantSchemeShard != 0);
-
-        TString boundary((char*)bound_1_2, sizeof(bound_1_2));
-        TString splitBoundry = "\010";
-
-        CreateTopic(runtime, env, ++txId, 2);
-        SplitPartition(runtime, env, txId, 0, splitBoundry);
-
-        auto topic = DescribeTopic(runtime);
-        Y_ASSERT(topic.HasAllocate());
-        auto allocate = topic.GetAllocate();
-
-
-        Cerr << "Allocate: " << allocate.DebugString() << Endl;
-        TestAllocatePQ(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_2", allocate.DebugString());
-        env.TestWaitNotification(runtime, txId);
-
-        // It doesn't work without sleep (previously reboot tablet was incidentally sleeping). We need to figure out why.
-        runtime.SimulateSleep(TDuration::Seconds(1));
-
-        Cerr << "Describe: " << Endl;
-        auto allocatedTopic = DescribeTopic(runtime, "/MyRoot/USER_2/Topic1", tenantSchemeShard);
-        auto partition0 = allocatedTopic.GetPartitions()[0];
-        auto partition1 = allocatedTopic.GetPartitions()[1];
-        auto partition2 = allocatedTopic.GetPartitions()[2];
-        auto partition3 = allocatedTopic.GetPartitions()[3];
-
-        ValidatePartition(partition0, NKikimrPQ::ETopicPartitionStatus::Inactive, Nothing(), boundary);
-        ValidatePartition(partition1, NKikimrPQ::ETopicPartitionStatus::Active, boundary, Nothing());
-        ValidatePartition(partition2, NKikimrPQ::ETopicPartitionStatus::Active, Nothing(), splitBoundry);
-        ValidatePartition(partition3, NKikimrPQ::ETopicPartitionStatus::Active, splitBoundry, boundary);
-
-        ValidatePartitionParents(partition0, {});
-        ValidatePartitionParents(partition1, {});
-        ValidatePartitionParents(partition2, {0});
-        ValidatePartitionParents(partition3, {0});
-
-        ValidatePartitionChildren(partition0, {2, 3});
-        ValidatePartitionChildren(partition1, {});
-        ValidatePartitionChildren(partition2, {});
-        ValidatePartitionChildren(partition3, {});
-    } // Y_UNIT_TEST(AllocateAfterSplit)
-
     Y_UNIT_TEST(DisableSplitMerge) {
         TTestBasicRuntime runtime;
         TTestEnv env = CreateTestEnv(runtime);

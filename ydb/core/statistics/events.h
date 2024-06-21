@@ -30,7 +30,7 @@ enum EStatType {
 
 struct TRequest {
     TPathId PathId;
-    std::optional<TString> ColumnName; // not used for simple stat
+    std::optional<ui32> ColumnTag; // not used for simple stat
 };
 
 struct TResponse {

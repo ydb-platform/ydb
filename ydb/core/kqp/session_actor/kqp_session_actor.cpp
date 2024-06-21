@@ -198,6 +198,7 @@ public:
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
 
         TempTablesState.SessionId = *optSessionId;
+        TempTablesState.Database = Settings.Database;
         LOG_D("Create session actor with id " << TempTablesState.SessionId);
     }
 
@@ -2133,7 +2134,7 @@ public:
 
             LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
             auto tempTablesManager = CreateKqpTempTablesManager(
-                std::move(TempTablesState), SelfId(), Settings.Database);
+                std::move(TempTablesState), std::move(userToken), SelfId(), Settings.Database);
 
             RegisterWithSameMailbox(tempTablesManager);
             return;

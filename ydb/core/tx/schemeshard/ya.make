@@ -166,8 +166,6 @@ SRCS(
     schemeshard__operation_create_continuous_backup.cpp
     schemeshard__operation_alter_continuous_backup.cpp
     schemeshard__operation_drop_continuous_backup.cpp
-    schemeshard__operation_allocate_pq.cpp
-    schemeshard__operation_deallocate_pq.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
     schemeshard__state_changed_reply.cpp

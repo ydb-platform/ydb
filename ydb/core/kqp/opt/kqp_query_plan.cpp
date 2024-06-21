@@ -509,7 +509,10 @@ private:
             } else if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
                 planNode.TypeName = "TableLookupJoin";
                 const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                lookupKeyColumnsStruct = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
+                YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
+                const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+                YQL_ENSURE(joinKeyType->GetKind() == ETypeAnnotationKind::Struct);
+                lookupKeyColumnsStruct = joinKeyType->Cast<TStructExprType>();
             }
 
             YQL_ENSURE(lookupKeyColumnsStruct);

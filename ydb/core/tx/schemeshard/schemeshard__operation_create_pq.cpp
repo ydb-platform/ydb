@@ -313,7 +313,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .FailOnRestrictedCreateInTempZone();
 
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {

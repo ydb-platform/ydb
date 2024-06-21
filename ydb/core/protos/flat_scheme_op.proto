@@ -1542,8 +1542,7 @@ enum EOperationType {
     // Move index
     ESchemeOpMoveIndex = 82;
 
-    ESchemeOpAllocatePersQueueGroup = 83;
-    ESchemeOpDeallocatePersQueueGroup = 84;
+    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
 
     // AlterExtSubDomain suboperations
     ESchemeOpAlterExtSubDomainCreateHive = 85;
@@ -1741,7 +1740,7 @@ message TModifyScheme {
 
     optional TViewDescription CreateView = 64;
 
-    optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+    optional NActorsProto.TActorId TempDirOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;
@@ -1749,6 +1748,11 @@ message TModifyScheme {
     optional TCreateContinuousBackup CreateContinuousBackup = 68;
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
+
+    // This flag is required for TModifyScheme to create any new objects inside temporary zone.
+    // Reads/Updates can be executed without flag.
+    // Object is in temporary zone if there is a directory with nonempty OwnerActorId on it's path.
+    optional bool AllowCreateInTempDir = 71 [default = false];
 }
 
 message TCopySequence {

@@ -869,7 +869,7 @@ void TPropose::PersistState(const TTxState& txState,
 {
     NIceDb::TNiceDb db(context.GetDB());
 
-    if (txState.TxType == TTxState::TxCreatePQGroup  || txState.TxType == TTxState::TxAllocatePQ) {
+    if (txState.TxType == TTxState::TxCreatePQGroup) {
         auto parentDir = context.SS->PathsById.at(Path->ParentPathId);
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);

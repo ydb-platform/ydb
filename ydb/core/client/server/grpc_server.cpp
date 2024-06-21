@@ -500,14 +500,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
-
-#define ADD_PROXY_REQUEST_JJ(NAME, EVENT_TYPE, MTYPE) \
-    ADD_PROXY_REQUEST_BASE(NAME, TJSON, TJSON, EVENT_TYPE, MTYPE)
-
-    // DB proxy requests both consuming and returning TJSON
-    ADD_PROXY_REQUEST_JJ(DbSchema,    TEvBusProxy::TEvDbSchema,    MTYPE_CLIENT_DB_SCHEMA)
-    ADD_PROXY_REQUEST_JJ(DbOperation, TEvBusProxy::TEvDbOperation, MTYPE_CLIENT_DB_OPERATION)
-    ADD_PROXY_REQUEST_JJ(DbBatch,     TEvBusProxy::TEvDbBatch,     MTYPE_CLIENT_DB_BATCH)
 }
 
 }

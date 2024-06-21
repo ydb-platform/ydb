@@ -11098,7 +11098,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             const auto handlerSlot = dataType->GetSlot();
             const auto castResult = GetCastResult(handlerSlot, resultSlot);
-            if (!castResult.Defined() || *castResult == NUdf::ECastOptions::Impossible) {
+            if (*castResult & NUdf::ECastOptions::Impossible) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()),
                     TStringBuilder() << "Cannot cast type of case handler " << handlerSlot << " to the returning type of JSON_VALUE " << resultSlot));
                 return false;
@@ -11893,7 +11893,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto resultType = ctx.Expr.MakeType<TOptionalExprType>(dstType);
 
         const auto cast = NUdf::GetCastResult(sSlot, tSlot);
-        if (!cast) {
+        if (*cast & NUdf::ECastOptions::Impossible) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported types in rounding: " << *srcType << " " << input->Content() << " to " << *dstType));
             return IGraphTransformer::TStatus::Error;

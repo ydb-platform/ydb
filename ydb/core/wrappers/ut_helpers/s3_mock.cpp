@@ -392,6 +392,10 @@ bool TS3Mock::Start() {
     return HttpServer.Start();
 }
 
+const char* TS3Mock::GetError() {
+    return HttpServer.GetError();
+}
+
 TS3Mock::TS3Mock(const TSettings& settings)
     : Settings(settings)
     , HttpServer(this, settings.HttpOptions)

@@ -973,6 +973,10 @@ enum EIndexState {
     EIndexStateWriteOnly = 3;
 }
 
+message TExplicitPartitions {
+    repeated TSplitBoundary SplitBoundary = 1;
+}
+
 message TIndexDescription {
     optional string Name = 1;
     optional uint64 LocalPathId = 2;
@@ -989,6 +993,13 @@ message TIndexDescription {
     repeated string DataColumnNames = 8;
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
+
+    // indexImplTable settings
+    oneof Partitions {
+        uint32 UniformPartitions = 10;
+        TExplicitPartitions ExplicitPartitions = 11;
+    }
+    optional TPartitioningPolicy PartitioningPolicy = 12;
 }
 
 message TIndexCreationConfig {

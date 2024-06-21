@@ -48,7 +48,7 @@ namespace {
 
         scheme.mutable_primary_key()->CopyFrom(tableDesc.GetKeyColumnNames());
         FillColumnDescription(scheme, mkqlKeyType, tableDesc);
-        FillIndexDescription(scheme, tableDesc);
+        FillIndexDescription(scheme, tableDesc, mkqlKeyType);
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
         FillAttributes(scheme, pathDesc);
@@ -2787,6 +2787,126 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {
             NLs::FollowerGroups({group}),
         });
+    }
+
+    void ShouldRestoreIndexTableSettings(const TString& schemeAdditions, auto&& tableDescriptionChecker) {
+        TTestBasicRuntime runtime;
+
+        const auto empty = TTestData("", EmptyYsonStr);
+        const auto data = TTestDataWithScheme(TStringBuilder() << R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UINT32 } } }
+                }
+                primary_key: "key"
+            )" << schemeAdditions,
+            {empty}
+        );
+
+        Run(runtime, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/User/Table"
+                }
+            }
+        )", Ydb::StatusIds::SUCCESS, "/MyRoot/User");
+
+        ui64 schemeshardId = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/User"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeshardId)
+        });
+
+        tableDescriptionChecker(
+            DescribePath(runtime, schemeshardId, "/MyRoot/User/Table/ByValue/indexImplTable", true, true, true)
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTableSplitPoints) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
+                                    value { items { uint32_value: 1 } }
+                                }
+                            }
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                TestDescribeResult(
+                    tableDescription,
+                    {NLs::CheckBoundaries}
+                );
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTableUniformPartitionsCount) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            uniform_partitions: 10
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                const auto& pathDescription = tableDescription.GetPathDescription();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    pathDescription.TablePartitionsSize(), 10,
+                    pathDescription.ShortDebugString()
+                );
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTablePartitioningSettings) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partitioning_settings {
+                                partitioning_by_size: ENABLED
+                                partition_size_mb: 1024
+                                partitioning_by_load: ENABLED
+                                min_partitions_count: 2
+                                max_partitions_count: 3
+                            }
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                TestDescribeResult(
+                    tableDescription,
+                    {
+                        NLs::SizeToSplitEqual(1 << 30),
+                        NLs::PartitioningByLoadStatus(true),
+                        NLs::MinPartitionsCountEqual(2),
+                        NLs::MaxPartitionsCountEqual(3)
+                    }
+                );
+            }
+        );
     }
 
     Y_UNIT_TEST(ShouldFailOnInvalidSchema) {

@@ -1222,6 +1222,13 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     const auto& tableStats = indexImplTable->GetStats().Aggregated;
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
+
+    *entry.MutablePartitioningPolicy() = indexImplTable->PartitionConfig().GetPartitioningPolicy();
+    if (const auto& explicitPartitions = indexImplTable->TableDescription.GetSplitBoundary();
+        !explicitPartitions.empty()
+    ) {
+        *entry.MutableExplicitPartitions()->MutableSplitBoundary() = explicitPartitions;
+    }
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

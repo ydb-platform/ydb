@@ -128,7 +128,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 ## Добавление или удаление потока изменений {#changefeed}
 
-`ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
+`ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 
 ### Параметры потока изменений {#changefeed-options}
 

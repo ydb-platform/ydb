@@ -1,14 +1,14 @@
 # Добавление, удаление и переименование вторичного индекса
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 ### Добавление индекса
 
-```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок в строковых таблицах. Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
+```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" %}строковых таблицах.{% else %}таблицах.{% endif %} Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
 
 ```sql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);

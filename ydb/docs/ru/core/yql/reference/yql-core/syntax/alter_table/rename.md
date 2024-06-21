@@ -1,10 +1,10 @@
 # Переименование таблицы
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 ```sql
 ALTER TABLE old_table_name RENAME TO new_table_name;

@@ -10,7 +10,7 @@
 Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица:
 
 ```sql
-CREATE table_name (
+CREATE <table_name> (
   columns 
   ...
 )
@@ -55,6 +55,8 @@ WITH (
     WITH ( key = value, ... )
 {% endif %}
 
+{% if backend_name == "YDB" %}
+
 ### Примеры создания таблиц
 
 {% list tabs %}
@@ -63,7 +65,7 @@ WITH (
 
 {% if feature_column_container_type %}
   ```sql
-  CREATE TABLE table_name (
+  CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
     c Float,
@@ -73,7 +75,7 @@ WITH (
   ```
 {% else %}
   ```sql
-  CREATE TABLE table_name (
+  CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
     c Float,
@@ -117,9 +119,40 @@ WITH (
 
 {% endlist %}
 
-При создании строковых и колоночных таблиц возможно задать:
+{% else %}
+
+### Пример создания таблицы
+
+{% if feature_column_container_type == true %}
+Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
+{% else %}
+Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
+{% endif %}
+{% if feature_not_null == true %}
+Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md), и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
+{% else %}
+{% if feature_not_null_for_pk %}
+По умолчанию все колонки [опциональные](../../types/optional.md) и могут иметь значение NULL. Ограничение `NOT NULL` можно указать только для колонок, входящих в первичный ключ.
+{% else %}
+Все колонки допускают запись `NULL` в качестве значений, то есть являются [опциональными](../../types/optional.md).
+{% endif %}
+{% endif %}
+{% if feature_map_tables %}
+Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
+{% endif %}
+
+**Пример**:
+```sql
+  CREATE TABLE <table_name> (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  );
+```
+{% endif %}
+
+При создании {% if backend_name == "YDB" %}строковых и колоночных таблиц{% else %}таблиц{% endif %} возможно задать:
 * [Вторичный индекс](secondary_index.md).
-* [Группы колонок](family.md) (поддерживается только в строковых таблицах).
-* [Дополнительные параметры](with.md):
-  + Время жизни записи в таблице (TTL).
-  + Шардирование таблицы и размер шарда.
+* [Группы колонок](family.md).
+* [Дополнительные параметры](with.md).

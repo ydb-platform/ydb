@@ -1,10 +1,10 @@
 # Добавление или удаление потока изменений
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 `ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 

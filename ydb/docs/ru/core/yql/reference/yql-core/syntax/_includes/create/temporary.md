@@ -1,10 +1,10 @@
 # Создание временных таблиц (TEMPORARY)
 
-{% note warning %}
+{% if backend_name == "YDB" %}
 
-{% include [olap_warning](../../../../../_includes/not_allow_for_olap.md) %}
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
 ```sql
 CREATE TEMPORARY TABLE table_name (

@@ -1,6 +1,6 @@
 # ALTER TABLE
 
-При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры строковых и колоночных таблиц. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
+При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры{% if backend_name == "YDB" %} [строковых](../../../../concepts/datamodel/table.md#row-tables) и [колоночных](../../../../concepts/datamodel/table.md#colums-tables){% else %} таблиц {% endif %}. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
 
 ```sql
 ALTER TABLE table_name action1, action2, ..., actionN;
@@ -28,7 +28,11 @@ ALTER TABLE episodes DROP COLUMN views;
 
 ## Добавление, удаление и переименование вторичного индекса {#secondary-index}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% if backend_name == "YDB" %}
+
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 ### Добавление индекса
 
@@ -72,7 +76,11 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 ## Добавление или удаление потока изменений {#changefeed}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% if backend_name == YDB %}
+
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 `ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 
@@ -149,7 +157,11 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 
 ## Переименование таблицы {#rename}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% if backend_name == "YDB" %}
+
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 ```sql
 ALTER TABLE old_table_name RENAME TO new_table_name;
@@ -167,7 +179,11 @@ ALTER TABLE `table1` RENAME TO `/backup/table1`;
 
 ## Создание и изменение групп колонок {#column-family}
 
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+{% if backend_name == "YDB" %}
+
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 Механизм [групп колонок](../../../../concepts/datamodel/table.md#column-groups) позволяет увеличить производительность операций неполного чтения строк путем разделения хранения колонок строковой таблицы на несколько групп. Наиболее часто используемый сценарий — организация хранения редко используемых атрибутов в отдельной группе колонок.
 

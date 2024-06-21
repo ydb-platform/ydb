@@ -1,8 +1,10 @@
 #include "clusterizer.h"
+#include "thread_pool.h"
 #include "vector_index.h"
-#include <format>
-#include <future>
+
 #include <library/cpp/dot_product/dot_product.h>
+
+#include <format>
 
 template <>
 struct std::formatter<TString>: std::formatter<std::string_view> {
@@ -150,45 +152,11 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
 
 class TTableIterator final: public TDatasetIterator {
 public:
-    TTableIterator(const TOptions& options, TTableClient& client)
+    TTableIterator(const TOptions& options, TTableClient& client, NVectorIndex::TThreadPool& tp)
         : Options{options}
         , Client{client}
-        , Reader{[&] {
-            std::unique_lock lock{M};
-            while (true) {
-                while (!It) {
-                    Start.wait(lock);
-                    if (Stop) {
-                        return;
-                    }
-                }
-                auto it = std::move(*It);
-                It.reset();
-                lock.unlock();
-                for (bool wasGood = true; wasGood;) {
-                    auto next = it.ReadNext();
-                    auto part = next.ExtractValueSync();
-                    wasGood = part.IsSuccess();
-                    lock.lock();
-                    Queue.push(std::move(part));
-                    if (Queue.size() == 1) {
-                        Finish.notify_one();
-                    }
-                    lock.unlock();
-                }
-                lock.lock();
-            }
-        }}
+        , ThreadPool{tp}
     {
-    }
-
-    ~TTableIterator() {
-        {
-            std::lock_guard lock{M};
-            Stop = true;
-        }
-        Start.notify_one();
-        Reader.join();
     }
 
     void UseLevel(ui8 level, TId parentId, ui64 rows) {
@@ -308,9 +276,19 @@ private:
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
+        ThreadPool.Submit([this, it = std::move(it)]() mutable {
+            for (bool wasGood = true; wasGood;) {
+                auto next = it.ReadNext();
+                auto part = next.ExtractValueSync();
+                wasGood = part.IsSuccess();
+                std::lock_guard lock{M};
+                Queue.emplace(std::move(part));
+                if (Queue.size() == 1) {
+                    Finish.notify_one();
+                }
+            }
+        });
         std::unique_lock lock{M};
-        It = std::move(it);
-        Start.notify_one();
         while (true) {
             if (Queue.empty()) {
                 lock.unlock();
@@ -374,16 +352,13 @@ private:
 
     const TOptions& Options;
     TTableClient& Client;
+    NVectorIndex::TThreadPool& ThreadPool;
     TString Table;
     TId ParentId = 0;
     ui64 RowsCount = 0;
 
-    bool Stop = false;
-    std::optional<TTablePartIterator> It;
     std::mutex M;
-    std::condition_variable Start;
     std::condition_variable Finish;
-    std::thread Reader;
     std::queue<TSimpleStreamPart<TResultSet>> Queue;
 
     std::vector<TString> Embeddings;
@@ -522,21 +497,6 @@ private:
 };
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
-    TTableIterator reader{options, client};
-    TBulkSender sender{options, client};
-    TBulkWriter writer{sender};
-    TClusterizer clusterizer{reader, CosineDistance,
-                             [&](TId parentId, TId id, TRawEmbedding embedding) {
-                                 writer.WritePosting(parentId, id, std::move(embedding));
-                             }};
-    sender.DropLevel(options.Levels);
-
-    struct TMeta {
-        TId ParentId = 0;
-        ui64 Count = 0;
-    };
-    std::deque<TMeta> curr;
-    std::deque<TMeta> next;
     auto makeClustersImpl = [&options](TTableIterator& reader, TBulkWriter& writer, TClusterizer& clusterizer, ui8 level, TId parentId, ui64 count) {
         reader.UseLevel(level, parentId, count);
         writer.UseLevel(level);
@@ -557,6 +517,13 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         }
         return clusters;
     };
+
+    struct TMeta {
+        TId ParentId = 0;
+        ui64 Count = 0;
+    };
+    std::deque<TMeta> curr;
+    std::deque<TMeta> next;
     auto processCluster = [&](const TClusterizer::TClusters& clusters) {
         for (size_t i = 0; auto id : clusters.Ids) {
             auto count = clusters.Count[i];
@@ -566,32 +533,50 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             ++i;
         }
     };
-    std::vector<std::future<TClusterizer::TClusters>> smallClusters;
+
+    NVectorIndex::TWaitGroup wg;
+    std::deque<TClusterizer::TClusters> smallClusters;
     auto processClusters = [&](ui32 count) {
         if (smallClusters.size() < count) {
             return;
         }
+        wg.Wait();
         for (auto& cluster : smallClusters) {
-            processCluster(cluster.get());
+            processCluster(cluster);
         }
         smallClusters.clear();
     };
+
+    NVectorIndex::TThreadPool tpCompute{std::thread::hardware_concurrency() / 2};
+    NVectorIndex::TThreadPool tpIO{std::thread::hardware_concurrency() / 2};
+    TTableIterator reader{options, client, tpIO};
+    TBulkSender sender{options, client};
+    TBulkWriter writer{sender};
+    TClusterizer clusterizer{reader, CosineDistance,
+                             [&](TId parentId, TId id, TRawEmbedding embedding) {
+                                 writer.WritePosting(parentId, id, std::move(embedding));
+                             },
+                             &tpCompute};
+    sender.DropLevel(options.Levels);
+
     auto makeClusters = [&](ui8 level, TId parentId, ui64 count) {
         if (count > kSmallClusterSize) {
             auto clusters = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
             processCluster(clusters);
             return;
         }
-        smallClusters.emplace_back(std::async(std::launch::async, [&, level, parentId, count] {
-            TTableIterator reader{options, client};
+        auto& p = smallClusters.emplace_back();
+        wg.Add();
+        tpCompute.Submit([&, level, parentId, count]() mutable {
+            TTableIterator reader{options, client, tpIO};
             TBulkWriter writer{sender};
             TClusterizer clusterizer{reader, CosineDistance,
                                      [&](TId parentId, TId id, TRawEmbedding embedding) {
                                          writer.WritePosting(parentId, id, std::move(embedding));
-                                     },
-                                     0};
-            return makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
-        }));
+                                     }};
+            p = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
+            wg.Done();
+        });
     };
     next.push_back({0, options.Rows});
     for (ui8 level = 1; !next.empty(); ++level) {

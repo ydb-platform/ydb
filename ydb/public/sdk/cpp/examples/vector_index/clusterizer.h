@@ -1,11 +1,13 @@
+#include "thread_pool.h"
+
 #include "util/generic/fwd.h"
 #include "util/generic/string.h"
 #include "util/system/types.h"
+
 #include <vector>
 #include <span>
 #include <functional>
 #include <chrono>
-#include <thread>
 
 inline constexpr ui64 kMinClusterSize = 8;
 
@@ -28,8 +30,7 @@ using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
 
 class TClusterizer {
 public:
-    TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, ui32 maxThreads = std::numeric_limits<ui32>::max());
-    ~TClusterizer();
+    TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp = nullptr);
 
     struct TOptions {
         ui32 maxIterations = 10;
@@ -110,13 +111,11 @@ private:
         bool Empty() const;
     };
 
+    NVectorIndex::TThreadPool* ThreadPool = nullptr;
     TBatch ToCompute;
     TBatch ToFill;
-    std::vector<std::thread> Threads;
     std::mutex M;
     std::condition_variable WaitWork;
-    std::condition_variable WaitIdle;
-    bool Stop = false;
     ui64 Work = 0;
     ui64 BatchSize = 0;
 };

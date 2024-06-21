@@ -1,4 +1,5 @@
 #include "clusterizer.h"
+
 #include "util/stream/output.h"
 #include "util/system/yassert.h"
 
@@ -57,44 +58,12 @@ bool TClusterizer::TBatch::Empty() const {
     return RawData.empty();
 }
 
-TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, ui32 maxThreads)
+TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp)
     : It{it}
     , Distance{std::move(distance)}
     , Create{std::move(create)}
+    , ThreadPool{tp}
 {
-    ui32 n = std::min<ui32>(std::thread::hardware_concurrency(), maxThreads);
-    Cout << "kmeans will use " << n << " threads" << Endl;
-    Threads.reserve(n);
-    for (ui32 i = 0; i != n; ++i) {
-        Threads.emplace_back([this, i] {
-            std::unique_lock lock{M};
-            while (true) {
-                while ((Work & (ui64{1} << i)) == 0) {
-                    WaitIdle.wait(lock);
-                }
-                if (Stop) {
-                    return;
-                }
-                lock.unlock();
-                auto size = ToCompute.RawData.size();
-                auto threads = Threads.size();
-                auto batchSize = (size + threads - 1) / threads;
-                auto start = i * batchSize;
-                auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
-                auto batch = ToCompute.RawData.subspan(start, len);
-                for (const auto& rawEmbedding : batch) {
-                    auto embedding = GetArray<float>(rawEmbedding);
-                    auto min = Compute(embedding);
-                    ToCompute.Min[start++] = min;
-                }
-                lock.lock();
-                Work &= ~(ui64{1} << i);
-                if (Work == 0) {
-                    WaitWork.notify_one();
-                }
-            }
-        });
-    }
 }
 
 TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
@@ -114,21 +83,40 @@ TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
 
 template <typename Func>
 void TClusterizer::ComputeBatch(Func&& func) {
-    if (!Threads.empty()) {
+    if (ThreadPool) {
+        auto threads = ThreadPool->Size();
         std::unique_lock lock{M};
         while (Work != 0) {
             WaitWork.wait(lock);
         }
         ToCompute.Swap(ToFill);
         if (!ToCompute.Empty()) {
-            Work = (ui64{1} << Threads.size()) - 1;
-            WaitIdle.notify_all();
+            Work = threads;
+            lock.unlock();
+            for (ui32 i = 0; i != threads; ++i) {
+                ThreadPool->Submit([this, i, threads] {
+                    auto size = ToCompute.RawData.size();
+                    auto batchSize = (size + threads - 1) / threads;
+                    auto start = i * batchSize;
+                    auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
+                    auto batch = ToCompute.RawData.subspan(start, len);
+                    for (const auto& rawEmbedding : batch) {
+                        auto embedding = GetArray<float>(rawEmbedding);
+                        auto min = Compute(embedding);
+                        ToCompute.Min[start++] = min;
+                    }
+                    std::lock_guard lock{M};
+                    if (--Work == 0) {
+                        WaitWork.notify_one();
+                    }
+                });
+            }
         }
     } else {
-        for (size_t start = 0; const auto& rawEmbedding : ToCompute.RawData) {
+        for (size_t start = 0; const auto& rawEmbedding : ToFill.RawData) {
             auto embedding = GetArray<float>(rawEmbedding);
             auto min = Compute(embedding);
-            ToCompute.Min[start++] = min;
+            ToFill.Min[start++] = min;
         }
     }
     Progress.Report(0);
@@ -146,17 +134,6 @@ void TClusterizer::Update(TMin min, TEmbedding embedding) {
         coord += embedding[pos++];
     }
     NewClusters[min.Pos].Count++;
-}
-
-TClusterizer::~TClusterizer() {
-    std::unique_lock lock{M};
-    Work = (ui64{1} << Threads.size()) - 1;
-    Stop = true;
-    lock.unlock();
-    WaitIdle.notify_all();
-    for (auto& thread : Threads) {
-        thread.join();
-    }
 }
 
 TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
@@ -211,7 +188,7 @@ bool TClusterizer::Init(ui64 k) {
         cluster.Coords.resize(dims, 0.f);
     }
     OldMean = std::numeric_limits<float>::max();
-    BatchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
+    BatchSize = (ui64{900'000} * ui64{ThreadPool ? ThreadPool->Size() : 1}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
     return true;
 }
 

@@ -763,7 +763,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        if (!settings.has_autoscaling_settings())) {
+        if (!settings.has_autoscaling_settings()) {
             minParts = settings.partitions_count();
         } else {
             const auto& autoScalteSettings = settings.autoscaling_settings();

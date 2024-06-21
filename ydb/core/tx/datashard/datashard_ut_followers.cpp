@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             for (auto pageId : msg->Fetch->Pages) {
                 auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
                 if (type == NTable::NPage::EPage::Schem2) {
-                    Cerr << "... blocking read" << Endl;
+                    Cerr << "... blocking part load read" << Endl;
                     blockedReads.emplace_back(ev.Release());
                 }
             }
@@ -542,12 +542,21 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         Cerr << "... unblocking read" << Endl;
         observer.Remove();
+        ui32 readDataPages = 0;
+        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                readDataPages += type == NTable::NPage::EPage::DataPage;
+            }
+        });
         for (auto& ev : blockedReads) {
             runtime.Send(ev.Release(), 0, true);
         }
         blockedReads.clear();
 
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(readDataPages, 1, "Sys data should have been preloaded");
 
         Cerr << "... checking after part switch" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(
@@ -557,19 +566,12 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+        UNIT_ASSERT_VALUES_EQUAL(readDataPages, 1);
 
         // Update row values and sleep
         Cerr << "... updating rows" << Endl;
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
         runtime.SimulateSleep(TDuration::Seconds(1));
-
-        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
-            NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
-                UNIT_ASSERT_C(type != NTable::NPage::EPage::DataPage, "Shouldn't read any data");
-            }
-        });
 
         // Read from follower must see updated values
         Cerr << "... checking after update" << Endl;
@@ -580,6 +582,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+        UNIT_ASSERT_VALUES_EQUAL(readDataPages, 1);
     }
 
     Y_UNIT_TEST(FollowerDuringDataPartSwitch) {
@@ -632,7 +635,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             for (auto pageId : msg->Fetch->Pages) {
                 auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
                 if (type == NTable::NPage::EPage::Schem2) {
-                    Cerr << "... blocking read" << Endl;
+                    Cerr << "... blocking part load read" << Endl;
                     blockedReads.emplace_back(ev.Release());
                 }
             }
@@ -667,12 +670,21 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         Cerr << "... unblocking read" << Endl;
         observer.Remove();
+        ui32 readDataPages = 0;
+        observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            NSharedCache::TEvRequest *msg = ev->Get();
+            for (auto pageId : msg->Fetch->Pages) {
+                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+                readDataPages += type == NTable::NPage::EPage::DataPage;
+            }
+        });
         for (auto& ev : blockedReads) {
             runtime.Send(ev.Release(), 0, true);
         }
         blockedReads.clear();
 
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL_C(readDataPages, 0, "Shouldn't have preload data");
 
         Cerr << "... checking after part switch" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(
@@ -682,6 +694,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+        UNIT_ASSERT_EQUAL(readDataPages, 3);
         
         // Update row values and sleep
         Cerr << "... updating rows" << Endl;
@@ -705,6 +718,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
+        UNIT_ASSERT_EQUAL(readDataPages, 3);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardFollowers)

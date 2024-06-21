@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     catch (const NYdb::NConsoleClient::TYdbErrorException& e) {
-        Cerr << e;        
+        Cerr << e;
         return EXIT_FAILURE;
     }
     catch (const yexception& e) {

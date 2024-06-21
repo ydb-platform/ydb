@@ -83,6 +83,20 @@
             "uri": "https://{canondata_backend}/1775059/3cb7d014d70b84dbcb84645fa987dd9d47d7fd6c/resource.tar.gz#test.test_action-runtime_make_code-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[action-subquery_merge_nested_subquery--Debug]": [
+        {
+            "checksum": "d32a3afdd03b6999f6e278e75caf9d06",
+            "size": 466,
+            "uri": "https://{canondata_backend}/1600758/d550f6a68107f128a0baaebaff84ef0c6691b095/resource.tar.gz#test.test_action-subquery_merge_nested_subquery--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[action-subquery_merge_nested_subquery--Plan]": [
+        {
+            "checksum": "212be881133a20b5b73ef1250dbeda51",
+            "size": 960,
+            "uri": "https://{canondata_backend}/1600758/d550f6a68107f128a0baaebaff84ef0c6691b095/resource.tar.gz#test.test_action-subquery_merge_nested_subquery--Plan_/plan.txt"
+        }
+    ],
     "test.test[action-table_content_before_from_folder--Debug]": [
         {
             "checksum": "c2874243446fd02ab24c55f2d42134c4",
@@ -459,6 +473,20 @@
             "checksum": "96f7a64e8ad24bc13081794e4b440a44",
             "size": 16526,
             "uri": "https://{canondata_backend}/1871182/ac171f22ae6cb6e444ea59e878dae0a467fd60c8/resource.tar.gz#test.test_bigdate-table_common_type-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-tzstrliterals-default.txt-Debug]": [
+        {
+            "checksum": "d8792ede493283553a302fb2714468be",
+            "size": 2986,
+            "uri": "https://{canondata_backend}/1031349/5cd6d3a72668cbea9853b86e5da2f0f315f35bc5/resource.tar.gz#test.test_bigdate-tzstrliterals-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-tzstrliterals-default.txt-Plan]": [
+        {
+            "checksum": "b2a2eb5d6b0a138ee924c128fc7738ef",
+            "size": 1331,
+            "uri": "https://{canondata_backend}/1031349/5cd6d3a72668cbea9853b86e5da2f0f315f35bc5/resource.tar.gz#test.test_bigdate-tzstrliterals-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[binding-insert_binding--Debug]": [

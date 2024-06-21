@@ -10,9 +10,8 @@ class TBlobStorageController::TTxUpdateNodeDrives
 {
     NKikimrBlobStorage::TEvControllerUpdateNodeDrives Record;
     std::optional<TConfigState> State;
-    std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> Result;
 
-    void UpdateDevicesInfo(TConfigState& state, TEvBlobStorage::TEvControllerNodeServiceSetUpdate* result) {
+    void UpdateDevicesInfo(TConfigState& state) {
         auto nodeId = Record.GetNodeId();
 
         auto createLog = [&] () {
@@ -83,9 +82,6 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (pdiskInfo.LastSeenSerial != serial) {
                 auto *item = getMutableItem();
                 item->LastSeenSerial = serial;
-                if (serial) {
-                    Self->ReadPDisk(pdiskId, *item, result, NKikimrBlobStorage::RESTART);
-                }
             }
 
             return true;
@@ -164,14 +160,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        Result = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;
         try {
-            UpdateDevicesInfo(*State, Result.get());
+            UpdateDevicesInfo(*State);
             State->CheckConsistency();
         } catch (const TExError& e) {
             updateIsSuccessful = false;
@@ -180,10 +174,6 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
-
-        Result->Record.SetInstanceId(Self->InstanceId);
-        Result->Record.SetComprehensive(false);
-        Result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
 
         TString error;
         if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
@@ -199,9 +189,6 @@ public:
             // Send new TNodeWardenServiceSet to NodeWarder inside
             State->ApplyConfigUpdates();
             State.reset();
-        }
-        if (Result) {
-            Self->SendToWarden(Record.GetNodeId(), std::move(Result), 0);
         }
     }
 };

@@ -118,11 +118,6 @@ public:
             return;
         }
 
-        if (!poolState->HasAccess(ev->Get()->UserToken)) {
-            ReplyContinueError(workerActorId, Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You do not have access permissions for pool " << poolId);
-            return;
-        }
-
         if (poolState->PlaceRequest(workerActorId, ev->Get()->SessionId) && poolState->TablesRequired()) {
             ScheduleLeaseUpdate();
             PrepareWorkloadServiceTables();
@@ -258,7 +253,7 @@ private:
 
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
         LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << message);
-        Send(replyActorId, new TEvContinueRequest(status, {NYql::TIssue(message)}));
+        Send(replyActorId, new TEvContinueRequest(status, {}, {NYql::TIssue(message)}));
     }
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {

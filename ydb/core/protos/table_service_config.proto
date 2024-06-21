@@ -42,6 +42,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
+        optional uint64 ReasonableSpillingTreshold = 22 [default = 104857600]; // 100 MiB
     }
 
     message TSpillingServiceConfig {

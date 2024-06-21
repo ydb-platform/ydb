@@ -105,8 +105,23 @@ protected:
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
 
-protected:
+    struct TTableRecord {
+        TString Key;
+        TString Value;
+    };
+
+    TVector<TTableRecord> MakeTableRecords();
+    TString MakeJsonDoc(const TVector<TTableRecord>& records);
+
+    void CreateTable(const TString& path);
+    void WriteToTable(const TString& tablePath,
+                      const TVector<TTableRecord>& records,
+                      NTable::TTransaction* tx);
+    size_t GetTableRecordsCount(const TString& tablePath);
+
     const TDriver& GetDriver() const;
+
+    void CheckTabletKeys(const TString& topicName);
 
 private:
     template<class E>
@@ -129,8 +144,6 @@ private:
                                               ui64 tabletId,
                                               ui64 writeId);
 
-    void CheckTabletKeys(const TString& topicName);
-
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
 
@@ -151,6 +164,7 @@ NTable::TSession TFixture::CreateTableSession()
 {
     NTable::TTableClient client(GetDriver());
     auto result = client.CreateSession().ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return result.GetSession();
 }
 
@@ -298,7 +312,8 @@ void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
     if (invalidTxId) {
         CommitTx(tx, EStatus::SUCCESS);
     } else {
-        UNIT_ASSERT(tableSession.Close().ExtractValueSync().IsSuccess());
+        auto result = tableSession.Close().ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     writeSession->Write(std::move(token), std::move(params));
@@ -1259,7 +1274,6 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
     ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
-    auto keys = GetTabletKeys(edge, tabletId);
 
     const THashSet<char> types {
         NPQ::TKeyPrefix::TypeInfo,
@@ -1269,12 +1283,39 @@ void TFixture::CheckTabletKeys(const TString& topicName)
         NPQ::TKeyPrefix::TypeTxMeta,
     };
 
-    for (auto& key : keys) {
-        UNIT_ASSERT_GT(key.size(), 0);
-        if (key[0] == '_') {
-            continue;
+    bool found;
+    THashSet<TString> keys;
+    for (size_t i = 0; i < 20; ++i) {
+        keys = GetTabletKeys(edge, tabletId);
+
+        found = false;
+        for (const auto& key : keys) {
+            UNIT_ASSERT_GT(key.size(), 0);
+            if (key[0] == '_') {
+                continue;
+            }
+
+            if (types.contains(key[0])) {
+                found = false;
+                break;
+            }
         }
-        UNIT_ASSERT_C(types.contains(key[0]), "unexpected type '" << key[0] << "'");
+
+        if (!found) {
+            break;
+        }
+
+        Sleep(TDuration::MilliSeconds(100));
+    }
+
+    if (found) {
+        Cerr << "keys for tablet " << tabletId << ":" << Endl;
+        for (const auto& k : keys) {
+            Cerr << k << Endl;
+        }
+        Cerr << "=============" << Endl;
+
+        UNIT_FAIL("unexpected keys for tablet " << tabletId);
     }
 }
 
@@ -1419,6 +1460,118 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+}
+
+void TFixture::CreateTable(const TString& tablePath)
+{
+    UNIT_ASSERT(!tablePath.empty());
+
+    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+
+    NTable::TSession session = CreateTableSession();
+    auto desc = NTable::TTableBuilder()
+        .AddNonNullableColumn("key", EPrimitiveType::Utf8)
+        .AddNonNullableColumn("value", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumn("key")
+        .Build();
+    auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+auto TFixture::MakeTableRecords() -> TVector<TTableRecord>
+{
+    TVector<TTableRecord> records;
+    records.emplace_back("key-1", "value-1");
+    records.emplace_back("key-2", "value-2");
+    records.emplace_back("key-3", "value-3");
+    records.emplace_back("key-4", "value-4");
+    return records;
+}
+
+auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
+{
+    auto makeJsonObject = [](const TTableRecord& r) {
+        return Sprintf(R"({"key":"%s", "value":"%s"})",
+                       r.Key.data(),
+                       r.Value.data());
+    };
+
+    if (records.empty()) {
+        return "[]";
+    }
+
+    TString s = "[";
+
+    s += makeJsonObject(records.front());
+    for (auto i = records.begin() + 1; i != records.end(); ++i) {
+        s += ", ";
+        s += makeJsonObject(*i);
+    }
+    s += "]";
+
+    return s;
+}
+
+void TFixture::WriteToTable(const TString& tablePath,
+                            const TVector<TTableRecord>& records,
+                            NTable::TTransaction* tx)
+{
+    TString query = Sprintf(R"(UPSERT INTO `%s` (key, value) VALUES ($key, $value);)",
+                            tablePath.data());
+    NTable::TSession session = tx->GetSession();
+
+    for (const auto& r : records) {
+        auto params = session.GetParamsBuilder()
+            .AddParam("$key").Utf8(r.Key).Build()
+            .AddParam("$value").Utf8(r.Value).Build()
+            .Build();
+        auto result = session.ExecuteDataQuery(query,
+                                               NYdb::NTable::TTxControl::Tx(*tx),
+                                               params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+}
+
+size_t TFixture::GetTableRecordsCount(const TString& tablePath)
+{
+    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)",
+                            tablePath.data());
+    NTable::TSession session = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(session);
+
+    auto result = session.ExecuteDataQuery(query,
+                                           NYdb::NTable::TTxControl::Tx(tx).CommitTx(true)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    NYdb::TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+
+    return parser.ColumnParser(0).GetUint64();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTable("/Root/table_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto records = MakeTableRecords();
+    WriteToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], MakeJsonDoc(records));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
+
+    CheckTabletKeys("topic_A");
 }
 
 }

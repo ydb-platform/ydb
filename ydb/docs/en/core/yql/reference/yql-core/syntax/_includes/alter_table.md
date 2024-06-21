@@ -36,7 +36,7 @@ ALTER TABLE episodes DROP column is_deleted;
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any index parameters from the [`CREATE TABLE`](../create_table#secondary_index) command.
+You can specify any index parameters from the [`CREATE TABLE`](../create_table.md#secondary_index) command.
 
 {% if backend_name == "YDB" %}
 
@@ -139,15 +139,15 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
    * `OLD_IMAGE`: Any column values before updates are written.
    * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
 * `FORMAT`: Data write format.
-   * `JSON`: Write data in [JSON](../../../../concepts/cdc#json-record-structure) format.
+   * `JSON`: Write data in [JSON](../../../../concepts/cdc.md#json-record-structure) format.
 {% if audience == "tech" %}
-   * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
-   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc#debezium-json-record-structure).
+   * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
+   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
 {% endif %}
-* `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
-* `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
-* `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc#initial-scan). Disabled by default.
+* `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
+* `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
+* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
+* `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc.md#initial-scan). Disabled by default.
 {% if audience == "tech" %}
 * `AWS_REGION`: Value to be written to the `awsRegion` field. Used only with the `DYNAMODB_STREAMS_JSON` format.
 {% endif %}
@@ -257,7 +257,7 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 {% endnote %}
 
-You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table#column-family) command.
+You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table.md#column-family) command.
 
 
 ## Changing additional table parameters {#additional-alter}

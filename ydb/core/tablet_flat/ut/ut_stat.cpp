@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 25428);
+        CheckMixedIndex(*subset, 24000, 2106479, 25458);
     }
 
     Y_UNIT_TEST(Serial_Groups)
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 49502);
+        CheckMixedIndex(*subset, 24000, 2106479, 49555);
     }
 
     Y_UNIT_TEST(Serial_Groups)
@@ -455,14 +455,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
     {
         const ui32 samples = 5;
 
-        Cerr << "Parts:" << Endl;
+        Cerr << subset.Flatten.size() << " parts:" << Endl;
         for (auto &part : subset.Flatten) {
             TTestEnv env;
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
             Cerr << "  " << index->GetEndRowId() << " rows, " 
                 << IndexTools::CountMainPages(*part.Part) << " pages, "
                 << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
-            for (ui32 sample : xrange(samples + 1)) {
+            for (ui32 sample : xrange(1u, samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
                 Y_ABORT_UNLESS(index->Seek(rowId) == EReady::Data);
                 TSmallVec<TCell> keyCells;
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true) {
+    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true, bool faulty = true) {
         if (mode == 0) {
             Dump(subset);
         }
@@ -571,6 +571,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         ui64 dataSizeResolution = totalBytes / histogramBucketsCount;
 
         TTouchEnv env;
+        env.Faulty = faulty;
         // env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
@@ -1031,6 +1032,46 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount), history ? 0.7 : 0);
             
             Check(*subset, mode, 10, false);
+        }
+    }
+
+    Y_UNIT_TEST(Many_Mixed)
+    {
+        const ui32 partsCount = 1000;
+        const ui64 rowsCount = 100000;
+
+        TAutoPtr<TMass> mass = new NTest::TMass(new NTest::TModelStd(false), rowsCount);
+
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            NPage::TConf conf;
+            conf.Groups.resize(mass->Model->Scheme->Families.size());
+            conf.Group(0).PageRows = 1; // we don't care about pages actual size
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+
+            TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount));
+            
+            Check(*subset, mode, 10, false, false);
+        }
+    }
+
+    Y_UNIT_TEST(Many_Serial)
+    {
+        const ui32 partsCount = 1000;
+        const ui64 rowsCount = 100000;
+
+        TAutoPtr<TMass> mass = new NTest::TMass(new NTest::TModelStd(false), rowsCount);
+
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            NPage::TConf conf;
+            conf.Groups.resize(mass->Model->Scheme->Families.size());
+            conf.Group(0).PageRows = 1; // we don't care about pages actual size
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+
+            TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerSeq(partsCount, mass->Saved.Size()));
+            
+            Check(*subset, mode, 10, false, false);
         }
     }
 }

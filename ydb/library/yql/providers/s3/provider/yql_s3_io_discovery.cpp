@@ -312,6 +312,9 @@ private:
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
 
+            TStringBuilder path;
+            object.ForEachChild([&path](const TExprNode& child){ path << child.Head().Tail().Head().Content() << " "; });
+
             TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
             if (auto it = genColumnsByNode.find(node); it != genColumnsByNode.end()) {
@@ -505,6 +508,7 @@ private:
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
                     .ColumnOrder(std::move(userSchema.back()))
                 .Done().Ptr():
                 Build<TS3ReadObject>(ctx, read.Pos())
@@ -512,6 +516,7 @@ private:
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
                 .Done().Ptr());
         }
 

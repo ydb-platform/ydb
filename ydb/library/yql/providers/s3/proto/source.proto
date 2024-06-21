@@ -22,4 +22,5 @@ message TSource {
     uint64 ParallelDownloadCount = 11;
     uint64 RowsLimitHint = 12;
     bool UseRuntimeListing = 13;
+    bool AsyncDecoding = 14;
 }

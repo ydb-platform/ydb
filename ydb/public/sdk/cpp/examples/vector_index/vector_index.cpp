@@ -224,7 +224,7 @@ public:
         }
         query = std::format(R"({0} RANDOM({1}) < {2}
   LIMIT {3})", query, Options.Embedding, std::max(0.5 / k, static_cast<double>(k * kMinClusterSize) / Rows()), k);
-        Cout << query << Endl;
+        // Cout << query << Endl;
 
         ThrowOnError(Client.RetryOperationSync([&](TSession session) {
             auto values = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
@@ -246,32 +246,32 @@ public:
         }));
     }
 
-    void Iterate(std::function<void(ui32, TRawEmbedding)> cb) final {
-        if (Rows() <= 20'000) {
-            if (Embeddings.empty()) {
-                Embeddings.reserve(20'000);
-                IterateImpl<false>([&](ui32 rows, TRawEmbedding embedding) {
-                    if (rows > 0) {
-                        Embeddings.push_back(std::move(embedding));
-                    }
-                });
-            }
-            for (auto embedding : Embeddings) {
-                cb(1, std::move(embedding));
-            }
-        } else {
-            IterateImpl<false>(cb);
+    void IterateEmbedding(TClusterizer& clusterizer) final {
+        if (Rows() > 20'000) {
+            IterateImpl<false>(clusterizer, [&](TRawEmbedding rawEmbedding) {
+                clusterizer.Handle(std::move(rawEmbedding));
+            });
+            return;
         }
+        if (Embeddings.empty()) {
+            Embeddings.reserve(20'000);
+            IterateImpl<false>(clusterizer, [&](TRawEmbedding embedding) {
+                Embeddings.push_back(std::move(embedding));
+            });
+        }
+        clusterizer.Handle(Embeddings);
     }
 
-    void Iterate(std::function<void(ui32, TId, TRawEmbedding)> cb) final {
+    void IterateId(TClusterizer& clusterizer) final {
         Embeddings.clear();
-        IterateImpl<true>(cb);
+        IterateImpl<true>(clusterizer, [&](TId id, TRawEmbedding rawEmbedding) {
+            clusterizer.Handle(id, std::move(rawEmbedding));
+        });
     }
 
 private:
     template <bool WithPK>
-    void IterateImpl(auto&& cb) {
+    void IterateImpl(TClusterizer& clusterizer, auto&& cb) {
         TReadTableSettings settings;
         // TODO(mbkkt) doesn't work settings.ReturnNotNullAsOptional(false);
         if constexpr (WithPK) {
@@ -296,13 +296,13 @@ private:
 
         ThrowOnError(Client.RetryOperationSync([&](TSession session) {
             auto fit = session.ReadTable(FullName(Options, Table), settings);
-            ReadImpl<WithPK>(fit.ExtractValueSync(), cb);
+            ReadImpl<WithPK>(clusterizer, fit.ExtractValueSync(), cb);
             return TStatus{EStatus::SUCCESS, {}};
         }));
     }
 
     template <bool WithPK>
-    void ReadImpl(TTablePartIterator it, auto&& cb) {
+    void ReadImpl(TClusterizer& clusterizer, TTablePartIterator it, auto&& cb) {
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
@@ -313,11 +313,9 @@ private:
             if (Queue.empty()) {
                 lock.unlock();
                 if constexpr (WithPK) {
-                    cb(0, 0, "");
-                    cb(0, 0, "");
+                    clusterizer.IdsTrigger();
                 } else {
-                    cb(0, "");
-                    cb(0, "");
+                    clusterizer.EmbeddingsTrigger();
                 }
                 lock.lock();
             }
@@ -343,7 +341,6 @@ private:
             ythrow TVectorException{std::move(part)};
         }
         TResultSetParser batch(part.ExtractPart());
-        ui32 rows = batch.RowsCount();
         if (!batch.TryNextRow()) {
             return true;
         }
@@ -360,14 +357,14 @@ private:
                 } else {
                     pk = *primaryKey.GetOptionalUint32();
                 }
-                cb(rows, pk, *embedding.GetOptionalString());
+                cb(pk, *embedding.GetOptionalString());
             } while (batch.TryNextRow());
         } else {
             Y_ASSERT(batch.ColumnsCount() == 1);
             auto embeddingIdx = batch.ColumnIndex(Options.Embedding);
             auto& embedding = batch.ColumnParser(embeddingIdx);
             do {
-                cb(rows, *embedding.GetOptionalString());
+                cb(*embedding.GetOptionalString());
             } while (batch.TryNextRow());
         }
         return true;

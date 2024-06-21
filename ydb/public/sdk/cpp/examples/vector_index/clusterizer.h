@@ -1,4 +1,5 @@
 #include "util/generic/fwd.h"
+#include "util/generic/string.h"
 #include "util/system/types.h"
 #include <vector>
 #include <span>
@@ -12,12 +13,14 @@ using TId = uint64_t;
 using TRawEmbedding = TString&&;
 using TEmbedding = std::span<const float>;
 
+class TClusterizer;
+
 class TDatasetIterator {
 public:
     virtual ui64 Rows() const = 0;
     virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(ui32, TRawEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(ui32, TId, TRawEmbedding)>) = 0;
+    virtual void IterateEmbedding(TClusterizer& clusterizer) = 0;
+    virtual void IterateId(TClusterizer& clusterizer) = 0;
 };
 
 using TDistance = std::function<float(TEmbedding, TEmbedding)>;
@@ -42,11 +45,19 @@ public:
 
     TClusters Run(const TOptions& options);
 
+    void Handle(std::span<const TString> embeddings);
+    void Handle(TRawEmbedding embedding);
+    void Handle(TId id, TRawEmbedding embedding);
+
+    void EmbeddingsTrigger();
+    void IdsTrigger();
+
 private:
     bool Init(ui64 k);
+    void StepUpdate();
+    bool Step(ui32 iteration, ui32 maxIterations, float neededDiff);
 
-    bool Step(float neededDiff);
-
+    void FinalizeUpdate();
     void Finalize();
 
     struct TMin {
@@ -76,7 +87,7 @@ private:
     float OldMean = std::numeric_limits<float>::max();
 
     struct TProgress {
-        void Reset(ui64 rows);
+        void Reset(std::string_view operation, ui64 rows);
         void Report(ui64 read);
         void ForceReport();
 
@@ -89,8 +100,9 @@ private:
     TProgress Progress;
 
     struct TBatch {
+        std::span<const TString> RawData;
         std::vector<TId> IdData;
-        std::vector<TString> RawData;
+        std::vector<TString> RawDataStorage;
         std::vector<TMin> Min;
 
         void Swap(TBatch& other);
@@ -106,4 +118,5 @@ private:
     std::condition_variable WaitIdle;
     bool Stop = false;
     ui64 Work = 0;
+    ui64 BatchSize = 0;
 };

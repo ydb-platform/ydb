@@ -2,12 +2,14 @@
 #include "util/stream/output.h"
 #include "util/system/yassert.h"
 
+#include <format>
+
 static constexpr ui64 kMinClusters = 4;
 static ui64 gId = 1;
 
-void TClusterizer::TProgress::Reset(ui64 rows) {
+void TClusterizer::TProgress::Reset(std::string_view operation, ui64 rows) {
     // Y_UNUSED(rows, Rows, Curr, Last);
-    Cout << "Start reading: " << rows << Endl;
+    Cout << "Start " << operation << ": " << rows << Endl;
     Curr = 0;
     Rows = rows;
     Last = std::chrono::steady_clock::now();
@@ -40,13 +42,15 @@ static std::span<const T> GetArray(std::string_view str) {
 }
 
 void TClusterizer::TBatch::Swap(TBatch& other) {
+    std::swap(RawData, other.RawData);
     IdData.swap(other.IdData);
-    RawData.swap(other.RawData);
+    RawDataStorage.swap(other.RawDataStorage);
     Min.swap(other.Min);
 }
 void TClusterizer::TBatch::Clear() {
+    RawData = {};
     IdData.clear();
-    RawData.clear();
+    RawDataStorage.clear();
     Min.clear();
 }
 bool TClusterizer::TBatch::Empty() const {
@@ -58,7 +62,7 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
     , Distance{std::move(distance)}
     , Create{std::move(create)}
 {
-    ui64 n = std::clamp<ui64>(std::thread::hardware_concurrency(), 1, std::numeric_limits<ui64>::max());
+    ui64 n = std::max<ui64>(std::thread::hardware_concurrency(), 1);
     Cout << "kmeans will use " << n << " threads" << Endl;
     Threads.reserve(n);
     for (ui64 i = 0; i != n; ++i) {
@@ -77,8 +81,8 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
                 auto batchSize = (size + threads - 1) / threads;
                 auto start = i * batchSize;
                 auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
-                std::span batch{ToCompute.RawData.data() + start, len};
-                for (const auto& rawEmbedding : batch) {
+                auto batch = ToCompute.RawData.subspan(start, len);
+                for (const TString& rawEmbedding : batch) {
                     auto embedding = GetArray<float>(rawEmbedding);
                     auto min = Compute(embedding);
                     ToCompute.Min[start++] = min;
@@ -152,9 +156,8 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     Y_ASSERT(!options.normalize); // normalize not supported
     const ui64 clusters = std::min<ui64>(options.maxK, 1000);
     if (Init(clusters)) {
-        for (size_t i = 0; i < options.maxIterations;) {
-            Cout << "Start step: " << ++i << " / " << options.maxIterations << Endl;
-            if (!Step(1.25)) {
+        for (ui32 i = 1; i <= options.maxIterations; ++i) {
+            if (!Step(i, options.maxIterations, 1.25)) {
                 break;
             }
         }
@@ -162,12 +165,12 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     } else {
         auto rows = It.Rows();
         Cout << "Bad dataset (" << rows << ") for such clusterization ( iterations: " << options.maxIterations << ", k: " << options.maxK << " )" << Endl;
-        Progress.Reset(rows);
+        Progress.Reset("read", rows);
         auto parentId = ++gId;
-        It.Iterate([&](ui32, TId id, TRawEmbedding rawEmbedding) {
-            Progress.Report(1);
-            Create(parentId, id, std::move(rawEmbedding));
-        });
+        // It.Iterate([&](ui32, TId id, TRawEmbedding rawEmbedding) {
+        //     Progress.Report(1);
+        //     Create(parentId, id, std::move(rawEmbedding));
+        // });
         Progress.ForceReport();
         Clusters.Ids.emplace_back(parentId);
         Clusters.Count.emplace_back(rows);
@@ -177,7 +180,7 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
 }
 
 bool TClusterizer::Init(ui64 k) {
-    Cout << "Start init" << Endl;
+    // Cout << "Start init" << Endl;
     // TODO kmeans++, kmeans||?
     if (k < kMinClusters || k * kMinClusterSize >= It.Rows()) {
         return false;
@@ -201,31 +204,45 @@ bool TClusterizer::Init(ui64 k) {
         cluster.Coords.resize(dims, 0.f);
     }
     OldMean = std::numeric_limits<float>::max();
+    BatchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
     return true;
 }
 
-bool TClusterizer::Step(float neededDiff) {
-    Progress.Reset(It.Rows());
+void TClusterizer::StepUpdate() {
+    for (size_t i = 0; i != ToFill.RawData.size(); ++i) {
+        auto embedding = GetArray<float>(ToFill.RawData[i]);
+        Update(ToFill.Min[i], embedding);
+    }
+}
 
-    auto update = [&] {
-        for (size_t i = 0; i != ToFill.RawData.size(); ++i) {
-            auto embedding = GetArray<float>(ToFill.RawData[i]);
-            Update(ToFill.Min[i], embedding);
-        }
-    };
-    auto batchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
-    It.Iterate([&](ui32 rows, TRawEmbedding rawEmbedding) {
-        if (rows > 0) {
-            Progress.Report(1);
-            ToFill.RawData.emplace_back(std::move(rawEmbedding));
-            ToFill.Min.emplace_back();
-        }
-        if (ToFill.RawData.size() >= batchSize) {
-            ComputeBatch(update);
-        }
-    });
-    ComputeBatch(update); // wait last and compute tail
-    ComputeBatch(update); // wait tail
+void TClusterizer::EmbeddingsTrigger() {
+    ToFill.RawData = ToFill.RawDataStorage;
+    ComputeBatch([this] { StepUpdate(); }); // wait last and compute tail
+    ComputeBatch([this] { StepUpdate(); }); // wait tail
+}
+
+void TClusterizer::Handle(std::span<const TString> embeddings) {
+    Progress.Report(embeddings.size());
+    ToFill.RawData = embeddings;
+    ToFill.Min.resize(embeddings.size());
+    ComputeBatch([this] { StepUpdate(); });
+}
+
+void TClusterizer::Handle(TRawEmbedding rawEmbedding) {
+    Progress.Report(1);
+    ToFill.RawDataStorage.emplace_back(std::move(rawEmbedding));
+    ToFill.Min.emplace_back();
+    if (ToFill.RawDataStorage.size() >= BatchSize) {
+        ToFill.RawData = ToFill.RawDataStorage;
+        ComputeBatch([this] { StepUpdate(); });
+    }
+}
+
+bool TClusterizer::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
+    Progress.Reset(std::format("step {} / {}", iteration, maxIterations), It.Rows());
+
+    It.IterateEmbedding(*this);
+    EmbeddingsTrigger();
 
     float newMean = 0;
     ui64 zeroCount = 0;
@@ -270,33 +287,38 @@ bool TClusterizer::Step(float neededDiff) {
     return !stop;
 }
 
-void TClusterizer::Finalize() {
-    Cout << "Start finalize" << Endl;
-    Progress.Reset(It.Rows());
+void TClusterizer::FinalizeUpdate() {
+    for (size_t i = 0; i != ToFill.RawDataStorage.size(); ++i) {
+        auto& parentId = Clusters.Ids[ToFill.Min[i].Pos];
+        Clusters.Count[ToFill.Min[i].Pos]++;
+        auto id = ToFill.IdData[i];
+        if (Y_UNLIKELY(!parentId))
+            parentId = ++gId;
+        Create(parentId, id, std::move(ToFill.RawDataStorage[i]));
+    }
+}
 
-    auto update = [&] {
-        for (size_t i = 0; i != ToFill.RawData.size(); ++i) {
-            auto& parentId = Clusters.Ids[ToFill.Min[i].Pos];
-            Clusters.Count[ToFill.Min[i].Pos]++;
-            auto id = ToFill.IdData[i];
-            if (Y_UNLIKELY(!parentId))
-                parentId = ++gId;
-            Create(parentId, id, std::move(ToFill.RawData[i]));
-        }
-    };
-    auto batchSize = (ui64{900'000} * ui64{Threads.size()}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
-    It.Iterate([&](ui32 rows, TId id, TRawEmbedding rawEmbedding) {
-        if (rows > 0) {
-            Progress.Report(1);
-            ToFill.IdData.emplace_back(id);
-            ToFill.RawData.emplace_back(std::move(rawEmbedding));
-            ToFill.Min.emplace_back();
-        }
-        if (ToFill.RawData.size() >= batchSize) {
-            ComputeBatch(update);
-        }
-    });
-    ComputeBatch(update); // wait last and compute tail
-    ComputeBatch(update); // wait tail
+void TClusterizer::IdsTrigger() {
+    ToFill.RawData = ToFill.RawDataStorage;
+    ComputeBatch([this] { FinalizeUpdate(); }); // wait last and compute tail
+    ComputeBatch([this] { FinalizeUpdate(); }); // wait tail
+}
+
+void TClusterizer::Handle(TId id, TRawEmbedding rawEmbedding) {
+    Progress.Report(1);
+    ToFill.IdData.emplace_back(id);
+    ToFill.RawDataStorage.emplace_back(std::move(rawEmbedding));
+    ToFill.Min.emplace_back();
+    if (ToFill.RawDataStorage.size() >= BatchSize) {
+        ToFill.RawData = ToFill.RawDataStorage;
+        ComputeBatch([this] { FinalizeUpdate(); });
+    }
+}
+
+void TClusterizer::Finalize() {
+    Progress.Reset("finalize", It.Rows());
+
+    It.IterateId(*this);
+    IdsTrigger();
     Progress.ForceReport();
 }

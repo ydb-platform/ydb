@@ -16,7 +16,8 @@ using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NTable;
 
-static constexpr size_t kBulkSize = 1000;
+static constexpr ui64 kBulkSize = 1000;
+static constexpr ui64 kSmallClusterSize = 20'000;
 
 static constexpr std::string_view FlatIndex = "flat";
 static constexpr std::string_view KMeansIndex = "kmeans";
@@ -248,14 +249,14 @@ public:
     }
 
     void IterateEmbedding(TClusterizer& clusterizer) final {
-        if (Rows() > 20'000) {
+        if (Rows() > kSmallClusterSize) {
             IterateImpl<false>(clusterizer, [&](TRawEmbedding rawEmbedding) {
                 clusterizer.Handle(std::move(rawEmbedding));
             });
             return;
         }
         if (Embeddings.empty()) {
-            Embeddings.reserve(20'000);
+            Embeddings.reserve(kSmallClusterSize);
             IterateImpl<false>(clusterizer, [&](TRawEmbedding embedding) {
                 Embeddings.push_back(std::move(embedding));
             });
@@ -561,7 +562,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         smallClusters.clear();
     };
     auto makeClusters = [&](ui8 level, TId parentId, ui64 count) {
-        if (count >= 20'000) {
+        if (count > kSmallClusterSize) {
             auto clusters = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
             processCluster(clusters);
             return;
@@ -573,7 +574,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
                                      [&](TId parentId, TId id, TRawEmbedding embedding) {
                                          writer.WritePosting(parentId, id, std::move(embedding));
                                      },
-                                     1};
+                                     0};
             return makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
         }));
     };

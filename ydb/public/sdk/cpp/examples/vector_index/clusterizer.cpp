@@ -62,7 +62,7 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
     , Distance{std::move(distance)}
     , Create{std::move(create)}
 {
-    ui32 n = std::clamp<ui32>(std::thread::hardware_concurrency(), 1, maxThreads);
+    ui32 n = std::min<ui32>(std::thread::hardware_concurrency(), maxThreads);
     Cout << "kmeans will use " << n << " threads" << Endl;
     Threads.reserve(n);
     for (ui32 i = 0; i != n; ++i) {
@@ -82,7 +82,7 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
                 auto start = i * batchSize;
                 auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
                 auto batch = ToCompute.RawData.subspan(start, len);
-                for (const TString& rawEmbedding : batch) {
+                for (const auto& rawEmbedding : batch) {
                     auto embedding = GetArray<float>(rawEmbedding);
                     auto min = Compute(embedding);
                     ToCompute.Min[start++] = min;
@@ -114,16 +114,23 @@ TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
 
 template <typename Func>
 void TClusterizer::ComputeBatch(Func&& func) {
-    std::unique_lock lock{M};
-    while (Work != 0) {
-        WaitWork.wait(lock);
+    if (!Threads.empty()) {
+        std::unique_lock lock{M};
+        while (Work != 0) {
+            WaitWork.wait(lock);
+        }
+        ToCompute.Swap(ToFill);
+        if (!ToCompute.Empty()) {
+            Work = (ui64{1} << Threads.size()) - 1;
+            WaitIdle.notify_all();
+        }
+    } else {
+        for (size_t start = 0; const auto& rawEmbedding : ToCompute.RawData) {
+            auto embedding = GetArray<float>(rawEmbedding);
+            auto min = Compute(embedding);
+            ToCompute.Min[start++] = min;
+        }
     }
-    ToCompute.Swap(ToFill);
-    if (!ToCompute.Empty()) {
-        Work = (ui64{1} << Threads.size()) - 1;
-        WaitIdle.notify_all();
-    }
-    lock.unlock();
     Progress.Report(0);
     if (!ToFill.Empty()) {
         func();

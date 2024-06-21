@@ -292,6 +292,14 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
         return ctx.NewAtom(pos, ToString(value.GetUint64()));
     } else if (slot == EDataSlot::Interval) {
         return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Date32) {
+        return ctx.NewAtom(pos, ToString(value.GetInt32()));
+    } else if (slot == EDataSlot::Datetime64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Timestamp64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Interval64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
     } else {
        return nullptr;
     }

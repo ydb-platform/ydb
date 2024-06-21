@@ -93,6 +93,22 @@ bool ConvertDataSlotToYdbTypedValue(NYql::EDataSlot fromType, const TString& fro
         toType->set_type_id(Ydb::Type::INTERVAL);
         toValue->set_int64_value(FromString<i64>(fromValue));
         break;
+    case NYql::EDataSlot::Date32:
+        toType->set_type_id(Ydb::Type::DATE32);
+        toValue->set_int32_value(FromString<i32>(fromValue));
+        break;
+    case NYql::EDataSlot::Datetime64:
+        toType->set_type_id(Ydb::Type::DATETIME64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;
+    case NYql::EDataSlot::Timestamp64:
+        toType->set_type_id(Ydb::Type::TIMESTAMP64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;
+    case NYql::EDataSlot::Interval64:
+        toType->set_type_id(Ydb::Type::INTERVAL64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;        
     default:
         return false;
     }

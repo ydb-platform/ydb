@@ -3,10 +3,10 @@
 При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры таблицы. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
 
 ```sql
-ALTER TABLE table_name action1, action2, ..., actionN;
+ALTER TABLE <table_name> <action1>, <action2>, ..., <actionN>;
 ```
 
-```action``` — это любое действие по изменению таблицы, из описанных ниже.
+```<action>``` — это любое действие по изменению таблицы, из описанных ниже.
 
 ## Изменение состава колонок {#columns}
 
@@ -55,15 +55,15 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 {% endnote %}
 
 ```sql
-ALTER TABLE table_name ALTER INDEX index_name SET partitioning_setting_name value;
-ALTER TABLE table_name ALTER INDEX index_name SET (partitioning_setting_name_1 = value_1, ...);
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
 
-* `table_name` - имя таблицы, индекс которой нужно изменить. 
+* `<table_name>` - имя таблицы, индекс которой нужно изменить. 
 
-* `index_name` - имя индекса, который нужно изменить.
+* `<index_name>` - имя индекса, который нужно изменить.
 
-* `partitioning_setting_name` - имя изменяемого параметра, который должен быть одним из следующих:
+* `<partitioning_setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
   * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
   * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
   * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
@@ -76,11 +76,13 @@ ALTER TABLE table_name ALTER INDEX index_name SET (partitioning_setting_name_1 =
 
 {% endnote %}
 
-* `value` - новое значение параметра. Возможные значения включают:
+* `<value>` - новое значение параметра. Возможные значения включают:
     * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
     * для остальных параметров — целое число типа `Uint64`
 
-Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` и устанавливает минимальное количество партиций равным 5:
+#### Пример
+
+Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` в таблице `series` и устанавливает ему минимальное количество партиций равным 5:
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -108,7 +110,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 Если индекс с новым именем существует, будет возвращена ошибка.
 
-{% if backend_name == YDB %}
+{% if backend_name == "YDB" %}
 
 Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 
@@ -202,7 +204,7 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ## Переименование таблицы {#rename}
 
 ```sql
-ALTER TABLE old_table_name RENAME TO new_table_name;
+ALTER TABLE <old_table_name> RENAME TO <new_table_name>;
 ```
 
 Если таблица с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены таблицы под нагрузкой поддерживается специализированными методами в CLI и SDK.
@@ -265,10 +267,10 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 В общем случае команда для изменения любого параметра таблицы выглядит следующим образом:
 
 ```sql
-ALTER TABLE table_name SET (key = value);
+ALTER TABLE <table_name> SET (<key> = <value>);
 ```
 
-```key``` — имя параметра, ```value``` — его новое значение.
+```<key>``` — имя параметра, ```<value>``` — его новое значение.
 
 Например, такая команда выключит автоматическое партиционирование таблицы:
 
@@ -283,10 +285,10 @@ ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 Команда для сброса параметра таблицы выглядит следующим образом:
 
 ```sql
-ALTER TABLE table_name RESET (key);
+ALTER TABLE <table_name> RESET (<key>);
 ```
 
-```key``` — имя параметра.
+```<key>``` — имя параметра.
 
 Например, такая команда сбросит (удалит) настройки TTL для таблицы:
 

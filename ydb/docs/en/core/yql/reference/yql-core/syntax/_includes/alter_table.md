@@ -3,10 +3,10 @@
 Using the ```ALTER TABLE``` command, you can change the composition of columns and additional table parameters. You can specify several actions in one command. In general, the ```ALTER TABLE``` command looks like this:
 
 ```sql
-ALTER TABLE table_name action1, action2, ..., actionN;
+ALTER TABLE <table_name> <action1>, <action2>, ..., <actionN>;
 ```
 
-```action```: Any action to change the table described below.
+```<action>```: Any action to change the table described below.
 
 ## Changing the composition of columns {#columns}
 
@@ -59,11 +59,11 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
 ```
 
-* `table_name`: The name of the table whose index is to be altered.
+* `<table_name>`: The name of the table whose index is to be modified.
 
-* `index_name`: The name of the index to be altered.
+* `<index_name>`: The name of the index to be modified.
 
-* `partitioning_setting_name`: The name of the setting to be altered, which should be one of the following:
+* `<partitioning_setting_name>`: The name of the setting to be modified, which should be one of the following:
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
     * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
@@ -110,7 +110,7 @@ You can also remove a secondary index using the {{ ydb-short-name }} CLI [table 
 
 If an index with the new name exists, an error is returned.
 
-{% if backend_name == YDB %}
+{% if backend_name == "YDB" %}
 
 Replacement of atomic indexes under load is supported by the command [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK ad-hoc methods.
 
@@ -128,7 +128,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 ## Adding and deleting a changefeed {#changefeed}
 
-`ADD CHANGEFEED <name> WITH (option = value[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
+`ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
 
 ### Changefeed options {#changefeed-options}
 
@@ -204,7 +204,7 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ## Renaming a table {#rename}
 
 ```sql
-ALTER TABLE old_table_name RENAME TO new_table_name;
+ALTER TABLE <old_table_name> RENAME TO <new_table_name>;
 ```
 
 If a table with a new name exists, an error is returned. The possibility of transactional table substitution under load is supported by ad-hoc CLI and SDK methods.
@@ -267,10 +267,10 @@ Most of the table parameters in YDB specified on the [table description]({{ conc
 In general, the command to change any table parameter looks like this:
 
 ```sql
-ALTER TABLE table_name SET (key = value);
+ALTER TABLE <table_name> SET (<key> = <value>);
 ```
 
-```key``` is a parameter name and ```value``` is its new value.
+```<key>``` is a parameter name and ```<value>``` is its new value.
 
 For example, this command disables automatic partitioning of the table:
 
@@ -285,10 +285,10 @@ Some table parameters in YDB listed on the [table description]({{ concept_table 
 The command to reset the table parameter looks like this:
 
 ```sql
-ALTER TABLE table_name RESET (key);
+ALTER TABLE <table_name> RESET (<key>);
 ```
 
-```key```: Name of the parameter.
+```<key>```: Name of the parameter.
 
 For example, this command resets (deletes) TTL settings for the table:
 

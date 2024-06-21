@@ -25,25 +25,22 @@ def main():
 
     github_srv = os.environ.get("GITHUB_SERVER_URL")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
-    repo_url= f"{github_srv}/{repo_name}/"
+    repo_url = f"{github_srv}/{repo_name}/"
 
     branch = os.environ.get("branch_to_compare")
     current_pr_commit_sha = os.environ.get("commit_git_sha")
 
-
     if current_pr_commit_sha is not None:
-                git_commit_time_bytes = subprocess.check_output(
-                    ["git", "show", "--no-patch", "--format=%cI", current_pr_commit_sha]
-                )
-                git_commit_time = datetime.datetime.fromisoformat(
-                    git_commit_time_bytes.decode("utf-8").strip()
-                )
-                git_commit_time_unix = int(git_commit_time.timestamp())
+        git_commit_time_bytes = subprocess.check_output(
+            ["git", "show", "--no-patch", "--format=%cI", current_pr_commit_sha]
+        )
+        git_commit_time = datetime.datetime.fromisoformat(
+            git_commit_time_bytes.decode("utf-8").strip()
+        )
+        git_commit_time_unix = int(git_commit_time.timestamp())
     else:
-       print(
-            f"Error: Cant get commit {current_pr_commit_sha} timestamp"
-        )  
-       return 1
+        print(f"Error: Cant get commit {current_pr_commit_sha} timestamp")
+        return 1
 
     current_sizes_result = get_current_build_size.get_build_size()
     main_sizes_result = get_main_build_size.get_build_size(git_commit_time_unix)

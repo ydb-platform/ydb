@@ -78,7 +78,8 @@ protected:
                       NTable::TTransaction* tx = nullptr);
     TVector<TString> ReadFromTopic(const TString& topicPath,
                                    const TString& consumerName,
-                                   const TDuration& duration);
+                                   const TDuration& duration,
+                                   NTable::TTransaction* tx = nullptr);
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
     void WaitForSessionClose(const TString& topicPath,
@@ -171,18 +172,21 @@ NTable::TSession TFixture::CreateTableSession()
 NTable::TTransaction TFixture::BeginTx(NTable::TSession& session)
 {
     auto result = session.BeginTransaction().ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return result.GetTransaction();
 }
 
 void TFixture::CommitTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Commit().ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
 }
 
 void TFixture::RollbackTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Rollback().ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
 }
 
@@ -590,7 +594,8 @@ void TFixture::WriteToTopic(const TString& topicPath,
 
 TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
                                          const TString& consumerName,
-                                         const TDuration& duration)
+                                         const TDuration& duration,
+                                         NTable::TTransaction* tx)
 {
     TVector<TString> messages;
 
@@ -604,12 +609,20 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
             return messages;
         }
 
-        for (auto& event : session->GetEvents()) {
+        NTopic::TReadSessionGetEventSettings settings;
+        if (tx) {
+            settings.Tx(*tx);
+        }
+
+        for (auto& event : session->GetEvents(settings)) {
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
                 for (auto& m : e->GetMessages()) {
                     messages.push_back(m.GetData());
                 }
-                e->Commit();
+
+                if (!tx) {
+                    e->Commit();
+                }
             }
         }
 
@@ -1572,6 +1585,33 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount("table_A"), records.size());
 
     CheckTabletKeys("topic_A");
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+
+    for (const auto& m : messages) {
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, m, &tx);
+    }
+
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
 }
 
 }

@@ -209,7 +209,7 @@ inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 hist
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);
+    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, stats.RowCount / histogramBucketsCount, stats.DataSize.Size, env, yieldHandler);
 
     return ready;
 }

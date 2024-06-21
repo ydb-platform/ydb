@@ -137,6 +137,12 @@ class TValueConverter {
             return TValue(Parser.GetDatetime().GetValue());
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
+        case EPrimitiveType::Date32:
+            return TValue(Parser.GetDate32().GetValue());
+        case EPrimitiveType::Datetime64:
+            return TValue(Parser.GetDatetime64().GetValue());
+        case EPrimitiveType::Timestamp64:
+            return TValue(Parser.GetTimestamp64().GetValue());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:

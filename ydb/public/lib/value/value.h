@@ -155,6 +155,10 @@ public:
     TWriteValue& Datetime(ui32 value);
     TWriteValue& Timestamp(ui64 value);
     TWriteValue& Interval(i64 value);
+    TWriteValue& Date32(i32 value);
+    TWriteValue& Datetime64(i64 value);
+    TWriteValue& Timestamp64(i64 value);
+    TWriteValue& Interval64(i64 value);
     TWriteValue& operator =(bool value);
     TWriteValue& operator =(ui8 value);
     TWriteValue& operator =(i8 value);

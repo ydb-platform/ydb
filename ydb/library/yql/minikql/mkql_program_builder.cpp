@@ -5279,7 +5279,8 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
         !(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *static_cast<TType*>(sourceType) << " into " << *static_cast<TType*>(targetType));
 
-    const bool useToIntegral = !options || NKikimr::NUdf::ECastOptions::MayFail & *options;
+    const bool useToIntegral = (*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        (*options & NKikimr::NUdf::ECastOptions::MayFail);
     return useToIntegral ? ToIntegral(arg, type) : Convert(arg, type);
 }
 

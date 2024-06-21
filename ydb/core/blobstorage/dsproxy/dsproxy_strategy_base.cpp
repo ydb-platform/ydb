@@ -389,7 +389,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
 }
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
-        bool isPut) {
+        bool isPut, float slowDiskThreshold) {
     if (info.GetTotalVDisksNum() == 1) {
         // when there is only one disk, we consider it not slow
         return 0;

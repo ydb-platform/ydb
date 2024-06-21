@@ -50,6 +50,8 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
         return;
     }
 
+    EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
 
     State->CmsTabletId = TabletID();
@@ -244,13 +246,16 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem, 
+        (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
 {
     for (const auto &entry : State->Permissions)
         info->AddLocks(entry.second, &ctx);
+    for (const auto &entry : State->ScheduledRequests)
+        info->ScheduleActions(entry.second, &ctx);
     for (const auto &entry : State->Notifications)
         info->AddExternalLocks(entry.second, &ctx);
     for (const auto &entry : State->HostMarkers)
@@ -305,6 +310,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             scheduled.SetDuration(request.GetDuration());
         scheduled.SetTenantPolicy(request.GetTenantPolicy());
         scheduled.SetAvailabilityMode(request.GetAvailabilityMode());
+        if (request.HasPriority()) {
+            scheduled.SetPriority(request.GetPriority());
+        }
     }
 
     LOG_INFO_S(ctx, NKikimrServices::CMS,
@@ -1468,6 +1476,20 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
         }
     }
 
+    if (rec.HasPriority() && !EnableCMSRequestPriorities) {
+        if (rec.GetUser() == WALLE_CMS_USER) {
+            rec.ClearPriority();
+        } else {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                ev, TStatus::WRONG_REQUEST, "Unsupported: feature flag EnableCMSRequestPriorities is off", ctx);
+        }
+    }
+
+    if (-100 > rec.GetPriority() || rec.GetPriority() > 100) {
+        return ReplyWithError<TEvCms::TEvPermissionResponse>(
+            ev, TStatus::WRONG_REQUEST, "Priority value is out of range", ctx);
+    }
+
     EnqueueRequest(ev.Release(), ctx);
 }
 
@@ -1820,7 +1842,6 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;
     auto &rec = ev->Get()->Record;
-    TString user = rec.GetUser();
 
     auto requestStartTime = TInstant::Now();
 
@@ -1860,12 +1881,25 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
+    ClusterInfo->LogManager.PushRollbackPoint();
+    const i32 priority = rec.GetPriority();
+    for (const auto &[_, scheduledRequest] : State->ScheduledRequests) {
+        if (scheduledRequest.Priority < priority) {
+            for (const auto &action : scheduledRequest.Request.GetActions()) {
+                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+            }
+        }
+    }
+    ClusterInfo->DeactivateScheduledLocks(priority);
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
+    ClusterInfo->ReactivateScheduledLocks();
+    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
         Reply(ev, std::move(resp), ctx);
     } else {
+        TString user = rec.GetUser();
         auto reqId = user + "-r-" + ToString(State->NextRequestId++);
         resp->Record.SetRequestId(reqId);
 
@@ -1873,7 +1907,9 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
+            scheduled.Priority = priority;
             scheduled.RequestId = reqId;
+            ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(reqId, std::move(scheduled));
@@ -1924,8 +1960,19 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     auto requestStartTime = TInstant::Now();
 
+    ClusterInfo->LogManager.PushRollbackPoint();
+    for (const auto &scheduled_request : State->ScheduledRequests) {
+        if (scheduled_request.second.Priority < request.Priority) {
+            for (const auto &action : scheduled_request.second.Request.GetActions())
+                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+        }
+    }
+
+    ClusterInfo->DeactivateScheduledLocks(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
+    ClusterInfo->ReactivateScheduledLocks();
+    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1933,14 +1980,19 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     } else {
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;
+        auto priority = request.Priority;
 
+        ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = order;
+            scheduled.Priority = priority;
             scheduled.RequestId = rec.GetRequestId();
             resp->Record.SetRequestId(scheduled.RequestId);
 
+            ClusterInfo->ScheduleActions(scheduled, &ctx);
+            
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(rec.GetRequestId(), std::move(scheduled));
         } else {
@@ -2223,7 +2275,12 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
-{
+{   
+    const auto& appConfig = ev->Get()->Record.GetConfig();
+    if (appConfig.HasFeatureFlags()) {
+        EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
+    }
+
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         Execute(CreateTxUpdateConfig(ev), ctx);
     } else {

@@ -215,6 +215,7 @@ public:
                 /* participants */ { },
                 groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
                 volatileOrdered,
+                /* arbiter */ false,
                 txc);
             // Note: transaction is already committed, no additional waiting needed
         }

@@ -223,7 +223,7 @@ namespace NKikimr::NPersQueueTests {
                 Sleep(TDuration::MilliSeconds(10));
             }
 
-            // Ts and firstOffset and expectingQuantities will be set in first iteration of reading by received messages. 
+            // Ts and firstOffset and expectingQuantities will be set in first iteration of reading by received messages.
             // Each will contains shifts from the message: before, equals and after.
             // It allow check reading from different shift. First iteration read from zero.
             TVector<TInstant> ts { TInstant::Zero() };
@@ -254,10 +254,10 @@ namespace NKikimr::NPersQueueTests {
                 ui32 lastOffset = 0;
 
                 settings.EventHandlers_.SimpleDataHandlers([&](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable {
-                        Cerr << ">>>>> Iteration: " << i << " TDataReceivedEvent: " << event.DebugString(false) 
+                        Cerr << ">>>>> Iteration: " << i << " TDataReceivedEvent: " << event.DebugString(false)
                              << " size=" << event.GetMessages().size() << Endl << Flush;
                         for (const auto& msg : event.GetMessages()) {
-                            Cerr << ">>>>> Iteration: " << i << " Got message: " << msg.GetData().substr(0, 16) 
+                            Cerr << ">>>>> Iteration: " << i << " Got message: " << msg.GetData().substr(0, 16)
                                                         << " :: " << msg.DebugString(false) << Endl << Flush;
 
                             auto count = ++map[msg.GetData()];
@@ -281,12 +281,12 @@ namespace NKikimr::NPersQueueTests {
                             } else {
                                 if (map.size() == 1) {
                                     auto expectedOffset = firstOffset[i];
-                                    UNIT_ASSERT_EQUAL_C(msg.GetOffset(), expectedOffset, "Iteration: " << i 
-                                                                << " Expected first message offset " << expectedOffset 
+                                    UNIT_ASSERT_EQUAL_C(msg.GetOffset(), expectedOffset, "Iteration: " << i
+                                                                << " Expected first message offset " << expectedOffset
                                                                 << " but got " << msg.GetOffset());
                                 } else {
-                                    UNIT_ASSERT_C(lastOffset < msg.GetOffset(), "Iteration: " << i 
-                                                                << " unexpected offset order. Last offset " << lastOffset 
+                                    UNIT_ASSERT_C(lastOffset < msg.GetOffset(), "Iteration: " << i
+                                                                << " unexpected offset order. Last offset " << lastOffset
                                                                 << " Message offset " << msg.GetOffset());
                                 }
 
@@ -310,8 +310,8 @@ namespace NKikimr::NPersQueueTests {
 
                 if (i == 0) {
                     for (ui32 j = 1; j < ts.size(); ++j) {
-                        Cerr << ">>>>> Planed iteration: " << j 
-                             << ". Start reading from time: " << ts[j]  
+                        Cerr << ">>>>> Planed iteration: " << j
+                             << ". Start reading from time: " << ts[j]
                              << ". Expected first message offset: " << firstOffset[j]
                              << ". Expected message quantity: " << expectingQuantities[j] << Endl;
                     }
@@ -462,6 +462,8 @@ namespace NKikimr::NPersQueueTests {
                                       "topic.read.lag_milliseconds",
                                       "topic.write.bytes",
                                       "topic.write.messages",
+                                      "topic.write.discarded_bytes",
+                                      "topic.write.discarded_messages",
                                       "api.grpc.topic.stream_write.bytes",
                                       "topic.write.partition_throttled_milliseconds",
                                       "topic.write.message_size_bytes",

@@ -81,6 +81,7 @@ namespace NKikimr {
         void SetEnablePqBilling(std::optional<bool> value);
         void SetEnableDbCounters(bool value);
         void SetAwsRegion(const TString& value);
+        void InitIcb(ui32 numNodes);
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -97,6 +98,8 @@ namespace NKikimr {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
+        NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
+        std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
 
     private:
         TAutoPtr<TMine> Mine;

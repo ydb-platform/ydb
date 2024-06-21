@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -3994,7 +3995,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4034,7 +4035,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4049,7 +4050,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4145,7 +4146,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4160,7 +4161,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -5179,6 +5180,37 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
+    Y_UNIT_TEST(DropTable) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable
+            .SetName("/Root/ColumnTableTest")
+            .SetPrimaryKey({ "id", "id_second" })
+            .SetSharding({ "id" })
+            .SetMinPartitionsCount(16)
+            .SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        auto sender = testHelper.GetRuntime().AllocateEdgeActor();
+        auto tabletIds = GetColumnTableShards(&testHelper.GetKikimr().GetTestServer(), sender, "/Root/ColumnTableTest");
+        for (auto tablet: tabletIds) {
+            UNIT_ASSERT_C(testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " not alive");
+        }
+        testHelper.DropTable("/Root/ColumnTableTest");
+        for (auto tablet: tabletIds) {
+            UNIT_ASSERT_C(!testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " is alive");
+        }
+    }
+
     Y_UNIT_TEST(AddColumnLongPk) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5260,6 +5292,52 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
+    Y_UNIT_TEST(InvalidColumnInTieringRule) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+
+        const TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
+        testHelper.CreateTable(testTable);
+        testHelper.CreateTier("tier1");
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(1).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
+            tableInserter.AddRow().Add(1).Add(2).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        while (csController->GetInsertFinishedCounter().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+
+        // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
+        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
+        testHelper.SetTiering(tableName, ruleName);
+
+        while (csController->GetTieringUpdates().Val() == 0) {
+            Cout << "Wait tiering..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+
+        testHelper.RebootTablets(tableName);
+    }
+
     Y_UNIT_TEST(AddColumnWithTtl) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5292,7 +5370,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -5307,12 +5384,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
-        {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` SET(TIERING = 'tiering1');)";
-            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        testHelper.SetTiering("/Root/ColumnTableTest", "tiering1");
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
@@ -5324,7 +5396,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -5339,12 +5410,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
             UNIT_ASSERT(!description.GetTtlSettings());
         }
-        {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TIERING);)";
-            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        testHelper.ResetTiering("/Root/ColumnTableTest");
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
@@ -5418,7 +5484,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-        
+
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         TTestHelper::TColumnTable testTable;
 
@@ -5583,8 +5649,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[\"test_res_3\"]]]");
         testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
 
-    //    testHelper.RebootTablets(testTable.GetName());
-    //    testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
+        testHelper.RebootTablets(testTable.GetName());
+        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
     Y_UNIT_TEST(AddColumnErrors) {
@@ -5643,6 +5709,19 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
+    Y_UNIT_TEST(BulkError) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
+    }
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5890,6 +5969,26 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[10000u]]");
     }
+
+    Y_UNIT_TEST(NullKeySchema) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32).SetNullable(false)
+        };
+        TTestHelper::TColumnTableStore testTableStore;
+        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTableStore, EStatus::SCHEME_ERROR);
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {
@@ -5917,6 +6016,86 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", TStringBuilder() << "[[1;" << ts.MicroSeconds() << "u;" << ts.MicroSeconds() << "u]]");
+    }
+
+    Y_UNIT_TEST(Decimal) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("dec").Decimal(TString("10.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(2)
+                .AddMember("dec").Decimal(TString("inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(3)
+                .AddMember("dec").Decimal(TString("-inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(4)
+                .AddMember("dec").Decimal(TString("nan"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(5)
+                .AddMember("dec").Decimal(TString("-nan"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(6)
+                .AddMember("dec").Decimal(TString("1.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(7)
+                .AddMember("dec").Decimal(TString("12.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(8)
+                .AddMember("dec").Decimal(TString("inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(9)
+                .AddMember("dec").Decimal(TString("-inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(10)
+                .AddMember("dec").Decimal(TString("2.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(11)
+                .AddMember("dec").Decimal(TString("15.1"))
+            .EndStruct();
+            builder.EndList();
+            const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"10.1\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"-nan\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(22,9)) ORDER BY id", "[[2];[8]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(22,9)) ORDER BY id", "[[3];[9]]");
+        // Nan cannot by find.
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(22,9))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(22,9))", "[]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
 
     Y_UNIT_TEST(TimestampCmpErr) {

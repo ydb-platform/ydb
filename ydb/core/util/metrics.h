@@ -395,6 +395,9 @@ public:
     using TProto = NKikimrMetricsProto::TMaximumValueUI64;
 
     void SetValue(TType value, TInstant now = TInstant::Now()) {
+        if (TProto::GetAllTimeMaximum() > 0 || MaximumValue > 0) { // ignoring initial value
+            TProto::SetAllTimeMaximum(std::max(value, TProto::GetAllTimeMaximum()));
+        }
         TDuration elapsedCurrentBucket = now - TInstant::MilliSeconds(TProto::GetLastBucketStartTime());
         if (TProto::ValuesSize() == 0 || elapsedCurrentBucket >= BucketDuration) {
             size_t bucketsPassed = 0;
@@ -434,6 +437,15 @@ public:
             lastBucketValue = std::max(lastBucketValue, value);
             MaximumValue = std::max(MaximumValue, value);
         }
+    }
+
+    void AdvanceTime(TInstant now) {
+        // Nothing changed, last value is stiil relevant
+        TType lastValue = {};
+        if (!TProto::GetValues().empty()) {
+            lastValue = *std::prev(TProto::MutableValues()->end());
+        }
+        SetValue(lastValue, now);
     }
 
     TType GetValue() const {

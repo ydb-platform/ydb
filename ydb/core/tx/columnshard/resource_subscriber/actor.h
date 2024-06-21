@@ -22,6 +22,7 @@ private:
         }
     }
 
+    void DoReplyAllocated(const ui64 internalTaskId, const ui64 rbTaskId);
 public:
     static TAtomicCounter WaitingBlobsCount;
     TActor(ui64 tabletId, const TActorId& parent);

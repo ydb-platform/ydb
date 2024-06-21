@@ -6,52 +6,6 @@ using namespace NKikimr::NDataShard;
 using namespace NSchemeShard;
 using namespace Tests;
 
-namespace {
-
-    NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId) {
-        NKikimrTxDataShard::TEvPeriodicTableStats stats;
-        bool captured = false;
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvPeriodicTableStats::EventType: {
-                    const auto& record = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;
-                    if (record.GetDatashardId() == tabletId) {
-                        stats = record;
-                        captured = true;
-                    }
-                    break;
-                }
-                default: {
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observerFunc);
-
-        for (int i = 0; i < 5 && !captured; ++i) {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() {
-                return captured;
-            };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-        }
-
-        runtime.SetObserverFunc(prevObserverFunc);
-        UNIT_ASSERT(captured);
-
-        return stats;
-    }
-
-    void CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-        auto evReq = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(shardId, sender, evReq.Release(), 0, GetPipeConfigWithRetries());
-    }
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(DataShardCompaction) {
     Y_UNIT_TEST(CompactBorrowed) {
         TPortManager pm;
@@ -87,7 +41,7 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
 
         {
             auto stats = WaitTableStats(runtime, shards2.at(0));
-            // Cerr << "Received shard stats:" << Endl << stats.DebugString();
+            Cerr << "Received shard stats:" << Endl << stats.DebugString();
             const auto& ownersProto = stats.GetUserTablePartOwners();
             THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
             // NOTE: datashard always adds current shard to part owners, even if there are no parts
@@ -96,12 +50,18 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
             UNIT_ASSERT(owners.contains(shards2.at(0)));
         }
 
-        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-        CompactBorrowed(runtime, shards2.at(0), tableId);
+        {
+            auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+            auto result = CompactBorrowed(runtime, shards2.at(0), tableId);
+            Cerr << "Compact result " << result.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTabletId(), shards2.at(0));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetOwnerId(), tableId.PathId.OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetLocalId(), tableId.PathId.LocalPathId);
+        }
 
         for (int i = 0; i < 5; ++i) {
             auto stats = WaitTableStats(runtime, shards2.at(0));
-            // Cerr << "Received shard stats:" << Endl << stats.DebugString();
+            // Cerr << "Received shard stats:" << Endl << stats.DebugString() << Endl;
             const auto& ownersProto = stats.GetUserTablePartOwners();
             THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
             if (i < 4) {

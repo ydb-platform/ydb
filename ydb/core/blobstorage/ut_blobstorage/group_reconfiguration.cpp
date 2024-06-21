@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
                 Timer.Reset();
                 auto ev = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
                 ev->Record.AddGroupIDs(GroupId);
-                NTabletPipe::SendData(SelfId(), ClientId, ev.release(), 0);
+                NTabletPipe::SendData(SelfId(), ClientId, ev.release(), Max<ui64>());
             }
         }
 

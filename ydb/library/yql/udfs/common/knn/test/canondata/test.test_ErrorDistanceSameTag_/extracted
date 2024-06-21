@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select Knn::CosineDistance($vector1, $vector2);
+	^
+        <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf, At Knn.CosineDistance
+        	select Knn::CosineDistance($vector1, $vector2);
+	            ^
+            <tmp_path>/program.sql:<main>:6:13: Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'FloatVector' is not equal to 'Uint8Vector'
+            	select Knn::CosineDistance($vector1, $vector2);
+	            ^

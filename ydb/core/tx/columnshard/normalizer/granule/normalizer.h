@@ -6,15 +6,19 @@
 
 namespace NKikimr::NOlap {
 
-class TGranulesNormalizer: public NOlap::INormalizerComponent {
+class TGranulesNormalizer: public TNormalizationController::INormalizerComponent {
     class TNormalizerResult;
+
+    static inline INormalizerComponent::TFactory::TRegistrator<TGranulesNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TGranulesNormalizer>(ENormalizerSequentialId::Granules);
 public:
-    virtual const TString& GetName() const override {
-        const static TString name = "TGranulesNormalizer";
-        return name;
+    TGranulesNormalizer(const TNormalizationController::TInitContext&) {
     }
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual ENormalizerSequentialId GetType() const override {
+        return ENormalizerSequentialId::Granules;
+    }
+
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 
 }

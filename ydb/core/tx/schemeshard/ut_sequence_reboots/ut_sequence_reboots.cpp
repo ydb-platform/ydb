@@ -23,11 +23,9 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
-
             {
                 TInactiveZone inactive(activeZone);
-                // no inactive finalization
+                TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
             }
         });
     }
@@ -105,14 +103,20 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
+            }
 
             t.TestEnv->ReliablePropose(runtime,
                 DropSequenceRequest(++t.TxId, "/MyRoot", "seq"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/seq", false, NLs::PathNotExist);
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/seq", false, NLs::PathNotExist);
+            }
 
             t.TestEnv->ReliablePropose(runtime,
                 CreateSequenceRequest(++t.TxId, "/MyRoot", R"(
@@ -121,11 +125,9 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
-
             {
                 TInactiveZone inactive(activeZone);
-                // no inactive finalization
+                TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
             }
         });
     }
@@ -163,19 +165,69 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-            TestLs(runtime, "/MyRoot/Table/seq2", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(
+                    runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                TestLs(
+                    runtime, "/MyRoot/Table/seq2", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+            }
 
             t.TestEnv->ReliablePropose(runtime,
                 DropTableRequest(++t.TxId, "/MyRoot", "Table"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CopyTableWithSequence) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
-                // no inactive finalization
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                        Name: "ValueIndex"
+                        KeyColumnNames: ["value"]
+                    }
+                    SequenceDescription {
+                        Name: "myseq"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                i64 value = DoNextVal(runtime, "/MyRoot/Table/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 1);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "copy", "/MyRoot/Table"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(
+                    runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+                i64 value = DoNextVal(runtime, "/MyRoot/copy/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 2);
             }
         });
     }

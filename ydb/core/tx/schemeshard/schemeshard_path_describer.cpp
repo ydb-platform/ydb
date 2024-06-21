@@ -210,6 +210,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnBackupInfo = Params.GetBackupInfo();
     bool returnBoundaries = false;
     bool returnRangeKey = true;
+    bool returnSetVal = Params.GetOptions().GetReturnSetVal();
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();
@@ -360,7 +361,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            Self->DescribeSequence(childPathId, childName, *entry->AddSequences());
+            Self->DescribeSequence(childPathId, childName, *entry->AddSequences(), returnSetVal);
             break;
         default:
             Y_FAIL_S("Unexpected table's child"
@@ -1240,23 +1241,27 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
 {
     auto it = Sequences.find(pathId);
     Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
         << " pathId# " << pathId
         << " name# " << name);
-    DescribeSequence(pathId, name, it->second, desc);
+    DescribeSequence(pathId, name, it->second, desc, fillSetVal);
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
 {
     Y_VERIFY_S(info, "Empty sequence info"
         << " pathId# " << pathId
         << " name# " << name);
 
     desc = info->Description;
+
+    if (!fillSetVal) {
+        desc.ClearSetVal();
+    }
 
     desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());

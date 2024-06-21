@@ -6,6 +6,8 @@ SRCS(
     scalars.cpp
     snapshot.cpp
     portion.cpp
+    tablet_id.cpp
+    blob.cpp
 )
 
 PEERDIR(

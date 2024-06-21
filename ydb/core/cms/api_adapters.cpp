@@ -381,6 +381,11 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetPartialPermissionAllowed(true);
         cmsRequest.SetSchedule(true);
 
+        i32 priority = opts.priority();
+        if (priority != 0) {
+            cmsRequest.SetPriority(priority);
+        }
+
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(group.actions().size() == 1);
             for (const auto& action : group.actions()) {
@@ -561,7 +566,8 @@ public:
             opts.set_task_uid(taskUid);
             opts.set_description(request.GetReason());
             opts.set_availability_mode(ConvertAvailabilityMode(request.GetAvailabilityMode()));
-
+            opts.set_priority(request.GetPriority());
+            
             // pending actions
             for (const auto& action : request.GetActions()) {
                 ConvertAction(action, *result.add_action_group_states()->add_action_states());

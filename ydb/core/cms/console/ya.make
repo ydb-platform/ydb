@@ -56,6 +56,8 @@ SRCS(
     http.h
     immediate_controls_configurator.cpp
     immediate_controls_configurator.h
+    jaeger_tracing_configurator.cpp
+    jaeger_tracing_configurator.h
     log_settings_configurator.cpp
     log_settings_configurator.h
     logger.cpp

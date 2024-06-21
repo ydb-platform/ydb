@@ -106,6 +106,9 @@ public:
 
         auto request = TEvNodeRegistrationRequest::GetProtoRequest(Request);
         Result.set_node_id(rec.GetNode().GetNodeId());
+        if (rec.GetNode().HasName()) {
+            Result.set_node_name(rec.GetNode().GetName());
+        }
         Result.set_expire(rec.GetNode().GetExpire());
         Result.set_domain_path(request->domain_path());
         CopyNodeInfo(Result.add_nodes(), rec.GetNode());

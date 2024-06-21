@@ -164,6 +164,7 @@ message TPermissionRequest {
   optional string MaintenanceTaskId = 10;
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
+  optional int32 Priority = 12;
 }
 
 enum EExtensionType {
@@ -211,6 +212,7 @@ message TManageRequestResponse {
     optional bool    PartialPermissionAllowed = 4;
     optional string  Reason = 5;
     optional EAvailabilityMode AvailabilityMode = 6;
+    optional int32 Priority = 7;
   }
 
   optional TStatus           Status = 1;

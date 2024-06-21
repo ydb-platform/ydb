@@ -20,6 +20,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>
@@ -347,6 +348,7 @@ struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
+    NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
 
 // grpc_request_proxy part
@@ -363,12 +365,17 @@ public:
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
 
-    //tracing
+    // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
-    virtual void LegacyFinishSpan() = 0;
+    virtual void FinishSpan() = 0;
+    // Returns pointer to a state that denotes whether this request ever been a subject
+    // to tracing decision. CAN be nullptr
+    virtual bool* IsTracingDecided() = 0;
 
     // Used for per-type sampling
-    virtual const TString& GetInternalRequestType() const = 0;
+    virtual NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const {
+        return NJaegerTracing::TRequestDiscriminator::EMPTY;
+    };
 
     // validation
     virtual bool Validate(TString& error) = 0;
@@ -487,10 +494,9 @@ public:
     }
 
     void StartTracing(NWilson::TSpan&& /*span*/) override {}
-    void LegacyFinishSpan() override {}
-    const TString& GetInternalRequestType() const final {
-        static const TString empty = "";
-        return empty;
+    void FinishSpan() override {}
+    bool* IsTracingDecided() override {
+        return nullptr;
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -893,12 +899,12 @@ public:
         Span_ = std::move(span);
     }
 
-    void LegacyFinishSpan() override {
+    void FinishSpan() override {
         Span_.End();
     }
 
-    const TString& GetInternalRequestType() const final {
-        return TRequest::descriptor()->full_name();
+    bool* IsTracingDecided() override {
+        return &IsTracingDecided_;
     }
 
     // IRequestCtxBase
@@ -919,6 +925,7 @@ private:
     bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
+    bool IsTracingDecided_ = false;
 };
 
 template <typename TDerived>
@@ -1311,10 +1318,12 @@ public:
         Span_ = std::move(span);
     }
 
-    void LegacyFinishSpan() override {}
+    void FinishSpan() override {
+        Span_.End();
+    }
 
-    const TString& GetInternalRequestType() const final {
-        return TRequest::descriptor()->full_name();
+    bool* IsTracingDecided() override {
+        return &IsTracingDecided_;
     }
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
@@ -1374,6 +1383,7 @@ private:
     TAuditLogParts AuditLogParts;
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
+    bool IsTracingDecided_ = false;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
@@ -1418,7 +1428,7 @@ class TGrpcRequestCall
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
+    static IActor* CreateRpcActor(TRequestIface* msg);
     static constexpr bool IsOp = IsOperation;
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
@@ -1435,8 +1445,6 @@ public:
     { }
 
     void Pass(const IFacilityProvider& facility) override {
-        this->Span_.End();
-
         try {
             PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
         } catch (const std::exception& ex) {
@@ -1458,6 +1466,13 @@ public:
             AuxSettings.CustomAttributeProcessor(schemeData, iface);
             return true;
         }
+    }
+
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = TBase::GetDatabaseName(),
+        };
     }
 
     // IRequestCtxBaseMtSafe

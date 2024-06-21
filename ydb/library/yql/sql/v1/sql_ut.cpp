@@ -6279,6 +6279,20 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
                 ALTER CONSUMER consumer3 SET (read_from = 2);
         )", false);
     }
+
+    Y_UNIT_TEST(TopicWithPrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            PRAGMA TablePathPrefix = '/database/path/to/tables';
+            ALTER TOPIC `my_table/my_feed` ADD CONSUMER `my_consumer`;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("/database/path/to/tables/my_table/my_feed"), 0}, {"topic", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["topic"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["/database/path/to/tables/my_table/my_feed"]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BlockEnginePragma) {
@@ -6455,5 +6469,16 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(UseViewAndFullColumnId) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; SELECT Input.x FROM Input VIEW uitzicht;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("SqlAccess"), 0}, {"SqlProjectItem", 0}, {"Read!", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(0, elementStat["SqlAccess"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlProjectItem"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
     }
 }

@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tx/data_events
     ydb/services/metadata
+    ydb/core/tx/columnshard/data_sharing/destination/events
 )
 
 END()

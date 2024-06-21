@@ -1,7 +1,7 @@
 #pragma once
-#include "defs.h"
-#include "engines/reader/description.h"
-#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
+#include "engines/reader/common/description.h"
+#include "engines/predicate/predicate.h"
+
 #include <library/cpp/cache/cache.h>
 
 namespace NKikimr::NOlap {
@@ -10,12 +10,9 @@ namespace NKikimr::NOlap {
 
 namespace NKikimr::NColumnShard {
 
-using TReadDescription = NOlap::TReadDescription;
+using TReadDescription = NOlap::NReader::TReadDescription;
 using IColumnResolver = NOlap::IColumnResolver;
 using NOlap::TWriteId;
-
-std::pair<NOlap::TPredicate, NOlap::TPredicate>
-RangePredicates(const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 class TBatchCache {
 public:

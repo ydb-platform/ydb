@@ -324,9 +324,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
-                ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumCPU.AdvanceTime(now);
         }
+        ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end()) {
         if (metrics.HasMemory()) {
@@ -334,9 +336,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
-                ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumMemory.AdvanceTime(now);
         }
+        ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end()) {
         if (metrics.HasNetwork()) {
@@ -344,9 +348,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
-                ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumNetwork.AdvanceTime(now);
         }
+        ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
     }
     if (metrics.HasStorage()) {
         ResourceValues.SetStorage(metrics.GetStorage());
@@ -398,14 +404,21 @@ TResourceRawValues TTabletInfo::GetResourceMaximumValues() const {
     }
 }
 
-i64 TTabletInfo::GetCounterValue(const NKikimrTabletBase::TMetrics& metrics, const TVector<i64>& allowedMetricIds) {
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsCPU(metrics)) {
+i64 TTabletInfo::GetCounterValue() const {
+    const auto& allowedMetricIds = GetTabletAllowedMetricIds();
+    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end()
+        && (ResourceMetricsAggregates.MaximumCPU.GetAllTimeMaximum() > 0
+        || ResourceValues.GetCPU() > 0)) {
         return 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsMemory(metrics)) {
+    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end()
+        && (ResourceMetricsAggregates.MaximumMemory.GetAllTimeMaximum() > 0
+        || ResourceValues.GetMemory() > 0)) {
         return 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsNetwork(metrics)) {
+    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end()
+        && (ResourceMetricsAggregates.MaximumNetwork.GetAllTimeMaximum() > 0
+        || ResourceValues.GetNetwork() > 0)) {
         return 0;
     }
     return 1;
@@ -446,8 +459,7 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
-    auto value = GetCounterValue(ResourceValues, GetTabletAllowedMetricIds());
-    ResourceValues.SetCounter(value);
+    ResourceValues.SetCounter(GetCounterValue());
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {

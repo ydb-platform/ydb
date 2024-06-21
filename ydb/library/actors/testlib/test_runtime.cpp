@@ -1556,6 +1556,14 @@ namespace NActors {
         return FindActor(actorId, node);
     }
 
+    TStringBuf TTestActorRuntimeBase::FindActorName(const TActorId& actorId, ui32 nodeIndex) const {
+        auto actor = FindActor(actorId, nodeIndex);
+        if (!actor) {
+            return {};
+        }
+        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actor->GetActivityType());
+    }
+
     void TTestActorRuntimeBase::EnableScheduleForActor(const TActorId& actorId, bool allow) {
         TGuard<TMutex> guard(Mutex);
         if (allow) {

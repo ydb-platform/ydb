@@ -10,6 +10,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(grpc_request_base.h)
 
 PEERDIR(
+    ydb/library/protobuf_printer
     contrib/libs/grpc
     library/cpp/monlib/dynamic_counters/percentile
 )
@@ -17,4 +18,3 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(ut)
-

@@ -332,7 +332,7 @@ public:
         if (!Object) {
             return result;
         }
-        result = Object->SerializeToProto();
+        Object->SerializeToProto(result);
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
         return result;
     }

@@ -704,7 +704,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = TMood::Wipe;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
@@ -750,7 +750,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = targetMood;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();

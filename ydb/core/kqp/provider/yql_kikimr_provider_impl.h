@@ -214,6 +214,9 @@ NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPosi
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
 
+const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TPositionHandle pos, bool withSystemColumns);
+
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations,
     TExprContext& ctx);
@@ -224,7 +227,8 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto);
+bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
+std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 // todo gvit switch to ydb typed value.
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);

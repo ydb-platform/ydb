@@ -788,18 +788,51 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto query = Q_(R"(
-            SELECT 1 + 1;
-        )");
+        {
+            auto query = Q_(R"(
+                SELECT 1 + 1;
+            )");
 
-        auto result = session.ExecuteDataQuery(
-            query,
-            TTxControl::BeginTx().CommitTx()
-        ).ExtractValueSync();
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[2]])",
-            FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto query = Q_(R"(
+                SELECT Int8("-1");
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[-1]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto query = Q_(R"(
+                SELECT Int8("-1") + Int8("-1");
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[-2]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+
     }
 
     Y_UNIT_TEST(Now) {

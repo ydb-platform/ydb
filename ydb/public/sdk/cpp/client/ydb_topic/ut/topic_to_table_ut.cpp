@@ -1594,6 +1594,9 @@ size_t TFixture::GetTableRecordsCount(const TString& tablePath)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
 {
+    //
+    // the test verifies a transaction in which data is written to a topic and to a table
+    //
     CreateTopic("topic_A");
     CreateTable("/Root/table_A");
 
@@ -1619,6 +1622,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
 {
+    //
+    // the test verifies a transaction in which data is read from one topic and written to another
+    //
     CreateTopic("topic_A");
     CreateTopic("topic_B");
 
@@ -1646,6 +1652,10 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
 {
+    //
+    // the test verifies a transaction in which data is read from a partition of one topic and written to
+    // another partition of this topic
+    //
     const ui32 PARTITION_0 = 0;
     const ui32 PARTITION_1 = 1;
 

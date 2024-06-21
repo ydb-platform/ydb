@@ -763,7 +763,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        if (settings.has_partitions_count()) {
+        if (settings.has_partitions_count() && !settings.has_autoscaling_settings()) {
             minParts = settings.partitions_count();
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
@@ -774,7 +774,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
 
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoScalteSettings.max_active_partitions(), 0L, 1L));
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoScalteSettings.max_active_partitions(), 0L, minParts));
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_up_threshold_percent(), 0 ,30));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_down_threshold_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));

@@ -44,7 +44,7 @@ public:
     void SslAccept();
 
 private:
-    ssize_t InsecureRecieve(void* buf, size_t len);
+    ssize_t InsecureReceive(void* buf, size_t len);
     ssize_t InsecureSend(const void* msg, size_t len);
     ssize_t SecureReceive(void* buf, size_t len);
     ssize_t SecureSend(const void* msg, size_t len);
@@ -60,7 +60,7 @@ private:
     TSslHolder<EVP_PKEY> Key;
     TSslHolder<X509> X509;
 
-    std::function<ssize_t(TLdapSocketWrapper&, void*, size_t)> RecieveMsg;
+    std::function<ssize_t(TLdapSocketWrapper&, void*, size_t)> ReceiveMsg;
     std::function<ssize_t(TLdapSocketWrapper&, const void*, size_t)> SendMsg;
 };
 

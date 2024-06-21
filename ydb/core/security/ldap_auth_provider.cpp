@@ -156,7 +156,7 @@ private:
         }
 
         int result = 0;
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() != NKikimrLdap::LDAPS_SCHEME && Settings.GetUseTls().GetEnable()) {
             result = NKikimrLdap::StartTLS(*ld);
             if (!NKikimrLdap::IsSuccess(result)) {
                 TEvLdapAuthProvider::TError error {
@@ -190,10 +190,8 @@ private:
             return response;
         }
 
-        const TString& host = Settings.GetHost();
-        const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort();
         int result = 0;
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
             const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
             if (!NKikimrLdap::IsSuccess(result)) {
@@ -204,10 +202,12 @@ private:
             }
         }
 
-        *ld = NKikimrLdap::Init(host, port);
-        if (*ld == nullptr) {
+        const TString uris = GetUris();
+        const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort(Settings.GetScheme());
+        result = NKikimrLdap::Init(ld, Settings.GetScheme(), uris, port);
+        if (!NKikimrLdap::IsSuccess(result)) {
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                    {.Message = "Could not initialize LDAP connection for host: " + host + ", port: " + ToString(port) + ". " + NKikimrLdap::LdapError(*ld),
+                    {.Message = "Could not initialize LDAP connection for uris: " + uris + ". " + NKikimrLdap::LdapError(*ld),
                     .Retryable = false}}};
         }
 
@@ -219,7 +219,7 @@ private:
                     .Retryable = NKikimrLdap::IsRetryableError(result)}}};
         }
 
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
             int requireCert = NKikimrLdap::ConvertRequireCert(Settings.GetUseTls().GetCertRequire());
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_REQUIRE_CERT, &requireCert);
             if (!NKikimrLdap::IsSuccess(result)) {
@@ -229,6 +229,9 @@ private:
                         .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
+
+        int dl = 0x0001;
+        NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
         return {};
     }
 
@@ -290,7 +293,7 @@ private:
     }
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
-        if (Settings.GetHost().empty()) {
+        if (Settings.GetHosts().empty() && Settings.GetHost().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Ldap server host is empty", .Retryable = false}};
         }
         if (Settings.GetBaseDn().empty()) {
@@ -303,6 +306,37 @@ private:
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
+    }
+
+    TString GetUris() const {
+        TStringBuilder uris;
+        if (Settings.HostsSize() > 0) {
+            for (const auto& host : Settings.GetHosts()) {
+                uris << CreateUri(host) << " ";
+            }
+            uris.remove(uris.size() - 1);
+        } else {
+            uris << CreateUri(Settings.GetHost());
+        }
+        return uris;
+    }
+
+    TString CreateUri(const TString& endpoint) const {
+        TStringBuilder uri;
+        uri << Settings.GetScheme() << "://" << endpoint;
+        if (!HasEndpointPort(endpoint)) {
+            uri << ':' << Settings.GetPort();
+        }
+        return uri;
+    }
+
+    static bool HasEndpointPort(const TString& endpoint) {
+        size_t colonPos = endpoint.find(':');
+        if (colonPos == TString::npos) {
+            return false;
+        }
+        ++colonPos;
+        return (endpoint.size() - colonPos) > 0;
     }
 
 private:

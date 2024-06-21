@@ -47,8 +47,10 @@ int Unbind(LDAP* ld) {
     return ldap_unbind(ld);
 }
 
-LDAP* Init(const TString& host, ui32 port) {
-    return ldap_init(host.c_str(), port);
+int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
+    Y_UNUSED(scheme, port);
+    Cerr << "+++ Initialize connection to: " << uris << Endl;
+    return ldap_initialize(ld, uris.c_str());
 }
 
 int Search(LDAP* ld,
@@ -109,7 +111,10 @@ std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char*
     return response;
 }
 
-ui32 GetPort() {
+ui32 GetPort(const TString& scheme) {
+    if (scheme == LDAPS_SCHEME) {
+        return LDAPS_PORT;
+    }
     return LDAP_PORT;
 }
 

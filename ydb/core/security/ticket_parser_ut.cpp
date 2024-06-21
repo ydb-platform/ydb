@@ -106,6 +106,16 @@ void InitLdapSettingsWithCustomGroupAttribute(NKikimrProto::TLdapAuthentication*
     ldapSettings->SetRequestedGroupAttribute("groupDN");
 }
 
+void InitLdapSettingsWithLdapsScheme(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    auto useTls = ldapSettings->MutableUseTls();
+    useTls->SetEnable(false);
+    ldapSettings->SetScheme("ldaps");
+    ldapSettings->AddHosts("qqq");
+    ldapSettings->AddHosts("localhost");
+    ldapSettings->AddHosts("localhost:11111");
+}
+
 class TLdapKikimrServer {
 public:
     TLdapKikimrServer(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings)
@@ -962,7 +972,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
-        TLdapKikimrServer server(InitLdapSettings);
+        TLdapKikimrServer server(InitLdapSettingsWithLdapsScheme/*InitLdapSettings*/);
         LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login));
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);

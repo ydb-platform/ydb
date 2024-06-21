@@ -29,9 +29,15 @@ int Unbind(LDAP* ld) {
     return ldap_unbind(ld);
 }
 
-LDAP* Init(const TString& host, ui32 port) {
-    char* ldapHost = const_cast<char*>(host.c_str());
-    return ldap_init(ldapHost, port);
+int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
+    char* hostName = const_cast<char*>(uris.c_str());
+    if (scheme == LDAPS_SCHEME) {
+        static const int isSecure = 1;
+        *ld = ldap_sslinit(hostName, port, isSecure);
+    } else {
+        *ld = ldap_init(hostName, port);
+    }
+    return LdapGetLastError();
 }
 
 int Search(LDAP* ld,
@@ -93,7 +99,10 @@ std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char*
     return response;
 }
 
-ui32 GetPort() {
+ui32 GetPort(const TString& scheme) {
+    if (scheme == LDAPS_SCHEME) {
+        return LDAP_SSL_PORT;
+    }
     return LDAP_PORT;
 }
 

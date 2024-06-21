@@ -70,7 +70,7 @@ TLdapSocketWrapper::TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> liste
 }
 
 void TLdapSocketWrapper::Receive(void* buf, size_t len) {
-    TBaseSocket::Check(RecieveMsg(*this, buf, len), "Recieve");
+    TBaseSocket::Check(ReceiveMsg(*this, buf, len), "Recieve");
 }
 
 void TLdapSocketWrapper::Send(const void* msg, size_t len) {
@@ -80,14 +80,17 @@ void TLdapSocketWrapper::Send(const void* msg, size_t len) {
 void TLdapSocketWrapper::OnAccept() {
     TSockAddrInet Addr;
     TBaseSocket::Check(ListenSocket->Accept(&Socket, &Addr), "accept");
-    RecieveMsg = &TLdapSocketWrapper::InsecureRecieve;
+    ReceiveMsg = &TLdapSocketWrapper::InsecureReceive;
     SendMsg = &TLdapSocketWrapper::InsecureSend;
 }
 
 void TLdapSocketWrapper::SslAccept() {
+    TSockAddrInet Addr;
+    TBaseSocket::Check(ListenSocket->Accept(&Socket, &Addr), "accept");
+    //==============================
     SSL_set_fd(Ssl.Get(), Socket);
     TBaseSocket::Check(SSL_accept(Ssl.Get()), "SslAccept");
-    RecieveMsg = &TLdapSocketWrapper::SecureReceive;
+    ReceiveMsg = &TLdapSocketWrapper::SecureReceive;
     SendMsg = &TLdapSocketWrapper::SecureSend;
 }
 
@@ -95,7 +98,7 @@ void TLdapSocketWrapper::Close() {
     Socket.Close();
 }
 
-ssize_t TLdapSocketWrapper::InsecureRecieve(void* buf, size_t len) {
+ssize_t TLdapSocketWrapper::InsecureReceive(void* buf, size_t len) {
     return Socket.Recv(buf, len);
 }
 

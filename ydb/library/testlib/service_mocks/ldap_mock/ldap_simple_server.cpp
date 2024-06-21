@@ -52,7 +52,8 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockRespons
                     running = false;
                 } else {
                     TAtomicSharedPtr<TLdapSocketWrapper> socket = MakeAtomicShared<TLdapSocketWrapper>(listenSocket);
-                    socket->OnAccept();
+                    // socket->OnAccept();
+                    socket->SslAccept();
 
                     SystemThreadFactory()->Run(
                         [socket, &useFirstSetResponses, &responses] {

@@ -122,6 +122,8 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
                 
                 cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.Data(), countMinRaw.Size()));
             }
+            if (auto countMinSketch = colMap.find("count-min"); countMinSketch != colMap.end()) {
+                TString countMinBase64 = countMinSketch->second.GetStringSafe();
 
             res->ColumnStatistics->Data[columnName] = cStat;
         }

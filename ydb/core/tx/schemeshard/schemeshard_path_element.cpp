@@ -219,6 +219,10 @@ bool TPathElement::IsView() const {
     return PathType == EPathType::EPathTypeView;
 }
 
+bool TPathElement::IsTemporary() const {
+    return !!TempDirOwnerActorId;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

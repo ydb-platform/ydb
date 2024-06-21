@@ -473,6 +473,7 @@ public:
         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
         for (size_t i = 0; i < ItemNodesSize; ++i) {
             if (fields[i]) {
+                UsedNodes.insert(i);
                 BufferForUsedInputItems.push_back(*fields[i]);
             }
         }
@@ -673,7 +674,7 @@ private:
                 }
                 auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
                 for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
-                    if (Nodes.IsInputItemNodeUsed(i)) {
+                    if (UsedNodes.contains(i)) {
                         fields[i] = &(BufferForUsedInputItems[j++]);
                     } else {
                         fields[i] = nullptr;
@@ -757,6 +758,7 @@ private:
     const bool AllowSpilling;
 
     TComputationContext& Ctx;
+    std::unordered_set<size_t> UsedNodes;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -414,6 +414,7 @@ protected:
     TOwnershipKeeper Keeper;
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
+    std::unordered_set<TActorId> ActorsWaitingToMoveTablets;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;

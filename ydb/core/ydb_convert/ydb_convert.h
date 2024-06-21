@@ -13,6 +13,10 @@
 
 #include <util/memory/pool.h>
 
+namespace NYql::NNodes {
+    class TExprBase;
+}
+
 namespace NKikimr {
 
 void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output);
@@ -50,6 +54,10 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::S
 
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool);
+
+
+// #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+bool CellFromLiteralExprNode(NYql::NNodes::TExprBase maybeLiteral, TCell& cell, TMemoryPool& valueDataPool); 
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 

@@ -1640,6 +1640,7 @@ private:
         YQL_ENSURE(!ReadSpec->Arrow);
         auto rows = next->Get()->Block.rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.DecompressedBytes += next->Get()->Block.bytes();
         IngressStats.Rows += rows;
         IngressStats.Chunks++;
         IngressStats.Resume();

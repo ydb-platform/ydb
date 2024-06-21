@@ -257,6 +257,7 @@ private:
                 html << "DqInputChannel.PushStats.CurrentPauseTs: " << (pushStats.CurrentPauseTs ? pushStats.CurrentPauseTs->ToString() : TString{}) << "<br />";
                 html << "DqInputChannel.PushStats.MergeWaitPeriod: " << pushStats.MergeWaitPeriod << "<br />";
                 html << "DqInputChannel.PushStats.Bytes: " << pushStats.Bytes << "<br />";
+                html << "DqInputChannel.PushStats.DecompressedBytes: " << pushStats.DecompressedBytes << "<br />";
                 html << "DqInputChannel.PushStats.Rows: " << pushStats.Rows << "<br />";
                 html << "DqInputChannel.PushStats.Chunks: " << pushStats.Chunks << "<br />";
                 html << "DqInputChannel.PushStats.Splits: " << pushStats.Splits << "<br />";
@@ -268,6 +269,7 @@ private:
 
                 const auto& popStats = info.Channel->GetPopStats();
                 html << "DqInputChannel.PopStats.Bytes: " << popStats.Bytes << "<br />";
+                html << "DqInputChannel.PopStats.DecompressedBytes: " << popStats.DecompressedBytes << "<br />";
                 html << "DqInputChannel.PopStats.Rows: " << popStats.Rows << "<br />";
                 html << "DqInputChannel.PopStats.Chunks: " << popStats.Chunks << "<br />";
                 html << "DqInputChannel.PopStats.Splits: " << popStats.Splits << "<br />";

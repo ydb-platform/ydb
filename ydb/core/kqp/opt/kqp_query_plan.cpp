@@ -2366,6 +2366,9 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
     if (asyncAggr.HasBytes()) {
         FillAggrStat(node, asyncAggr.GetBytes(), "Bytes");
     }
+    if (asyncAggr.HasDecompressedBytes()) {
+        FillAggrStat(node, asyncAggr.GetDecompressedBytes(), "DecompressedBytes");
+    }
     if (asyncAggr.HasRows()) {
         FillAggrStat(node, asyncAggr.GetRows(), "Rows");
     }

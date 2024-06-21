@@ -366,6 +366,14 @@ public:
     ~TSpillingSupportState() {
     }
 
+    bool IsFetchRequired() const {
+        return InputStatus != EFetchResult::Finish;
+    }
+
+    bool IsProcessingRequired() const {
+        return true;
+    }
+
     bool UpdateSpillingAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
@@ -381,13 +389,13 @@ public:
 
                 return UpdateSpillingAndWait();
             case EOperatingMode::ProcessSpilled:
-                // TODO: add finalizing and loading next bucket here;
+                return ProcessSpilledData();
                return false;
             case EOperatingMode::Spilling: {
                 CurrentBucketId = -1;
                 UpdateSpillingBuckets();
 
-                if (!HasMemoryForProcessing()) {
+                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish) {
                     bool isWaitingForReduce = TryToReduceMemory();
                     if (isWaitingForReduce) return true;
                 }
@@ -399,6 +407,8 @@ public:
                     bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
                     BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
                 }
+
+                if (InputStatus == EFetchResult::Finish) return FlushSpillingBuffersAndWait();
 
                 return false;
             }
@@ -472,8 +482,14 @@ public:
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        // TODO
-        return nullptr;
+        if (GetMode() == EOperatingMode::InMemory) return static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+
+        MKQL_ENSURE(SpilledBuckets.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
+        MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
+
+        auto value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
+        if (!value) SpilledBuckets.pop_front();
+        return value;
     }
 
     bool IsImmediateProcessingAvaliable() const {
@@ -680,9 +696,9 @@ private:
         }
     }
 
-    EFetchResult ProcessSpilledData(NUdf::TUnboxedValue*const* output){
+    bool ProcessSpilledData(){
         if (AsyncReadOperation) {
-            if (!AsyncReadOperation->HasValue()) return EFetchResult::Yield;
+            if (!AsyncReadOperation->HasValue()) return true;
             if (RecoverState) {
                 SpilledBuckets[0].SpilledState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), Ctx.HolderFactory);
             } else {
@@ -700,7 +716,7 @@ private:
                 AsyncReadOperation = bucket.SpilledState->ExtractWideItem(BufferForKeyAnsState);
                 if (AsyncReadOperation) {
                     BufferForKeyAnsState.resize(0);
-                    return EFetchResult::Yield;
+                    return true;
                 }
                 for (size_t i = 0; i< KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
@@ -715,40 +731,29 @@ private:
                 BufferForKeyAnsState.resize(0);
             }
             //process spilled data
-            while(!bucket.SpilledData->Empty()) {
+            if (!bucket.SpilledData->Empty()) {
                 RecoverState = false;
                 BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
                 AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
                 if (AsyncReadOperation) {
-                    return EFetchResult::Yield;
+                    return true;
                 }
                 auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-                for (size_t i = 0, j = 0; i < Nodes.ItemNodes.size(); ++i) {
+                for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
                     if (Nodes.IsInputItemNodeUsed(i)) {
                         fields[i] = &(BufferForUsedInputItems[j++]);
                     } else {
                         fields[i] = nullptr;
                     }
                 }
-                Nodes.ExtractKey(Ctx, fields, static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue));
-                const bool isNew = bucket.InMemoryProcessingState->TasteIt();
-                Nodes.ProcessItem(
-                    Ctx,
-                    isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Tongue),
-                    static_cast<NUdf::TUnboxedValue *>(bucket.InMemoryProcessingState->Throat)
-                );
-                BufferForUsedInputItems.resize(0);
+                
+                IsProcessingRequired = true;
+                return false;
             }
-
-            if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                Nodes.FinishItem(Ctx, values, output);
-
-                return EFetchResult::One;
-            }
-            bucket.InMemoryProcessingState->ReadMore<false>();
-            SpilledBuckets.pop_front();
         }
-        return EFetchResult::Finish;
+
+        IsFinished = true;
+        return false;
     }
 
     EOperatingMode GetMode() const {

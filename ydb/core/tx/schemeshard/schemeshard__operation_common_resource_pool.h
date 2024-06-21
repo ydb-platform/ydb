@@ -8,9 +8,7 @@
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 
-namespace NKikimr::NSchemeShard {
-
-namespace NResourcePool {
+namespace NKikimr::NSchemeShard::NResourcePool {
 
 TPath::TChecker IsParentPathValid(const TPath& parentPath);
 
@@ -22,27 +20,16 @@ TResourcePoolInfo::TPtr CreateResourcePool(const NKikimrSchemeOp::TResourcePoolD
 
 TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, const TResourcePoolInfo::TPtr oldResourcePoolInfo);
 
-}  // namespace NResourcePool
+bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context);
 
-class TResourcePoolSubOperation : public TSubOperation {
-public:
-    using TSubOperation::TSubOperation;
+bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
 
-protected:
-    static TTxState::ETxState NextState();
-    virtual TTxState::ETxState NextState(TTxState::ETxState state) const override;
-    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override;
-    virtual TSubOperationState::TPtr GetProposeOperationState() = 0;
+TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const;
-    static bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, const TPath& dstPath);
-    TTxState& CreateTransaction(const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType) const;
-    void RegisterParentPathDependencies(const TOperationContext& context, const TPath& parentPath) const;
+void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db);
 
-    void AdvanceTransactionStateToPropose(const TOperationContext& context, NIceDb::TNiceDb& db) const;
-    void PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acll) const;
-};
+void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acll);
 
-}  // namespace NKikimr::NSchemeShard
+}  // namespace NKikimr::NSchemeShard::NResourcePool

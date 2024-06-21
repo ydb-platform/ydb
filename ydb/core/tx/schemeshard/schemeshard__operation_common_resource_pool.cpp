@@ -1,10 +1,8 @@
 #include "schemeshard__operation_common_resource_pool.h"
-#include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 
 
-namespace NKikimr::NSchemeShard {
-
-namespace NResourcePool {
+namespace NKikimr::NSchemeShard::NResourcePool {
 
 namespace {
 
@@ -55,10 +53,10 @@ bool Validate(const NKikimrSchemeOp::TResourcePoolDescription& description, TStr
 }
 
 TResourcePoolInfo::TPtr CreateResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, ui64 alterVersion) {
-    auto externalDataSoureInfo = MakeIntrusive<TResourcePoolInfo>();
-    externalDataSoureInfo->AlterVersion = alterVersion;
-    externalDataSoureInfo->Properties.CopyFrom(description.GetProperties());
-    return externalDataSoureInfo;
+    auto resourcePoolInfo = MakeIntrusive<TResourcePoolInfo>();
+    resourcePoolInfo->AlterVersion = alterVersion;
+    resourcePoolInfo->Properties.CopyFrom(description.GetProperties());
+    return resourcePoolInfo;
 }
 
 TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, const TResourcePoolInfo::TPtr oldResourcePoolInfo) {
@@ -74,46 +72,16 @@ TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolD
     return resourcePoolInfo;
 }
 
-}  // namespace NResourcePool
-
-//// TResourcePoolSubOperation
-
-TTxState::ETxState TResourcePoolSubOperation::NextState() {
-    return TTxState::Propose;
-}
-
-TTxState::ETxState TResourcePoolSubOperation::NextState(TTxState::ETxState state) const {
-    switch (state) {
-    case TTxState::Waiting:
-    case TTxState::Propose:
-        return TTxState::Done;
-    default:
-        return TTxState::Invalid;
-    }
-}
-
-TSubOperationState::TPtr TResourcePoolSubOperation::SelectStateFunc(TTxState::ETxState state) {
-    switch (state) {
-    case TTxState::Waiting:
-    case TTxState::Propose:
-        return GetProposeOperationState();
-    case TTxState::Done:
-        return MakeHolder<TDone>(OperationId);
-    default:
-        return nullptr;
-    }
-}
-
-bool TResourcePoolSubOperation::IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context) {
     TString errorStr;
-    if (!context.SS->CheckApplyIf(Transaction, errorStr)) {
+    if (!context.SS->CheckApplyIf(transaction, errorStr)) {
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
         return false;
     }
     return true;
 }
 
-bool TResourcePoolSubOperation::IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description) {
+bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description) {
     TString errorStr;
     if (!NResourcePool::Validate(description, errorStr)) {
         result->SetError(NKikimrScheme::StatusSchemeError, errorStr);
@@ -122,32 +90,28 @@ bool TResourcePoolSubOperation::IsDescriptionValid(const THolder<TProposeRespons
     return true;
 }
 
-void TResourcePoolSubOperation::AddPathInSchemeShard(const THolder<TProposeResponse>& result, const TPath& dstPath) {
-    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-}
-
-TTxState& TResourcePoolSubOperation::CreateTransaction(const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType) const {
-    Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-    TTxState& txState = context.SS->CreateTx(OperationId, txType, resourcePoolPathId);
+TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType) {
+    Y_ABORT_UNLESS(!context.SS->FindTx(operationId));
+    TTxState& txState = context.SS->CreateTx(operationId, txType, resourcePoolPathId);
     txState.Shards.clear();
     return txState;
 }
 
-void TResourcePoolSubOperation::RegisterParentPathDependencies(const TOperationContext& context, const TPath& parentPath) const {
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
     if (parentPath.Base()->HasActiveChanges()) {
         const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
                                     ? parentPath.Base()->CreateTxId
                                     : parentPath.Base()->LastTxId;
-        context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
+        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
     }
 }
 
-void TResourcePoolSubOperation::AdvanceTransactionStateToPropose(const TOperationContext& context, NIceDb::TNiceDb& db) const {
-    context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-    context.OnComplete.ActivateTx(OperationId);
+void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db) {
+    context.SS->ChangeTxState(db, operationId, TTxState::Propose);
+    context.OnComplete.ActivateTx(operationId);
 }
 
-void TResourcePoolSubOperation::PersistResourcePool(const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) const {
+void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) {
     const auto& resourcePoolPathId = resourcePoolPath->PathId;
 
     if (!context.SS->ResourcePools.contains(resourcePoolPathId)) {
@@ -161,7 +125,7 @@ void TResourcePoolSubOperation::PersistResourcePool(const TOperationContext& con
 
     context.SS->PersistPath(db, resourcePoolPathId);
     context.SS->PersistResourcePool(db, resourcePoolPathId, resourcePoolInfo);
-    context.SS->PersistTxState(db, OperationId);
+    context.SS->PersistTxState(db, operationId);
 }
 
-}  // namespace NKikimr::NSchemeShard
+}  // namespace NKikimr::NSchemeShard::NResourcePool

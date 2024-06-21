@@ -358,10 +358,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
-            return *modifyScheme.MutableCreateResourcePool()->MutablePoolId();
+            return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
-            return *modifyScheme.MutableCreateResourcePool()->MutablePoolId();
+            return *modifyScheme.MutableCreateResourcePool()->MutableName();
         }
     }
 

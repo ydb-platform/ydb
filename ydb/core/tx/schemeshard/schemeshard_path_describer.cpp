@@ -911,7 +911,7 @@ void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pat
     TResourcePoolInfo::TPtr resourcePoolInfo = *it;
 
     auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
-    entry->SetPoolId(pathEl->Name);
+    entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(resourcePoolInfo->AlterVersion);
     entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);

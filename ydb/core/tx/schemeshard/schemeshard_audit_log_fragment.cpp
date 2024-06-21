@@ -546,13 +546,13 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        result.emplace_back(tx.GetCreateResourcePool().GetPoolId());
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
         result.emplace_back(tx.GetDrop().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
-        result.emplace_back(tx.GetCreateResourcePool().GetPoolId());
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
     }
 

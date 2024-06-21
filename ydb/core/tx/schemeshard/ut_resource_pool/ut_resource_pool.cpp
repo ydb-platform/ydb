@@ -9,8 +9,11 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool"
             )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
@@ -23,8 +26,11 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool"
                 Properties {
                     Properties {
                         key: "concurrent_query_limit",
@@ -39,7 +45,17 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathExist);
+        NKikimrSchemeOp::TResourcePoolProperties properties;
+        properties.MutableProperties()->insert({"concurrent_query_limit", "10"});
+        properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+
+        auto describeResult =  DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool");
+        TestDescribeResult(describeResult, {NLs::PathExist});
+        UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
+        const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
     }
 
     Y_UNIT_TEST(DropResourcePool) {
@@ -47,9 +63,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
-            )",{NKikimrScheme::StatusAccepted});
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool"
+            )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
@@ -61,18 +80,21 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TestLs(runtime, "/MyRoot/.resource_pools/MyResourcePool", false, NLs::PathNotExist);
     }
 
-    using TRuntimeTxFn = std::function<void(TTestBasicRuntime&, ui64)>;
-
-    void DropTwice(const TString& path, TRuntimeTxFn createFn, TRuntimeTxFn dropFn) {
+    Y_UNIT_TEST(DropResourcePoolTwice) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        createFn(runtime, ++txId);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
         env.TestWaitNotification(runtime, txId);
 
-        dropFn(runtime, ++txId);
-        dropFn(runtime, ++txId);
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+            Name: "MyResourcePool"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncDropResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", "MyResourcePool");
+        AsyncDropResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", "MyResourcePool");
         TestModificationResult(runtime, txId - 1);
 
         auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
@@ -84,23 +106,9 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDropTxId(), txId - 1);
 
         env.TestWaitNotification(runtime, txId - 1);
-        TestDescribeResult(DescribePath(runtime, path), {
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/MyResourcePool"), {
             NLs::PathNotExist
         });
-    }
-
-    Y_UNIT_TEST(DropResourcePoolTwice) {
-        auto createFn = [](TTestBasicRuntime& runtime, ui64 txId) {
-            TestCreateResourcePool(runtime, txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
-            )");
-        };
-
-        auto dropFn = [](TTestBasicRuntime& runtime, ui64 txId) {
-            AsyncDropResourcePool(runtime, txId, "/MyRoot/.resource_pools", "MyResourcePool");
-        };
-
-        DropTwice("/MyRoot/.resource_pools/MyResourcePool", createFn, dropFn);
     }
 
     Y_UNIT_TEST(ParallelCreateResourcePool) {
@@ -109,11 +117,11 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
-                PoolId: "MyResourcePool1"
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool1"
             )");
         AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
-                PoolId: "MyResourcePool2"
+                Name: "MyResourcePool2"
             )");
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
@@ -140,12 +148,15 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         ui64 txId = 123;
 
         TString resourcePoolConfig = R"(
-                PoolId: ".resource_pools/NilNoviSubLuna"
+                Name: "NilNoviSubLuna"
             )";
 
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", resourcePoolConfig);
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", resourcePoolConfig);
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", resourcePoolConfig);
 
         ui64 sts[3];
         sts[0] = TestModificationResults(runtime, txId-2, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
@@ -173,7 +184,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                             NLs::IsResourcePool,
                             NLs::PathVersionEqual(2)});
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", resourcePoolConfig, {ESts::StatusAlreadyExists});
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", resourcePoolConfig, {ESts::StatusAlreadyExists});
     }
 
     Y_UNIT_TEST(ReadOnlyMode) {
@@ -181,9 +192,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
-        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
+        AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool"
             )");
 
         // Set ReadOnly
@@ -203,8 +217,8 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         // Check that new modifications fail
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", {NKikimrScheme::StatusReadOnly});
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                PoolId: ".resource_pools/MyResourcePool2"
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool2"
             )", {NKikimrScheme::StatusReadOnly});
 
         // Disable ReadOnly
@@ -224,16 +238,16 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot",R"(
-                PoolId: "AnotherDir/MyResourcePool"
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
+                Name: "AnotherDir/MyResourcePool"
             )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.resource_pools"}});
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
-                PoolId: "AnotherDir/MyResourcePool"
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "AnotherDir/MyResourcePool"
             )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.resource_pools"}});
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools",R"(
-                PoolId: ""
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: ""
             )", {{NKikimrScheme::StatusSchemeError, "error: path part shouldn't be empty"}});
     }
 
@@ -242,8 +256,11 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
-                PoolId: ".resource_pools/MyResourcePool"
+        TestMkDir(runtime, ++txId, "/MyRoot", ".resource_pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
+                Name: "MyResourcePool"
                 Properties {
                     Properties {
                         key: "concurrent_query_limit",
@@ -254,7 +271,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "50"
                     }
                 }
-            )",{NKikimrScheme::StatusAccepted});
+            )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
@@ -267,13 +284,13 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
             TestDescribeResult(describeResult, {NLs::PathExist});
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetPoolId(), "MyResourcePool");
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
         }
 
         TestAlterResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
-                PoolId: "MyResourcePool"
+                Name: "MyResourcePool"
                 Properties {
                     Properties {
                         key: "concurrent_query_limit",
@@ -284,7 +301,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "60"
                     }
                 }
-            )",{NKikimrScheme::StatusAccepted});
+            )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
@@ -296,7 +313,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
             TestDescribeResult(describeResult, {NLs::PathExist});
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetPoolId(), "MyResourcePool");
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 2);
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
         }
@@ -311,15 +328,13 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestAlterResourcePool(runtime, ++txId, "/MyRoot/.resource_pools", R"(
-                PoolId: "MyResourcePool"
+                Name: "MyResourcePool"
                 Properties {
                     Properties {
                         key: "concurrent_query_limit",
                         value: "20"
                     }
                 }
-            )",{NKikimrScheme::StatusPathDoesNotExist});
-
-        env.TestWaitNotification(runtime, txId);
+            )", {NKikimrScheme::StatusPathDoesNotExist});
     }
 }

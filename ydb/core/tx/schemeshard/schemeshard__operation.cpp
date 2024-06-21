@@ -727,7 +727,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         targetName = tx.GetCreateView().GetName();
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        targetName = tx.GetCreateResourcePool().GetPoolId();
+        targetName = tx.GetCreateResourcePool().GetName();
         break;
     default:
         result.Transactions.push_back(tx);
@@ -826,7 +826,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.MutableCreateView()->SetName(name);
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-            create.MutableCreateResourcePool()->SetPoolId(name);
+            create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
             Y_UNREACHABLE();

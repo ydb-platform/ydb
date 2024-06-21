@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
 
             AsyncCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
-                    PoolId: "MyResourcePool"
+                    Name: "MyResourcePool"
                     Properties {
                         Properties {
                             key: "concurrent_query_limit",
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
 
                 UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
                 const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
-                UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetPoolId(), "MyResourcePool");
+                UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
                 UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
             }
@@ -46,8 +46,11 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
     Y_UNIT_TEST(ParallelCreateDrop) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            AsyncCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                    PoolId: ".resource_pools/DropMe"
+            TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            AsyncCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                    Name: "DropMe"
                 )");
             AsyncDropResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", "DropMe");
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
@@ -68,9 +71,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
                 TInactiveZone inactive(activeZone);
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -91,8 +97,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -113,8 +123,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateResourcePool(runtime, t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateResourcePool(runtime, t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -127,8 +141,8 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/.resource_pools/ResourcePool"),
                                    {NLs::PathNotExist});
 
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -146,8 +160,12 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -155,8 +173,8 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                    PoolId: ".resource_pools/ResourcePool"
+            TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                    Name: "ResourcePool"
                 )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -174,16 +192,20 @@ Y_UNIT_TEST_SUITE(TResourcePoolTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".resource_pools");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestDropResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", "ResourcePool");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot", R"(
-                        PoolId: ".resource_pools/ResourcePool"
+                TestCreateResourcePool(runtime, ++t.TxId, "/MyRoot/.resource_pools", R"(
+                        Name: "ResourcePool"
                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }

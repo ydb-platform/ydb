@@ -71,12 +71,9 @@ private:
     const TOperationId OperationId;
 };
 
-class TDropResourcePool : public TResourcePoolSubOperation {
-    using TBase = TResourcePoolSubOperation;
-
-protected:
-    TSubOperationState::TPtr GetProposeOperationState() override {
-        return MakeHolder<TPropose>(OperationId);
+class TDropResourcePool : public TSubOperation {
+    static TTxState::ETxState NextState() {
+        return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -91,7 +88,7 @@ protected:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return GetProposeOperationState();
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -99,7 +96,6 @@ protected:
         }
     }
 
-private:
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath) {
         auto checks = dstPath.Check();
         checks
@@ -133,7 +129,7 @@ private:
     }
 
     void CreateTransaction(const TOperationContext& context, const TPathId& resourcePoolPathId) const {
-        TTxState& txState = TBase::CreateTransaction(context, resourcePoolPathId, TTxState::TxDropResourcePool);
+        TTxState& txState = NResourcePool::CreateTransaction(OperationId, context, resourcePoolPathId, TTxState::TxDropResourcePool);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
     }
@@ -160,15 +156,15 @@ private:
     }
 
 public:
-    using TBase::TBase;
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDrop();
-        const TString& poolId = dropDescription.GetName();
-        LOG_N("TDropResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << poolId);
+        const TString& name = dropDescription.GetName();
+        LOG_N("TDropResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -176,9 +172,9 @@ public:
 
         const TPath& dstPath = dropDescription.HasId()
             ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(poolId);
+            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
-        RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
+        RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -191,7 +187,7 @@ public:
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
-        SetState(TBase::NextState());
+        SetState(NextState());
         return result;
     }
 

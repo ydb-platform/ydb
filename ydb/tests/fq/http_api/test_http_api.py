@@ -103,7 +103,8 @@ class TestHttpApi(TestBase):
             with pytest.raises(
                 YQHttpClientException,
                 match=re.escape(
-                    """Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': "text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
+                    """Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': """
+                    """"text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
                 ),
             ):  # noqa
                 client.create_query()
@@ -383,7 +384,8 @@ class TestHttpApi(TestBase):
             with pytest.raises(
                 YQHttpClientException,
                 match=re.escape(
-                    "Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': 'Result set index out of bound: 1 >= 1', 'issue_code': 1003, 'severity': 'ERROR', 'issues': []}]"
+                    "Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': "
+                    "'Result set index out of bound: 1 >= 1', 'issue_code': 1003, 'severity': 'ERROR', 'issues': []}]"
                 ),
             ):  # noqa
                 client.get_query_result_set(query_id, result_set_index=1)

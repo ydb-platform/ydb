@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <ydb/library/yql/public/udf/tz/udf_tz.h>
 
 #include <util/datetime/base.h>
+#include <util/string/printf.h>
 
 namespace NYql::DateTime {
 
@@ -145,6 +147,13 @@ struct TTMStorage {
 
     inline ui64 ToTimeOfDay() const {
         return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+    }
+
+    const TString ToString() const {
+        const auto& tzName = NUdf::GetTimezones()[TimezoneId];
+        return Sprintf("%4d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
+                       Year, Month, Day, Hour, Minute, Second, Microsecond,
+                       static_cast<int>(tzName.size()), tzName.data());
     }
 };
 

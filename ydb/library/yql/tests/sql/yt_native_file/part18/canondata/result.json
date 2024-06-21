@@ -683,6 +683,13 @@
             "uri": "https://{canondata_backend}/1899731/c92a452de9406ab0662eb9deef9f0799dbd3673d/resource.tar.gz#test.test_csee-nested_closure_in_l2_and_l1-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[datetime-date_tz_impossible_cast--Debug]": [],
+    "test.test[datetime-date_tz_impossible_cast--Plan]": [],
+    "test.test[datetime-date_tz_impossible_cast--Results]": [
+        {
+            "uri": "file://test.test_datetime-date_tz_impossible_cast--Results_/extracted"
+        }
+    ],
     "test.test[distinct-distinct_one_count-default.txt-Debug]": [
         {
             "checksum": "9127b9bf3ead0b7b7c325adbc9e2d6c6",

@@ -28,7 +28,7 @@ using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
 
 class TClusterizer {
 public:
-    TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create);
+    TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, ui32 maxThreads = std::numeric_limits<ui32>::max());
     ~TClusterizer();
 
     struct TOptions {

@@ -1,6 +1,7 @@
 #include "clusterizer.h"
 #include "vector_index.h"
 #include <format>
+#include <future>
 #include <library/cpp/dot_product/dot_product.h>
 
 template <>
@@ -520,7 +521,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     };
     std::deque<TMeta> curr;
     std::deque<TMeta> next;
-    auto makeClusters = [&](ui8 level, TId parentId, ui64 count) {
+    auto makeClustersImpl = [&options](TTableIterator& reader, TBulkWriter& writer, TClusterizer& clusterizer, ui8 level, TId parentId, ui64 count) {
         reader.UseLevel(level, parentId, count);
         writer.UseLevel(level);
         auto clusters = clusterizer.Run({
@@ -536,8 +537,11 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             ++i;
         }
         if (level >= options.Levels) {
-            return;
+            return TClusterizer::TClusters{};
         }
+        return clusters;
+    };
+    auto processCluster = [&](const TClusterizer::TClusters& clusters) {
         for (size_t i = 0; auto id : clusters.Ids) {
             auto count = clusters.Count[i];
             if (count != 0) {
@@ -545,6 +549,33 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             }
             ++i;
         }
+    };
+    std::vector<std::future<TClusterizer::TClusters>> smallClusters;
+    auto processClusters = [&](ui32 count) {
+        if (smallClusters.size() < count) {
+            return;
+        }
+        for (auto& cluster : smallClusters) {
+            processCluster(cluster.get());
+        }
+        smallClusters.clear();
+    };
+    auto makeClusters = [&](ui8 level, TId parentId, ui64 count) {
+        if (count >= 20'000) {
+            auto clusters = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
+            processCluster(clusters);
+            return;
+        }
+        smallClusters.emplace_back(std::async(std::launch::async, [&makeClustersImpl, &client, &options, level, parentId, count] {
+            TTableIterator reader{options, client};
+            TBulkWriter writer{options, client, count};
+            TClusterizer clusterizer{reader, CosineDistance,
+                                     [&](TId parentId, TId id, TRawEmbedding embedding) {
+                                         writer.WritePosting(parentId, id, std::move(embedding));
+                                     },
+                                     1};
+            return makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
+        }));
     };
     next.push_back({0, options.Rows});
     for (ui8 level = 1; !next.empty(); ++level) {
@@ -554,6 +585,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             makeClusters(level, meta.ParentId, meta.Count);
         }
         curr.clear();
+        processClusters(0);
         writer.DropLevel(level);
         writer.Wait();
     }

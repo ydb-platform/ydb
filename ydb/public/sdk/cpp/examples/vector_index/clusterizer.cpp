@@ -57,15 +57,15 @@ bool TClusterizer::TBatch::Empty() const {
     return RawData.empty();
 }
 
-TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create)
+TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, ui32 maxThreads)
     : It{it}
     , Distance{std::move(distance)}
     , Create{std::move(create)}
 {
-    ui64 n = std::max<ui64>(std::thread::hardware_concurrency(), 1);
+    ui32 n = std::clamp<ui32>(std::thread::hardware_concurrency(), 1, maxThreads);
     Cout << "kmeans will use " << n << " threads" << Endl;
     Threads.reserve(n);
-    for (ui64 i = 0; i != n; ++i) {
+    for (ui32 i = 0; i != n; ++i) {
         Threads.emplace_back([this, i] {
             std::unique_lock lock{M};
             while (true) {

@@ -605,6 +605,172 @@ private:
     const std::hash<IHTTPGateway::TRetryPolicy::TPtr> HashPtr;
 };
 
+class THTTPScopedGateway : public IHTTPGateway {
+public:
+    using TPtr = std::shared_ptr<THTTPScopedGateway>;
+    using TWeakPtr = std::weak_ptr<THTTPScopedGateway>;
+
+    class TDownloadInfo {
+    public:
+        TDownloadInfo(
+            ui32 priority,
+            TString url,
+            THeaders headers,
+            std::size_t offset,
+            std::size_t sizeLimit,
+            TOnResult callback,
+            TString data,
+            TRetryPolicy::TPtr retryPolicy)
+        :   Priority(priority),
+            Url(url),
+            Headers(headers),
+            Offset(offset),
+            SizeLimit(sizeLimit),
+            Callback(callback),
+            Data(data),
+            RetryPolicy(retryPolicy)
+        {
+        }
+
+        TDownloadInfo(
+            ui32 priority,
+            TString url,
+            THeaders headers,
+            std::size_t offset,
+            std::size_t sizeLimit,
+            TOnDownloadStart onStart,
+            TOnNewDataPart onNewData,
+            TOnDownloadFinish onFinish,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter)
+        :   Priority(priority),
+            Url(url),
+            Headers(headers),
+            Offset(offset),
+            SizeLimit(sizeLimit),
+            OnStart(onStart),
+            OnNewData(onNewData),
+            OnFinish(onFinish),
+            InflightCounter(&inflightCounter)
+        {
+        }
+
+        // common fields
+        ui32 Priority;
+        TString Url;
+        THeaders Headers;
+        std::size_t Offset;
+        std::size_t SizeLimit;
+        // in memory download
+        TOnResult Callback;
+        TString Data;
+        TRetryPolicy::TPtr RetryPolicy;
+        // streaming download
+        TOnDownloadStart OnStart;
+        TOnNewDataPart OnNewData;
+        TOnDownloadFinish OnFinish;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr* InflightCounter;
+    };
+
+
+public:
+    THTTPScopedGateway(IHTTPGateway::TPtr gateway) : Gateway(gateway) {
+    }
+
+    static TPtr Make(IHTTPGateway::TPtr gateway) {
+        auto result = std::make_shared<THTTPScopedGateway>(gateway);
+        result->SetSelf(result);
+        return result;
+    }
+
+    void SetSelf(TWeakPtr self) {
+        Self = self;
+    }
+
+    void Upload(
+        TString url,
+        THeaders headers,
+        TString body,
+        TOnResult callback,
+        bool put = false,
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) final {
+        // Upload is just pass through
+        Gateway->Upload(url, headers, body, callback, put, retryPolicy);
+    }
+
+    void Delete(
+        TString url,
+        THeaders headers,
+        TOnResult callback,
+        TRetryPolicy::TPtr retryPolicy) final {
+        // Delete is just pass through
+        Gateway->Delete(url, headers, callback, retryPolicy);
+    }
+
+    void Download(
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnResult callback,
+        TString data = {},
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) final {
+        // old-style Download implies priority == 0
+        this->Download(0, url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
+    void Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) final {
+        // TBD
+        Gateway->Download(priority, url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
+    TCancelHook Download(
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final {
+        // old-style Download implies priority == 0
+        return this->Download(0, url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+        
+    TCancelHook Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final {
+        // TBD
+        return Gateway->Download(priority, url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+        
+    ui64 GetBuffersSizePerStream() final {
+        return Gateway->GetBuffersSizePerStream();
+    }
+
+    IHTTPGateway::TPtr GetScopedGateway(const TString& scope) final {
+        return Gateway->GetScopedGateway(scope);
+    }
+
+private:
+    IHTTPGateway::TPtr Gateway;
+    TWeakPtr Self;
+};
+
 class THTTPMultiGateway : public IHTTPGateway {
 friend class IHTTPGateway;
 public:
@@ -904,6 +1070,19 @@ private:
         Wakeup(sizeLimit);
     }
 
+    void Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) final
+    {
+        this->Download(url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
     TCancelHook Download(
         TString url,
         THeaders headers,
@@ -927,8 +1106,40 @@ private:
         };
     }
 
+    TCancelHook Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
+    {
+        return this->Download(url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+
     ui64 GetBuffersSizePerStream() final {
         return BuffersSizePerStream;
+    }
+
+    IHTTPGateway::TPtr GetScopedGateway(const TString& scope) final {
+
+        auto gateway = THTTPMultiGateway::Singleton.lock();
+        Y_ABORT_UNLESS(gateway);
+        const std::unique_lock lock(THTTPMultiGateway::CreateSync);
+
+        auto it = ScopedGateways.find(scope);
+        if (it != ScopedGateways.end()) {
+            if (auto result = it->second.lock()) {
+                return result;
+            }
+        }
+
+        IHTTPGateway::TPtr result = THTTPScopedGateway::Make(gateway);
+        ScopedGateways.emplace(scope, result);
+        return result;
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
@@ -970,6 +1181,7 @@ private:
     static TWeakPtr Singleton;
 
     TDNSGateway<> DnsGateway;
+    std::unordered_map<TString, IHTTPGateway::TWeakPtr> ScopedGateways;
 
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Rps;

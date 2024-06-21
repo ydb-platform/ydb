@@ -84,6 +84,19 @@ public:
         }
     }
 
+    void Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) final
+    {
+        this->Download(url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
     TCancelHook Download(
             TString,
             THeaders,
@@ -96,8 +109,26 @@ public:
         return {};
     }
 
+    TCancelHook Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
+    {
+        return this->Download(url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+
     ui64 GetBuffersSizePerStream() final {
         return 0;
+    }
+
+    IHTTPGateway::TPtr GetScopedGateway(const TString& /* scope */) final {
+        return std::make_shared<THTTPMockGateway>();  
     }
 
     void AddDefaultResponse(TDataDefaultResponse response) {

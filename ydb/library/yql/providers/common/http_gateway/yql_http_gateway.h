@@ -99,6 +99,16 @@ public:
         TString data = {},
         TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
 
+    virtual void Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) = 0;
+
     class TCountedContent : public TContentBase {
     public:
         TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter);
@@ -128,7 +138,20 @@ public:
         TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
         
+    virtual TCancelHook Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
+        
     virtual ui64 GetBuffersSizePerStream() = 0;
+
+    virtual IHTTPGateway::TPtr GetScopedGateway(const TString& scope) = 0;
 
     static THeaders MakeYcHeaders(
         const TString& requestId,

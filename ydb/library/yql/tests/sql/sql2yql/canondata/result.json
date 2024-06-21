@@ -4304,6 +4304,20 @@
             "uri": "https://{canondata_backend}/1937027/bbc35c51807ca32a384973d8a730422ad871c54c/resource.tar.gz#test_sql2yql.test_column_group-hint_/sql.yql"
         }
     ],
+    "test_sql2yql.test[column_group-hint_anon]": [
+        {
+            "checksum": "dbb0cca1127bb0c111eaf0a628b2b9a1",
+            "size": 4108,
+            "uri": "https://{canondata_backend}/1942525/2065de9dd4b18a7276f6c5d85e09a5754c9a2fd8/resource.tar.gz#test_sql2yql.test_column_group-hint_anon_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[column_group-hint_anon_groups]": [
+        {
+            "checksum": "1f44e91a47e42b8d5876da52098a98ce",
+            "size": 4144,
+            "uri": "https://{canondata_backend}/1942525/2065de9dd4b18a7276f6c5d85e09a5754c9a2fd8/resource.tar.gz#test_sql2yql.test_column_group-hint_anon_groups_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[column_group-hint_append_fail]": [
         {
             "checksum": "18aacc13c7921e65e61411ea0a31136e",
@@ -23475,6 +23489,20 @@
             "checksum": "450488532da6b5625887973fc27a6286",
             "size": 1099,
             "uri": "https://{canondata_backend}/1937027/bbc35c51807ca32a384973d8a730422ad871c54c/resource.tar.gz#test_sql_format.test_column_group-hint_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_group-hint_anon]": [
+        {
+            "checksum": "0a7f14733fa0206794e5c41780561323",
+            "size": 230,
+            "uri": "https://{canondata_backend}/1942525/2065de9dd4b18a7276f6c5d85e09a5754c9a2fd8/resource.tar.gz#test_sql_format.test_column_group-hint_anon_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_group-hint_anon_groups]": [
+        {
+            "checksum": "554c312c9220887717b03eb9a4392cb3",
+            "size": 273,
+            "uri": "https://{canondata_backend}/1942525/2065de9dd4b18a7276f6c5d85e09a5754c9a2fd8/resource.tar.gz#test_sql_format.test_column_group-hint_anon_groups_/formatted.sql"
         }
     ],
     "test_sql_format.test[column_group-hint_append_fail]": [

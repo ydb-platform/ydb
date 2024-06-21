@@ -592,8 +592,7 @@ private:
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
-        // TODO: fix retries for columnshard
-        if (SchemeEntry->Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        if (InconsistentTx) {
             TlsActivationContext->Schedule(
                 CalculateNextAttemptDelay(metadata->SendAttempts),
                 new IEventHandle(
@@ -639,12 +638,19 @@ private:
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         CA_LOG_W("Timeout shardID=" << ev->Get()->ShardId);
+        YQL_ENSURE(InconsistentTx);
         RetryShard(ev->Get()->ShardId, ev->Cookie);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        RetryShard(ev->Get()->TabletId, std::nullopt);
+        if (InconsistentTx) {
+            RetryShard(ev->Get()->TabletId, std::nullopt);
+        } else {
+            RuntimeError(
+                TStringBuilder() << "Error while delivering message to tablet " << ev->Get()->TabletId,
+                NYql::NDqProto::StatusIds::UNAVAILABLE);
+        }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {

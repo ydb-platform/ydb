@@ -126,7 +126,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
         : Request(std::move(request))
         , Database(database)
@@ -135,7 +135,6 @@ public:
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerRetriesConfig)
-        , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
         , AggregationSettings(aggregation)
         , HasOlapTable(false)
         , StreamResult(streamResult)
@@ -1598,7 +1597,7 @@ protected:
     }
 
     void GetSecretsSnapshot() {
-        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext().ActorSystem(), MaximalSecretsSnapshotWaitTime);
+        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext().ActorSystem());
     }
 
     void GetResourcesSnapshot() {
@@ -1924,7 +1923,6 @@ protected:
 
     std::vector<TString> SecretNames;
     std::map<TString, TString> SecureParams;
-    TDuration MaximalSecretsSnapshotWaitTime;
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -1950,7 +1948,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
@@ -1958,7 +1956,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -886,14 +886,13 @@ namespace Tests {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
-                                                                  Settings->AppConfig->GetMetadataProviderConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig->GetQueryServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory);
+            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig->GetQueryServiceConfig(), federatedQuerySetupFactory);
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }

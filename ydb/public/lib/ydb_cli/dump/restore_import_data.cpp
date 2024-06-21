@@ -268,6 +268,18 @@ public:
         return TInstant::ParseIso8601(Value);
     }
 
+    i32 GetDate32() const {
+        return FromString<i32>(Value);
+    }
+
+    i64 GetDatetime64() const {
+        return FromString<i64>(Value);
+    }
+
+    i64 GetTimestamp64() const {
+        return FromString<i64>(Value);
+    }
+
     TString GetString() const {
         return CheckedUnescape();
     }

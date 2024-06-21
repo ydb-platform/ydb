@@ -5275,7 +5275,8 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
     }
 
     const auto options = NKikimr::NUdf::GetCastResult(*sourceType->GetDataSlot(), *targetType->GetDataSlot());
-    MKQL_ENSURE(!(*options & NKikimr::NUdf::ECastOptions::Impossible),
+    MKQL_ENSURE((*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        !(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *static_cast<TType*>(sourceType) << " into " << *static_cast<TType*>(targetType));
 
     const bool useToIntegral = !options || NKikimr::NUdf::ECastOptions::MayFail & *options;

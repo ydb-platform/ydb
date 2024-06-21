@@ -38,7 +38,6 @@ ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut [37/40] chunk chunk
 ydb/core/persqueue/ut [38/40] chunk chunk
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_AutosplitByLoad
 ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
 ydb/core/persqueue/ut TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK

@@ -2472,6 +2472,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "ResultBytes", taskStats.GetResultBytes());
         SetNonZero(node, "IngressRows", taskStats.GetIngressRows());
         SetNonZero(node, "IngressBytes", taskStats.GetIngressBytes());
+        SetNonZero(node, "IngressDecompressedBytes", taskStats.GetIngressDecompressedBytes());
         SetNonZero(node, "EgressRows", taskStats.GetEgressRows());
         SetNonZero(node, "EgressBytes", taskStats.GetEgressBytes());
 
@@ -2567,6 +2568,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 }
                 if ((*stat)->HasIngressBytes()) {
                     FillAggrStat(stats, (*stat)->GetIngressBytes(), "IngressBytes");
+                }
+                if ((*stat)->HasIngressDecompressedBytes()) {
+                    FillAggrStat(stats, (*stat)->GetIngressDecompressedBytes(), "IngressDecompressedBytes");
                 }
                 if ((*stat)->HasEgressRows()) {
                     FillAggrStat(stats, (*stat)->GetEgressRows(), "EgressRows");

@@ -191,7 +191,7 @@ void TFixture::CommitTx(NTable::TTransaction& tx, EStatus status)
 void TFixture::RollbackTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Rollback().ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
 }
 
 auto TFixture::CreateReader() -> TTopicReadSessionPtr

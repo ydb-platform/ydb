@@ -43,7 +43,6 @@ struct TTestTableDescription {
     TString Name;
     TVector<TString> KeyColumns;
     TVector<TColumn> Columns;
-    TVector<std::pair<TString, TVector<TString>>> SyncSecondaryIndexes;
     TMaybe<TReplicationConfig> ReplicationConfig = TReplicationConfig::Default();
     TMaybe<ui32> UniformPartitions = Nothing();
 

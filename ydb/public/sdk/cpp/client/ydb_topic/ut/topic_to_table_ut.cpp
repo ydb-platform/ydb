@@ -185,15 +185,13 @@ NTable::TTransaction TFixture::BeginTx(NTable::TSession& session)
 void TFixture::CommitTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Commit().ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
 }
 
 void TFixture::RollbackTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Rollback().ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status, result.GetIssues().ToString());
 }
 
 auto TFixture::CreateReader() -> TTopicReadSessionPtr

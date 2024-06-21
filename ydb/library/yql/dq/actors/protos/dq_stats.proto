@@ -19,7 +19,7 @@ enum EDqStatsMode {
 message TDqAsyncBufferStats {
     // Data
     uint64 Bytes  = 1; // physical bytes
-    uint64 DecompressedBytes = 11; // decomressed bytes
+    uint64 DecompressedBytes = 11; // decompressed bytes
     uint64 Rows   = 2; // logical rows (if applicable)
     uint64 Chunks = 3; // chunk is group of sent/received bytes in single batch
     uint64 Splits = 4; // logical partitioning (if applicable)

@@ -514,10 +514,10 @@ int Main(int argc, const char *argv[])
         }
         tablesDirMapping[clusterName] = dirPath;
         for (const auto& entry : TDirIterator(TFsPath(dirPath))) {
-            if (TFsPath(entry.fts_path).IsFile() && TFsPath(entry.fts_path).GetExtension() == "txt") {
-                auto tableName = TString(clusterName) + '.' + TFsPath(entry.fts_path).RelativeTo(TFsPath(dirPath)).c_str();
+            if (auto entryPath = TFsPath(entry.fts_path); entryPath.IsFile() && entryPath.GetExtension() == "txt") {
+                auto tableName = TString(clusterName).append('.').append(entryPath.RelativeTo(TFsPath(dirPath)).GetPath());
                 tableName = tableName.substr(0, tableName.Size() - 4); // remove .txt extension
-                tablesMapping[tableName] = TFsPath(entry.fts_path).c_str();
+                tablesMapping[tableName] = entryPath.GetPath();
             }
         }
     }

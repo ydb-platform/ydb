@@ -58,34 +58,22 @@ class TTableHistogramBuilderBtreeIndex {
     struct TNodeEventKeyGreater {
         const TKeyCellDefaults& KeyDefaults;
 
-        bool operator ()(const TNodeEvent& a, const TNodeEvent& b) const {
+        bool operator ()(const TNodeEvent& a, const TNodeEvent& b) const noexcept {
             if (a.Key && b.Key) {
                 auto cmp = CompareKeys(a.Key, b.Key, KeyDefaults);
                 if (cmp != 0) {
                     return cmp > 0;
                 }
-                if (a.IsBegin != b.IsBegin) {
-                    return !a.IsBegin;
-                }
-                return false;
             }
 
-            if (a.Key && !b.Key) {
-                return b.IsBegin; // empty begin -> -inf
-            }
+            return GetCategory(a) > GetCategory(b);
+        }
 
-            if (!a.Key && b.Key) {
-                return !a.IsBegin; // empty end -> +inf
+        ui8 GetCategory(const TNodeEvent& a) const noexcept {
+            if (a.Key) {
+                return 0;
             }
-
-            if (!a.Key && !b.Key) {
-                if (a.IsBegin != b.IsBegin) {
-                    return !a.IsBegin;
-                }
-                return false;
-            }
-
-            Y_UNREACHABLE();
+            return a.IsBegin ? -1 : 1;
         }
     };
 

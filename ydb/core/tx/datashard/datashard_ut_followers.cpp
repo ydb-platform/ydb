@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         InitRoot(server, sender);
 
-        auto policy = new NLocalDb::TCompactionPolicy();
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
         policy->MinDataPageSize = 1;
         policy->MinBTreeIndexNodeSize = 1;
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             TShardedTableOptions()
                 .Shards(2)
                 .Followers(1)
-                .Policy(policy));
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         InitRoot(server, sender);
 
-        auto policy = new NLocalDb::TCompactionPolicy();
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
         policy->MinDataPageSize = 1;
         policy->MinBTreeIndexNodeSize = 1;
 
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             TShardedTableOptions()
                 .Shards(2)
                 .Followers(1)
-                .Policy(policy));
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         InitRoot(server, sender);
 
-        auto policy = new NLocalDb::TCompactionPolicy();
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
         policy->MinDataPageSize = 1;
         policy->MinBTreeIndexNodeSize = 1;
 
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             TShardedTableOptions()
                 .Shards(2)
                 .Followers(1)
-                .Policy(policy));
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
@@ -474,14 +474,14 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         InitRoot(server, sender);
 
-        auto policy = new NLocalDb::TCompactionPolicy();
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
         policy->MinDataPageSize = 1;
         policy->MinBTreeIndexNodeSize = 1;
 
         CreateShardedTable(server, sender, "/Root", "table-1",
             TShardedTableOptions()
                 .Followers(1)
-                .Policy(policy));
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
@@ -603,14 +603,14 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         InitRoot(server, sender);
 
-        auto policy = new NLocalDb::TCompactionPolicy();
+        TIntrusivePtr<NLocalDb::TCompactionPolicy> policy = new NLocalDb::TCompactionPolicy();
         policy->MinDataPageSize = 1;
         policy->MinBTreeIndexNodeSize = 1;
 
         CreateShardedTable(server, sender, "/Root", "table-1",
             TShardedTableOptions()
                 .Followers(1)
-                .Policy(policy));
+                .Policy(policy.Get()));
 
         const auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);

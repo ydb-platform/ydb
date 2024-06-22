@@ -271,6 +271,15 @@ public:
                         ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), normalized, TNodeFlags::MultilineContent),
                         ctx)
                     );
+            } else if (NYql::HasSetting(*res->Child(TYtWriteTable::idx_Table)->Child(TYtTable::idx_Settings), EYtSettingType::Anonymous)) {
+                if (const auto mode = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable); mode != EColumnGroupMode::Disable) {
+                    res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
+                        NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
+                            EYtSettingType::ColumnGroups,
+                            ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), NYql::GetSingleColumnGroupSpec(), TNodeFlags::MultilineContent),
+                            ctx)
+                        );
+                }
             }
             auto mutationId = ++NextMutationId_;
             res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,

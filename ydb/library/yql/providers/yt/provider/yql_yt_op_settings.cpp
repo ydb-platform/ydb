@@ -955,6 +955,11 @@ TString NormalizeColumnGroupSpec(const TStringBuf spec) {
     }
 }
 
+const TString& GetSingleColumnGroupSpec() {
+    static TString GROUP = NYT::NodeToCanonicalYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+    return GROUP;
+}
+
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type) {
     for (auto& setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && FromString<EYtSettingType>(setting->Child(0)->Content()) == type) {

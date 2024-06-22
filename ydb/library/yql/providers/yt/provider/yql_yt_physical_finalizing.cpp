@@ -2681,7 +2681,7 @@ private:
                 }
                 if (EColumnGroupMode::Single == mode) {
                     if (fullUsage[i]) {
-                        groupSpecs[i] = NYT::NodeToCanonicalYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+                        groupSpecs[i] = NYql::GetSingleColumnGroupSpec();
                     }
                 } else {
                     if (fullUsage[i]) {

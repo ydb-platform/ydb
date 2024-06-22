@@ -881,6 +881,10 @@ void TPropose::PersistState(const TTxState& txState,
     context.OnComplete.PublishToSchemeBoard(OperationId, PathId);
 
     TTopicInfo::TPtr pqGroup = context.SS->Topics[PathId];
+
+    NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
+    NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+
     pqGroup->FinishAlter();
 
     context.SS->PersistPersQueueGroup(db, PathId, pqGroup);

@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void SimpleTest(bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
+        setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void ReadingAfterSplitTest(bool autoscaleAwareSDK, bool autoCommit) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
+        setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void ReadingAfterSplitTest_PreferedPartition(bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
+        setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
 
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_PreferedPartition(bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionMerge_PreferedPartition(bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadEmptyPartitions(bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         TTestReadSession readSession("session-0", client, Max<size_t>(), false, {}, autoscaleAwareSDK);
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         TTestReadSession readSession("Session-0", client, Max<size_t>(), false, {}, false);
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         TTestReadSession readSession("Session-0", client, Max<size_t>(), false, {}, true);
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -690,6 +690,57 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), alterScaleDownPercent);
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
+    }
+
+    Y_UNIT_TEST(ControlPlane_DisableAutoPartitioning) {
+        auto topicName = "autoscalit-topic";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(1)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::ScaleUp)
+                    .EndConfigureAutoscalingSettings()
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .BeginAlterAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::Disabled)
+                    .EndAlterAutoscalingSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse max-partition is not 0");
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MaxActivePartitions(0)
+                    .BeginAlterAutoscalingSettings()
+                        .Strategy(EAutoscalingStrategy::Disabled)
+                    .EndAlterAutoscalingSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
     }
 
     Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {

@@ -68,8 +68,8 @@ const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
 void TSchemeShard::SubscribeToTempTableOwners() {
     auto ctx = ActorContext();
-    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
-    for (const auto& [ownerActorId, tempTables] : tempTablesByOwner) {
+    auto& TempDirsByOwner = TempDirsState.TempDirsByOwner;
+    for (const auto& [ownerActorId, tempTables] : TempDirsByOwner) {
         ctx.Send(new IEventHandle(ownerActorId, SelfId(),
                                 new TEvSchemeShard::TEvOwnerActorAck(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
@@ -435,7 +435,7 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-    ClearTempTablesState();
+    ClearTempDirsState();
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
@@ -1498,7 +1498,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateTable:
     case TTxState::TxCopyTable:
     case TTxState::TxCreatePQGroup:
-    case TTxState::TxAllocatePQ:
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
     case TTxState::TxCreateBlockStoreVolume:
@@ -1588,6 +1587,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMergeTablePartition:
         break;
     case TTxState::TxFillIndex:
+    case TTxState::TxAllocatePQ:
         Y_ABORT("deprecated");
     case TTxState::TxModifyACL:
     case TTxState::TxInvalid:
@@ -1896,7 +1896,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion)
+                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
+                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -1913,7 +1914,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion)
+                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
+                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
                     );
     }
 }
@@ -2807,33 +2809,33 @@ void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId
     db.Table<Schema::PersQueueGroupAlters>().Key(pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
+void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& partitionInfo) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
-    Y_ABORT_UNLESS(pqInfo.ParentPartitionIds.size() <= 2);
-    auto it = pqInfo.ParentPartitionIds.begin();
-    const auto parent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
-    const auto adjacentParent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    Y_ABORT_UNLESS(partitionInfo.ParentPartitionIds.size() <= 2);
+    auto it = partitionInfo.ParentPartitionIds.begin();
+    const auto parent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    const auto adjacentParent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
 
     db.Table<Schema::PersQueues>()
-        .Key(pathId.LocalPathId, pqInfo.PqId)
+        .Key(pathId.LocalPathId, partitionInfo.PqId)
         .Update(NIceDb::TUpdate<Schema::PersQueues::ShardIdx>(shardIdx.GetLocalId()),
-                NIceDb::TUpdate<Schema::PersQueues::GroupId>(pqInfo.GroupId),
-                NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(pqInfo.AlterVersion),
-                NIceDb::TUpdate<Schema::PersQueues::CreateVersion>(pqInfo.CreateVersion),
-                NIceDb::TUpdate<Schema::PersQueues::Status>(pqInfo.Status),
+                NIceDb::TUpdate<Schema::PersQueues::GroupId>(partitionInfo.GroupId),
+                NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(partitionInfo.AlterVersion),
+                NIceDb::TUpdate<Schema::PersQueues::CreateVersion>(partitionInfo.CreateVersion),
+                NIceDb::TUpdate<Schema::PersQueues::Status>(partitionInfo.Status),
                 NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
                 NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
 
-    if (pqInfo.KeyRange) {
-        if (pqInfo.KeyRange->FromBound) {
-            db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, pqInfo.PqId).Update(
-                NIceDb::TUpdate<Schema::PersQueues::RangeBegin>(*pqInfo.KeyRange->FromBound));
+    if (partitionInfo.KeyRange) {
+        if (partitionInfo.KeyRange->FromBound) {
+            db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
+                NIceDb::TUpdate<Schema::PersQueues::RangeBegin>(*partitionInfo.KeyRange->FromBound));
         }
 
-        if (pqInfo.KeyRange->ToBound) {
-            db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, pqInfo.PqId).Update(
-                NIceDb::TUpdate<Schema::PersQueues::RangeEnd>(*pqInfo.KeyRange->ToBound));
+        if (partitionInfo.KeyRange->ToBound) {
+            db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
+                NIceDb::TUpdate<Schema::PersQueues::RangeEnd>(*partitionInfo.KeyRange->ToBound));
         }
     }
 }
@@ -4374,7 +4376,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         BorrowedCompactionQueue->Shutdown(ctx);
     }
 
-    ClearTempTablesState();
+    ClearTempDirsState();
     if (BackgroundCleaningQueue) {
         BackgroundCleaningQueue->Shutdown(ctx);
     }
@@ -6326,7 +6328,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
-    } else if (BackgroundCleaningTxs.contains(txId)) {
+    } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
 
@@ -6382,7 +6384,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
-    if (BackgroundCleaningTxs.contains(txId)) {
+    if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         HandleBackgroundCleaningCompletionResult(txId);
         executed = true;
     }
@@ -6556,24 +6558,24 @@ void TSchemeShard::ApplyPartitionConfigStoragePatch(
     }
 }
 
-std::optional<TTempTableInfo> TSchemeShard::ResolveTempTableInfo(const TPathId& pathId) {
+std::optional<TTempDirInfo> TSchemeShard::ResolveTempDirInfo(const TPathId& pathId) {
     auto path = TPath::Init(pathId, this);
     if (!path) {
         return std::nullopt;
     }
-    TTempTableInfo info;
+    TTempDirInfo info;
     info.Name = path.LeafName();
     info.WorkingDir = path.Parent().PathString();
 
-    TTableInfo::TPtr table = Tables.at(path.Base()->PathId);
-    if (!table) {
+    auto pathInfo = PathsById.at(path.Base()->PathId);
+    if (!pathInfo) {
         return std::nullopt;
     }
-    if (!table->IsTemporary) {
+    if (!pathInfo->TempDirOwnerActorId) {
         return std::nullopt;
     }
 
-    info.OwnerActorId = table->OwnerActorId;
+    info.TempDirOwnerActorId = pathInfo->TempDirOwnerActorId;
     return info;
 }
 

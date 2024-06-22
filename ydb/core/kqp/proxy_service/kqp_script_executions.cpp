@@ -76,7 +76,7 @@ public:
     TQueryBase(const TString& operationName, const TString& executionId, TString sessionId = {})
         : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY, sessionId)
     {
-        SetLogInfo(operationName, executionId);
+        SetOperationInfo(operationName, executionId);
     }
 };
 

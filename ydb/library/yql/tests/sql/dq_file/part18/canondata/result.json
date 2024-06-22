@@ -696,6 +696,7 @@
         }
     ],
     "test.test[csee-nested_closure_in_l2_and_l1-default.txt-Results]": [],
+    "test.test[datetime-date_tz_impossible_cast--Results]": [],
     "test.test[distinct-distinct_one_count-default.txt-Analyze]": [
         {
             "checksum": "3d4c7adf569a297bdeb5433241db9dcb",

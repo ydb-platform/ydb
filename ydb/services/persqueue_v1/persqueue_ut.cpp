@@ -7273,7 +7273,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 auto ev = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
                 if (!ev)
                     continue;
-                TString data("a", dataSize);
+                TString data(dataSize, 'a');
                 NYdb::NTopic::TWriteMessage writeMsg{data};
                 writeMsg.CreateTimestamp(TInstant::Now() - writeLag);
                 writeMsg.Codec = NYdb::NTopic::ECodec::RAW;

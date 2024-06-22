@@ -235,8 +235,6 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup);
     GENERIC_HELPERS(DropPQGroup);
     DROP_BY_PATH_ID_HELPERS(DropPQGroup);
-    GENERIC_HELPERS(AllocatePQ);
-    GENERIC_HELPERS(DeallocatePQ);
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume);
@@ -559,7 +557,7 @@ namespace NSchemeShardUT_Private {
     void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message);
     void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
-    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds);
+    void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path);

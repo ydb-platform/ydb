@@ -431,20 +431,19 @@ private:
 //            << ", finished: " << outputChannel.Channel->IsFinished());
             );
 
-        outputChannel.PopStarted = true;
-        const bool hasFreeMemory = peerState.HasFreeMemory();
+        const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
+        const bool hasFreeMemory = Channels->HasFreeMemoryInChannel(outputChannel.ChannelId);
         UpdateBlocked(outputChannel, !hasFreeMemory);
-        ProcessOutputsState.Inflight++;
-        if (!hasFreeMemory) {
-            CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
-                << ", peerState:(" << peerState.DebugString() << ")"
-            );
-            auto ev = MakeHolder<NTaskRunnerActor::TEvOutputChannelData>(channelId);
-            Y_ABORT_UNLESS(!ev->Finished);
-            Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
+
+        if (!shouldSkipData && !outputChannel.EarlyFinish && !hasFreeMemory) {
+            CA_LOG_T("DrainOutputChannel return because No free memory in channel, channel: " << outputChannel.ChannelId);
+            ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
+            ProcessOutputsState.AllOutputsFinished = !outputChannel.Finished;
             return;
         }
 
+        outputChannel.PopStarted = true;
+        ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, new NTaskRunnerActor::TEvOutputChannelDataRequest(channelId, wasFinished, peerState.GetFreeMemory()));
     }
 
@@ -494,7 +493,6 @@ private:
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
         outputChannel->Finished = true;
         outputChannel->EarlyFinish = true;
-        TrySendAsyncChannelData(*outputChannel); // early finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
         if (outputChannel->PopStarted) { // There may be another in-flight message here
@@ -604,8 +602,6 @@ private:
     }
 
     void DoExecuteImpl() override {
-        TrySendAsyncChannelsData();
-
         PollAsyncInput();
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
@@ -668,7 +664,6 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         ContinueRunInflight = false;
-        TrySendAsyncChannelsData(); // send from previous cycle
 
         MkqlMemoryLimit = ev->Get()->MkqlMemoryLimit;
         ProfileStats = std::move(ev->Get()->ProfileStats);
@@ -774,26 +769,15 @@ private:
         outputChannel.AsyncData->Finished = ev->Get()->Finished;
         outputChannel.AsyncData->Changed = ev->Get()->Changed;
 
-        if (TrySendAsyncChannelData(outputChannel)) {
-            CheckRunStatus();
-        }
+        SendAsyncChannelData(outputChannel);
+        CheckRunStatus();
     }
 
-    bool TrySendAsyncChannelData(TOutputChannelInfo& outputChannel) {
-        if (!outputChannel.AsyncData) {
-            return false;
-        }
+    void SendAsyncChannelData(TOutputChannelInfo& outputChannel) {
+        Y_ABORT_UNLESS(outputChannel.AsyncData);
 
         // If the channel has finished, then the data received after drain is no longer needed
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
-        if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
-            CA_LOG_T("TrySendAsyncChannelData return false because Channel can't send channel data, channel: " << outputChannel.ChannelId);
-            return false;
-        }
-        if (!shouldSkipData && !outputChannel.EarlyFinish && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
-            CA_LOG_T("TrySendAsyncChannelData return false because No free memory in channel, channel: " << outputChannel.ChannelId);
-            return false;
-        }
 
         auto& asyncData = *outputChannel.AsyncData;
         outputChannel.Finished = asyncData.Finished || shouldSkipData || outputChannel.EarlyFinish;
@@ -861,19 +845,6 @@ private:
             FinishedSinks.size() == SinksMap.size();
 
         outputChannel.AsyncData = Nothing();
-
-        return true;
-    }
-
-    bool TrySendAsyncChannelsData() {
-        bool result = false;
-        for (auto& [channelId, outputChannel] : OutputChannelsMap) {
-            result |= TrySendAsyncChannelData(outputChannel);
-        }
-        if (result) {
-            CheckRunStatus();
-        }
-        return result;
     }
 
     void OnInputChannelDataAck(NTaskRunnerActor::TEvInputChannelDataAck::TPtr& ev) {

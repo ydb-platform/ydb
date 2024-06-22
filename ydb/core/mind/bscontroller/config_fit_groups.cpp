@@ -54,7 +54,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateOrSanitizeGroup(0, group, {}, {}, 0, false, &TGroupGeometryInfo::AllocateGroup);
+                        AllocateOrSanitizeGroup(TGroupId::Zero(), group, {}, {}, 0, false, &TGroupGeometryInfo::AllocateGroup);
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -69,7 +69,7 @@ namespace NKikimr {
                 for (;;) {
                     // obtain group local id
                     auto& nextGroupId = State.NextGroupId.Unshare();
-                    const ui32 groupLocalId = nextGroupId ? TGroupID(nextGroupId).GroupLocalID() : 0;
+                    const ui32 groupLocalId = nextGroupId.GetRawId() ? TGroupID(nextGroupId).GroupLocalID() : 0;
 
                     // create new full group id
                     TGroupID fullGroupId(EGroupConfigurationType::Dynamic, AvailabilityDomainId, groupLocalId);
@@ -77,10 +77,10 @@ namespace NKikimr {
                     ++nextFullGroupId;
 
                     // write down NextGroupId
-                    nextGroupId = nextFullGroupId.GetRaw();
+                    nextGroupId = TGroupId::FromValue(nextFullGroupId.GetRaw());
 
                     // exit if there is no collision
-                    groupId = fullGroupId.GetRaw();
+                    groupId = TGroupId::FromValue(fullGroupId.GetRaw());
                     if (!State.Groups.Find(groupId)) {
                         break;
                     }
@@ -124,7 +124,7 @@ namespace NKikimr {
                 ui32 lifeCyclePhase = 0;
                 TString mainKeyId = "";
                 TString encryptedGroupKey = "";
-                ui64 groupKeyNonce = groupId; // For the first time use groupId, then use low 32 bits of the
+                ui64 groupKeyNonce = groupId.GetRawId(); // For the first time use groupId, then use low 32 bits of the
                                               // NextGroupKeyNonce to produce high 32 bits of the groupKeyNonce.
 
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
@@ -376,9 +376,9 @@ namespace NKikimr {
                         if (!IgnoreGroupFailModelChecks) {
                             // process only groups with changed content; check the failure model
                             if (!checker.CheckFailModelForGroup(failed)) {
-                                throw TExMayLoseData(groupId);
+                                throw TExMayLoseData(groupId.GetRawId());
                             } else if (!IgnoreDegradedGroupsChecks && checker.IsDegraded(failed)) {
-                                throw TExMayGetDegraded(groupId);
+                                throw TExMayGetDegraded(groupId.GetRawId());
                             }
                         }
 
@@ -506,7 +506,7 @@ namespace NKikimr {
                 TStackVec<ui32, 16> groups;
                 for (const auto& [vslotId, vslot] : info.VSlotsOnPDisk) {
                     if (!vslot->IsBeingDeleted()) {
-                        groups.push_back(vslot->GroupId);
+                        groups.push_back(vslot->GroupId.GetRawId());
                     }
                 }
 

@@ -2357,6 +2357,9 @@ namespace {
             PRINT_PRIMITIVE(Date);
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
+            PRINT_PRIMITIVE(Date32);
+            PRINT_PRIMITIVE(Datetime64);
+            PRINT_PRIMITIVE(Timestamp64);
             PRINT_PRIMITIVE(String);
             PRINT_PRIMITIVE(DyNumber);
 

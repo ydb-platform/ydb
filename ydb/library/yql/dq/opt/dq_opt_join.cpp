@@ -560,7 +560,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    if (!IsDqPureExpr(join.LeftInput())) {
+    if (!IsDqCompletePureExpr(join.LeftInput())) {
         return node;
     }
 
@@ -599,7 +599,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .JoinType().Build(joinType)
         .LeftJoinKeyNames(join.LeftJoinKeyNames())
         .RightJoinKeyNames(join.RightJoinKeyNames())
-        .Done();  
+        .Done();
 }
 
 TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {
@@ -621,7 +621,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
 
     TMaybeNode<TDqCnUnionAll> rightCn = join.RightInput().Maybe<TDqCnUnionAll>();
-    YQL_ENSURE(rightCn || IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true));
+    YQL_ENSURE(rightCn || IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true));
 
     TMaybeNode<TDqCnBroadcast> rightBroadcast;
     TNodeOnNodeOwnedMap rightPrecomputes;
@@ -875,7 +875,7 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     }
 
     // join stream with pure expr
-    else if (leftIsUnionAll && IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true)) {
+    else if (leftIsUnionAll && IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true)) {
         auto leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
 
         auto [leftJoinKeys, _] = GetJoinKeys(join, ctx);
@@ -909,7 +909,7 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     }
 
     // join pure expr with stream
-    else if (IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true) && rightIsUnionAll) {
+    else if (IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true) && rightIsUnionAll) {
         auto rightCn = join.RightInput().Cast<TDqCnUnionAll>();
 
         auto [_, rightJoinKeys] = GetJoinKeys(join, ctx);

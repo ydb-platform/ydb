@@ -1404,12 +1404,14 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
-    if (node->Head().IsCallable({"GroupByKey", "CombineByKey"})) {
-        return FuseFlatMapOverByKey<false>(*node, ctx);
-    }
+    if (self.Lambda().Ref().IsComplete()) {
+        if (node->Head().IsCallable({"GroupByKey", "CombineByKey"})) {
+            return FuseFlatMapOverByKey<false>(*node, ctx);
+        }
 
-    if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
-        return FuseFlatMapOverByKey<true>(*node, ctx);
+        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
+            return FuseFlatMapOverByKey<true>(*node, ctx);
+        }
     }
 
     if (node->Head().IsCallable("ForwardList")) {

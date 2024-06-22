@@ -76,27 +76,6 @@
             "uri": "https://{canondata_backend}/1903885/df64cdedb0510382ad3c412404939d20ce178ef2/resource.tar.gz#test.test_action-runtime_format_type-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[action-subquery_merge_nested_subquery-default.txt-Debug]": [
-        {
-            "checksum": "77b06488833b67e7d27ef6221c3418e5",
-            "size": 553,
-            "uri": "https://{canondata_backend}/1920236/df296391156851095e326102a665e0179365e8d4/resource.tar.gz#test.test_action-subquery_merge_nested_subquery-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[action-subquery_merge_nested_subquery-default.txt-Plan]": [
-        {
-            "checksum": "212be881133a20b5b73ef1250dbeda51",
-            "size": 960,
-            "uri": "https://{canondata_backend}/1924537/3d2705efadc402a8a106ede4d6132e0dbc7b7516/resource.tar.gz#test.test_action-subquery_merge_nested_subquery-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[action-subquery_merge_nested_subquery-default.txt-Results]": [
-        {
-            "checksum": "6a84f2308a09ca7b3f129ecebf10f516",
-            "size": 747,
-            "uri": "https://{canondata_backend}/1920236/df296391156851095e326102a665e0179365e8d4/resource.tar.gz#test.test_action-subquery_merge_nested_subquery-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[agg_phases-min_by-default.txt-Debug]": [
         {
             "checksum": "2b77f197d186fd861413c979b7b7572a",
@@ -563,6 +542,13 @@
             "checksum": "56ddb792341a8c10bbb7f46db22b405a",
             "size": 1377,
             "uri": "https://{canondata_backend}/1871182/5a4449eecae85d31c6f70eca057fe425dfafe11b/resource.tar.gz#test.test_blocks-top_sort_two_mix--Results_/results.txt"
+        }
+    ],
+    "test.test[column_group-hint_non_lst_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_lst_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_lst_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_lst_yson_fail--Results_/extracted"
         }
     ],
     "test.test[column_order-insert_tmp-default.txt-Debug]": [

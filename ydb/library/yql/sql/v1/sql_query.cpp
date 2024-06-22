@@ -2352,6 +2352,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablefilterpushdownoverjoinoptionalside") {
             Ctx.FilterPushdownOverJoinOptionalSide = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableFilterPushdownOverJoinOptionalSide");
+        } else if (normalizedPragma == "rotatejointree") {
+            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx.RotateJoinTree)) {
+                Error() << "Expected boolean literal as a single argument for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
         } else if (normalizedPragma == "allowunnamedcolumns") {
             Ctx.WarnUnnamedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "AllowUnnamedColumns");

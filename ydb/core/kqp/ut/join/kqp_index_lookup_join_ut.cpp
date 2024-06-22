@@ -1028,6 +1028,36 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
         }
     }
 
+    {  // execute left join with left filter for join keys before lookup join: l.Key1 = l.Key2 = l.Fk
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, l.Fk, r.Key1
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Key1 = r.Key1
+                AND l.Key2 = r.Key1
+                AND l.Fk = r.Key1
+            ORDER BY l.Key1, l.Key2, l.Fk, r.Key1
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [#;[3];#;#];
+            [[1];[1];[1];[1]];
+            [[2];[2];[20];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+            if (tableStats.name() == "/Root/Right") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
+            }
+        }
+    }
+
     {  // execute join with left filter before lookup join: l.Key1 = l.Key2 AND l.Value1 = l.Value2
         TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
@@ -1045,6 +1075,37 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         CompareYson(R"([
+            [[2];[2];[2];["two"];["two"];["two"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+            if (tableStats.name() == "/Root/Right") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
+            }
+        }
+    }
+
+    {  // execute left join with left filter for join keys before lookup join: l.Key1 = l.Key2 AND l.Value1 = l.Value2
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, r.Key1, l.Value1, l.Value2, r.Key2
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Key1 = r.Key1
+                AND l.Key2 = r.Key1
+                AND l.Value1 = r.Key2
+                AND l.Value2 = r.Key2
+            ORDER BY l.Key1, l.Key2, r.Key1
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [#;[3];#;["three"];["value3"];#];
+            [[1];[1];#;["one"];["value1"];#];
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 

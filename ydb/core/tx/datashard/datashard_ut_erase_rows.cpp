@@ -428,14 +428,18 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase) {
+    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, const bool enableDatetime64 = false) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(enableDatetime64);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetFeatureFlags(featureFlags);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -614,6 +618,50 @@ key = 3, value = .19024416e19
 key = 4, value = (empty maybe)
         )");
     }
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDate32) {
+        ConditionalEraseShouldSuccess("Date32", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01" AS Date32)),
+(2, CAST("1970-01-01" AS Date32)),
+(3, CAST("1990-03-01" AS Date32)),
+(4, CAST("2030-04-15" AS Date32)),
+(5, NULL);
+        )", R"(
+key = 4, value = 22019
+key = 5, value = (empty maybe)
+        )", true);
+    } 
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDatetime64) {
+        ConditionalEraseShouldSuccess("Datetime64", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01T00:00:00Z" AS Datetime64)),
+(2, CAST("1970-01-01T00:00:00Z" AS Datetime64)),
+(3, CAST("1990-03-01T00:00:00Z" AS Datetime64)),
+(4, CAST("2030-04-15T00:00:00Z" AS Datetime64)),
+(5, NULL);
+        )", R"(
+key = 4, value = 1902441600
+key = 5, value = (empty maybe)
+        )", true);
+    } 
+    
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
+        ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, CAST("1960-01-01T00:00:00.000000Z" AS Timestamp64)),
+(2, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp64)),
+(3, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp64)),
+(4, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp64)),
+(5, NULL);
+        )", R"(
+key = 4, value = 1902441600000000
+key = 5, value = (empty maybe)
+        )", true);
+    }    
+
+
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;

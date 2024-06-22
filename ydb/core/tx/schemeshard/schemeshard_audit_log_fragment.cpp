@@ -76,10 +76,6 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return "DROP PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        return "ALLOCATE PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        return "DEALLOCATE PERSISTENT QUEUE";
     // database
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
@@ -256,17 +252,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAllocatePersQueueGroup().GetName()}));
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDeallocatePersQueueGroup().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));

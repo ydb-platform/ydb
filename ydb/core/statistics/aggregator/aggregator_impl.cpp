@@ -56,6 +56,12 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
     if (config.HasFeatureFlags()) {
         const auto& featureFlags = config.GetFeatureFlags();
         EnableStatistics = featureFlags.GetEnableStatistics();
+
+        bool enableColumnStatisticsOld = EnableColumnStatistics;
+        EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        if (!enableColumnStatisticsOld && EnableColumnStatistics) {
+            InitializeStatisticsTable();
+        }
     }
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -433,7 +439,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev) {
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
-void TStatisticsAggregator::Initialize() {
+void TStatisticsAggregator::InitializeStatisticsTable() {
+    if (!EnableColumnStatistics) {
+        return;
+    }
     Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()));
 }
 
@@ -488,10 +497,10 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     PendingSaveStatistics = false;
 
-    std::vector<TString> columnNames;
+    std::vector<ui32> columnTags;
     std::vector<TString> data;
     auto count = CountMinSketches.size();
-    columnNames.reserve(count);
+    columnTags.reserve(count);
     data.reserve(count);
 
     for (auto& [tag, sketch] : CountMinSketches) {
@@ -499,13 +508,13 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
         if (itColumnName == ColumnNames.end()) {
             continue;
         }
-        columnNames.push_back(itColumnName->second);
+        columnTags.push_back(tag);
         TString strSketch(sketch->AsStringBuf());
         data.push_back(strSketch);
     }
 
     Register(CreateSaveStatisticsQuery(ScanTableId.PathId, EStatType::COUNT_MIN_SKETCH,
-        std::move(columnNames), std::move(data)));
+        std::move(columnTags), std::move(data)));
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {

@@ -1,6 +1,5 @@
 #include "gateway_spec.h"
 
-#include <filesystem>
 #include <ydb/library/yql/tools/yqlrun/http/yql_server.h>
 
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
@@ -514,11 +513,11 @@ int Main(int argc, const char *argv[])
             return 1;
         }
         tablesDirMapping[clusterName] = dirPath;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(std::string(dirPath))) {
-            if (entry.is_regular_file() && entry.path().has_extension() && entry.path().extension() == ".txt") {
-                auto tableName = TString(clusterName) + '.' + std::filesystem::relative(entry.path(), std::string(dirPath));
+        for (const auto& entry : TDirIterator(TFsPath(dirPath))) {
+            if (auto entryPath = TFsPath(entry.fts_path); entryPath.IsFile() && entryPath.GetExtension() == "txt") {
+                auto tableName = TString(clusterName).append('.').append(entryPath.RelativeTo(TFsPath(dirPath)).GetPath());
                 tableName = tableName.substr(0, tableName.Size() - 4); // remove .txt extension
-                tablesMapping[tableName] = entry.path().string();
+                tablesMapping[tableName] = entryPath.GetPath();
             }
         }
     }

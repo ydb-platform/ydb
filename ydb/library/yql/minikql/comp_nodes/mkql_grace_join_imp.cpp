@@ -294,11 +294,10 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
     ui64 tuplesFound = 0;
 
-    std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>> joinSlots, spillSlots, slotToIdx;
+    std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>> joinSlots, slotToIdx;
     std::vector<ui32, TMKQLAllocator<ui32, EMemorySubPool::Temporary>> stringsOffsets1, stringsOffsets2;
     ui64 reservedSize = 6 * (DefaultTupleBytes * DefaultTuplesNum) / sizeof(ui64);
     joinSlots.reserve( reservedSize );
-    spillSlots.reserve( reservedSize );
     stringsOffsets1.reserve(JoinTable1->NumberOfStringColumns + JoinTable1->NumberOfIColumns + 1);
     stringsOffsets2.reserve(JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 1);
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
@@ -347,7 +346,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         
         ui64 nSlots = 3 * tuplesNum2 + 1;
         joinSlots.clear();
-        spillSlots.clear();
         slotToIdx.clear();
         joinSlots.resize(nSlots*slotSize, 0);
         slotToIdx.resize(nSlots, 0);
@@ -385,9 +383,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 else
                 {
                     std::copy_n(it2, headerSize2, slotIt);
-                    ui64 stringsPos = spillSlots.size();
-                    spillSlots.insert(spillSlots.end(), it2 + headerSize2, it2 + keysValSize);
-                    *(slotIt + headerSize2) = stringsPos;
+
+                    *(slotIt + headerSize2) = it2 + headerSize2 - bucket2->KeyIntVals.begin();
                 }
                 ui64 currSlotNum = (slotIt - joinSlots.begin()) / slotSize;
                 slotToIdx[currSlotNum] = tuple2Idx;
@@ -435,7 +432,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     if (std::equal(it1 + keyIntOffset1, it1 + headerSize1, slotIt + keyIntOffset2)) {
                         ui64 stringsPos = *(slotIt + headerSize2);
                         ui64 stringsSize = *(it1 + headerSize1 - 1);
-                        if (std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, spillSlots.begin() + stringsPos)) {
+                        if (std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, bucket2->KeyIntVals.begin() + stringsPos)) {
                             tuplesFound++;
                             matchFound = true;
                         }
@@ -457,7 +454,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
                     if (keysValSize > slotSize ) {
                         ui64 stringsPos = *(slotIt + headerSize2);
-                        slotStringsStart = spillSlots.begin() + stringsPos;
+                        slotStringsStart = bucket2->KeyIntVals.begin() + stringsPos;
                     }
 
                     if ( !table1HasKeyStringColumns) {

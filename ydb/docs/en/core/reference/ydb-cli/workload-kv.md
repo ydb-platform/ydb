@@ -167,7 +167,7 @@ Parameter name | Parameter description
 
 Upsert load variant for inserting rows by sequential keys instead of random.
 
-Sequential upserts generate a concentrated load on a table (at each point in time) instead of creating a uniform load on the entire table.
+Sequential upserts generate a concentrated load on a small number of table partitions (at each point in time) instead of creating a uniform load on the entire table.
 
 To run this type of load, execute the command:
 
@@ -175,15 +175,15 @@ To run this type of load, execute the command:
 {{ ydb-cli }} workload kv run upsert-seq [global workload options...] [specific workload options...]
 ```
 
-* `global workload options`: [The global options for all types of load](#global-workload-options).
+* `global workload options`: [The global options for all load types](#global-workload-options).
 * `specific workload options`: [Options of a specific load type](#upsert-seq-options).
 
 ### Parameters for upsert {#upsert-seq-options}
 
 Parameter name | Parameter description
 ---|---
-`--len` | The size of the rows in bytes that are inserted into the table as values. Default: 8.
-`--start-first-key` | The starting value for the first column of the primary key. Default: 0.
+`--len` | The size of the rows in bytes inserted into the table as values. Default: 8.
+`--start-first-key` | The starting value for the primary key's first column. Default: 0.
 
 ## Insert load {#insert-kv}
 

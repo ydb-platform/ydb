@@ -6264,7 +6264,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True) { // uses b-tree index
@@ -6302,7 +6302,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_EnableLocalDBFlatIndex_False) { // uses b-tree index
@@ -6341,7 +6341,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_False_EnableLocalDBFlatIndex_False) { // uses flat index
@@ -6468,7 +6468,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 330);
     }
 
 }

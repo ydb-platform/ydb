@@ -330,7 +330,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             std::swap(tuplesNum1, tuplesNum2);
        }
 
-        joinResults.reserve(3 * tuplesNum1 );
 
         ui64 slotSize = headerSize2;
 

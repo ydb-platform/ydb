@@ -257,7 +257,7 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
         auto newIt = newTable.begin() + t.SlotSize * newSlotNum;
         while (*newIt != 0) {
             newIt += t.SlotSize;
-            if (newIt >= newTable.end()) {
+            if (newIt == newTable.end()) {
                 newIt = newTable.begin();
             }
         }
@@ -413,7 +413,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
             ui64 slotNum = hash % nSlots;
             auto slotIt = joinSlots.begin() + slotNum * slotSize;
-            while (*slotIt != 0 && slotIt != joinSlots.end())
+            while (*slotIt != 0)
             {
 
                 bool matchFound = false;
@@ -742,7 +742,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
         }
 
         it += t.SlotSize;
-        if (it >= t.Table.end()) {
+        if (it == t.Table.end()) {
             it = t.Table.begin();
         }
     }

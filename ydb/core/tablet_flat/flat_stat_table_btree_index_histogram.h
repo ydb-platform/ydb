@@ -64,9 +64,15 @@ class TTableHistogramBuilderBtreeIndex {
                 if (cmp != 0) {
                     return cmp > 0;
                 }
+                return GetKind(a) > GetKind(b);
             }
 
             return GetCategory(a) > GetCategory(b);
+        }
+
+        ui8 GetKind(const TNodeEvent& a) const noexcept {
+            // end first
+            return a.IsBegin ? 1 : -1;
         }
 
         ui8 GetCategory(const TNodeEvent& a) const noexcept {

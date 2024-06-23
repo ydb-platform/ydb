@@ -122,6 +122,13 @@ message ComputeStatus {
     float shards_quota_usage = 5;
 }
 
+message TimeDifferenceStatus {
+    StatusFlag.Status overall = 1;
+    int64 max_difference_ms = 2;
+    string node = 3;
+    string peer = 4;
+}
+
 message LocationNode {
     uint32 id = 1;
     string host = 2;
@@ -198,6 +205,7 @@ message DatabaseStatus {
     StatusFlag.Status overall = 2;
     StorageStatus storage = 3;
     ComputeStatus compute = 4;
+    TimeDifferenceStatus time_difference = 5;
 }
 
 message SelfCheckResult {

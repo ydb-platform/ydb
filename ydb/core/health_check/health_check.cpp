@@ -2579,15 +2579,17 @@ public:
         databaseStatus.set_name(path);
         FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
         FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});
-        FillTimeDifference(state, {&dbContext, "NODES_TIME_DIFFERENCE"});
+        FillTimeDifference(state, *databaseStatus.mutable_time_difference(), {&dbContext, "NODES_TIME_DIFFERENCE"});
         if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
                 && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
-                "Database has multiple issues", ETags::DBState, { ETags::ComputeState, ETags::StorageState});
+                "Database has multiple issues", ETags::DBState, { ETags::ComputeState, ETags::StorageState, ETags::SyncState });
         } else if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", ETags::DBState, {ETags::ComputeState});
+            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", ETags::DBState, {ETags::ComputeState, ETags::SyncState});
         } else if (databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", ETags::DBState, {ETags::StorageState});
+            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", ETags::DBState, {ETags::StorageState, ETags::SyncState});
+        } else if (databaseStatus.time_difference().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
+            dbContext.ReportStatus(databaseStatus.time_difference().overall(), "Database has time difference issues", ETags::DBState, {ETags::SyncState});
         }
         databaseStatus.set_overall(dbContext.GetOverallStatus());
         context.UpdateMaxStatus(dbContext.GetOverallStatus());
@@ -2600,7 +2602,7 @@ public:
     const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
-    void FillTimeDifference(TDatabaseState& databaseState, TSelfCheckContext context) {
+    void FillTimeDifference(TDatabaseState& databaseState, Ydb::Monitoring::TimeDifferenceStatus& timeDifferenceStatus, TSelfCheckContext context) {
         long maxClockSkewUs = 0;
         TNodeId maxClockSkewPeerId = 0;
         TNodeId maxClockSkewNodeId = 0;
@@ -2630,6 +2632,7 @@ public:
         }
 
         if (!maxClockSkewNodeId) {
+            timeDifferenceStatus.set_overall(Ydb::Monitoring::StatusFlag::GREEN);
             return;
         }
 
@@ -2644,6 +2647,11 @@ public:
         } else {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
+
+        timeDifferenceStatus.set_node(ToString(maxClockSkewNodeId));
+        timeDifferenceStatus.set_peer(ToString(maxClockSkewPeerId));
+        timeDifferenceStatus.set_max_difference_ms(maxClockSkewTime.MilliSeconds());
+        timeDifferenceStatus.set_overall(context.GetOverallStatus());
     }
 
     void FillResult(TOverallStateContext context) {

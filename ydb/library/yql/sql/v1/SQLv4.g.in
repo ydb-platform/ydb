@@ -62,6 +62,9 @@ sql_stmt_core:
   | create_view_stmt
   | drop_view_stmt
   | alter_replication_stmt
+  | create_resource_pool_stmt
+  | alter_resource_pool_stmt
+  | drop_resource_pool_stmt
 ;
 
 expr:
@@ -797,6 +800,21 @@ permission_name: permission_id | STRING_VALUE;
 
 permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
 
+create_resource_pool_stmt: CREATE RESOURCE POOL object_ref
+  with_table_settings
+;
+
+alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
+  alter_resource_pool_action (COMMA alter_resource_pool_action)*
+;
+alter_resource_pool_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -1160,18 +1178,108 @@ keyword_hint_uncompat:
 ;
 
 keyword_as_compat:
-    ATTRIBUTES
+    ABORT
+  | ACTION
+  | ADD
+  | AFTER
+  | ALTER
+  | ANALYZE
+  | AND
+  | ANSI
+  | ARRAY
+  | ASC
+  | ASYNC
+  | ATTACH
+  | ATTRIBUTES
+  | AUTOINCREMENT
+  | BEFORE
+  | BEGIN
+  | BERNOULLI
+  | BY
+  | CASCADE
+  | CHANGEFEED
+  | CHECK
+  // | COLLATE
+  | COMMIT
+  | CONDITIONAL
+  | CONFLICT
   | CONNECT
+  | CONSTRAINT
   | CONSUMER
+  | COVER
+  | CREATE
+  // | CROSS
+  | CURRENT
   | DATA
+  | DATABASE
+  | DECIMAL
+  | DECLARE
+  | DEFAULT
+  | DEFERRABLE
+  | DEFERRED
+  // | DEFINE
+  | DELETE
+  | DESC
   | DESCRIBE
+  | DETACH
   | DIRECTORY
+  | DISABLE
+  | DISCARD
+  // | DO
+  | DROP
+  | EACH
+  | ELSE
+  | EMPTY
+  | ENCRYPTED
+  | END
+  | ERROR
+  | ESCAPE
+  | EVALUATE
+  | EXCLUDE
+  // | EXCLUSION
+  | EXCLUSIVE
+  | EXPLAIN
+  | EXPORT
+  | EXTERNAL
+  | FAIL
+  | FAMILY
+  | FILTER
   | FIRST
+  | FLATTEN
+  | FOLLOWING
+  | FOR
+  | FOREIGN
+  | FUNCTION
+  | GLOB
   | GRANT
+  | GROUP
+  | GROUPING
+  | HASH
+  | IF
+  | IGNORE
+  | ILIKE
+  | IMMEDIATE
+  | IMPORT
+  | IN
+  | INDEX
+  | INDEXED
+  | INHERITS
   | INITIAL
+  | INITIALLY
+  // | INNER
+  | INSERT
+  | INSTEAD
+  | INTO
+  | IS
+  // | ISNULL
+  // | JOIN
+  // | KEY
   | LAST
+  // | LEFT
   | LEGACY
+  | LIKE
   | MANAGE
+  | MATCH
   | MATCHES
   | MATCH_RECOGNIZE
   | MEASURES
@@ -1179,33 +1287,105 @@ keyword_as_compat:
   | MILLISECONDS
   | MODIFY
   | NANOSECONDS
+  // | NATURAL
   | NEXT
+  | NO
+  // | NOTNULL
+  | NULLS
+  | OBJECT
+  | OF
+  | OFFSET
   | OMIT
+  // | ON
   | ONE
+  | ONLY
   | OPTION
+  | OR
+  | ORDER
+  | OTHERS
+  // | OUTER
+  // | OVER
   | PARALLEL
+  | PARTITION
+  | PASSING
+  | PASSWORD
   | PAST
   | PATTERN
   | PER
   | PERMUTE
+  | PLAN
+  | POOL
+  | PRAGMA
+  | PRECEDING
+  // | PRESORT
+  | PRIMARY
   | PRIVILEGES
+//  | QUERY
   | QUEUE
+  | RAISE
 //  | READ
+  | REFERENCES
+  | REGEXP
+  | REINDEX
+  | RELEASE
   | REMOVE
+  | RENAME
+  | REPLACE
   | REPLICATION
+  | RESET
+  | RESPECT
+  | RESTRICT
+  // | RESULT
+  | REVERT
   | REVOKE
+  // | RIGHT
+  | RLIKE
+  | ROLLBACK
+  | ROW
+  // | SAMPLE
+  | SAVEPOINT
   | SECONDS
   | SEEK
+  // | SEMI
+  | SETS
   | SHOW
   | TSKIP
   | SOURCE
+  | SUBQUERY
   | SUBSET
+  | SYMBOLS
+  | SYNC
+  | SYSTEM
+  | TABLE
   | TABLES
+  | TABLESAMPLE
+  | TABLESTORE
+  | TEMP
+  | TEMPORARY
+  | THEN
+  | TIES
+  | TO
   | TOPIC
+  | TRANSACTION
+  | TRIGGER
   | TYPE
+  | UNCONDITIONAL
+  | UNIQUE
+  | UNKNOWN
   | UNMATCHED
+  | UPDATE
+  | UPSERT
+  | USE
+  | USER
+//  | USING
+  | VACUUM
+  | VALUES
+//  | VIEW
+  | VIRTUAL
+//  | WITH
+  | WRAPPER
 //  | WRITE
-
+  | XOR
 ;
 
 // insert new keyword into keyword_as_compat also
@@ -1346,6 +1526,7 @@ keyword_compat: (
   | PER
   | PERMUTE
   | PLAN
+  | POOL
   | PRAGMA
   | PRECEDING
   | PRESORT
@@ -1670,7 +1851,7 @@ NEXT: N E X T;
 NO: N O;
 NOT: N O T;
 NOTNULL: N O T N U L L;
-TNULL: N U L L;
+NULL: N U L L;
 NULLS: N U L L S;
 OBJECT: O B J E C T;
 OF: O F;
@@ -1695,6 +1876,7 @@ PATTERN: P A T T E R N;
 PER: P E R;
 PERMUTE: P E R M U T E;
 PLAN: P L A N;
+POOL: P O O L;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
 PRESORT: P R E S O R T;

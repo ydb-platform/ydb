@@ -218,8 +218,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock2().GetToken1().GetId() == SQLv4Lexer::OR &&
-                    rule.GetBlock2().GetToken2().GetId() == SQLv4Lexer::REPLACE
+                    rule.GetBlock2().GetToken1().GetId() == SQLv4Lexer::TOR &&
+                    rule.GetBlock2().GetToken2().GetId() == SQLv4Lexer::TREPLACE
                 );
             }
 
@@ -227,22 +227,22 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& block = rule.GetBlock3();
             ETableType tableType = ETableType::Table;
             bool temporary = false;
-            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv4Lexer::TABLESTORE) {
+            if (block.HasAlt2() && block.GetAlt2().GetToken1().GetId() == SQLv4Lexer::TTABLESTORE) {
                 tableType = ETableType::TableStore;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt2().GetToken1()))
                         << "CREATE TABLE AS is not supported for TABLESTORE";
                     return false;
                 }
-            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv4Lexer::EXTERNAL) {
+            } else if (block.HasAlt3() && block.GetAlt3().GetToken1().GetId() == SQLv4Lexer::TEXTERNAL) {
                 tableType = ETableType::ExternalTable;
                 if (isCreateTableAs) {
                     Context().Error(GetPos(block.GetAlt3().GetToken1()))
                         << "CREATE TABLE AS is not supported for EXTERNAL TABLE";
                     return false;
                 }
-            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv4Lexer::TEMP ||
-                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv4Lexer::TEMPORARY) {
+            } else if (block.HasAlt4() && block.GetAlt4().GetToken1().GetId() == SQLv4Lexer::TTEMP ||
+                    block.HasAlt5() && block.GetAlt5().GetToken1().GetId() == SQLv4Lexer::TTEMPORARY) {
                 temporary = true;
             }
 
@@ -250,9 +250,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock4()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock4().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    rule.GetBlock4().GetToken2().GetId() == SQLv4Lexer::NOT &&
-                    rule.GetBlock4().GetToken3().GetId() == SQLv4Lexer::EXISTS
+                    rule.GetBlock4().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    rule.GetBlock4().GetToken2().GetId() == SQLv4Lexer::TNOT &&
+                    rule.GetBlock4().GetToken3().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -339,8 +339,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    rule.GetBlock3().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    rule.GetBlock3().GetToken2().GetId() == SQLv4Lexer::EXISTS
+                    rule.GetBlock3().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    rule.GetBlock3().GetToken2().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -431,7 +431,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore15: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
-            const bool isTablestore = rule.GetToken2().GetId() == SQLv4Lexer::TABLESTORE;
+            const bool isTablestore = rule.GetToken2().GetId() == SQLv4Lexer::TTABLESTORE;
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
@@ -697,7 +697,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock4().Alt_case()) {
                 case TRule_alter_group_stmt_TBlock4::kAlt1: {
                     auto& addDropNode = node.GetBlock4().GetAlt1();
-                    const bool isDrop = addDropNode.GetToken1().GetId() == SQLv4Lexer::DROP;
+                    const bool isDrop = addDropNode.GetToken1().GetId() == SQLv4Lexer::TDROP;
                     TVector<TDeferredAtom> roles;
                     bool allowSystemRoles = false;
                     roles.emplace_back();
@@ -746,13 +746,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            const bool isUser = node.GetToken2().GetId() == SQLv4Lexer::USER;
+            const bool isUser = node.GetToken2().GetId() == SQLv4Lexer::TUSER;
             bool missingOk = false;
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::EXISTS
+                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -788,9 +788,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::NOT &&
-                    node.GetBlock3().GetToken3().GetId() == SQLv4Lexer::EXISTS
+                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::TNOT &&
+                    node.GetBlock3().GetToken3().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -842,8 +842,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock3()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::EXISTS
+                    node.GetBlock3().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    node.GetBlock3().GetToken2().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -874,8 +874,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock2().GetToken1().GetId() == SQLv4Lexer::OR &&
-                    node.GetBlock2().GetToken2().GetId() == SQLv4Lexer::REPLACE
+                    node.GetBlock2().GetToken1().GetId() == SQLv4Lexer::TOR &&
+                    node.GetBlock2().GetToken2().GetId() == SQLv4Lexer::TREPLACE
                 );
             }
 
@@ -883,9 +883,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock6()) { // IF NOT EXISTS
                 existingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock6().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    node.GetBlock6().GetToken2().GetId() == SQLv4Lexer::NOT &&
-                    node.GetBlock6().GetToken3().GetId() == SQLv4Lexer::EXISTS
+                    node.GetBlock6().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    node.GetBlock6().GetToken2().GetId() == SQLv4Lexer::TNOT &&
+                    node.GetBlock6().GetToken3().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 
@@ -941,8 +941,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (node.HasBlock5()) { // IF EXISTS
                 missingOk = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    node.GetBlock5().GetToken1().GetId() == SQLv4Lexer::IF &&
-                    node.GetBlock5().GetToken2().GetId() == SQLv4Lexer::EXISTS
+                    node.GetBlock5().GetToken1().GetId() == SQLv4Lexer::TIF &&
+                    node.GetBlock5().GetToken2().GetId() == SQLv4Lexer::TEXISTS
                 );
             }
 

@@ -1613,9 +1613,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         switch (token.GetId()) {
-                            case SQLv4Lexer::ASC:
+                            case SQLv4Lexer::TASC:
                                 return true;
-                            case SQLv4Lexer::DESC:
+                            case SQLv4Lexer::TDESC:
                                 desc = true;
                                 return true;
                             default:
@@ -3607,10 +3607,10 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         switch (token.GetId()) {
-            case SQLv4Lexer::ASC:
+            case SQLv4Lexer::TASC:
                 Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
                 break;
-            case SQLv4Lexer::DESC:
+            case SQLv4Lexer::TDESC:
                 asc = false;
                 Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
                 break;
@@ -3641,11 +3641,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::DISTINCT;
+    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TDISTINCT;
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::DISTINCT) {
+    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TDISTINCT) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

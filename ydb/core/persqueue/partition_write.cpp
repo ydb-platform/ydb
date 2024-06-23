@@ -1044,8 +1044,11 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             rename->SetNewKey(x.NewKey.ToString());
         }
         if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.OldKey.GetOffset(),
-                           "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, x.NewKey.ToString().c_str());
+            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+                           "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
+                           DataKeysBody.back().Key.ToString().c_str(),
+                           Head.Offset,
+                           x.NewKey.ToString().c_str());
         }
         LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,

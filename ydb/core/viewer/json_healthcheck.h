@@ -233,10 +233,6 @@ public:
         ReplyAndPassAway();
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&) {
-        SendHealthCheckRequest();
-    }
-
     void Handle(NHealthCheck::TEvSelfCheckResultProto::TPtr& ev) {
         Result = std::move(ev->Get()->Record);
         NHealthCheck::RemoveUnrequestedEntries(*Result, MakeSelfCheckRequest().Release()->Request);
@@ -249,7 +245,7 @@ public:
             SubscribedNodeId = activeNode;
             std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
             auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
-            Send(*cache, request.Release());
+            Send(*cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
         } else {
             SendHealthCheckRequest();
         }

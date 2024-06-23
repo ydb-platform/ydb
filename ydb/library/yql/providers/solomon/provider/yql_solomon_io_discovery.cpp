@@ -179,32 +179,6 @@ public:
                       .Done().Ptr();
             }
 
-            if (this->State_->IsRtmrMode()) {
-                return node;
-            }
-
-            if (auto maybeWrite = TMaybeNode<TSoWrite>(node)) {
-                if (!maybeWrite.DataSink()) {
-                    return node;
-                }
-                auto write = maybeWrite.Cast();
-
-                if (!EnsureArgsCount(write.Ref(), 5, ctx)) {
-                    return {};
-                }
-
-                return Build<TSoWrite>(ctx, write.Pos())
-                    .World(write.World())
-                    .DataSink(write.DataSink())
-                    .FreeArgs()
-                        .Add<TCoAtom>()
-                            .Value("")
-                        .Build()
-                        .Add(write.Arg(3))
-                    .Build()
-                    .Done().Ptr();
-            }
-
             return node;
         }, ctx, TOptimizeExprSettings {nullptr});
 

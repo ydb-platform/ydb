@@ -63,6 +63,7 @@ public:
     
     }
     void AddBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        AFL_VERIFY(batch);
         Batches.emplace_back(batch);
     }
 
@@ -75,7 +76,7 @@ public:
     }
 
     std::shared_ptr<arrow::RecordBatch> Merge(const TIndexInfo& indexInfo) const {
-        NArrow::NMerger::TMergePartialStream stream(indexInfo.GetReplaceKey(), indexInfo.ArrowSchemaWithSpecials(), false, IIndexInfo::GetSpecialColumnNames());
+        NArrow::NMerger::TMergePartialStream stream(indexInfo.GetReplaceKey(), indexInfo.ArrowSchemaWithSpecials(), false, IIndexInfo::GetSnapshotColumnNames());
         THashMap<std::string, ui64> fieldSizes;
         ui64 rowsCount = 0;
         for (auto&& batch : Batches) {
@@ -196,10 +197,13 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
 std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
-    auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
-    Y_ABORT_UNLESS(batch);
+    auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot(),
+        inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
+    AFL_VERIFY(batch);
 
-    return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
+    auto result = NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
+    AFL_VERIFY(result);
+    return result;
 }
 
 NColumnShard::ECumulativeCounters TInsertColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

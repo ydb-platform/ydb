@@ -51,13 +51,6 @@ message TReadStats {
     optional uint64 CommittedPortionsBytes = 17;
 }
 
-message TLogicalMetadata {
-    optional uint32 NumRows = 1;
-    optional uint64 RawBytes = 4;
-    optional uint64 DirtyWriteTimeSeconds = 5;
-    optional string SpecialKeysRawData = 6;
-}
-
 message TMetadata {
     optional uint32 Format = 1; // EResultFormat
     optional bytes Schema = 2;
@@ -80,6 +73,23 @@ message TEvWrite {
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
     optional uint32 WritePartId = 9 [default = 0];
     optional uint32 GranuleShardingVersion = 10;
+    enum EModificationType {
+        UPSERT = 1;
+        INSERT = 2;
+        UPDATE = 3;
+        REPLACE = 4;
+        DELETE = 5;
+    }
+    optional EModificationType ModificationType = 11;
+
+}
+
+message TLogicalMetadata {
+    optional uint32 NumRows = 1;
+    optional uint64 RawBytes = 4;
+    optional uint64 DirtyWriteTimeSeconds = 5;
+    optional string SpecialKeysRawData = 6;
+    optional TEvWrite.EModificationType ModificationType = 7;
 }
 
 message TEvWriteResult {

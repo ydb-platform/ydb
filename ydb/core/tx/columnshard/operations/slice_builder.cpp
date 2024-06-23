@@ -3,26 +3,26 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/data_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 
 std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlices() {
     NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
-    const auto& writeMeta = WriteData.GetWriteMeta();
-    const ui64 tableId = writeMeta.GetTableId();
-    const ui64 writeId = writeMeta.GetWriteId();
-
-    std::shared_ptr<arrow::RecordBatch> batch = WriteData.GetData()->ExtractBatch();
-
-    if (!batch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId);
+    if (!OriginalBatch) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
         return {};
     }
-
+    if (!OriginalBatch->num_rows()) {
+        return std::vector<NKikimr::NArrow::TSerializedBatch>();
+    }
     NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize());
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
-    auto splitResult = NArrow::SplitByBlobSize(batch, context);
+    auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
         return {};
@@ -49,6 +49,265 @@ bool TBuildSlicesTask::DoExecute() {
         auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(NKikimrProto::EReplyStatus::CORRUPTED), std::move(buffer));
         TActorContext::AsActorContext().Send(ParentActorId, result.release());
     }
+
+    return true;
+}
+
+class IMerger {
+private:
+    NArrow::NMerger::TRWSortableBatchPosition IncomingPosition;
+
+    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+protected:
+    std::shared_ptr<ISnapshotSchema> Schema;
+    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    bool IncomingFinished = false;
+public:
+    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+        : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
+        , Schema(actualSchema)
+        , IncomingData(incoming)
+    {
+        IncomingFinished = !IncomingPosition.InitPosition(0);
+    }
+
+    virtual ~IMerger() = default;
+
+    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() = 0;
+
+    TConclusionStatus AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
+        NArrow::NMerger::TRWSortableBatchPosition existsPosition(data, 0, Schema->GetPKColumnNames(), 
+            Schema->GetIndexInfo().GetColumnSTLNames(Schema->GetIndexInfo().GetColumnIds(false)), false);
+        bool exsistFinished = !existsPosition.InitPosition(0);
+        while (!IncomingFinished && !exsistFinished) {
+            auto cmpResult = IncomingPosition.Compare(existsPosition);
+            if (cmpResult == std::partial_ordering::equivalent) {
+                auto result = OnEqualKeys(existsPosition, IncomingPosition);
+                if (result.IsFail()) {
+                    return result;
+                }
+                exsistFinished = !existsPosition.NextPosition(1);
+                IncomingFinished = !IncomingPosition.NextPosition(1);
+            } else if (cmpResult == std::partial_ordering::less) {
+                auto result = OnIncomingOnly(IncomingPosition);
+                if (result.IsFail()) {
+                    return result;
+                }
+                IncomingFinished = !IncomingPosition.NextPosition(1);
+            } else {
+                AFL_VERIFY(false);
+            }
+        }
+        AFL_VERIFY(exsistFinished);
+        while (!IncomingFinished) {
+            auto result = OnIncomingOnly(IncomingPosition);
+            if (result.IsFail()) {
+                return result;
+            }
+            IncomingFinished = !IncomingPosition.NextPosition(1);
+        }
+        return TConclusionStatus::Success();
+    }
+};
+
+class TInsertMerger: public IMerger {
+private:
+    using TBase = IMerger;
+    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        return TConclusionStatus::Fail("key duplication: " + exists.GetSorting()->DebugJson(exists.GetPosition()).GetStringRobust());
+    }
+    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        return TConclusionStatus::Success();
+    }
+public:
+    using TBase::TBase;
+    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
+        return IncomingData;
+    }
+};
+
+class TReplaceMerger: public IMerger {
+private:
+    using TBase = IMerger;
+    NArrow::TColumnFilter Filter = NArrow::TColumnFilter::BuildDenyFilter();
+    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& /*exists*/, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        Filter.Add(true);
+        return TConclusionStatus::Success();
+    }
+    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        Filter.Add(false);
+        return TConclusionStatus::Success();
+    }
+public:
+    using TBase::TBase;
+
+    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
+        auto result = IncomingData;
+        AFL_VERIFY(Filter.Apply(result));
+        return result;
+    }
+};
+
+class TUpdateMerger: public IMerger {
+private:
+    using TBase = IMerger;
+    NArrow::NMerger::TRecordBatchBuilder Builder;
+    std::vector<std::optional<ui32>> IncomingColumnRemap;
+    std::vector<std::shared_ptr<arrow::BooleanArray>> HasIncomingDataFlags;
+    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override {
+        auto rGuard = Builder.StartRecord();
+        AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size());
+        for (i32 columnIdx = 0; columnIdx < Schema->GetIndexInfo().ArrowSchema()->num_fields(); ++columnIdx) {
+            const std::optional<ui32>& incomingColumnIdx = IncomingColumnRemap[columnIdx];
+            if (!incomingColumnIdx || !HasIncomingDataFlags[*incomingColumnIdx]->GetView(incoming.GetPosition())) {
+                const ui32 idxChunk = exists.GetData().GetPositionInChunk(columnIdx, exists.GetPosition());
+                rGuard.Add(*exists.GetData().GetPositionAddress(columnIdx).GetArray(), idxChunk);
+            } else {
+                const ui32 idxChunk = incoming.GetData().GetPositionInChunk(*incomingColumnIdx, incoming.GetPosition());
+                rGuard.Add(*incoming.GetData().GetPositionAddress(*incomingColumnIdx).GetArray(), idxChunk);
+            }
+        }
+        return TConclusionStatus::Success();
+    }
+    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        return TConclusionStatus::Success();
+    }
+public:
+    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
+        return Builder.Finalize();
+    }
+
+    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+        : TBase(incoming, actualSchema)
+        , Builder(actualSchema->GetIndexInfo().ArrowSchema()->fields())
+    {
+        for (auto&& i : actualSchema->GetIndexInfo().ArrowSchema()->field_names()) {
+            auto fIdx = IncomingData->schema()->GetFieldIndex(i);
+            if (fIdx == -1) {
+                IncomingColumnRemap.emplace_back();
+            } else {
+                auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + i);
+                std::shared_ptr<arrow::Array> flagsArray;
+                if (fExistsIdx != -1) {
+                    AFL_VERIFY(IncomingData->column(fExistsIdx)->type_id() == arrow::Type::BOOL);
+                    flagsArray = IncomingData->column(fExistsIdx);
+                } else {
+                    flagsArray = NArrow::TThreadSimpleArraysCache::GetConst(arrow::TypeTraits<arrow::BooleanType>::type_singleton(),
+                        std::make_shared<arrow::BooleanScalar>(true), IncomingData->num_rows());
+                }
+                HasIncomingDataFlags.emplace_back(static_pointer_cast<arrow::BooleanArray>(flagsArray));
+                IncomingColumnRemap.emplace_back(fIdx);
+            }
+        }
+    }
+};
+
+class TModificationRestoreTask: public NDataReader::IRestoreTask {
+private:
+    using TBase = NDataReader::IRestoreTask;
+    NEvWrite::TWriteData WriteData;
+    const ui64 TabletId;
+    const NActors::TActorId ParentActorId;
+    const NActors::TActorId BufferActorId;
+    std::shared_ptr<IMerger> Merger;
+    const std::shared_ptr<ISnapshotSchema> ActualSchema;
+    const ui64 LocalPathId;
+    const TSnapshot Snapshot;
+    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override {
+        auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
+        request->ReadToSnapshot = Snapshot;
+        request->RangesFilter = std::make_shared<TPKRangesFilter>(false);
+        auto pkData = NArrow::ExtractColumns(IncomingData, ActualSchema->GetPKColumnNames());
+        for (ui32 i = 0; i < pkData->num_rows(); ++i) {
+            auto batch = pkData->Slice(i, 1);
+            auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batch);
+            auto pTo = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::LessEqual, batch);
+            AFL_VERIFY(request->RangesFilter->Add(pFrom, pTo, &ActualSchema->GetIndexInfo()));
+        }
+        for (auto&& i : ActualSchema->GetIndexInfo().GetColumnIds(false)) {
+            request->AddColumn(i, ActualSchema->GetIndexInfo().GetColumnName(i));
+        }
+        return request;
+    }
+
+    virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override {
+        auto result = Merger->AddExistsDataOrdered(data);
+        if (result.IsFail()) {
+            auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId);
+            TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+            auto evResult = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(
+                NKikimrProto::EReplyStatus::CORRUPTED), std::move(buffer));
+            TActorContext::AsActorContext().Send(ParentActorId, evResult.release());
+        }
+        return result;
+    }
+    virtual TConclusionStatus DoOnFinished() override {
+        auto batchResult = Merger->BuildResultBatch();
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
+            TabletId, ParentActorId, BufferActorId, std::move(WriteData), batchResult);
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        return TConclusionStatus::Success();
+    }
+public:
+    TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId,
+        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, 
+        const std::shared_ptr<ISnapshotSchema>& actualSchema, const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData)
+        : TBase(tabletId, parentActorId)
+        , WriteData(std::move(writeData))
+        , TabletId(tabletId)
+        , ParentActorId(parentActorId)
+        , BufferActorId(bufferActorId)
+        , Merger(merger)
+        , ActualSchema(actualSchema)
+        , LocalPathId(WriteData.GetWriteMeta().GetTableId())
+        , Snapshot(actualSnapshot)
+        , IncomingData(incomingData)
+    {
+
+    }
+};
+
+bool TBuildBatchesTask::DoExecute() {
+    std::shared_ptr<arrow::RecordBatch> batch = WriteData.GetData()->ExtractBatch();
+    if (!batch) {
+        auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(NKikimrProto::EReplyStatus::CORRUPTED), std::move(buffer));
+        TActorContext::AsActorContext().Send(ParentActorId, result.release());
+        return true;
+    }
+    std::shared_ptr<IMerger> merger;
+    switch (WriteData.GetWriteMeta().GetModificationType()) {
+        case NEvWrite::EModificationType::Upsert: {
+            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+            NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+            return true;
+        }
+        case NEvWrite::EModificationType::Insert: {
+            merger = std::make_shared<TInsertMerger>(batch, ActualSchema);
+            break;
+        }
+        case NEvWrite::EModificationType::Update: {
+            merger = std::make_shared<TUpdateMerger>(batch, ActualSchema);
+            break;
+        }
+        case NEvWrite::EModificationType::Replace: {
+            merger = std::make_shared<TReplaceMerger>(batch, ActualSchema);
+            break;
+        }
+        case NEvWrite::EModificationType::Delete: {
+            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+            NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+            return true;
+        }
+
+    }
+    std::shared_ptr<NDataReader::IRestoreTask> task = std::make_shared<NOlap::TModificationRestoreTask>(
+        TabletId, ParentActorId, BufferActorId, std::move(WriteData), merger, ActualSchema, ActualSnapshot, batch);
+    NActors::TActivationContext::AsActorContext().Register(new NDataReader::TActor(task));
 
     return true;
 }

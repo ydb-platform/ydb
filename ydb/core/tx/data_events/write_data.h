@@ -1,4 +1,5 @@
 #pragma once
+#include "common/modification_type.h"
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -23,6 +24,7 @@ public:
 };
 
 class TWriteMeta {
+private:
     YDB_ACCESSOR(ui64, WriteId, 0);
     YDB_READONLY(ui64, TableId, 0);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
@@ -34,6 +36,7 @@ class TWriteMeta {
     YDB_ACCESSOR_DEF(TString, DedupId);
 
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
+    YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Upsert);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle1StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle2StartInstant, TMonotonic::Now());
@@ -42,6 +45,18 @@ class TWriteMeta {
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
 public:
+    bool IsGuaranteeWriter() const {
+        switch (ModificationType) {
+            case EModificationType::Delete:
+            case EModificationType::Upsert:
+            case EModificationType::Insert:
+                return true;
+            case EModificationType::Update:
+            case EModificationType::Replace:
+                return false;
+        }
+    }
+
     TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion)
         : WriteId(writeId)
         , TableId(tableId)

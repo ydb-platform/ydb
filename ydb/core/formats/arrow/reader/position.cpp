@@ -19,7 +19,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     ui64 posStart = posStartExt;
     ui64 posFinish = posFinishExt;
     {
-        position.InitPosition(posStart);
+        AFL_VERIFY(position.InitPosition(posStart));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
             return TFoundPosition::Greater(posStart);
@@ -28,7 +28,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
     {
-        position.InitPosition(posFinish);
+        AFL_VERIFY(position.InitPosition(posFinish));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
             return TFoundPosition::Less(posFinish);
@@ -125,7 +125,7 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
 TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
+        AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialChunkedArray>(c));
         auto f = batch->schema()->GetFieldByName(i);
         AFL_VERIFY(f);

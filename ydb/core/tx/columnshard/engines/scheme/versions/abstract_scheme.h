@@ -31,6 +31,8 @@ public:
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 
+    std::vector<std::string> GetPKColumnNames() const;
+
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
 

@@ -113,6 +113,8 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
 bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema);
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);

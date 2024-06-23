@@ -645,6 +645,54 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
     return out;
 }
 
+namespace {
+
+template <class T>
+class TDefaultScalarValue {
+public:
+    static constexpr T Value = 0;
+};
+
+template <>
+class TDefaultScalarValue<bool> {
+public:
+    static constexpr bool Value = false;
+};
+
+}
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type) {
+    std::shared_ptr<arrow::Scalar> out;
+    SwitchType(type->id(), [&](const auto& t) {
+        using TWrap = std::decay_t<decltype(t)>;
+        using T = typename TWrap::T;
+        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+        if constexpr (std::is_same_v<T, arrow::StringType> ||
+            std::is_same_v<T, arrow::BinaryType> ||
+            std::is_same_v<T, arrow::LargeStringType> ||
+            std::is_same_v<T, arrow::LargeBinaryType>) {
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
+        } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
+            std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(s), type);
+        } else if constexpr (std::is_same_v<T, arrow::HalfFloatType>) {
+            return false;
+        } else if constexpr (arrow::is_temporal_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value, type);
+        } else if constexpr (arrow::has_c_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value);
+        } else {
+            return false;
+        }
+        return true;
+    });
+    Y_ABORT_UNLESS(out);
+    return out;
+}
+
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) {
     auto res = array->GetScalar(position);
     Y_ABORT_UNLESS(res.ok());

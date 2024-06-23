@@ -1854,6 +1854,134 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteReadLongTxDup();
     }
 
+    Y_UNIT_TEST(WriteReadModifications) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const TestTableDescription table = {};
+        //
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+
+        auto ydbSchema = table.Schema;
+        SetupSchema(runtime, sender, tableId);
+
+        constexpr ui32 numRows = 10;
+        std::pair<ui64, ui64> portion = { 10, 10 + numRows };
+        auto testData = MakeTestBlob(portion, ydbSchema);
+        TAutoPtr<IEventHandle> handle;
+
+        ui64 txId = 0;
+        ui64 planStep = 100;
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Replace));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(!rb || rb->num_rows() == 0);
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(!rb || rb->num_rows() == 0);
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(!WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            ++planStep;
+        }
+    }
+
     Y_UNIT_TEST(WriteRead) {
         TestTableDescription table;
         TestWriteRead(false, table);

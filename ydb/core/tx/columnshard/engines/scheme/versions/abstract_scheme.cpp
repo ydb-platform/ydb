@@ -138,4 +138,8 @@ std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderO
     }
 }
 
+std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
+    return GetIndexInfo().GetReplaceKey()->field_names();
+}
+
 }

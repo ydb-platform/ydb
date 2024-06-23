@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/sys_view/common/schema.h>
 
@@ -35,7 +36,7 @@ bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     return true;
 }
 
-std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
+std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot, const bool isDelete) {
     Y_ABORT_UNLESS(batch);
     i64 numColumns = batch->num_columns();
     i64 numRows = batch->num_rows();
@@ -47,6 +48,10 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::sha
                             NArrow::MakeUI64Array(snapshot.GetTxId(), numRows));
     Y_ABORT_UNLESS(res.ok());
     Y_ABORT_UNLESS((*res)->num_columns() == numColumns + 2);
+    AFL_VERIFY(!batch->GetColumnByName(SPEC_COL_DELETE_FLAG));
+    res = (*res)->AddColumn(numColumns + 2, arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
+        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows));
+    Y_ABORT_UNLESS(res.ok());
     return *res;
 }
 
@@ -56,9 +61,10 @@ ui64 TIndexInfo::GetSpecialColumnsRecordSize() {
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
     static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
-        arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
-        arrow::field(SPEC_COL_TX_ID, arrow::uint64())
-    });
+            arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+            arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
+            arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean())
+        });
     return result;
 }
 
@@ -68,12 +74,14 @@ bool TIndexInfo::IsSpecialColumn(const arrow::Field& field) {
 
 bool TIndexInfo::IsSpecialColumn(const std::string& fieldName) {
     return fieldName == SPEC_COL_PLAN_STEP
-        || fieldName == SPEC_COL_TX_ID;
+        || fieldName == SPEC_COL_TX_ID
+        || fieldName == SPEC_COL_DELETE_FLAG;
 }
 
 bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
     return fieldId == (ui32)ESpecialColumn::PLAN_STEP
-        || fieldId == (ui32)ESpecialColumn::TX_ID;
+        || fieldId == (ui32)ESpecialColumn::TX_ID
+        || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
 }
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
@@ -92,6 +100,8 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
         return ui32(ESpecialColumn::PLAN_STEP);
     } else if (name == SPEC_COL_TX_ID) {
         return ui32(ESpecialColumn::TX_ID);
+    } else if (name == SPEC_COL_DELETE_FLAG) {
+        return ui32(ESpecialColumn::DELETE_FLAG);
     }
     return {};
 }
@@ -101,6 +111,8 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
         return SPEC_COL_PLAN_STEP;
     } else if (ESpecialColumn(id) == ESpecialColumn::TX_ID) {
         return SPEC_COL_TX_ID;
+    } else if (ESpecialColumn(id) == ESpecialColumn::DELETE_FLAG) {
+        return SPEC_COL_DELETE_FLAG;
     } else {
         const auto ci = Columns.find(id);
 
@@ -113,18 +125,32 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
     }
 }
 
-std::vector<ui32> TIndexInfo::GetColumnIds() const {
+std::vector<ui32> TIndexInfo::GetColumnIds(const bool withSpecial) const {
     std::vector<ui32> result;
     for (auto&& i : Columns) {
         result.emplace_back(i.first);
     }
-    result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
-    result.emplace_back((ui32)ESpecialColumn::TX_ID);
+    if (withSpecial) {
+        result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
+        result.emplace_back((ui32)ESpecialColumn::TX_ID);
+        result.emplace_back((ui32)ESpecialColumn::DELETE_FLAG);
+    }
     return result;
 }
 
 std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) const {
     std::vector<TString> out;
+    out.reserve(ids.size());
+    for (ui32 id : ids) {
+        const auto ci = Columns.find(id);
+        Y_ABORT_UNLESS(ci != Columns.end());
+        out.push_back(ci->second.Name);
+    }
+    return out;
+}
+
+std::vector<std::string> TIndexInfo::GetColumnSTLNames(const std::vector<ui32>& ids) const {
+    std::vector<std::string> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
         const auto ci = Columns.find(id);
@@ -166,6 +192,7 @@ void TIndexInfo::BuildSchemaWithSpecials() {
     // Place special fields at the beginning of the schema.
     extended.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
     extended.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
+    extended.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
     // Append fields from the regular schema afterward.
     extended.insert(extended.end(), schema->fields().begin(), schema->fields().end());
 
@@ -395,6 +422,7 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
         // Place special fields at the beginning of the schema.
         fields.push_back(arrow::field(TIndexInfo::SPEC_COL_PLAN_STEP, arrow::uint64()));
         fields.push_back(arrow::field(TIndexInfo::SPEC_COL_TX_ID, arrow::uint64()));
+        fields.push_back(arrow::field(TIndexInfo::SPEC_COL_DELETE_FLAG, arrow::boolean()));
     }
 
     for (const ui32 id: ids) {
@@ -447,7 +475,7 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
         AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures(c.first, GetColumnFieldVerified(c.first), DefaultSerializer, operators->GetDefaultOperator(), 
             NArrow::IsPrimitiveYqlType(c.second.PType), c.first == GetPKFirstColumnId())).second);
     }
-    for (auto&& cId : GetSpecialColumnIds()) {
+    for (auto&& cId : GetSystemColumnIds()) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
         AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures(cId, GetColumnFieldVerified(cId), DefaultSerializer, operators->GetDefaultOperator(), false, false)).second);
     }

@@ -168,6 +168,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     NEvWrite::TWriteMeta writeMeta(writeId, tableId, source, granuleShardingVersion);
+    if (record.HasModificationType()) {
+        writeMeta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(record.GetModificationType()));
+    }
     writeMeta.SetDedupId(dedupId);
     Y_ABORT_UNLESS(record.HasLongTxId());
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
@@ -232,7 +235,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData));
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData),
+             TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema(), GetLastTxSnapshot());
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }

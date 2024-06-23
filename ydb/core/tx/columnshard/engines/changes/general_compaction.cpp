@@ -25,17 +25,20 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
     {
         auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
-        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSpecialColumnNames());
+        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSnapshotColumnNames());
+
+        THashSet<ui64> portionsInUsage;
+        for (auto&& i : portions) {
+            AFL_VERIFY(portionsInUsage.emplace(i.GetPortionInfo().GetPortionId()).second);
+        }
 
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema);
-            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
-                shardingActual->GetShardingInfo()->GetFilter(batch)->Apply(batch);
-            }
             batch = resultSchema->NormalizeBatch(*dataSchema, batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            mergeStream.AddSource(batch, nullptr);
+            auto filter = BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), portionsInUsage, resultSchema);
+            mergeStream.AddSource(batch, filter);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, resultDataSchema->fields());
     }
@@ -52,6 +55,49 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     }
 }
 
+std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
+    const std::shared_ptr<arrow::RecordBatch>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISnapshotSchema::TPtr& resultSchema) const {
+    std::shared_ptr<NArrow::TColumnFilter> filter;
+    if (shardingActual && pInfo.NeedShardingFilter(*shardingActual)) {
+        filter = shardingActual->GetShardingInfo()->GetFilter(batch);
+    }
+    NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
+    if (auto col = batch->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG)) {
+        auto pkSchema = resultSchema->GetIndexInfo().GetReplaceKey();
+        AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+        auto bCol = static_pointer_cast<arrow::BooleanArray>(col);
+        for (ui32 i = 0; i < bCol->length(); ++i) {
+            filterDeleted.Add(!bCol->GetView(i));
+        }
+        NArrow::TColumnFilter filterCorrection = NArrow::TColumnFilter::BuildDenyFilter();
+        NArrow::NMerger::TRWSortableBatchPosition pos(batch, 0, pkSchema->field_names(), {}, false);
+        ui32 posCurrent = 0;
+        auto excludedIntervalsInfo = GranuleMeta->GetPortionsIndex().GetIntervalFeatures(pInfo, portionsInUsage);
+        for (auto&& i : excludedIntervalsInfo.GetExcludedIntervals()) {
+            NArrow::NMerger::TSortableBatchPosition startForFound(i.GetStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition finishForFound(i.GetFinish().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            auto foundStart = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, startForFound, true);
+            AFL_VERIFY(foundStart);
+            AFL_VERIFY(!foundStart->IsLess())("pos", pos.DebugJson())("start", startForFound.DebugJson());
+            auto foundFinish = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, finishForFound, false);
+            AFL_VERIFY(foundFinish);
+            AFL_VERIFY(!foundFinish->IsGreater())("pos", pos.DebugJson())("finish", finishForFound.DebugJson());
+            filterCorrection.Add(foundStart->GetPosition() - posCurrent, false);
+            filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition() + 1, true);
+            posCurrent = foundFinish->GetPosition() + 1;
+        }
+        AFL_VERIFY(filterCorrection.Size() <= batch->num_rows());
+        filterCorrection.Add(false, batch->num_rows() - filterCorrection.Size());
+        filterDeleted = filterDeleted.Or(filterCorrection);
+    }
+    if (filter) {
+        *filter = filter->And(filterDeleted);
+    } else if (!filterDeleted.IsTotalAllowFilter()) {
+        filter = std::make_shared<NArrow::TColumnFilter>(std::move(filterDeleted));
+    }
+    return filter;
+}
+
 void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
@@ -63,9 +109,10 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
 
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
-    for (auto&& i : TIndexInfo::GetSpecialColumnNames()) {
+    for (auto&& i : TIndexInfo::GetSnapshotColumnNames()) {
         pkFieldNamesSet.emplace(i);
     }
+    pkFieldNamesSet.emplace(TIndexInfo::SPEC_COL_DELETE_FLAG);
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     {
@@ -76,7 +123,12 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             indexFields.emplace_back(i);
         }
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSpecialColumnNames());
+        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames());
+        THashSet<ui64> usedPortionIds;
+        for (auto&& i : portions) {
+            AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
+        }
+
         ui32 idx = 0;
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
@@ -90,11 +142,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            std::shared_ptr<NArrow::TColumnFilter> filter;
-            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
-                filter = shardingActual->GetShardingInfo()->GetFilter(batch);
-            }
-
+            std::shared_ptr<NArrow::TColumnFilter> filter = BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), usedPortionIds, resultSchema);
             mergeStream.AddSource(batch, filter);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);

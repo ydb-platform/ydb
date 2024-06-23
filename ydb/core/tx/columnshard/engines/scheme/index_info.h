@@ -140,7 +140,7 @@ public:
     /// Appends the special columns to the batch.
     static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(
         const std::shared_ptr<arrow::RecordBatch>& batch,
-        const TSnapshot& snapshot);
+        const TSnapshot& snapshot, const bool isDelete);
 
     /// Makes schema as set of the special columns.
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
@@ -256,7 +256,8 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
-    std::vector<ui32> GetColumnIds() const;
+    std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
+    std::vector<ui32> GetColumnIds(const bool withSpecial = true) const;
     std::vector<ui32> GetEntityIds() const {
         auto result = GetColumnIds();
         for (auto&& i : Indexes) {
@@ -319,11 +320,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    static const std::set<ui32>& GetSpecialColumnIdsSet() {
-        static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());
-        return result;
-    }
 
     ui64 GetVersion() const {
         return Version;

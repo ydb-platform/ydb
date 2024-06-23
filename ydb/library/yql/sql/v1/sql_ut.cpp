@@ -3004,10 +3004,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
 
         TString a1 = Err2Str(res);
-        TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
-
-<main>:1:15: Error: Unexpected character : cannot match to any predicted input...
-
+        TString a2(R"foo(<main>:1:16: Error: Unknown cluster: edar
 )foo");
 
         UNIT_ASSERT_NO_DIFF(a1, a2);
@@ -3019,8 +3016,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res1.Root);
         UNIT_ASSERT(!res2.Root);
 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:15: Error: Unexpected character : syntax error...\n\n");
-        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:15: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:12: Error: mismatched input 'b' expecting {<EOF>, ';'}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:12: Error: mismatched input 'b' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(InvalidHexInStringLiteral) {
@@ -3046,31 +3043,31 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidDoubleAtString) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: extraneous input '@' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
         NYql::TAstParseResult res = SqlToYql("SELECT @@foo@@ @ @@bar@@");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '@@foo@@' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: mismatched input '@' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(InvalidStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: mismatched input '\"' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: mismatched input '@' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(SelectInvalidSyntax) {
         NYql::TAstParseResult res = SqlToYql("select 1 form Wat");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:14: Error: Unexpected token 'Wat' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:14: Error: extraneous input 'Wat' expecting {<EOF>, ';'}\n");
     }
 
     Y_UNIT_TEST(SelectNoCluster) {
@@ -3095,8 +3092,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         NYql::TAstParseResult res = SqlToYql("select case when true 1;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:22: Error: Unexpected token absence : Missing THEN \n\n"
-            "<main>:1:23: Error: Unexpected token absence : Missing END \n\n"
+            "<main>:1:22: Error: missing THEN at \'1\'\n"
+            "<main>:1:23: Error: extraneous input \';\' expecting {ELSE, END, WHEN}\n"
         );
     }
 
@@ -3106,7 +3103,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "FROM plato.Input AS a\n"
             "WHERE CASE WHEN a.key = \"foo\" a.subkey ELSE a.value END\n"
         );
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:30: Error: Unexpected token absence : Missing THEN \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:30: Error: missing THEN at 'a'\n");
     }
 
     Y_UNIT_TEST(SelectCaseWithoutEnd) {
@@ -3466,7 +3463,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(ReduceNoBy) {
         NYql::TAstParseResult res = SqlToYql("reduce plato.Input using some::udf(value)");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unexpected token absence : Missing ON \n\n<main>:1:25: Error: Unexpected token absence : Missing USING \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: mismatched input 'using' expecting {',', ON, PRESORT}\n");
     }
 
     Y_UNIT_TEST(ReduceDistinct) {
@@ -3478,7 +3475,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(CreateTableWithView) {
         NYql::TAstParseResult res = SqlToYql("CREATE TABLE plato.foo:bar (key INT);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: Unexpected token ':' : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: mismatched input ':' expecting '('\n");
     }
 
     Y_UNIT_TEST(AsteriskWithSomethingAfter) {
@@ -3839,13 +3836,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvaildUsageReal0) {
         NYql::TAstParseResult res = SqlToYql("select .0;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {'<|', '+', '-', '~', '*', '(', '$', '{', '[', ABORT, ACTION, ADD, AFTER, ALL, ALTER, ANALYZE, AND, ANSI, ANY, ARRAY, AS, ASC, ASSUME, ASYMMETRIC, ASYNC, ATTACH, ATTRIBUTES, AUTOINCREMENT, BEFORE, BEGIN, BERNOULLI, BETWEEN, BITCAST, BY, CALLABLE, CASCADE, CASE, CAST, CHANGEFEED, CHECK, COLLATE, COLUMN, COLUMNS, COMMIT, COMPACT, CONDITIONAL, CONFLICT, CONNECT, CONSTRAINT, CONSUMER, COVER, CREATE, CROSS, CUBE, CURRENT, CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP, DATA, DATABASE, DECIMAL, DECLARE, DEFAULT, DEFERRABLE, DEFERRED, DEFINE, DELETE, DESC, DESCRIBE, DETACH, DICT, DIRECTORY, DISABLE, DISCARD, DISTINCT, DO, DROP, EACH, ELSE, EMPTY, EMPTY_ACTION, ENCRYPTED, END, ENUM, ERASE, ERROR, ESCAPE, EVALUATE, EXCEPT, EXCLUDE, EXCLUSION, EXCLUSIVE, EXISTS, EXPLAIN, EXPORT, EXTERNAL, FAIL, FALSE, FAMILY, FILTER, FIRST, FLATTEN, FLOW, FOLLOWING, FOR, FOREIGN, FROM, FULL, FUNCTION, GLOB, GRANT, GROUP, GROUPING, GROUPS, HASH, HAVING, HOP, IF, IGNORE, ILIKE, IMMEDIATE, IMPORT, IN, INDEX, INDEXED, INHERITS, INITIAL, INITIALLY, INNER, INSERT, INSTEAD, INTERSECT, INTO, IS, ISNULL, JOIN, JSON_EXISTS, JSON_QUERY, JSON_VALUE, KEY, LAST, LEFT, LEGACY, LIKE, LIMIT, LIST, LOCAL, MANAGE, MATCH, MATCHES, MATCH_RECOGNIZE, MEASURES, MICROSECONDS, MILLISECONDS, MODIFY, NANOSECONDS, NATURAL, NEXT, NO, NOT, NOTNULL, NULL, NULLS, OBJECT, OF, OFFSET, OMIT, ON, ONE, ONLY, OPTION, OPTIONAL, OR, ORDER, OTHERS, OUTER, OVER, PARALLEL, PARTITION, PASSING, PASSWORD, PAST, PATTERN, PER, PERMUTE, PLAN, POOL, PRAGMA, PRECEDING, PRESORT, PRIMARY, PRIVILEGES, PROCESS, QUEUE, RAISE, RANGE, REDUCE, REFERENCES, REGEXP, REINDEX, RELEASE, REMOVE, RENAME, REPLACE, REPLICATION, RESET, RESOURCE, RESPECT, RESTRICT, RESULT, RETURN, RETURNING, REVERT, REVOKE, RIGHT, RLIKE, ROLLBACK, ROLLUP, ROW, ROWS, SAMPLE, SAVEPOINT, SCHEMA, SECONDS, SEEK, SELECT, SEMI, SET, SETS, SHOW, TSKIP, SOURCE, STREAM, STRUCT, SUBQUERY, SUBSET, SYMBOLS, SYMMETRIC, SYNC, SYSTEM, TABLE, TABLES, TABLESAMPLE, TABLESTORE, TAGGED, TEMP, TEMPORARY, THEN, TIES, TO, TOPIC, TRANSACTION, TRIGGER, TRUE, TUPLE, TYPE, UNBOUNDED, UNCONDITIONAL, UNION, UNIQUE, UNKNOWN, UNMATCHED, UPDATE, UPSERT, USE, USER, USING, VACUUM, VALUES, VARIANT, VIEW, VIRTUAL, WHEN, WHERE, WINDOW, WITH, WITHOUT, WRAPPER, XOR, STRING_VALUE, ID_PLAIN, ID_QUOTED, DIGITS, INTEGER_VALUE, REAL, BLOB}\n");
     }
 
     Y_UNIT_TEST(InvaildUsageReal1) {
         NYql::TAstParseResult res = SqlToYql("select .0f;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: extraneous input '.' expecting {'<|', '+', '-', '~', '*', '(', '$', '{', '[', ABORT, ACTION, ADD, AFTER, ALL, ALTER, ANALYZE, AND, ANSI, ANY, ARRAY, AS, ASC, ASSUME, ASYMMETRIC, ASYNC, ATTACH, ATTRIBUTES, AUTOINCREMENT, BEFORE, BEGIN, BERNOULLI, BETWEEN, BITCAST, BY, CALLABLE, CASCADE, CASE, CAST, CHANGEFEED, CHECK, COLLATE, COLUMN, COLUMNS, COMMIT, COMPACT, CONDITIONAL, CONFLICT, CONNECT, CONSTRAINT, CONSUMER, COVER, CREATE, CROSS, CUBE, CURRENT, CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP, DATA, DATABASE, DECIMAL, DECLARE, DEFAULT, DEFERRABLE, DEFERRED, DEFINE, DELETE, DESC, DESCRIBE, DETACH, DICT, DIRECTORY, DISABLE, DISCARD, DISTINCT, DO, DROP, EACH, ELSE, EMPTY, EMPTY_ACTION, ENCRYPTED, END, ENUM, ERASE, ERROR, ESCAPE, EVALUATE, EXCEPT, EXCLUDE, EXCLUSION, EXCLUSIVE, EXISTS, EXPLAIN, EXPORT, EXTERNAL, FAIL, FALSE, FAMILY, FILTER, FIRST, FLATTEN, FLOW, FOLLOWING, FOR, FOREIGN, FROM, FULL, FUNCTION, GLOB, GRANT, GROUP, GROUPING, GROUPS, HASH, HAVING, HOP, IF, IGNORE, ILIKE, IMMEDIATE, IMPORT, IN, INDEX, INDEXED, INHERITS, INITIAL, INITIALLY, INNER, INSERT, INSTEAD, INTERSECT, INTO, IS, ISNULL, JOIN, JSON_EXISTS, JSON_QUERY, JSON_VALUE, KEY, LAST, LEFT, LEGACY, LIKE, LIMIT, LIST, LOCAL, MANAGE, MATCH, MATCHES, MATCH_RECOGNIZE, MEASURES, MICROSECONDS, MILLISECONDS, MODIFY, NANOSECONDS, NATURAL, NEXT, NO, NOT, NOTNULL, NULL, NULLS, OBJECT, OF, OFFSET, OMIT, ON, ONE, ONLY, OPTION, OPTIONAL, OR, ORDER, OTHERS, OUTER, OVER, PARALLEL, PARTITION, PASSING, PASSWORD, PAST, PATTERN, PER, PERMUTE, PLAN, POOL, PRAGMA, PRECEDING, PRESORT, PRIMARY, PRIVILEGES, PROCESS, QUEUE, RAISE, RANGE, REDUCE, REFERENCES, REGEXP, REINDEX, RELEASE, REMOVE, RENAME, REPLACE, REPLICATION, RESET, RESOURCE, RESPECT, RESTRICT, RESULT, RETURN, RETURNING, REVERT, REVOKE, RIGHT, RLIKE, ROLLBACK, ROLLUP, ROW, ROWS, SAMPLE, SAVEPOINT, SCHEMA, SECONDS, SEEK, SELECT, SEMI, SET, SETS, SHOW, TSKIP, SOURCE, STREAM, STRUCT, SUBQUERY, SUBSET, SYMBOLS, SYMMETRIC, SYNC, SYSTEM, TABLE, TABLES, TABLESAMPLE, TABLESTORE, TAGGED, TEMP, TEMPORARY, THEN, TIES, TO, TOPIC, TRANSACTION, TRIGGER, TRUE, TUPLE, TYPE, UNBOUNDED, UNCONDITIONAL, UNION, UNIQUE, UNKNOWN, UNMATCHED, UPDATE, UPSERT, USE, USER, USING, VACUUM, VALUES, VARIANT, VIEW, VIRTUAL, WHEN, WHERE, WINDOW, WITH, WITHOUT, WRAPPER, XOR, STRING_VALUE, ID_PLAIN, ID_QUOTED, DIGITS, INTEGER_VALUE, REAL, BLOB}\n");
     }
 
     Y_UNIT_TEST(InvaildUsageWinFunctionWithoutWindow) {
@@ -3969,7 +3966,7 @@ select FormatType($f());
     Y_UNIT_TEST(AnyAsTableName) {
         NYql::TAstParseResult res = SqlToYql("use plato; select * from any;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected token ';' : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: no viable alternative at input 'any;'\n");
     }
 
     Y_UNIT_TEST(IncorrectOrderOfLambdaOptionalArgs) {
@@ -4016,7 +4013,7 @@ select FormatType($f());
             "  select 1\n"
             "; end\n");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token absence : Missing DO \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: missing DO at '<EOF>'\n");
     }
 
     Y_UNIT_TEST(ErrorMultiWayJoinWithUsing) {
@@ -4332,7 +4329,7 @@ select FormatType($f());
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:4:56: Error: Unexpected token 'PICOSECONDS'");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'PICOSECONDS' expecting {MICROSECONDS, MILLISECONDS, NANOSECONDS, SECONDS}");
     }
 
     Y_UNIT_TEST(InvalidChangefeedSink) {
@@ -5645,7 +5642,7 @@ Y_UNIT_TEST_SUITE(LibraSqlSugar) {
 Y_UNIT_TEST_SUITE(TrailingQuestionsNegative) {
     Y_UNIT_TEST(Basic) {
         ExpectFailWithError("SELECT 1?;", "<main>:1:9: Error: Unexpected token '?' at the end of expression\n");
-        ExpectFailWithError("SELECT 1? + 1;", "<main>:1:10: Error: Unexpected token '+' : cannot match to any predicted input...\n\n");
+        ExpectFailWithError("SELECT 1? + 1;", "<main>:1:10: Error: mismatched input '+' expecting {<EOF>, ';'}\n");
         ExpectFailWithError("SELECT 1 + 1??? < 2", "<main>:1:13: Error: Unexpected token '?' at the end of expression\n");
         ExpectFailWithError("SELECT   1? > 2? > 3?",
             "<main>:1:11: Error: Unexpected token '?' at the end of expression\n"
@@ -6711,7 +6708,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
                 CREATE VIEW TheView AS SELECT 1;
             )"
         );
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'AS' : syntax error");
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "mismatched input 'AS' expecting WITH");
     }
 
     Y_UNIT_TEST(CreateViewSecurityInvokerTurnedOff) {
@@ -6975,7 +6972,7 @@ Y_UNIT_TEST_SUITE(ResourcePool) {
         ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE RESOURCE POOL MyResourcePool;
-            )sql" , "<main>:3:51: Error: Unexpected token ';' : syntax error...\n\n");
+            )sql" , "<main>:3:51: Error: mismatched input ';' expecting WITH\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;

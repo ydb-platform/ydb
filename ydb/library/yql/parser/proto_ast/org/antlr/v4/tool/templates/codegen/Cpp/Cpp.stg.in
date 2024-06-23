@@ -47,7 +47,7 @@ class <file.exportMacro> <lexer.name> : public <superClass> {
 public:
 <if (lexer.tokens)>
   enum {
-    <lexer.tokens: {k | <k> = <lexer.tokens.(k)>}; separator=", ", wrap, anchor>
+    <lexer.tokens: {k | T<k> = <lexer.tokens.(k)>}; separator=", ", wrap, anchor>
   };
 <endif>
 
@@ -348,7 +348,7 @@ class <file.exportMacro> <parser.name> : public <superClass> {
 public:
 <if (parser.tokens)>
   enum {
-    <parser.tokens: {k | <k> = <parser.tokens.(k)>}; separator=", ", wrap, anchor>
+    <parser.tokens: {k | T<k> = <parser.tokens.(k)>}; separator=", ", wrap, anchor>
   };
 <endif>
 
@@ -397,6 +397,19 @@ public:
   bool error = false;
 
 private:
+  static const size_t TEOF = static_cast\<size_t>(-1);
+  static std::vector\<antlr4::dfa::DFA> _decisionToDFA;
+  static antlr4::atn::PredictionContextCache _sharedContextCache;
+  static std::vector\<std::string> _ruleNames;
+  static std::vector\<std::string> _tokenNames;
+
+  static std::vector\<std::string> _literalNames;
+  static std::vector\<std::string> _symbolicNames;
+  static antlr4::dfa::Vocabulary _vocabulary;
+
+  google::protobuf::Arena* Arena = nullptr;
+  <atn>
+
   <namedActions.declarations>
 };
 >>
@@ -1136,15 +1149,15 @@ isZero ::= [
 ]
 
 offsetShift(shiftAmount, offset, prefix = false) ::= <%
-<if (!isZero.(offset))>(<if (prefix)><parser.name>::<endif><shiftAmount> - <offset>)<else><if (prefix)><parser.name>::<endif><shiftAmount><endif>
+<if (!isZero.(offset))>(<if (prefix)><parser.name>::T<endif><shiftAmount> - <offset>)<else><if (prefix)><parser.name>::T<endif><shiftAmount><endif>
 %>
 
 bitsetInlineComparison(s, bits) ::= <%
-<bits.tokens: {t | <s.varName> == <parser.name>::<t.name>}; separator = "\n\n|| ">
+<bits.ttypes: {ttype | <s.varName> == <parser.name>::T<ttype>}; separator = "\n\n|| ">
 %>
 
-cases(tokens) ::= <<
-<tokens: {t | case <parser.name>::<t.name>:}; separator="\n">
+cases(ttypes) ::= <<
+<ttypes: {t | case <parser.name>::T<t>:}; separator="\n">
 >>
 
 InvokeRuleHeader(r, argExprsChunks) ::= "InvokeRuleHeader"
@@ -1167,7 +1180,7 @@ MatchTokenHeader(m) ::= "<! Required but unused. !>"
 MatchToken(m) ::= <<
 {
   setState(<m.stateNumber>);
-  auto token = <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::<m.name>);
+  auto token = <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::T<m.name>);
   if (parent && token && token->getType() > 0) {
     Y_ABORT_UNLESS(parent, "Parent is null");
     parent->MutableToken<elemId>()->SetId(token->getType());
@@ -1351,26 +1364,26 @@ RuleContextDecl(r) ::= "<! Variable Declaration !>"
 RuleContextListDeclHeader(rdecl) ::= "std::vector\<<rdecl.ctxName> *> <rdecl.escapedName>"
 RuleContextListDecl(rdecl) ::= "<! Variable Declaration !>"
 
-ContextTokenGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode *<t.escapedName>();"
+ContextTokenGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode *T<t.name>();"
 ContextTokenGetterDecl(t) ::= <<
-tree::TerminalNode* <parser.name>::<t.ctx.name>::<t.escapedName>() {
-  return getToken(<parser.name>::<t.escapedName>, 0);
+tree::TerminalNode* <parser.name>::<t.ctx.name>::T<t.name>() {
+  return getToken(<parser.name>::T<t.name>, 0);
 }
 
 >>
 
-ContextTokenListGetterDeclHeader(t) ::= "std::vector\<antlr4::tree::TerminalNode *> <t.escapedName>();"
+ContextTokenListGetterDeclHeader(t) ::= "std::vector\<antlr4::tree::TerminalNode *> T<t.name>();"
 ContextTokenListGetterDecl(t) ::= <<
-std::vector\<tree::TerminalNode *> <parser.name>::<t.ctx.name>::<t.escapedName>() {
-  return getTokens(<parser.name>::<t.escapedName>);
+std::vector\<tree::TerminalNode *> <parser.name>::<t.ctx.name>::T<t.name>() {
+  return getTokens(<parser.name>::T<t.name>);
 }
 
 >>
 
-ContextTokenListIndexedGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode* <t.escapedName>(size_t i);"
+ContextTokenListIndexedGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode* T<t.name>(size_t i);"
 ContextTokenListIndexedGetterDecl(t)  ::= <<
-tree::TerminalNode* <parser.name>::<t.ctx.name>::<t.escapedName>(size_t i) {
-  return getToken(<parser.name>::<t.escapedName>, i);
+tree::TerminalNode* <parser.name>::<t.ctx.name>::T<t.name>(size_t i) {
+  return getToken(<parser.name>::T<t.name>, i);
 }
 
 >>

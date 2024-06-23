@@ -2110,12 +2110,13 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
                 CompactedKeys.emplace_back(write->Key, write->Value.size());
+                ClearOldHead(write->Key.GetOffset(), write->Key.GetPartNo(), PersistRequest.Get());
             }
         }
 
     }
 
-    if (auto formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+    if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
         ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
         RenameFormedBlobs(formedBlobs,
                           *Parameters,

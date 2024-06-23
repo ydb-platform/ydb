@@ -53,6 +53,10 @@ public:
     virtual ~TKeyPrefix()
     {}
 
+    TString ToString() const {
+        return TString(Data(), Size());
+    }
+
     bool Marked(EMark mark) {
         if (Size() >= MarkedSize())
             return *PtrMark() == mark;

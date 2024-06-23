@@ -330,7 +330,6 @@ public:
         : TBase(actorContext, poolId, poolConfig, counters)
     {
         Y_ENSURE(InFlightLimit < std::numeric_limits<ui64>::max());
-        FinishedRequests.reserve(InFlightLimit);
         RegisterCounters();
     }
 

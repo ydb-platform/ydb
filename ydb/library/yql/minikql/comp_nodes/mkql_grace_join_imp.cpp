@@ -342,7 +342,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         }
 
         
-        ui64 nSlots = 3 * tuplesNum2 + 1;
+        ui64 nSlots = (3 * tuplesNum2 + 1) | 1;
         joinSlots.clear();
         slotToIdx.clear();
         joinSlots.resize(nSlots*slotSize, 0);
@@ -680,7 +680,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
     }
 
     if ( ( (t.NSlots - t.FillCount) * 100 ) / t.NSlots < 50 ) {
-        ResizeHashTable(t, 2 * t.NSlots);
+        ResizeHashTable(t, 2 * t.NSlots + 1);
     }
 
     if ( HasBitSet(keys + HashSize, 1)) // Keys with null value

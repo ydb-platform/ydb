@@ -643,7 +643,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
         for (const auto &simd_block : SIMDBlock_) {
 #define CASE(i, j)                                                             \
     case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOrImpl<i, j>(                     \
+        SIMDPack<TTraits>::template PackTupleOrImpl<i + 1, j + 1>(             \
             block_columns.data() + cols_past, res + simd_block.RowOffset,      \
             cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
             BlockColsOffsets_.data() + cols_past, TotalRowSize,                \
@@ -822,7 +822,7 @@ void TTupleLayoutFallback<TTraits>::Unpack(
         for (const auto &simd_block : SIMDBlock_) {
 #define CASE(i, j)                                                             \
     case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template UnpackTupleOrImpl<i, j>(                   \
+        SIMDPack<TTraits>::template UnpackTupleOrImpl<i + 1, j + 1>(           \
             res + simd_block.RowOffset, block_columns.data() + cols_past,      \
             cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
             BlockColsOffsets_.data() + cols_past, TotalRowSize,                \

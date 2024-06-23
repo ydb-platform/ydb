@@ -6123,7 +6123,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
         UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
         UNIT_ASSERT(resourcePool.ResourcePoolInfo);
-        UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetPoolId(), "MyResourcePool");
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetName(), "MyResourcePool");
         const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");

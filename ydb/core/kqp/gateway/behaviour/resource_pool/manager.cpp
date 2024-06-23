@@ -221,9 +221,9 @@ void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperat
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
     schemeTx.SetWorkingDir(context.GetExternalData().GetDatabase());
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
-    
+
     auto& resourcePoolDescription = *schemeTx.MutableCreateResourcePool();
-    resourcePoolDescription.SetPoolId(TStringBuilder() << ".resource_pools/" << settings.GetObjectId());
+    resourcePoolDescription.SetName(TStringBuilder() << ".resource_pools/" << settings.GetObjectId());
     FillResourcePoolDescription(resourcePoolDescription, settings);
 }
 
@@ -233,7 +233,7 @@ void TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperati
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterResourcePool);
 
     auto& resourcePoolDescription = *schemeTx.MutableCreateResourcePool();
-    resourcePoolDescription.SetPoolId(settings.GetObjectId());
+    resourcePoolDescription.SetName(settings.GetObjectId());
     FillResourcePoolDescription(resourcePoolDescription, settings);
 }
 

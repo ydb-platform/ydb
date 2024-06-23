@@ -127,7 +127,7 @@ public:
         return 0;
     }
 
-    IHTTPGateway::TPtr GetScopedGateway(const TString& /* scope */) final {
+    IHTTPGateway::TPtr GetScopedGateway(const TString& /* scope */, ui32 /* limit */) final {
         return std::make_shared<THTTPMockGateway>();  
     }
 

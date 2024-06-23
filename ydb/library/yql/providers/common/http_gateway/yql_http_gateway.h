@@ -148,10 +148,10 @@ public:
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
-        
+
     virtual ui64 GetBuffersSizePerStream() = 0;
 
-    virtual IHTTPGateway::TPtr GetScopedGateway(const TString& scope) = 0;
+    virtual IHTTPGateway::TPtr GetScopedGateway(const TString& scope, ui32 limit) = 0;
 
     static THeaders MakeYcHeaders(
         const TString& requestId,

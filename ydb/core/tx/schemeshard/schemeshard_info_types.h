@@ -3249,6 +3249,13 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
     TString QueryText;
 };
 
+struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
+    using TPtr = TIntrusivePtr<TResourcePoolInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TResourcePoolProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

@@ -1913,6 +1913,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Resorce Pool
+        {
+            auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TOwnerId ownerPathId = rowset.GetValue<Schema::ResourcePool::OwnerPathId>();
+                TLocalPathId localPathId = rowset.GetValue<Schema::ResourcePool::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                auto& resourcePool = Self->ResourcePools[pathId] = new TResourcePoolInfo();
+                resourcePool->AlterVersion = rowset.GetValue<Schema::ResourcePool::AlterVersion>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD resourcePool->Properties.ParseFromString(rowset.GetValue<Schema::ResourcePool::Properties>());
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read table columns
         {
             TColumnRows columnRows;

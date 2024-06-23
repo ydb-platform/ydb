@@ -1796,6 +1796,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
     };
 
+    struct ResourcePool : Table<110> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Properties : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1904,7 +1914,8 @@ struct Schema : NIceDb::Schema {
         PersQueueGroupStats,
         BuildColumnOperationSettings,
         View,
-        BackgroundSessions
+        BackgroundSessions,
+        ResourcePool
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

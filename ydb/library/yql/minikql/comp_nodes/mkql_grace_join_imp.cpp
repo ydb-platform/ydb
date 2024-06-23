@@ -244,7 +244,7 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
         if ( *it == 0)
             continue;
         ui64 hash = *it;
-        ui64 newSlotNum = (hash / NumberOfBuckets) % (newSlots);
+        ui64 newSlotNum = hash % (newSlots);
         auto newIt = newTable.begin() + t.SlotSize * newSlotNum;
         while (*newIt != 0) {
             newIt += t.SlotSize;
@@ -359,7 +359,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             if (!HasBitSet(nullsPtr, 1))
             {
 
-                ui64 slotNum = (hash / NumberOfBuckets) % nSlots;
+                ui64 slotNum = hash % nSlots;
                 auto slotIt = joinSlots.begin() + slotNum * slotSize;
 
                 while (*slotIt != 0)
@@ -409,7 +409,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 continue;
             }
 
-            ui64 slotNum = (hash / NumberOfBuckets) % nSlots;
+            ui64 slotNum = hash % nSlots;
             auto slotIt = joinSlots.begin() + slotNum * slotSize;
             while (*slotIt != 0 && slotIt != joinSlots.end())
             {
@@ -679,7 +679,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
         return false;
 
     ui64 hash = *keys;
-    ui64 slot = (hash / NumberOfBuckets) % t.NSlots;
+    ui64 slot = hash % t.NSlots;
     auto it = t.Table.begin() + slot * t.SlotSize;
 
     ui64 keyIntOffset = HashSize + NullsBitmapSize_;

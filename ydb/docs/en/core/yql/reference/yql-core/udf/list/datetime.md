@@ -472,7 +472,7 @@ Starting from the Unix epoch, there is no valid value representing midnight on 0
 At the same time, values with a negative timezone offset are converted correctly:
 
 ```yql
-select cast(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate)
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate);
 /* 1970-01-01,America/Los_Angeles */
 
 ```

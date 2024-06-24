@@ -463,7 +463,7 @@ select
 It's worth mentioning that several `TzDatetime` or `TzTimestamp` values with a positive timezone offset cannot be cast to `TzDate`. Consider the example below:
 
 ```yql
-select cast(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate)
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate);
 /* Fatal: Timestamp 1970-01-01T23:59:59.000000,Europe/Moscow cannot be casted to TzDate */
 ```
 

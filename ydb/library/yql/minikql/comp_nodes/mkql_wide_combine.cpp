@@ -1269,6 +1269,8 @@ public:
                 }
 
                 if (ptr->IsFetchRequired()) {
+                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                        fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
                     ptr->FetchesCount++;
                     if (ptr->InputStatus == EFetchResult::Yield) return EFetchResult::Yield;

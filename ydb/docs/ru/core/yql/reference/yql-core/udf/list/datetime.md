@@ -467,7 +467,7 @@ select
 Стоит отметить, что значения в типaх TzDatetime и TzTimestamp, имеющие положительное смещение таймзоны, не могут быть преобразованы в тип TzDate. Рассмотрим следующий пример:
 
 ```yql
-select cast(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate)
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate);
 /* Fatal: Timestamp 1970-01-01T23:59:59.000000,Europe/Moscow cannot be casted to TzDate */
 ```
 
@@ -476,7 +476,7 @@ select cast(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate)
 В то же время, значения, имеющие отрицательное смещение таймзоны, возвращают корректный результат:
 
 ```yql
-select cast(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate)
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate);
 /* 1970-01-01,America/Los_Angeles */
 
 ```

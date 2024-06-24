@@ -758,7 +758,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         if (init.reader_name()) {
             PeerName = init.reader_name();
         }
-        AutoscalingSupport = init.autoscaling_support();
+        AutoscalingSupport = init.auto_partitioning_support();
     }
 
     if (MaxTimeLagMs < 0) {

@@ -631,19 +631,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto scaleUpPercent = 80;
         auto scaleDownPercent = 20;
         auto threshold = 500;
-        auto strategy = EAutoscalingStrategy::ScaleUp;
+        auto strategy = EAutoPartitioningStrategy::ScaleUp;
 
         TCreateTopicSettings createSettings;
         createSettings
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(minParts)
             .MaxActivePartitions(maxParts)
-                .BeginConfigureAutoscalingSettings()
-                .ScaleUpThresholdPercent(scaleUpPercent)
-                .ScaleDownThresholdPercent(scaleDownPercent)
-                .ThresholdTime(TDuration::Seconds(threshold))
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(scaleUpPercent)
+                .DownUtilizationPercent(scaleDownPercent)
+                .StabilizationWindow(TDuration::Seconds(threshold))
                 .Strategy(strategy)
-                .EndConfigureAutoscalingSettings()
+                .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
         client.CreateTopic(autoscalingTestTopic, createSettings).Wait();
 
@@ -655,29 +655,29 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), minParts);
         UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), maxParts);
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), strategy);
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), scaleDownPercent);
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), scaleUpPercent);
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), threshold);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), strategy);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent(), scaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent(), scaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds(), threshold);
 
         auto alterMinParts = 10;
         auto alterMaxParts = 20;
         auto alterScaleUpPercent = 90;
         auto alterScaleDownPercent = 10;
         auto alterThreshold = 700;
-        auto alterStrategy = EAutoscalingStrategy::ScaleUpAndDown;
+        auto alterStrategy = EAutoPartitioningStrategy::ScaleUpAndDown;
 
         TAlterTopicSettings alterSettings;
         alterSettings
             .BeginAlterPartitioningSettings()
             .MinActivePartitions(alterMinParts)
             .MaxActivePartitions(alterMaxParts)
-                .BeginAlterAutoscalingSettings()
-                .ScaleDownThresholdPercent(alterScaleDownPercent)
-                .ScaleUpThresholdPercent(alterScaleUpPercent)
-                .ThresholdTime(TDuration::Seconds(alterThreshold))
+                .BeginAlterAutoPartitioningSettings()
+                .DownUtilizationPercent(alterScaleDownPercent)
+                .UpUtilizationPercent(alterScaleUpPercent)
+                .StabilizationWindow(TDuration::Seconds(alterThreshold))
                 .Strategy(alterStrategy)
-                .EndAlterAutoscalingSettings()
+                .EndAlterAutoPartitioningSettings()
             .EndAlterTopicPartitioningSettings();
 
         client.AlterTopic(autoscalingTestTopic, alterSettings).Wait();
@@ -686,10 +686,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), alterMinParts);
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), alterMaxParts);
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), alterStrategy);
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), alterScaleDownPercent);
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), alterStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent(), alterScaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent(), alterScaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds(), alterThreshold);
     }
 
     Y_UNIT_TEST(ControlPlane_DisableAutoPartitioning) {
@@ -704,9 +704,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .BeginConfigurePartitioningSettings()
                     .MinActivePartitions(1)
                     .MaxActivePartitions(100)
-                    .BeginConfigureAutoscalingSettings()
-                        .Strategy(EAutoscalingStrategy::ScaleUp)
-                    .EndConfigureAutoscalingSettings()
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
                 .EndConfigurePartitioningSettings();
             client.CreateTopic(topicName, createSettings).Wait();
         }
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             alterSettings
                 .BeginAlterPartitioningSettings()
                     .BeginAlterAutoscalingSettings()
-                        .Strategy(EAutoscalingStrategy::Disabled)
+                        .Strategy(EAutoPartitioningStrategy::Disabled)
                     .EndAlterAutoscalingSettings()
                 .EndAlterTopicPartitioningSettings();
             auto f = client.AlterTopic(topicName, alterSettings);
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .BeginAlterPartitioningSettings()
                     .MaxActivePartitions(0)
                     .BeginAlterAutoscalingSettings()
-                        .Strategy(EAutoscalingStrategy::Disabled)
+                        .Strategy(EAutoPartitioningStrategy::Disabled)
                     .EndAlterAutoscalingSettings()
                 .EndAlterTopicPartitioningSettings();
             auto f = client.AlterTopic(topicName, alterSettings);
@@ -752,9 +752,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         createSettings
             .RetentionStorageMb(1024)
             .BeginConfigurePartitioningSettings()
-                .BeginConfigureAutoscalingSettings()
-                .Strategy(EAutoscalingStrategy::ScaleUp)
-                .EndConfigureAutoscalingSettings()
+                .BeginConfigureAutoPartitioningSettings()
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
         auto result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
 
@@ -782,12 +782,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(1)
             .MaxActivePartitions(100)
-                .BeginConfigureAutoscalingSettings()
-                .ScaleUpThresholdPercent(2)
-                .ScaleDownThresholdPercent(1)
-                .ThresholdTime(TDuration::Seconds(1))
-                .Strategy(EAutoscalingStrategy::ScaleUp)
-                .EndConfigureAutoscalingSettings()
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(1))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
         client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 

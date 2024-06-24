@@ -372,7 +372,7 @@ public:
     }
 
     bool OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalPoolSize() > QueueSizeLimit + 1) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || PendingRequests.size() + DelayedRequests.size() > QueueSizeLimit) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return false;
         }

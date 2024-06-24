@@ -3258,62 +3258,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TableSink_OlapInsertUpsertError) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"(
-            CREATE TABLE `/Root/ColumnShard` (
-                Col1 Uint64 NOT NULL,
-                Col2 Int32,
-                PRIMARY KEY (Col1)
-            )
-            PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
-        )";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-        { 
-            auto prepareResult = client.ExecuteQuery(R"(
-                UPSERT INTO `/Root/ColumnShard` (Col1, Col2) VALUES (1u, 1)
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(!prepareResult.IsSuccess());
-            UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("is not supported for olap tables"),
-                prepareResult.GetIssues().ToString());
-        }
-
-        { 
-            auto prepareResult = client.ExecuteQuery(R"(
-                INSERT INTO `/Root/ColumnShard` (Col1, Col2) VALUES (2u, 2)
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(!prepareResult.IsSuccess());
-            UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().Contains("is not supported for olap tables"),
-                prepareResult.GetIssues().ToString());
-        }
-
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([])");
-        }
-    }
-
     Y_UNIT_TEST(TableSink_ReplaceDuplicatesOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

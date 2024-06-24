@@ -72,9 +72,9 @@ code { white-space: pre; }
     filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
     if args.by_side:
         assert len(set(map(len, filelists))) == 1, "All dirs must have same layout"
-        print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(5*len(rdirs), html.escape(name[len(rdirs[0]) + 1:])) for name in filelists[0]))
+        print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(7*len(rdirs), html.escape(name[len(rdirs[0]) + 1:])) for name in filelists[0]))
     else:
-        print('<tr><th>' + ''.join('<th colspan="{}">'.format(5*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
+        print('<tr><th>' + ''.join('<th colspan="{}">'.format(7*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
     print('<tr><th>')
     if args.by_side:
         dirfiles = map(lambda x: [x[0], [x[1]]], itertools.chain(*map(lambda x: zip(rdirs, x), zip(*filelists))))
@@ -86,25 +86,42 @@ code { white-space: pre; }
                 with open(name) as f:
                     coldata = []
                     cmdline = f.readline()
-                    print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(dirname if args.by_side else name[len(dirname) + 1:])))
+                    print('<th colspan="7"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(dirname if args.by_side else name[len(dirname) + 1:])))
                     for line in f:
                         line = line.split('\t')
-                        (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]
+                        (q, utime, stime, maxrss, exitcode, elapsed, minflt, majflt, inblock, oublock, nvcsw, nivcsv) = line[:12]
+                        if len(line) >= 14:
+                            rchar = line[12]
+                            wchar = line[13]
+                        else:
+                            rchar = -1
+                            wchar = -1
                         utime = float(utime)
                         stime = float(stime)
                         maxrss = int(maxrss)
+                        inblock = int(inblock)
+                        oublock = int(oublock)
                         exitcode = int(exitcode)
                         elapsed = int(elapsed)*1e-9
+                        rchar = int(rchar)
+                        wchar = int(wchar)
                         if len(data):
                             # assert data[0][len(coldata)][0] == q
                             if data[0][len(coldata)][0] != q:
                                 pass
-                        coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode]]
+                        if wchar >= 0:
+                            for spec in ['stderr.txt', 'stdout.txt', 'err.txt', 'stat.yson', 'result.yson', 'plan.yson', 'expr.txt']:
+                                try:
+                                    wchar -= os.stat('{}/{}-{}'.format(dirname, q, spec)).st_size
+                                except Exception as ex:
+                                    print(ex, file=sys.stderr)
+                                    pass
+                        coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode, minflt, majflt, inblock, oublock, nvcsw, nivcsv, rchar, wchar]]
                     data += [coldata]
             except Exception:
                 print(name, file=sys.stderr)
                 raise
-    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>'*len(data) + '</tr>')
+    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>Input, MB<th>Output, MB<th>'*len(data) + '</tr>')
     refDatas = [None]*len(data[0])
     refTypes = [None]*len(data[0])
     for i in range(len(data[0])):
@@ -112,12 +129,12 @@ code { white-space: pre; }
         print('<tr><td>{}'.format(html.escape(q)), end='')
         for c in range(len(data)):
             try:
-                (dirname, q, elapsed, utime, stime, maxrss, exitcode) = data[c][i]
+                (dirname, q, elapsed, utime, stime, maxrss, exitcode, minflt, majflt, inblock, oublock, nvcsw, nivcsv, rchar, wchar) = data[c][i]
             except Exception:
-                print('<td colspan="5">N/A')
+                print('<td colspan="7">N/A')
                 continue
             if c == 0:
-                (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode) = data[c][i]
+                (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode, refMinflt, refMajflt, refInblock, refOublock, refNvcsw, refNivcsv, refRchar, refWchar) = data[c][i]
             cls = ''
             spilling = {}
             if args.verbose > 0:
@@ -141,9 +158,15 @@ code { white-space: pre; }
             if spilling and args.verbose > 1:
                 print('<span title="{}">+{}</span>'.format(', '.join('{}*{}'.format(t, spilling[t]) for t in spilling), ''.join(map(lambda t: SPILLING_MAP[t], sorted(spilling.keys())))))
             if c == 0:
-                print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
+                print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(
+                    elapsed, utime, maxrss/1024, rchar/(1024*1024), wchar/(1024*1024)))
             else:
-                print('<td class="tabnum">{}<td class="tabnum">{}<td class="tabnum">{}'.format(fmtchange(elapsed, refElapsed), fmtchange(utime, refUtime), fmtchange(maxrss/1024, refMaxrss/1024)))
+                print('<td class="tabnum">{}<td class="tabnum">{}<td class="tabnum">{}<td class="tabnum">{}<td class="tabnum">{}'.format(
+                    fmtchange(elapsed, refElapsed),
+                    fmtchange(utime, refUtime),
+                    fmtchange(maxrss/1024, refMaxrss/1024),
+                    fmtchange(rchar/(1024*1024), refRchar/(1024*1024)),
+                    fmtchange(wchar/(1024*1024), refWchar/(1024*1024))))
 
             skip = False
             for blacklisted in blacklists:

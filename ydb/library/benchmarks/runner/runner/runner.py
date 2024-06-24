@@ -6,6 +6,7 @@ import datetime
 import json
 import argparse
 import signal
+import sys
 
 try:
     from time import clock_gettime_ns, CLOCK_MONOTONIC
@@ -31,6 +32,10 @@ def run(argv, out, err, timeout=30*60, hard_timeout=5):
             ([(os.POSIX_SPAWN_OPEN, 2, err, os.O_WRONLY | os.O_CREAT, 0o666)] if err else [])
             ))
         assert pid > 0
+        try:
+            procio = open('/proc/{}/io'.format(pid))
+        except Exception:
+            pass
         if timeout is not None:
             siginfo = signal.sigtimedwait({signal.SIGCHLD}, timeout)
             if siginfo is None:
@@ -38,11 +43,23 @@ def run(argv, out, err, timeout=30*60, hard_timeout=5):
                 siginfo = signal.sigtimedwait({signal.SIGCHLD}, hard_timeout)
                 if siginfo is None:
                     os.kill(pid, signal.SIGKILL)
+        iostat = {}
+        try:
+            for line in procio:
+                (key, value) = line.strip().split(': ')
+                value = int(value)
+                iostat[key] = value
+        except Exception as ex:
+            iostat = None
+            print(ex, sys.stderr)
+        finally:
+            if procio:
+                procio.close()
         (pid, status, rusage) = os.wait4(pid, 0)
         elapsed = time_ns()
         elapsed -= start_time
         exitcode = os.waitstatus_to_exitcode(status)
-        return exitcode, rusage, elapsed
+        return exitcode, rusage, elapsed, iostat
     finally:
         signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
 
@@ -77,7 +94,7 @@ def main():
             print(q, end='\t', file=outf)
             name = outdir + '/' + q
             outname = name + '-result.yson'
-            exitcode, rusage, elapsed = run(
+            exitcode, rusage, elapsed, iostat = run(
                 argv + [
                     '--result-file', outname,
                     '--bindings-file', bindings,
@@ -101,6 +118,8 @@ def main():
             print(rusage.ru_oublock, end='\t', file=outf)
             print(rusage.ru_nvcsw, end='\t', file=outf)
             print(rusage.ru_nivcsw, end='\t', file=outf)
+            print(iostat['rchar'] if iostat and 'rchar' in iostat else -1, end='\t', file=outf)
+            print(iostat['wchar'] if iostat and 'wchar' in iostat else -1, end='\t', file=outf)
             # resource.struct_rusage(ru_utime=7.919329, ru_stime=5.22704,
             #   ru_maxrss=639600, ru_ixrss=0, ru_idrss=0, ru_isrss=0,
             #   ru_minflt=135127, ru_majflt=0, ru_nswap=0, ru_inblock=0,
@@ -112,6 +131,7 @@ def main():
             print(json.dumps({
                 'q': q, 'exitcode': exitcode,
                 'elapsed': elapsed,
+                'io': iostat,
                 'rusage': {
                     'utime': rusage.ru_utime,
                     'stime': rusage.ru_stime,

@@ -41,6 +41,10 @@ def main():
     parser.add_argument('--blacklist-file', default=[], action='append', help='File with query name regexp that will be skipped for comparison')
     parser.add_argument('--verbose', '-v', action='count', default=0)
     parser.add_argument('--by-side', action='store_true', default=False)
+    parser.add_argument('--include-q', default=[], action='append')
+    parser.add_argument('--exclude-q', default=[], action='append')
+    parser.add_argument('--include-dir', default=[], action='append')
+    parser.add_argument('--exclude-dir', default=[], action='append')
     parser.add_argument('resultdir', nargs='+', help='Directories for comparison')
 
     args = parser.parse_args()
@@ -70,6 +74,34 @@ code { white-space: pre; }
     print('<table border="1">')
 
     filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
+    if len(args.include_dir):
+        outf = []
+        for filelist in filelists:
+            outl = []
+            for file in filelist:
+                include = False
+                for r in args.include_dir:
+                    if re.search(r, file):
+                        include = True
+                        break
+                if include:
+                    outl += [file]
+            outf += [outl]
+        filelists = outf
+    if len(args.exclude_dir):
+        outf = []
+        for filelist in filelists:
+            outl = []
+            for file in filelist:
+                include = True
+                for r in args.exclude_dir:
+                    if re.search(r, file):
+                        include = False
+                        break
+                if include:
+                    outl += [file]
+            outf += [outl]
+        filelists = outf
     if args.by_side:
         assert len(set(map(len, filelists))) == 1, "All dirs must have same layout"
         print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(7*len(rdirs), html.escape(name[len(rdirs[0]) + 1:])) for name in filelists[0]))
@@ -82,6 +114,22 @@ code { white-space: pre; }
         dirfiles = zip(rdirs, filelists)
     for dirname, filelist in dirfiles:
         for name in filelist:
+            if len(args.include_q):
+                include = False
+                for r in args.include_q:
+                    if re.search(r, name):
+                        include = True
+                        break
+                if not include:
+                    continue
+            if len(args.exclude_q):
+                include = True
+                for r in args.exclude_q:
+                    if re.search(r, name):
+                        include = False
+                        break
+                if not include:
+                    continue
             try:
                 with open(name) as f:
                     coldata = []

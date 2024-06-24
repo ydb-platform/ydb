@@ -71,7 +71,7 @@ UPDATE table1 ON SELECT * FROM $to_update
 
 {% note info %}
 
-Currently, data updating is possible only using a synchronous secondary index. This is because data modification is possible only in [Serializable](../concepts/transactions.md#modes) transactions, but accessing asynchronous indices would break the guarantees of this transaction mode.
+Currently, data updating is possible only using a synchronous secondary index. This limitation exists because data modification is permitted only in [Serializable](../concepts/transactions.md#modes) transactions, and accessing asynchronous indices would violate the guarantees of this transaction mode.
 
 {% endnote %}
 
@@ -90,7 +90,7 @@ WHERE views = 0;
 
 {% note info %}
 
-Currently, deleting data is possible only using a synchronous secondary index. This is because data removal is possible only in [Serializable](../concepts/transactions.md#modes) transactions, but accessing asynchronous indices would break the guarantees of this transaction mode.
+Currently, deleting data is possible only using a synchronous secondary index. This is because data removal is permitted only in [Serializable](../concepts/transactions.md#modes) transactions, and accessing asynchronous indices would violate the guarantees of this transaction mode.
 
 {% endnote %}
 

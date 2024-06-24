@@ -352,7 +352,7 @@ private:
                 .Build()
             .Done();
 
-        
+
         auto finalChannelSettings = TDqStageSettings::Parse(stage);
         finalChannelSettings.WideChannels = false;
         finalChannelSettings.OutputNarrowType = nullptr;
@@ -568,7 +568,10 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
-        const bool enableSpillingGenericQuery = kqpCtx->IsGenericQuery() && config->SpillingEnabled() && config->EnableSpillingGenericQuery;
+        const bool enableSpillingGenericQuery =
+            kqpCtx->IsGenericQuery() && config->SpillingEnabled() &&
+            config->EnableSpillingGenericQuery;
+
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")

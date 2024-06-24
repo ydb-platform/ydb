@@ -343,7 +343,7 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
     settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
     settings.FailOnUndelivery = true;
     settings.StatsMode = GetDqStatsMode(StatsMode);
-    settings.UseSpilling = false;
+    settings.UseSpilling = WithSpilling;
 
     NYql::NDq::TComputeMemoryLimits limits;
     limits.ChannelBufferSize = 32_MB;  // Depends on NYql::NDq::TDqOutputChannelSettings::ChunkSizeLimit (now 48 MB) with a ratio of 1.5

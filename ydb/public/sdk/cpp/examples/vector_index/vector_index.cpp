@@ -74,7 +74,7 @@ static TString FullName(const TOptions& options, const TString& name) {
 }
 
 static TString IndexName(const TOptions& options) {
-    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer, "_2");
+    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
 }
 
 static TString FullIndexName(const TOptions& options) {

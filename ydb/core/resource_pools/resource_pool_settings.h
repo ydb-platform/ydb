@@ -29,7 +29,7 @@ struct TSettingsParser {
     void operator()(TDuration* setting) const {
         ui64 seconds = FromString<ui64>(value);
         if (seconds > std::numeric_limits<ui64>::max() / 1000) {
-            throw yexception() << "Invalid seconds value " << seconds << ", it is should be between less or equal than " << std::numeric_limits<ui64>::max() / 1000;
+            throw yexception() << "Invalid seconds value " << seconds << ", it is should be less or equal than " << std::numeric_limits<ui64>::max() / 1000;
         }
         *setting = TDuration::Seconds(seconds);
     }

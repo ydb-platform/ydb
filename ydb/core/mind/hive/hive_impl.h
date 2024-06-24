@@ -414,7 +414,7 @@ protected:
     TOwnershipKeeper Keeper;
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
-    std::unordered_set<TActorId> ActorsWaitingToMoveTablets;
+    std::vector<TActorId> ActorsWaitingToMoveTablets;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -591,20 +591,9 @@ protected:
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
-    struct TBestNodeResult {
-        TNodeInfo* BestNode;
-        bool TryToContinue;
-
-        TBestNodeResult(TNodeInfo& bestNode)
-            : BestNode(&bestNode)
-            , TryToContinue(true)
-        {}
-
-        TBestNodeResult(bool tryToContinue)
-            : BestNode(nullptr)
-            , TryToContinue(tryToContinue)
-        {}
-    };
+    struct TNoNodeFound {};
+    struct TTooManyTabletsStarting {};
+    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting>;
 
     TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
@@ -636,7 +625,7 @@ public:
     TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
-    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
+TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
@@ -989,6 +978,7 @@ protected:
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
+    void WaitToMoveTablets(TActorId actor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

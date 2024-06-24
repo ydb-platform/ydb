@@ -1,27 +1,5 @@
 # CREATE TABLE
 
-{% if feature_olap_tables %}
-
-{{ ydb-short-name }} поддерживает два типа таблиц:
-
-* [строковые](../../../../concepts/datamodel/table.md);
-* [колоночные](../../../../concepts/datamodel/table.md#column-tables).
-
-Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица:
-
-```sql
-CREATE <table_name> (
-  columns 
-  ...
-)
-
-WITH (
-  STORE = COLUMN -- Default value ROW
-)
-```
-
-{% endif %}
-
 ## Синтаксис CREATE TABLE
 
 {% if feature_bulk_tables %}
@@ -56,6 +34,28 @@ WITH (
 {% endif %}
 
 {% if backend_name == "YDB" %}
+
+{% if feature_olap_tables %}
+
+{{ ydb-short-name }} поддерживает два типа таблиц:
+
+* [строковые](../../../../concepts/datamodel/table.md);
+* [колоночные](../../../../concepts/datamodel/table.md#column-tables).
+
+Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица:
+
+```sql
+CREATE <table_name> (
+  columns 
+  ...
+)
+
+WITH (
+  STORE = COLUMN -- Default value ROW
+)
+```
+
+{% endif %}
 
 ### Примеры создания таблиц
 

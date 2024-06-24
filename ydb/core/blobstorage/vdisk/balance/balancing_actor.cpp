@@ -9,6 +9,63 @@
 namespace NKikimr {
 namespace NBalancing {
 
+    template<class T>
+    struct TBatchedQueue {
+        TVector<T> Data;
+        ui32 CurPos = 0;
+        const ui32 BatchSize = 0;
+
+        TBatchedQueue(ui32 batchSize)
+            : BatchSize(batchSize)
+        {}
+
+        TConstArrayRef<T> GetNextBatch() {
+            if (Empty()) {
+                return {};
+            }
+
+            ui32 begin = CurPos;
+            ui32 end = Min(begin + BatchSize, static_cast<ui32>(Data.size()));
+            CurPos = end;
+            return TConstArrayRef<T>(Data.data() + begin, end - begin);
+        }
+
+        bool Empty() const {
+            return CurPos >= Data.size();
+        }
+
+        ui32 Size() const {
+            return Data.size() - CurPos;
+        }
+    };
+
+    struct TBatchManager {
+        TActorId SenderId;
+        TActorId DeleterId;
+        bool IsSendCompleted = false;
+        bool IsDeleteCompleted = false;
+
+        void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
+            if (ev->Sender == SenderId) {
+                IsSendCompleted = true;
+            } else if (ev->Sender == DeleterId) {
+                IsDeleteCompleted = true;
+            } else {
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, "Unexpected id", (Id, ev->Sender));
+            }
+        }
+
+        bool IsBatchCompleted() const {
+            return IsSendCompleted && IsDeleteCompleted;
+        }
+
+        TBatchManager() = default;
+        TBatchManager(IActor* sender, IActor* deleter)
+            : SenderId(TlsActivationContext->Register(sender))
+            , DeleterId(TlsActivationContext->Register(deleter))
+        {}
+    };
+
     class TBalancingActor : public TActorBootstrapped<TBalancingActor> {
     private:
         std::shared_ptr<TBalancingCtx> Ctx;
@@ -17,21 +74,10 @@ namespace NBalancing {
         TQueueActorMapPtr QueueActorMapPtr;
         THashSet<TVDiskID> ConnectedVDisks;
 
-        TQueue<TPartInfo> SendOnMainParts;
-        TQueue<TLogoBlobID> TryDeleteParts;
+        TBatchedQueue<TPartInfo> SendOnMainParts;
+        TBatchedQueue<TLogoBlobID> TryDeleteParts;
 
-        TActorId SenderId;
-        TActorId DeleterId;
-
-        struct TStats {
-            bool SendCompleted = false;
-            ui32 SendPartsLeft = 0;
-            bool DeleteCompleted = false;
-            ui32 DeletePartsLeft = 0;
-        };
-
-        TStats Stats;
-
+        TBatchManager BatchManager;
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Main logic
@@ -46,44 +92,14 @@ namespace NBalancing {
         void ScheduleJobQuant() {
             // once repl token received, start balancing - waking up sender and deleter
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
-                (SendPartsLeft, Stats.SendPartsLeft), (DeletePartsLeft, Stats.DeletePartsLeft),
+                (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
                 (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
-            Send(SenderId, new NActors::TEvents::TEvWakeup());
-            Send(DeleterId, new NActors::TEvents::TEvWakeup());
-        }
 
-        void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
-            // sender or deleter completed job quant
-            switch (ev->Get()->Id) {
-                case SENDER_ID:
-                    Stats.SendCompleted = true;
-                    Stats.SendPartsLeft = ev->Get()->Status;
-                    break;
-                case DELETER_ID:
-                    Stats.DeleteCompleted = true;
-                    Stats.DeletePartsLeft = ev->Get()->Status;
-                    break;
-                default:
-                    Y_ABORT("Unexpected id");
-            }
-
-            if (Stats.SendCompleted && Stats.DeleteCompleted) {
-                // balancing job quant completed, release token
-                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
-
-                if (Stats.SendPartsLeft != 0 || Stats.DeletePartsLeft != 0) {
-                    // sender or deleter has not finished yet
-                    Stats.SendCompleted = Stats.SendPartsLeft == 0;
-                    Stats.DeleteCompleted = Stats.DeletePartsLeft == 0;
-                    ContinueBalancing();
-                    return;
-                }
-
-                // balancing completed
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                Send(Ctx->SkeletonId, new TEvStartBalancing());
-                PassAway();
-            }
+            // register sender and deleter actors
+            BatchManager = TBatchManager(
+                CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx),
+                CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx)
+            );
         }
 
         void CollectKeys() {
@@ -120,7 +136,7 @@ namespace NBalancing {
                     for (const auto& [parts, data]: merger.Parts) {
                         if (!(partsToSend & parts).Empty()) {
                             lastBalancingTimeIt->second = TlsActivationContext->Now();
-                            SendOnMainParts.push(TPartInfo{
+                            SendOnMainParts.Data.emplace_back(TPartInfo{
                                 .Key=It.GetCurKey().LogoBlobID(),
                                 .PartsMask=parts,
                                 .PartData=data
@@ -132,8 +148,8 @@ namespace NBalancing {
                 if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {
                     // collect parts to delete
                     for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
-                        TryDeleteParts.push(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
-                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB07, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.back().ToString()));
+                        TryDeleteParts.Data.emplace_back(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
+                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB07, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.Data.back().ToString()));
                     }
                 }
 
@@ -149,18 +165,30 @@ namespace NBalancing {
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
-                (SendOnMainParts, SendOnMainParts.size()), (TryDeleteParts, TryDeleteParts.size()));
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.size();
-
-            // register sender and deleter actors
-            SenderId = TlsActivationContext->Register(CreateSenderActor(SelfId(), std::move(SendOnMainParts), QueueActorMapPtr, Ctx));
-            DeleterId = TlsActivationContext->Register(CreateDeleterActor(SelfId(), std::move(TryDeleteParts), QueueActorMapPtr, Ctx));
+                (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()));
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
 
             // start balancing
             ContinueBalancing();
         }
 
+        void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
+            BatchManager.Handle(ev);
+            if (BatchManager.IsBatchCompleted()) {
+                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+
+                if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
+                    // no more parts to send or delete
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
+                    Send(Ctx->SkeletonId, new TEvStartBalancing());
+                    PassAway();
+                    return;
+                }
+
+                ContinueBalancing();
+            }
+        }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Helper functions
@@ -181,7 +209,7 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, VDISKP(Ctx->VCtx, "Aske repl token msg not delivered"));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB09, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"));
                 ScheduleJobQuant();
             }
         }
@@ -205,13 +233,13 @@ namespace NBalancing {
             }
             GInfo = msg->NewInfo;
 
-            Send(SenderId, msg->Clone());
-            Send(DeleterId, msg->Clone());
+            Send(BatchManager.SenderId, msg->Clone());
+            Send(BatchManager.DeleterId, msg->Clone());
         }
 
         void PassAway() override {
-            Send(SenderId, new NActors::TEvents::TEvPoison);
-            Send(DeleterId, new NActors::TEvents::TEvPoison);
+            Send(BatchManager.SenderId, new NActors::TEvents::TEvPoison);
+            Send(BatchManager.DeleterId, new NActors::TEvents::TEvPoison);
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
@@ -219,10 +247,12 @@ namespace NBalancing {
         }
 
         STRICT_STFUNC(StateFunc,
+            // Logic events
             cFunc(NActors::TEvents::TEvWakeup::EventType, CollectKeys)
             cFunc(TEvReplToken::EventType, ScheduleJobQuant)
             hFunc(NActors::TEvents::TEvCompleted, Handle)
 
+            // System events
             hFunc(NActors::TEvents::TEvUndelivered, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
 
@@ -237,13 +267,15 @@ namespace NBalancing {
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
             , It(Ctx->Snap.HullCtx, &Ctx->Snap.LogoBlobsSnap)
+            , SendOnMainParts(BATCH_SIZE)
+            , TryDeleteParts(BATCH_SIZE)
         {
         }
 
         void Bootstrap() {
+            Become(&TThis::StateFunc);
             CreateVDisksQueues();
             It.SeekToFirst();
-            Become(&TThis::StateFunc);
             ++Ctx->MonGroup.BalancingIterations();
             Schedule(TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
         }

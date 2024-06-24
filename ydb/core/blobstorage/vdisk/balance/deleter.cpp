@@ -21,39 +21,32 @@ namespace {
     class TPartsRequester {
     private:
         const TActorId NotifyId;
-        const size_t BatchSize;
-        TQueue<TLogoBlobID> Parts;
+        TConstArrayRef<TLogoBlobID> Parts;
         TReplQuoter::TPtr Quoter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
         NMonGroup::TBalancingGroup& MonGroup;
 
         TVector<TPartOnMain> Result;
-        ui32 Responses;
-        ui32 ExpectedResponses;
+        ui32 RequestsSent = 0;
+        ui32 Responses = 0;
     public:
 
-        TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
+        TPartsRequester(TActorId notifyId, TConstArrayRef<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
             : NotifyId(notifyId)
-            , BatchSize(batchSize)
-            , Parts(std::move(parts))
+            , Parts(parts)
             , Quoter(quoter)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
             , MonGroup(monGroup)
-            , Result(Reserve(BatchSize))
-            , Responses(0)
-            , ExpectedResponses(0)
+            , Result(parts.size())
         {}
 
-        void ScheduleJobQuant(const TActorId& selfId) {
-            Result.resize(Min(Parts.size(), BatchSize));
-            ExpectedResponses = 0;
+        void SendRequestsToCheckPartsOnMain(const TActorId& selfId) {
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVGet>> vDiskToQueries;
 
-            for (ui64 i = 0; i < BatchSize && !Parts.empty(); ++i) {
-                auto key = Parts.front();
-                Parts.pop();
+            for (ui64 i = 0; i < Parts.size(); ++i) {
+                auto key = Parts[i];
                 Result[i] = TPartOnMain{
                     .Key=key,
                     .HasOnMain=false
@@ -80,17 +73,8 @@ namespace {
                     msgSize
                 );
                 ++MonGroup.CandidatesToDeleteAskedFromMain();
-                ++ExpectedResponses;
+                ++RequestsSent;
             }
-        }
-
-        std::pair<std::optional<TVector<TPartOnMain>>, ui32> TryGetResults() {
-            if (ExpectedResponses == Responses) {
-                ExpectedResponses = 0;
-                Responses = 0;
-                return {std::move(Result), Parts.size()};
-            }
-            return {std::nullopt, Parts.size()};
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
@@ -111,69 +95,43 @@ namespace {
                 }
             }
         }
+
+        ui32 GetPartsSize() const {
+            return Parts.size();
+        }
+
+        bool IsDone() const {
+            return Responses == RequestsSent;
+        }
+
+        const TVector<TPartOnMain>& GetResult() const {
+            return Result;
+        }
     };
 
-
-    class TDeleter : public TActorBootstrapped<TDeleter> {
-        TActorId NotifyId;
+    class TPartsDeleter {
+    private:
         std::shared_ptr<TBalancingCtx> Ctx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        TPartsRequester PartsRequester;
         ui32 OrderId = 0;
-        TWaiter Mngr;
 
-        struct TStats {
-            ui32 PartsRequested = 0;
-            ui32 PartsDecidedToDelete = 0;
-            ui32 PartsMarkedDeleted = 0;
-        };
-        TStats Stats;
+        ui32 RequestsSent = 0;
+        ui32 Responses = 0;
+    public:
+        TPartsDeleter(std::shared_ptr<TBalancingCtx> ctx, TIntrusivePtr<TBlobStorageGroupInfo> gInfo)
+            : Ctx(ctx)
+            , GInfo(gInfo)
+        {}
 
-        void ScheduleJobQuant() {
-            Mngr.Init();
-            PartsRequester.ScheduleJobQuant(SelfId());
-            TryProcessResults();
-        }
-
-        void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-            PartsRequester.Handle(ev);
-            TryProcessResults();
-        }
-
-        void TryProcessResults() {
-            if (auto [batch, partsLeft] = PartsRequester.TryGetResults(); batch.has_value()) {
-                Stats.PartsRequested += batch->size();
-                ui64 epoch = Mngr.GetEpoch();
-                ui32 deletedParts = 0;
-                for (auto& part: *batch) {
-                    if (part.HasOnMain) {
-                        ++Stats.PartsDecidedToDelete;
-                        DeleteLocal(part.Key, epoch);
-                        ++deletedParts;
-                    }
-                }
-                Mngr.StartJob(TlsActivationContext->Now(), deletedParts, partsLeft);
-                Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
-                TryCompleteBatch(epoch);
-            }
-        }
-
-        void TryCompleteBatch(NActors::TEvents::TEvCompleted::TPtr ev) {
-            TryCompleteBatch(ev->Get()->Id);
-        }
-
-        void TryCompleteBatch(ui64 epoch) {
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TEvDelLogoBlobDataSyncLogResult received"), (ExpectedEpoch, epoch), (ActualEpoch, Mngr.GetEpoch()), (ToSendPartsCount, Mngr.ToSendPartsCount), (SentPartsCount, Mngr.SentPartsCount));
-
-            if (auto ev = Mngr.IsJobDone(epoch, TlsActivationContext->Now()); ev != nullptr) {
-                Send(NotifyId, ev);
-                if (Mngr.IsPassAway()) {
-                    PassAway();
+        void DeleteParts(TActorId selfId, const TVector<TPartOnMain>& parts) {
+            for (const auto& part: parts) {
+                if (part.HasOnMain) {
+                    DeleteLocal(selfId, part.Key);
                 }
             }
         }
 
-        void DeleteLocal(const TLogoBlobID& key, ui64 epoch) {
+        void DeleteLocal(TActorId selfId, const TLogoBlobID& key) {
             TLogoBlobID keyWithoutPartId(key, 0);
 
             TIngress ingress;
@@ -182,19 +140,106 @@ namespace {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
                 (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
 
-            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++, epoch));
+            TlsActivationContext->Send(
+                new IEventHandle(Ctx->SkeletonId, selfId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++)));
 
             ++Ctx->MonGroup.MarkedReadyToDelete();
             Ctx->MonGroup.MarkedReadyToDeleteBytes() += GInfo->GetTopology().GType.PartSize(key);
+            ++RequestsSent;
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
-            Stats.PartsMarkedDeleted++;
+            ++Responses;
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
-            ui64 epoch = ev->Get()->Cookie;
-            Mngr.PartJobDone(epoch);
-            TryCompleteBatch(epoch);
+        }
+
+        bool IsDone() const {
+            return Responses == RequestsSent;
+        }
+    };
+
+
+    class TDeleter : public TActorBootstrapped<TDeleter> {
+        TActorId NotifyId;
+        std::shared_ptr<TBalancingCtx> Ctx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+        TPartsRequester PartsRequester;
+        TPartsDeleter PartsDeleter;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        //  RequestState
+        ///////////////////////////////////////////////////////////////////////////////////////////
+
+        void SendRequestsToCheckPartsOnMain() {
+            Become(&TThis::RequestState);
+
+            if (PartsRequester.GetPartsSize() == 0) {
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to request. PassAway"));
+                PassAway();
+                return;
+            }
+
+            PartsRequester.SendRequestsToCheckPartsOnMain(SelfId());
+
+            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(REQUEST_TIMEOUT_TAG)); // read timeout
+        }
+
+        void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
+            PartsRequester.Handle(ev);
+            if (PartsRequester.IsDone()) {
+                DeleteLocalParts();
+            }
+        }
+
+        void TimeoutRequest(NActors::TEvents::TEvWakeup::TPtr ev) {
+            if (ev->Get()->Tag != REQUEST_TIMEOUT_TAG) {
+                return;
+            }
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutRequest"));
+            DeleteLocalParts();
+        }
+
+        STRICT_STFUNC(RequestState,
+            hFunc(TEvBlobStorage::TEvVGetResult, Handle)
+            hFunc(NActors::TEvents::TEvWakeup, TimeoutRequest)
+
+            hFunc(TEvVGenerationChange, Handle)
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        );
+
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        //  DeleteState
+        ///////////////////////////////////////////////////////////////////////////////////////////
+
+        void DeleteLocalParts() {
+            Become(&TThis::DeleteState);
+
+            if (PartsRequester.GetResult().empty()) {
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"));
+                PassAway();
+                return;
+            }
+
+            PartsDeleter.DeleteParts(SelfId(), PartsRequester.GetResult());
+
+            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(DELETE_TIMEOUT_TAG)); // delete timeout
+        }
+
+        void HandleDelLogoBlobResult(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
+            PartsDeleter.Handle(ev);
+            if (PartsDeleter.IsDone()) {
+                PassAway();
+            }
+        }
+
+        void TimeoutDelete(NActors::TEvents::TEvWakeup::TPtr ev) {
+            if (ev->Get()->Tag != DELETE_TIMEOUT_TAG) {
+                return;
+            }
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutDelete"));
+            PassAway();
         }
 
         void PassAway() override {
@@ -202,49 +247,51 @@ namespace {
             TActorBootstrapped::PassAway();
         }
 
+        STRICT_STFUNC(DeleteState,
+            hFunc(TEvDelLogoBlobDataSyncLogResult, HandleDelLogoBlobResult)
+            hFunc(NActors::TEvents::TEvWakeup, TimeoutDelete)
+
+            hFunc(TEvVGenerationChange, Handle)
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        );
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        //  Helper functions
+        ///////////////////////////////////////////////////////////////////////////////////////////
+
         void Handle(TEvVGenerationChange::TPtr ev) {
             GInfo = ev->Get()->NewInfo;
         }
-
-        STRICT_STFUNC(StateFunc,
-            cFunc(NActors::TEvents::TEvWakeup::EventType, ScheduleJobQuant)
-            hFunc(TEvBlobStorage::TEvVGetResult, Handle)
-            hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-            hFunc(NActors::TEvents::TEvCompleted, TryCompleteBatch)
-
-            hFunc(TEvVGenerationChange, Handle)
-        );
 
     public:
         TDeleter() = default;
         TDeleter(
             TActorId notifyId,
-            TQueue<TLogoBlobID> parts,
+            TConstArrayRef<TLogoBlobID> parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
             : NotifyId(notifyId)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
-            , Mngr{.ServiceId=DELETER_ID}
+            , PartsRequester(SelfId(), parts, Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr, Ctx->MonGroup)
+            , PartsDeleter(ctx, GInfo)
         {
         }
 
         void Bootstrap() {
-            Become(&TThis::StateFunc);
+            SendRequestsToCheckPartsOnMain();
         }
     };
 }
 
 IActor* CreateDeleterActor(
     TActorId notifyId,
-    TQueue<TLogoBlobID> parts,
+    TConstArrayRef<TLogoBlobID> parts,
     TQueueActorMapPtr queueActorMapPtr,
     std::shared_ptr<TBalancingCtx> ctx
 ) {
-    return new TDeleter(notifyId, std::move(parts), queueActorMapPtr, ctx);
+    return new TDeleter(notifyId, parts, queueActorMapPtr, ctx);
 }
 
 } // NBalancing

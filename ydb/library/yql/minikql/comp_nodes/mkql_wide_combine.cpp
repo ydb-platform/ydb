@@ -1280,11 +1280,11 @@ public:
                     for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                         fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
 
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Tongue));
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
 
                     bool isNew = ptr->TasteIt();
                     if (ptr->IsImmediateProcessingAvaliable()) {
-                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Throat));
+                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
                     }
                     continue;
                 }

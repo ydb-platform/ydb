@@ -234,7 +234,8 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto batch = NArrow::DeserializeBatch(bData, GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion()));
         Y_ABORT_UNLESS(batch);
-        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSpecialColumns(batch, CommittedBlob.GetSnapshot(), CommittedBlob.GetIsDelete());
+        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(batch, CommittedBlob.GetSnapshot());
+        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);
     }
     MutableStageData().SyncTableColumns(columns->GetSchema()->fields());

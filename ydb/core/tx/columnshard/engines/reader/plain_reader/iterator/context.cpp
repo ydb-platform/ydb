@@ -36,6 +36,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     const bool partialUsageByPK = ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey(), ReadMetadata->GetIndexInfo());
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
+    const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!ReadMetadata->GetRequestShardingInfo()) {
         auto ver = source->GetShardingVersionOptional();
@@ -43,7 +44,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
             needShardingFilter = true;
         }
     }
-    if (auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0][1]) {
+    if (auto result = CacheFetchingScripts
+        [needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0]
+        [partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+        [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0]) {
 //        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("SS", needSnapshots)("PK", partialUsageByPK)("IDX", useIndexes)("SHARDING", needShardingFilter)
 //            ("EXCL", source->GetExclusiveIntervalOnly())("MEM", source->IsSourceInMemory())("result", result->DebugString());
         return result;

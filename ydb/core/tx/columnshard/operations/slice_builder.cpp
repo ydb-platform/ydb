@@ -155,6 +155,7 @@ private:
     NArrow::NMerger::TRecordBatchBuilder Builder;
     std::vector<std::optional<ui32>> IncomingColumnRemap;
     std::vector<std::shared_ptr<arrow::BooleanArray>> HasIncomingDataFlags;
+    const std::optional<NArrow::NMerger::TSortableBatchPosition> DefaultExists;
     virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override {
         auto rGuard = Builder.StartRecord();
         AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size());
@@ -170,17 +171,23 @@ private:
         }
         return TConclusionStatus::Success();
     }
-    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        return TConclusionStatus::Success();
+    virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) override {
+        if (!DefaultExists) {
+            return TConclusionStatus::Success();
+        } else {
+            return OnEqualKeys(*DefaultExists, incoming);
+        }
     }
 public:
     virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
         return Builder.Finalize();
     }
 
-    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema, 
+        const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {})
         : TBase(incoming, actualSchema)
         , Builder(actualSchema->GetIndexInfo().ArrowSchema()->fields())
+        , DefaultExists(defaultExists)
     {
         for (auto&& i : actualSchema->GetIndexInfo().ArrowSchema()->field_names()) {
             auto fIdx = IncomingData->schema()->GetFieldIndex(i);
@@ -279,12 +286,27 @@ bool TBuildBatchesTask::DoExecute() {
         TActorContext::AsActorContext().Send(ParentActorId, result.release());
         return true;
     }
+    const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
-        case NEvWrite::EModificationType::Upsert: {
+        case NEvWrite::EModificationType::Replace: {
+            batch = ActualSchema->AddDefault(batch);
             std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
             NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
             return true;
+        }
+
+        case NEvWrite::EModificationType::Upsert: {
+            if (defaultFields.empty()) {
+                std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+                NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+                return true;
+            } else {
+                auto batchDefault = ActualSchema->BuildDefaultBatch(defaultFields, 1);
+                NArrow::NMerger::TSortableBatchPosition pos(batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
+                merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, pos);
+                break;
+            }
         }
         case NEvWrite::EModificationType::Insert: {
             merger = std::make_shared<TInsertMerger>(batch, ActualSchema);
@@ -292,10 +314,6 @@ bool TBuildBatchesTask::DoExecute() {
         }
         case NEvWrite::EModificationType::Update: {
             merger = std::make_shared<TUpdateMerger>(batch, ActualSchema);
-            break;
-        }
-        case NEvWrite::EModificationType::Replace: {
-            merger = std::make_shared<TReplaceMerger>(batch, ActualSchema);
             break;
         }
         case NEvWrite::EModificationType::Delete: {

@@ -52,6 +52,16 @@ private:
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
 
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const {
+        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
+        return features.GetDefaultWriteValue();
+    }
+
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const std::string& colName) const {
+        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
+        return features.GetDefaultReadValue();
+    }
+
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
     }

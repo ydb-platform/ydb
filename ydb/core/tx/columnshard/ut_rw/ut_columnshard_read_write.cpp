@@ -1885,21 +1885,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Replace));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
-            txIds.insert(txId);
-            PlanCommit(runtime, sender, planStep, txIds);
-
-            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
-            reader.SetReplyColumns({ "timestamp" });
-            auto rb = reader.ReadAll();
-            UNIT_ASSERT(reader.IsCorrectlyFinished());
-            UNIT_ASSERT(!rb || rb->num_rows() == 0);
-            ++planStep;
-        }
-        {
-            TSet<ui64> txIds;
-            std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
             ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);

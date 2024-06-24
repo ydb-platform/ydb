@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -140,6 +141,51 @@ std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderO
 
 std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
     return GetIndexInfo().GetReplaceKey()->field_names();
+}
+
+std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
+    std::vector<std::shared_ptr<arrow::Field>> result;
+    for (auto&& f : GetIndexInfo().ArrowSchema()->fields()) {
+        if (!existsSchema->GetFieldByName(f->name())) {
+            result.emplace_back(f);
+        }
+    }
+    return result;
+}
+
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const {
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    for (auto&& i : fields) {
+        auto defaultValue = GetDefaultWriteValueVerified(i->name());
+        if (!defaultValue) {
+            columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetNull(i->type(), rowsCount));
+        } else {
+            columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(i->type(), defaultValue, rowsCount));
+        }
+    }
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
+}
+
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultWriteValueVerified(const std::string& columnName) const {
+    return GetIndexInfo().GetColumnDefaultWriteValueVerified(columnName);
+}
+
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    auto result = batch;
+    for (auto&& i : GetIndexInfo().ArrowSchema()->fields()) {
+        if (batch->schema()->GetFieldIndex(i->name()) != -1) {
+            continue;
+        }
+        auto defaultValue = GetDefaultWriteValueVerified(i->name());
+        std::shared_ptr<arrow::Array> column;
+        if (!defaultValue) {
+            column = NArrow::TThreadSimpleArraysCache::GetNull(i->type(), batch->num_rows());
+        } else {
+            column = NArrow::TThreadSimpleArraysCache::GetConst(i->type(), defaultValue, batch->num_rows());
+        }
+        result = NArrow::TStatusValidator::GetValid(result->AddColumn(result->num_columns(), i->name(), column));
+    }
+    return result;
 }
 
 }

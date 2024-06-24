@@ -456,7 +456,8 @@ TReadAnswer TReadInfo::FormAnswer(
             if (trueOffset > Offset || trueOffset == Offset && header.GetPartNo() >= PartNo) {
                 pos = 0;
             } else {
-                pos = batch.FindPos(Offset, PartNo);
+                ui64 trueSearchOffset = Offset - blobs[pos].Key.GetOffset() + firstHeaderOffset;
+                pos = batch.FindPos(trueSearchOffset, PartNo);
             }
             offset += header.GetCount();
 

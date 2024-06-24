@@ -1640,16 +1640,6 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
         }
     }
 
-    if (messages.size() != (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)) {
-        Cerr << "oldHeadMsgCount=" << oldHeadMsgCount << Endl;
-        Cerr << "bigBlobMsgCount=" << bigBlobMsgCount << Endl;
-        Cerr << "newHeadMsgCount=" << newHeadMsgCount << Endl;
-        Cerr << "messages.size=" << messages.size() << Endl;
-        for (size_t i = 0; i < messages.size(); ++i) {
-            Cerr << i << ") " << messages[i].size() << Endl;
-        }
-        DumpPQTabletKeys("topic_A");
-    }
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount);
 
     size_t start = 0;

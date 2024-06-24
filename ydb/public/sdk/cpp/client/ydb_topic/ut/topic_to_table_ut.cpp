@@ -131,10 +131,17 @@ protected:
                       NTable::TTransaction* tx);
     size_t GetTableRecordsCount(const TString& tablePath);
 
+    enum ERestartPQTabletMode {
+        ERestartNo,
+        ERestartBeforeCommit,
+        ERestartAfterCommit,
+    };
+
     struct TTestTxWithBigBlobsParams {
         size_t OldHeadCount = 0;
         size_t BigBlobsCount = 2;
         size_t NewHeadCount = 0;
+        ERestartPQTabletMode RestartMode = ERestartNo;
     };
 
     void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
@@ -156,6 +163,7 @@ protected:
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
+    void DumpPQTabletKeys(const TString& topicName);
 
 private:
     template<class E>
@@ -166,8 +174,8 @@ private:
     ui64 GetTopicTabletId(const TActorId& actorId,
                           const TString& topicPath,
                           ui32 partition);
-    THashSet<TString> GetTabletKeys(const TActorId& actorId,
-                                    ui64 tabletId);
+    TVector<TString> GetTabletKeys(const TActorId& actorId,
+                                   ui64 tabletId);
     ui64 GetTransactionWriteId(const TActorId& actorId,
                                ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -680,6 +688,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
 
         for (auto& event : session->GetEvents(settings)) {
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
                 for (auto& m : e->GetMessages()) {
                     messages.push_back(m.GetData());
                 }
@@ -803,7 +812,7 @@ ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPat
     return Max<ui64>();
 }
 
-THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
+TVector<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
@@ -828,12 +837,12 @@ THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
     UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadRangeResultSize(), 1);
 
-    THashSet<TString> keys;
+    TVector<TString> keys;
 
     auto& result = response->Record.GetReadRangeResult(0);
     for (size_t i = 0; i < result.PairSize(); ++i) {
         auto& kv = result.GetPair(i);
-        keys.insert(kv.GetKey());
+        keys.emplace_back(kv.GetKey());
     }
 
     return keys;
@@ -1371,7 +1380,7 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     };
 
     bool found;
-    THashSet<TString> keys;
+    TVector<TString> keys;
     for (size_t i = 0; i < 20; ++i) {
         keys = GetTabletKeys(edge, tabletId);
 
@@ -1403,6 +1412,17 @@ void TFixture::CheckTabletKeys(const TString& topicName)
         Cerr << "=============" << Endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
+    }
+}
+
+void TFixture::DumpPQTabletKeys(const TString& topicName)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    auto keys = GetTabletKeys(edge, tabletId);
+    for (const auto& key : keys) {
+        Cerr << key << Endl;
     }
 }
 
@@ -1602,9 +1622,34 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
+    if (params.RestartMode == ERestartBeforeCommit) {
+        RestartPQTablet("topic_A", 0);
+    }
+
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    if (params.RestartMode == ERestartAfterCommit) {
+        RestartPQTablet("topic_A", 0);
+    }
+
+    TVector<TString> messages;
+    for (size_t i = 0; (i < 10) && (messages.size() < (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)); ++i) {
+        auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        for (auto& m : block) {
+            messages.push_back(std::move(m));
+        }
+    }
+
+    if (messages.size() != (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)) {
+        Cerr << "oldHeadMsgCount=" << oldHeadMsgCount << Endl;
+        Cerr << "bigBlobMsgCount=" << bigBlobMsgCount << Endl;
+        Cerr << "newHeadMsgCount=" << newHeadMsgCount << Endl;
+        Cerr << "messages.size=" << messages.size() << Endl;
+        for (size_t i = 0; i < messages.size(); ++i) {
+            Cerr << i << ") " << messages[i].size() << Endl;
+        }
+        DumpPQTabletKeys("topic_A");
+    }
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount);
 
     size_t start = 0;
@@ -1624,35 +1669,24 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
     }
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_18, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 2, .NewHeadCount = 10});
+#define Y_UNIT_TEST_WITH_REBOOTS(name, oldHeadCount, bigBlobsCount, newHeadCount) \
+Y_UNIT_TEST_F(name##_RestartNo, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartNo}); \
+} \
+Y_UNIT_TEST_F(name##_RestartBeforeCommit, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartBeforeCommit}); \
+} \
+Y_UNIT_TEST_F(name##_RestartAfterCommit, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartAfterCommit}); \
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_19, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 0, .NewHeadCount = 10});
-}
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_18, 10, 2, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_19, 10, 0, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_20, 10, 2,  0);
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_20, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 10, .BigBlobsCount = 2, .NewHeadCount = 0});
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_21, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 2, .NewHeadCount = 10});
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_22, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 0, .NewHeadCount = 10});
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_23, TFixture)
-{
-    TestTxWithBigBlobs({.OldHeadCount = 0, .BigBlobsCount = 2, .NewHeadCount = 0});
-}
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_21,  0, 2, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_22,  0, 0, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_23,  0, 2,  0);
 
 void TFixture::CreateTable(const TString& tablePath)
 {

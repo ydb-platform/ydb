@@ -230,8 +230,9 @@ private:
             }
         }
 
-        int dl = 0x0001;
-        NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
+        // ldap debug
+        // int dl = 0x0001;
+        // NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
         return {};
     }
 
@@ -294,7 +295,7 @@ private:
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
         if (Settings.GetHosts().empty() && Settings.GetHost().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Ldap server host is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "List of ldap server hosts is empty", .Retryable = false}};
         }
         if (Settings.GetBaseDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BaseDn is empty", .Retryable = false}};

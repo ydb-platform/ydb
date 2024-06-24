@@ -19,8 +19,8 @@ public:
     using TRequestHandler = std::function<void(TAtomicSharedPtr<TStreamSocket> socket)>;
 
 public:
-    TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses);
-    TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses);
+    TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses, bool isSecurityConnection = false);
+    TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses, bool isSecurityConnection = false);
     ~TLdapSimpleServer();
 
     void Stop();

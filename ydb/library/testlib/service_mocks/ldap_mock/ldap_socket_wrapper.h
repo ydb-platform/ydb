@@ -35,13 +35,14 @@ class TLdapSocketWrapper {
     using TSslHolder = THolder<T, TSslDestroy>;
 
 public:
-    TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> listenSocket);
+    TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> listenSocket, bool isSecureConnection = false);
 
     void Close();
     void Receive(void* buf, size_t len);
     void Send(const void* msg, size_t len);
     void OnAccept();
-    void SslAccept();
+    void EnableSecureConnection();
+    bool IsSecure() const;
 
 private:
     ssize_t InsecureReceive(void* buf, size_t len);
@@ -59,6 +60,7 @@ private:
     TSslHolder<SSL> Ssl;
     TSslHolder<EVP_PKEY> Key;
     TSslHolder<X509> X509;
+    bool IsSecurityConnection = false;
 
     std::function<ssize_t(TLdapSocketWrapper&, void*, size_t)> ReceiveMsg;
     std::function<ssize_t(TLdapSocketWrapper&, const void*, size_t)> SendMsg;

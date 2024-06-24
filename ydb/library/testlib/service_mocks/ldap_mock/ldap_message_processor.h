@@ -22,7 +22,7 @@ public:
     size_t GetLength();
 
 private:
-    void SslAccept();
+    // void SslAccept();
     int GetInt();
     void GetNBytes(unsigned char* buf, size_t n);
     TString GetString();

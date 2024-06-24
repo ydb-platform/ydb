@@ -76,9 +76,9 @@ TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper
     : Socket(socket)
 {}
 
-void TLdapRequestProcessor::SslAccept() {
-    Socket->SslAccept();
-}
+// void TLdapRequestProcessor::SslAccept() {
+//     Socket->EnableSecureConnection();
+// }
 
 unsigned char TLdapRequestProcessor::GetByte() {
     unsigned char res;

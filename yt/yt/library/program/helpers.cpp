@@ -202,6 +202,8 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     NBus::TTcpDispatcher::Get()->Configure(config->TcpDispatcher);
 
+    NPipes::TIODispatcher::Get()->Configure(config->IODispatcher);
+
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher);
 
     NRpc::NGrpc::TDispatcher::Get()->Configure(config->GrpcDispatcher);
@@ -257,6 +259,8 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     NBus::TTcpDispatcher::Get()->Configure(config->TcpDispatcher->ApplyDynamic(dynamicConfig->TcpDispatcher));
+
+    NPipes::TIODispatcher::Get()->Configure(dynamicConfig->IODispatcher ? dynamicConfig->IODispatcher : config->IODispatcher);
 
     NRpc::TDispatcher::Get()->Configure(config->RpcDispatcher->ApplyDynamic(dynamicConfig->RpcDispatcher));
 

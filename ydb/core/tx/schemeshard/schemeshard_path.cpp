@@ -870,6 +870,19 @@ const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool al
     return *this;
 }
 
+const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsResourcePool()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a resource pool"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;

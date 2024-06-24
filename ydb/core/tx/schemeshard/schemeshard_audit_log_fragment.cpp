@@ -235,6 +235,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE ALTER CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         return "ALTER TABLE DROP CONTINUOUS BACKUP";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        return "CREATE RESOURCE POOL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        return "DROP RESOURCE POOL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        return "ALTER RESOURCE POOL";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -528,6 +534,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
     }
 

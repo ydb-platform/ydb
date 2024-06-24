@@ -720,6 +720,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         targetName = tx.GetCreateView().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        targetName = tx.GetCreateResourcePool().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -809,6 +812,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
             create.MutableCreateView()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+            create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
             Y_UNREACHABLE();
@@ -1081,6 +1087,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropContinuousBackup:
         Y_ABORT("TODO: implement");
 
+    // ResourcePool
+    case TTxState::ETxType::TxCreateResourcePool:
+        return CreateNewResourcePool(NextPartId(), txState);
+    case TTxState::ETxType::TxDropResourcePool:
+        return CreateDropResourcePool(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterResourcePool:
+        return CreateAlterResourcePool(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1312,6 +1326,14 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // ResourcePool
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        return CreateNewResourcePool(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        return CreateDropResourcePool(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        return CreateAlterResourcePool(NextPartId(), tx);
 
     }
 

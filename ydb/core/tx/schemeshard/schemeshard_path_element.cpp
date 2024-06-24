@@ -223,6 +223,10 @@ bool TPathElement::IsTemporary() const {
     return !!TempDirOwnerActorId;
 }
 
+bool TPathElement::IsResourcePool() const {
+    return PathType == EPathType::EPathTypeResourcePool;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

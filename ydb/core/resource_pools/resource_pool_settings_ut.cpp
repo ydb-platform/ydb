@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(settings.QueryCancelAfter, TDuration::Seconds(10));
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TSettingsParser{"-1"}, propertiesMap["query_cancel_after_seconds"]), TFromStringException, "Unexpected symbol \"-\" at pos 0 in string \"-1\".");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TSettingsParser{"18446744073709552"}, propertiesMap["query_cancel_after_seconds"]), yexception, "Invalid seconds value 18446744073709552, it is should be between less or equal than 18446744073709551");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TSettingsParser{"18446744073709552"}, propertiesMap["query_cancel_after_seconds"]), yexception, "Invalid seconds value 18446744073709552, it is should be less or equal than 18446744073709551");
     }
 
     Y_UNIT_TEST(PercentSettingsParsing) {

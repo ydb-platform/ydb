@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/resource_pools)
 
 PEERDIR(
     library/cpp/testing/unittest
+
+    ydb/core/resource_pools
 )
 
 SRCS(

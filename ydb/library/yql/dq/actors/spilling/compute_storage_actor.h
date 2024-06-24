@@ -3,6 +3,7 @@
 #include "ydb/library/yql/dq/common/dq_common.h"
 
 #include <ydb/library/actors/core/actor.h>
+#include <library/cpp/threading/future/future.h>
 
 namespace NYql::NDq {
 

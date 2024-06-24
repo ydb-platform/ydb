@@ -4,7 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
-
+#include <library/cpp/threading/future/future.h>
 
 namespace NKikimr::NKqp {
 

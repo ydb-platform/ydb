@@ -1,5 +1,5 @@
 #include "compute_storage.h"
-
+#include <ydb/library/actors/core/actorsystem.h>
 #include <util/generic/guid.h>
 
 namespace NYql::NDq {

@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/exceptions/exceptions.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NFq {
 

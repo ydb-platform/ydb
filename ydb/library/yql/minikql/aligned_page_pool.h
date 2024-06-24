@@ -221,7 +221,6 @@ public:
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
-        std::cerr << std::format("USED: {} of {}\n", GetUsed(), GetLimit());
         return IsMemoryYellowZoneReached;
     }
 

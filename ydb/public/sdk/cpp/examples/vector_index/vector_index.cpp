@@ -3,8 +3,9 @@
 #include "vector_index.h"
 
 #include <library/cpp/dot_product/dot_product.h>
-
 #include <format>
+
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 template <>
 struct std::formatter<TString>: std::formatter<std::string_view> {
@@ -20,7 +21,7 @@ using namespace NTable;
 
 static constexpr ui64 kBulkSize = 1000;
 static constexpr ui64 kSmallClusterSize = 20'000;
-static constexpr ui64 kMaxReadQueueSize = 3;
+static constexpr ui64 kReadQueuePrefetch = 2;
 
 static constexpr std::string_view FlatIndex = "flat";
 static constexpr std::string_view KMeansIndex = "kmeans";
@@ -278,16 +279,24 @@ private:
             ythrow TVectorException{std::move(it)};
         }
         ThreadPool.Submit([this, it = std::move(it)]() mutable {
+            ui64 rows = 0;
             for (bool wasGood = true; wasGood;) {
                 auto next = it.ReadNext();
                 auto part = next.ExtractValueSync();
                 wasGood = part.IsSuccess();
+                if (Y_LIKELY(wasGood)) {
+                    rows += part.GetPart().RowsCount();
+                    if (Y_UNLIKELY(rows > Rows())) {
+                        wasGood = false;
+                        part = TSimpleStreamPart<TResultSet>{TResultSet{Ydb::ResultSet{}}, TStatus{EStatus::CLIENT_OUT_OF_RANGE, {}}};
+                    }
+                }
                 std::unique_lock lock{M};
                 Queue.emplace(std::move(part));
                 if (Queue.size() == 1) {
                     Finish.notify_one();
                 }
-                while (Queue.size() == kMaxReadQueueSize) {
+                while (Queue.size() > kReadQueuePrefetch) {
                     Start.wait(lock);
                 }
             }
@@ -308,7 +317,7 @@ private:
             }
             auto part = std::move(Queue.front());
             Queue.pop();
-            if (Queue.size() + 1 == kMaxReadQueueSize) {
+            if (Queue.size() == kReadQueuePrefetch) {
                 Start.notify_one();
             }
             lock.unlock();
@@ -425,6 +434,7 @@ struct TBulkSender {
     }
 
     void Wait() {
+        std::lock_guard lock{M};
         WaitImpl();
         WaitImpl();
     }
@@ -517,6 +527,10 @@ private:
 };
 
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
+    auto cores = std::thread::hardware_concurrency() / 2;
+    NVectorIndex::TThreadPool tpCompute{cores};
+    NVectorIndex::TThreadPool tpIO{cores};
+
     auto makeClustersImpl = [&options](TTableIterator& reader, TBulkWriter& writer, TClusterizer& clusterizer, ui8 level, TId parentId, ui64 count) {
         reader.UseLevel(level, parentId, count);
         writer.UseLevel(level);
@@ -565,9 +579,6 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         }
         clusters.clear();
     };
-    auto cores = std::thread::hardware_concurrency() / 2;
-    NVectorIndex::TThreadPool tpCompute{cores};
-    NVectorIndex::TThreadPool tpIO{cores};
     TTableIterator reader{options, client, tpIO};
     TBulkSender sender{options, client, cores};
     TBulkWriter writer{sender};

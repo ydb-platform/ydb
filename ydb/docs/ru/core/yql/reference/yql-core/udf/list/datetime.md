@@ -464,7 +464,7 @@ select
 	DateTime::Format("%Y-%m-%d %Z")(AddTimezone($x, "Europe/Moscow")), -- 2019-10-22 Europe/Moscow
 ```
 
-Стоит отметить, что значения в типaх TzDatetime и TzTimestamp, имеющие положительное смещение таймзоны, не могут быть преобразованы в тип TzDate. Рассмотрим следующий пример:
+Стоит отметить, что некоторые значения в типaх TzDatetime и TzTimestamp, имеющие положительное смещение таймзоны, не могут быть преобразованы в тип TzDate. Рассмотрим следующий пример:
 
 ```yql
 SELECT CAST(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate);

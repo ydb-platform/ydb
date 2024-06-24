@@ -166,6 +166,7 @@ public:
     TInstant GetDatetime() const;
 
     bool HasTracingAttributes() const;
+    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes);
     NTracing::TTraceId GetTraceId() const;
     NTracing::TSpanId GetSpanId() const;
 

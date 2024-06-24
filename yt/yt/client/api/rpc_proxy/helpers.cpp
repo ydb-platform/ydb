@@ -1355,7 +1355,7 @@ void ToProto(
         protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());

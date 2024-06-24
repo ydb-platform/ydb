@@ -11,19 +11,23 @@
 
 namespace NKikimr::NColumnShard {
 
-    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId)
+    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt,
+        const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType)
         : Status(status)
         , CreatedAt(createdAt)
         , WriteId(writeId)
         , LockId(lockId)
         , Cookie(cookie)
-        , GranuleShardingVersionId(granuleShardingVersionId) {
+        , GranuleShardingVersionId(granuleShardingVersionId)
+        , ModificationType(mType)
+    {
     }
 
     void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
+        writeMeta.SetModificationType(ModificationType);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)),
@@ -79,11 +83,17 @@ namespace NKikimr::NColumnShard {
         for (auto&& writeId : GlobalWriteIds) {
             proto.AddInternalWriteIds((ui64)writeId);
         }
+        proto.SetModificationType((ui32)ModificationType);
     }
 
     void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
         for (auto&& writeId : proto.GetInternalWriteIds()) {
             GlobalWriteIds.push_back(TWriteId(writeId));
+        }
+        if (proto.HasModificationType()) {
+            ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
+        } else {
+            ModificationType = NEvWrite::EModificationType::Upsert;
         }
     }
 
@@ -121,7 +131,7 @@ namespace NKikimr::NColumnShard {
                 NKikimrTxColumnShard::TInternalOperationData metaProto;
                 Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
-                auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec), granuleShardingVersionId);
+                auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec), granuleShardingVersionId, NEvWrite::EModificationType::Upsert);
                 operation->FromProto(metaProto);
                 AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
 
@@ -242,9 +252,9 @@ namespace NKikimr::NColumnShard {
         db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
     }
 
-    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId) {
+    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
         auto writeId = BuildNextWriteId();
-        auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId);
+        auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType);
         Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
         Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;

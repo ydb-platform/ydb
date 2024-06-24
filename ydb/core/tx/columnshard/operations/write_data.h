@@ -31,11 +31,13 @@ private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
     NOlap::ISnapshotSchema::TPtr BatchSchema;
     TString IncomingData;
+    NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Upsert;
 };
 
 class TProtoArrowData : public NEvWrite::IDataContainer {
 private:
     std::optional<ui64> OriginalDataSize;
+    NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Replace;
 public:
     TProtoArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
         : IndexSchema(schema)

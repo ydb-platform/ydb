@@ -2945,305 +2945,309 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_OltpUpsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+    class TTableDataModificationTester {
+    protected:
+        NKikimrConfig::TAppConfig AppConfig;
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        YDB_ACCESSOR(bool, IsOlap, false);
+        virtual void DoExecute() = 0;
+    public:
+        void Execute() {
+            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+            auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+            Kikimr = std::make_unique<TKikimrRunner>(settings);
+            Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto session = Kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        const TString query = R"(
-            CREATE TABLE `/Root/DataShard` (
-                Col1 Uint64 NOT NULL,
-                Col2 Int32,
-                Col3 String,
-                PRIMARY KEY (Col1)
-            );
-        )";
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/DataShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32,
+                    Col3 String,
+                    PRIMARY KEY (Col1)
+                ) WITH (
+                    STORE = %s,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                );
+            )", IsOlap ? "COLUMN" : "ROW");
 
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            DoExecute();
+        }
 
-        auto client = kikimr.GetQueryClient();
-        
-        {
-            auto it = client.ExecuteQuery(R"(
+    };
+
+    class TUpsertFromTableTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
+            }
 
-        {
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
                 UPSERT INTO `/Root/DataShard` (Col1) VALUES (1u);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];["null"]];[1u;#;["test"]]])");
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];["null"]];[1u;#;["test"]]])");
+            }
         }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpUpsert) {
+        TUpsertFromTableTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
     }
 
-    Y_UNIT_TEST(TableSink_OltpInsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+    Y_UNIT_TEST(TableSink_OlapUpsert) {
+        TUpsertFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+    class TInsertFromTableTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"(
-            CREATE TABLE `/Root/DataShard` (
-                Col1 Uint64 NOT NULL,
-                Col2 Int32,
-                Col3 String,
-                PRIMARY KEY (Col1)
-            );
-        )";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-        
-        {
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!it.IsSuccess(), it.GetIssues().ToString());
-            UNIT_ASSERT_C(
-                it.GetIssues().ToString().Contains("Operation is aborting because an duplicate key")
-                || it.GetIssues().ToString().Contains("Conflict with existing key."),
-                it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(!it.IsSuccess(), it.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    it.GetIssues().ToString().Contains("Operation is aborting because an duplicate key")
+                    || it.GetIssues().ToString().Contains("Conflict with existing key."),
+                    it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
+            }
         }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpInsert) {
+        TInsertFromTableTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
     }
 
-    Y_UNIT_TEST(TableSink_OltpDelete) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+    Y_UNIT_TEST(TableSink_OlapInsert) {
+        TInsertFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+    class TDeleteFromTableTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"(
-            CREATE TABLE `/Root/DataShard` (
-                Col1 Uint64 NOT NULL,
-                Col2 Int32,
-                Col3 String,
-                PRIMARY KEY (Col1)
-            );
-        )";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-        
-        {
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/DataShard` WHERE Col3 == 't';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/DataShard` WHERE Col3 == 'not found';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/DataShard` ON SELECT 0 AS Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[1u;#;["test"]]])");
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[1u;#;["test"]]])");
+            }
         }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpDelete) {
+        TDeleteFromTableTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
     }
 
-    Y_UNIT_TEST(TableSink_OltpUpdate) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+    Y_UNIT_TEST(TableSink_OlapDelete) {
+        TDeleteFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+    class TUpdateFromTableTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"(
-            CREATE TABLE `/Root/DataShard` (
-                Col1 Uint64 NOT NULL,
-                Col2 Int32,
-                Col3 String,
-                PRIMARY KEY (Col1)
-            );
-        )";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-        
-        {
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 't';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 'not found';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
-        }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 1 AS Col2, 'text' AS Col3;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        { 
-            auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 10u AS Col1, 1 AS Col2, 'text' AS Col3;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-        {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard`;
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[0u;[1];["text"]];[1u;#;["test"]];[2u;[42];["t"]]])");
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[1];["text"]];[1u;#;["test"]];[2u;[42];["t"]]])");
+            }
         }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpUpdate) {
+        TUpdateFromTableTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TableSink_OlapUpdate) {
+        TUpdateFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
     }
 
     Y_UNIT_TEST(TableSink_OlapInsertUpsertError) {

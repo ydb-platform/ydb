@@ -125,7 +125,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             } else {
                 auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
                 Y_ABORT_UNLESS(operation);
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "put data fails");
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, 
+                    ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
                 ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
             }
             CSCounters.OnFailedWriteResponse(EWriteFailReason::PutBlob);
@@ -331,9 +332,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     const auto& operation = record.GetOperations()[0];
-    if (operation.GetType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE) {
+    const std::optional<NEvWrite::EModificationType> mType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
+    if (!mType) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only REPLACE operation is supported");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, 
+            "operation " + NKikimrDataEvents::TEvWrite::TOperation::EOperationType_Name(operation.GetType()) + " is not supported");
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
@@ -384,7 +387,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         granuleShardingVersionId = record.GetGranuleShardingVersionId();
     }
 
-    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId);
+    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId, *mType);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);

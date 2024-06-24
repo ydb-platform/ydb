@@ -326,4 +326,5 @@ message TEvReadBlobRangesResult {
 
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
+    optional uint32 ModificationType = 2;
 }

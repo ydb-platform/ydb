@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -61,7 +62,7 @@ public:
     std::set<ui32> GetPkColumnsIds() const;
 
     std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema) const;
+    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema, const NEvWrite::EModificationType modificationType) const;
 };
 
 } // namespace NKikimr::NOlap

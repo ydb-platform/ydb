@@ -251,6 +251,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
     NCommon::TConfSetting<bool, false> UseIntermediateSchema;
+    NCommon::TConfSetting<bool, false> UseIntermediateStreams;
     NCommon::TConfSetting<bool, false> UseFlow;
     NCommon::TConfSetting<ui16, false> WideFlowLimit;
     NCommon::TConfSetting<bool, false> UseSystemColumns;

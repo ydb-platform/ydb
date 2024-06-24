@@ -133,8 +133,6 @@ private:
 
     TMaybeNode<TExprBase> UnorderedPublishTarget(TExprBase node, TExprContext& ctx) const;
 
-    TMaybeNode<TExprBase> AddTrivialMapperForNativeYtTypes(TExprBase node, TExprContext& ctx) const;
-
     TMaybeNode<TExprBase> YtDqWrite(TExprBase node, TExprContext& ctx) const;
 
     TMaybeNode<TExprBase> PushDownYtMapOverSortedMerge(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
@@ -159,4 +157,4 @@ private:
     const TYtState::TPtr State_;
 };
 
-}  // namespace NYql 
+}  // namespace NYql

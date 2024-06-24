@@ -50,6 +50,7 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options);
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch);
+TString SerializeBatchFullNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch);
 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);

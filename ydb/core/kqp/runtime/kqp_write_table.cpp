@@ -175,7 +175,7 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
     class TBatch : public IPayloadSerializer::IBatch {
     public:
         TString SerializeToString() const override {
-            return NArrow::SerializeBatchNoCompression(Data);
+            return NArrow::SerializeBatchFullNoCompression(Data);
         }
 
         i64 GetMemory() const override {

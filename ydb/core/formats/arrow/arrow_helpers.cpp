@@ -128,6 +128,12 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
     return SerializeBatch(batch, writeOptions);
 }
 
+TString SerializeBatchFullNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+    writeOptions.use_threads = false;
+    return NSerialization::TNativeSerializer(writeOptions).SerializeFull(batch);
+}
+
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema)
 {
     auto result = NSerialization::TNativeSerializer().Deserialize(blob, schema);

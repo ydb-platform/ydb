@@ -2682,29 +2682,16 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << Endl;
                 }
             } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) {
-                bool matchedEvent = false;
                 {
-                    TString prefixes[2] = {"Delay Delete Blob ", "Delay Delete Small Blob "};
+                    TString prefixes[2] = {"Delay Delete Blob "};
                     for (TString prefix : prefixes) {
                         size_t pos = msg->Line.find(prefix);
                         if (pos != TString::npos) {
                             TString blobId = msg->Line.substr(pos + prefix.size());
                             Cerr << "Delayed delete: " << blobId << Endl;
                             delayedBlobs.insert(blobId);
-                            matchedEvent = true;
                             break;
                         }
-                    }
-                }
-                if (!matchedEvent){
-                    TString prefix = "Delete Small Blob ";
-                    size_t pos = msg->Line.find(prefix);
-                    if (pos != TString::npos) {
-                        TString blobId = msg->Line.substr(pos + prefix.size());
-                        Cerr << "Delete small blob: " << blobId << Endl;
-                        deletedBlobs.insert(blobId);
-                        delayedBlobs.erase(blobId);
-                        matchedEvent = true;
                     }
                 }
             } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) {

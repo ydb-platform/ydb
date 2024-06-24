@@ -50,6 +50,17 @@ public:
         }
     };
 
+    struct TChannelHistoryEntry {
+        ui32 Channel;
+        TTabletChannelInfo::THistoryEntry Entry;
+
+        TChannelHistoryEntry(ui32 channel, const TTabletChannelInfo::THistoryEntry& entry)
+            : Channel(channel)
+            , Entry(entry)
+        {
+        }
+    };
+
     TTabletId Id;
     ETabletState State;
     TTabletTypes::EType Type;
@@ -60,6 +71,8 @@ public:
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
     std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
+    std::vector<TChannelHistoryEntry> DeletedHistory;
+    bool WasAliveSinceCutHistory = false;
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
     TTabletCategoryInfo* Category;
@@ -339,6 +352,7 @@ public:
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
     TString GetChannelStoragePoolName(ui32 channelId) const;
     TStoragePoolInfo& GetStoragePool(ui32 channelId) const;
+    void RestoreDeletedHistory();
 
     void SetType(TTabletTypes::EType type);
 };

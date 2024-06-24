@@ -2539,8 +2539,7 @@ namespace NKikimr {
                 ActiveActors.Erase(BalancingId);
             }
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, LastBalancingTime
-            );
+                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -2807,7 +2806,6 @@ namespace NKikimr {
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         std::shared_ptr<TQueryCtx> QueryCtx;
         TIntrusivePtr<TVPatchCtx> VPatchCtx;
-        THashMap<TLogoBlobID, TInstant> LastBalancingTime;
         TIntrusivePtr<TLocalRecoveryInfo> LocalRecovInfo; // just info we got after local recovery
         std::unique_ptr<TOverloadHandler> OverloadHandler;
         TActorIDPtr SkeletonFrontIDPtr;

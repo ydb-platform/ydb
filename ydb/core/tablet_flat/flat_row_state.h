@@ -30,15 +30,13 @@ namespace NTable {
             Left_ = cellDefaults.size();
             State.assign(Left_, { });
             Cells.assign(cellDefaults.begin(), cellDefaults.end());
-            ExternalBlobSize_ = 0;
-            MissingExternalBlobs_ = 0;
+            MissingExternalBlobsSize_ = 0;
         }
 
         ui32 Need() const noexcept { return Need_; }
         ui32 Left() const noexcept { return Left_; }
         TPos Size() const noexcept { return Cells.size(); }
-        ui64 ExternalBlobSize() const noexcept { return ExternalBlobSize_; }
-        ui32 MissingExternalBlobs() const noexcept { return MissingExternalBlobs_; }
+        ui64 MissingExternalBlobsSize() const noexcept { return MissingExternalBlobsSize_; }
 
         bool operator==(ERowOp rop) const noexcept
         {
@@ -124,12 +122,8 @@ namespace NTable {
             }
         }
 
-        void AddExternalBlobSize(ui32 externalBlobSize) noexcept {
-            ExternalBlobSize_ += externalBlobSize;
-        }
-
-        void IncMissingExternalBlobs() noexcept {
-            MissingExternalBlobs_++;
+        void AddMissingExternalBlobSize(ui32 externalBlobSize) noexcept {
+            MissingExternalBlobsSize_ += externalBlobSize;
         }
 
         TArrayRef<const TCell> operator*() const noexcept
@@ -165,8 +159,7 @@ namespace NTable {
         ui32 Left_ = 0;     /* Cells with unknown state */
         TStackVec<TCellOp, 64> State;
         TSmallVec<TCell> Cells;
-        ui64 ExternalBlobSize_ = 0;
-        ui32 MissingExternalBlobs_ = 0;
+        ui64 MissingExternalBlobsSize_ = 0;
     };
 
 }

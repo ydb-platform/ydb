@@ -1305,8 +1305,6 @@ namespace NTable {
                 if (ref >> (sizeof(ui32) * 8))
                     Y_ABORT("Upper bits of ELargeObj ref now isn't used");
 
-                row.AddExternalBlobSize(Part->GetExternalBlobSize(ref, op));
-
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
@@ -1324,12 +1322,9 @@ namespace NTable {
                         of next iterator alteration method invocation. This is
                         why here direct array of TGlobId is used.
                     */
-                    if (IgnoreMissingExternalBlobs) {
-                        row.IncMissingExternalBlobs();
-                        op = TCellOp(ECellOp(op), ELargeObj::GlobId);
-                    } else {
-                        op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
-                    }
+                    row.AddMissingExternalBlobSize(Part->GetLargeObjectSize(op, ref));
+
+                    op = TCellOp((blob.Need && !IgnoreMissingExternalBlobs) ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
@@ -1379,7 +1374,7 @@ namespace NTable {
         ui8 SkipMainVersion : 1;
         ui8 SkipEraseVersion : 1;
 
-        bool IgnoreMissingExternalBlobs;
+        bool IgnoreMissingExternalBlobs : 1;
     };
 
     class TRunIter final {

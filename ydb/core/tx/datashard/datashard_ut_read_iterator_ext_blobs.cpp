@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
                 fam = {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", 
                         .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 512_KB};
             } else {
-                fam = {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"};
+                fam = {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", .DataThreshold = 100u};
             }
             
             TVector<TShardedTableOptions::TColumn> columns = {

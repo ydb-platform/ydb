@@ -1026,7 +1026,6 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
         const ITransactionObserverPtr& observer,
         bool ignoreMissingExternalBlobs) const noexcept
 {
-    Y_UNUSED(ignoreMissingExternalBlobs);
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);

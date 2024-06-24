@@ -888,7 +888,7 @@ private:
             TDbTupleRef rowValues = iter->GetValues();
 
             if (!precharging) {
-                if (iter->Row().MissingExternalBlobs() == 0) {
+                if (iter->Row().MissingExternalBlobsSize() == 0) {
                     lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
                     lastKeyState = iter->GetKeyState();
                 } else {
@@ -898,7 +898,7 @@ private:
 
             if (precharging) {
                 prechargedCount++;
-                prechargedSize += iter->Row().ExternalBlobSize();
+                prechargedSize += iter->Row().MissingExternalBlobsSize();
 
                 auto cells = rowValues.Cells();
                 size_t cellsSize = cells.size();

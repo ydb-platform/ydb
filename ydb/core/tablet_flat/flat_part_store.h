@@ -79,7 +79,7 @@ public:
         return PageCollections[groupId.Index]->PageCollection->Page(pageId).Size;
     }
 
-    ui64 GetExternalBlobSize(ui64 ref, ELargeObj lob) const override
+    ui64 GetLargeObjectSize(ELargeObj lob, ui64 ref) const override
     {
         auto* cache = Locate(lob, ref);
 

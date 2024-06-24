@@ -729,7 +729,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
-                .SetEnableChangefeedInitialScan(true);
+                .SetEnableChangefeedInitialScan(true)
+                .SetEnableUuidAsPrimaryKey(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -804,6 +805,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return TShardedTableOptions()
             .Columns({
                 {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+            });
+    }
+
+    TShardedTableOptions UuidTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uuid", true, false},
                 {"value", "Uint32", false, false},
             });
     }
@@ -1349,6 +1358,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
+        });
+    }
+
+    Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(UuidTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), 10),
+            (Uuid("65df1ec2-a97d-47b2-ae56-3c023da6ee8c"), 20),
+            (Uuid("65df1ec3-a97d-47b2-ae56-3c023da6ee8c"), 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c");
+        )"}, {
+            R"({"update":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec2-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec3-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"erase":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
         });
     }
 

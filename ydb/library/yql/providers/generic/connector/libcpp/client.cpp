@@ -31,7 +31,7 @@ namespace NYql::NConnector {
             GrpcConfig_.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
             GrpcConfig_.EnableSsl = config.GetUseSsl();
 
-            YQL_CLOG(INFO, ProviderGeneric) << "Connector endpoint: " << (config.GetUseSsl() ? "gprcs" : "grpc") << "://" << GrpcConfig_.Locator;
+            YQL_CLOG(INFO, ProviderGeneric) << "Connector endpoint: " << (config.GetUseSsl() ? "grpcs" : "grpc") << "://" << GrpcConfig_.Locator;
 
             // Read content of CA cert
             TString rootCertData;

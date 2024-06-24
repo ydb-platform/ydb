@@ -312,6 +312,14 @@ private:
                 return valueParser.GetTimestamp().ToString();
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
+            case NYdb::EPrimitiveType::Date32:
+                return valueParser.GetInt32();
+            case NYdb::EPrimitiveType::Datetime64:
+                return valueParser.GetDatetime64();
+            case NYdb::EPrimitiveType::Timestamp64:
+                return valueParser.GetTimestamp64();
+            case NYdb::EPrimitiveType::Interval64:
+                return valueParser.GetInterval64();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:

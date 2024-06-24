@@ -1,5 +1,8 @@
 #pragma once
 
+#include "vector_index.h"
+
+#include "util/stream/output.h"
 #include "util/system/compiler.h"
 #include "util/system/types.h"
 
@@ -26,7 +29,13 @@ public:
         }
 
         void Call() noexcept final {
-            (*this)();
+            try {
+                (*this)();
+            } catch (const TVectorException& e) {
+                Cerr << "Call failed: " << e << Endl;
+            } catch (const std::exception& e) {
+                Cerr << "Call failed: " << e.what() << Endl;
+            }
             delete this;
         }
     };

@@ -20,6 +20,7 @@ using namespace NTable;
 
 static constexpr ui64 kBulkSize = 1000;
 static constexpr ui64 kSmallClusterSize = 20'000;
+static constexpr ui64 kMaxReadQueueSize = 3;
 
 static constexpr std::string_view FlatIndex = "flat";
 static constexpr std::string_view KMeansIndex = "kmeans";
@@ -286,7 +287,7 @@ private:
                 if (Queue.size() == 1) {
                     Finish.notify_one();
                 }
-                while (Queue.size() == 3) {
+                while (Queue.size() == kMaxReadQueueSize) {
                     Start.wait(lock);
                 }
             }
@@ -307,7 +308,7 @@ private:
             }
             auto part = std::move(Queue.front());
             Queue.pop();
-            if (Queue.size() == 2) {
+            if (Queue.size() + 1 == kMaxReadQueueSize) {
                 Start.notify_one();
             }
             lock.unlock();

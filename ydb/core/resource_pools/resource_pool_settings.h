@@ -6,51 +6,55 @@
 
 namespace NKikimr::NResourcePool {
 
-typedef double TRatio;
+typedef double TPercent;
 
 struct TPoolSettings {
-    ui64 ConcurrentQueryLimit = 0;  // 0 = infinity
-    ui64 QueryCountLimit = 0;  // 0 = infinity
+    i32 ConcurrentQueryLimit = -1;  // -1 = disabled
+    i32 QueueSize = -1;  // -1 = disabled
     TDuration QueryCancelAfter = TDuration::Zero();  // 0 = disabled
 
-    TRatio QueryMemoryLimitRatioPerNode = 100;  // Percent from node memory capacity
+    TPercent QueryMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity, -1 = disabled
 };
 
 struct TSettingsParser {
     const TString& value;
 
-    template <typename T>
-    void operator()(T* setting) {
-        *setting = FromString<T>(value);
+    void operator()(i32* setting) const {
+        *setting = FromString<i32>(value);
+        if (*setting < -1) {
+            throw yexception() << "Invalid integer value " << *setting << ", it is should be greater or equal -1";
+        }
     }
 
-    template <>
-    void operator()(TDuration* setting) {
-        *setting = TDuration::Seconds(FromString<ui64>(value));
+    void operator()(TDuration* setting) const {
+        ui64 seconds = FromString<ui64>(value);
+        if (seconds > std::numeric_limits<ui64>::max() / 1000) {
+            throw yexception() << "Invalid seconds value " << seconds << ", it is should be between less or equal than " << std::numeric_limits<ui64>::max() / 1000;
+        }
+        *setting = TDuration::Seconds(seconds);
     }
 
-    template <>
-    void operator()(TRatio* setting) {
-        *setting = FromString<double>(value);
-        if (*setting < 0 || 100 < *setting) {
-            throw yexception() << "Invalid ratio value " << *setting << ", it is should be between 0 and 100";
+    void operator()(TPercent* setting) const {
+        *setting = FromString<TPercent>(value);
+        if (*setting != -1 && (*setting < 0 || 100 < *setting)) {
+            throw yexception() << "Invalid percent value " << *setting << ", it is should be between 0 and 100 or -1";
         }
     }
 };
 
 struct TSettingsExtractor {
     template <typename T>
-    TString operator()(T* setting) {
+    TString operator()(T* setting) const {
         return ToString(*setting);
     }
 
     template <>
-    TString operator()(TDuration* setting) {
+    TString operator()(TDuration* setting) const {
         return ToString(setting->Seconds());
     }
 };
 
-using TProperty = std::variant<ui64*, TDuration*, TRatio*>;
+using TProperty = std::variant<i32*, TDuration*, TPercent*>;
 std::unordered_map<TString, TProperty> GetPropertiesMap(TPoolSettings& settings);
 
 }  // namespace NKikimr::NResourcePool

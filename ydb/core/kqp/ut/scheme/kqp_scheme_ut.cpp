@@ -6041,14 +6041,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUERY_CANCEL_AFTER_SECONDS=86400,
-                QUERY_COUNT_LIMIT=1000
+                QUEUE_SIZE=1000
             );)");
 
         // ALTER RESOURCE POOL
         checkDisabled(R"(
             ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30),
-                SET QUERY_COUNT_LIMIT 100,
+                SET QUEUE_SIZE 100,
                 RESET (QUERY_CANCEL_AFTER_SECONDS);
             )");
 
@@ -6112,8 +6112,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUERY_CANCEL_AFTER_SECONDS=86400,
-                QUERY_COUNT_LIMIT=1000,
-                QUERY_MEMORY_LIMIT_RATIO_PER_NODE=95
+                QUEUE_SIZE=1000,
+                QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -6128,8 +6128,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "1000");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePool) {
@@ -6183,7 +6183,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE RESOURCE POOL MyResourcePool WITH (
                     CONCURRENT_QUERY_LIMIT=20,
                     QUERY_CANCEL_AFTER_SECONDS=86400,
-                    QUERY_MEMORY_LIMIT_RATIO_PER_NODE=95
+                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -6194,14 +6194,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
         }
 
         {
             auto query = R"(
                 ALTER RESOURCE POOL MyResourcePool
                     SET (CONCURRENT_QUERY_LIMIT = 30),
-                    SET QUERY_COUNT_LIMIT 100,
+                    SET QUEUE_SIZE 100,
                     RESET (QUERY_CANCEL_AFTER_SECONDS);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -6213,8 +6213,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "0");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "100");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "95");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
         }
     }
 
@@ -6232,7 +6232,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = R"(
             ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30),
-                SET QUERY_COUNT_LIMIT 100,
+                SET QUEUE_SIZE 100,
                 RESET (QUERY_CANCEL_AFTER_SECONDS);
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

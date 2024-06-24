@@ -50,7 +50,7 @@ public:
         : Counters(counters)
         , ActorContext(actorContext)
         , PoolId(poolId)
-        , PoolSizeLimit(GetMaxPoolSize(poolConfig))
+        , QueueSizeLimit(GetMaxQueueSize(poolConfig))
         , InFlightLimit(GetMaxInFlight(poolConfig))
         , PoolConfig(poolConfig)
         , CancelAfter(poolConfig.QueryCancelAfter)
@@ -235,15 +235,14 @@ private:
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 
-    static ui64 GetMaxPoolSize(const NResourcePool::TPoolSettings& poolConfig) {
-        const ui64 queryCountLimit = poolConfig.QueryCountLimit;
-        return queryCountLimit ? queryCountLimit : std::numeric_limits<ui64>::max();
+    static ui64 GetMaxQueueSize(const NResourcePool::TPoolSettings& poolConfig) {
+        const auto queueSize = poolConfig.QueueSize;
+        return queueSize == -1 ? std::numeric_limits<ui64>::max() : static_cast<ui64>(queueSize);
     }
 
     static ui64 GetMaxInFlight(const NResourcePool::TPoolSettings& poolConfig) {
-        const ui64 queueSizeLimit = GetMaxPoolSize(poolConfig);
-        const ui64 concurrentQueryLimit = poolConfig.ConcurrentQueryLimit;
-        return std::min(concurrentQueryLimit ? concurrentQueryLimit : std::numeric_limits<ui64>::max(), queueSizeLimit);
+        const auto concurrentQueryLimit = poolConfig.ConcurrentQueryLimit;
+        return concurrentQueryLimit == -1 ? std::numeric_limits<ui64>::max() : static_cast<ui64>(concurrentQueryLimit);
     }
 
     void RegisterCounters() {
@@ -264,7 +263,7 @@ protected:
 
     const TActorContext ActorContext;
     const TString PoolId;
-    const ui64 PoolSizeLimit;
+    const ui64 QueueSizeLimit;
     const ui64 InFlightLimit;
 
 private:
@@ -373,7 +372,7 @@ public:
     }
 
     bool OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalPoolSize() > PoolSizeLimit) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalPoolSize() > QueueSizeLimit + 1) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return false;
         }
@@ -418,8 +417,10 @@ public:
         LOG_T("succefully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);
 
         RemoveFinishedRequests();
-        if (GlobalState.AmountRequests() + PendingRequests.size() > PoolSizeLimit) {
-            ui64 countToDelete = std::min(GlobalState.AmountRequests() + PendingRequests.size() - PoolSizeLimit, PendingRequests.size());
+        DoStartPendingRequest();
+
+        if (GlobalState.DelayedRequests + PendingRequests.size() > QueueSizeLimit) {
+            ui64 countToDelete = std::min(GlobalState.DelayedRequests + PendingRequests.size() - QueueSizeLimit, PendingRequests.size());
             auto firstRequest = PendingRequests.begin() + (PendingRequests.size() - countToDelete);
             ForEachUnfinished(firstRequest, PendingRequests.end(), [this](TRequest* request) {
                 ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
@@ -428,7 +429,6 @@ public:
             PendingRequestsCount->Set(PendingRequests.size());
         }
 
-        DoStartPendingRequest();
         DoDelayRequest();
         DoStartDelayedRequest();
     };
@@ -657,7 +657,7 @@ private:
 }  // anonymous namespace
 
 TStatePtr CreateState(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
-    if (!poolConfig.ConcurrentQueryLimit && !poolConfig.QueryCountLimit) {
+    if (poolConfig.ConcurrentQueryLimit == -1) {
         return MakeIntrusive<TUnlimitedState>(actorContext, poolId, poolConfig, counters);
     }
     return MakeIntrusive<TFifoState>(actorContext, poolId, poolConfig, counters);

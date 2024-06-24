@@ -230,7 +230,7 @@ void TestDropExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikim
 void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "10"},
-        {"query_count_limit", "100"},
+        {"queue_size", "100"},
         {"query_cancel_after_seconds", "150"}
     });
     const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
@@ -240,16 +240,16 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
     const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "10");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "100");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "150");
 }
 
 void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "20"},
-        {"query_memory_limit_ratio_per_node", "80.5"}
+        {"query_memory_limit_percent_per_node", "80.5"}
     }, {
-        "query_count_limit"
+        "queue_size"
     });
     const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
 
@@ -258,9 +258,9 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_count_limit"), "0");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "150");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_ratio_per_node"), "80.5");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "80.5");
 }
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {

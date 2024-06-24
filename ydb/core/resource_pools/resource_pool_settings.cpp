@@ -6,9 +6,9 @@ namespace NKikimr::NResourcePool {
 std::unordered_map<TString, TProperty> GetPropertiesMap(TPoolSettings& settings) {
     return {
         {"concurrent_query_limit", &settings.ConcurrentQueryLimit},
-        {"query_count_limit", &settings.QueryCountLimit},
+        {"queue_size", &settings.QueueSize},
         {"query_cancel_after_seconds", &settings.QueryCancelAfter},
-        {"query_memory_limit_ratio_per_node", &settings.QueryMemoryLimitRatioPerNode}
+        {"query_memory_limit_percent_per_node", &settings.QueryMemoryLimitPercentPerNode}
     };
 }
 

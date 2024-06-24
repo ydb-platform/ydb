@@ -281,10 +281,13 @@ private:
                 auto next = it.ReadNext();
                 auto part = next.ExtractValueSync();
                 wasGood = part.IsSuccess();
-                std::lock_guard lock{M};
+                std::unique_lock lock{M};
                 Queue.emplace(std::move(part));
                 if (Queue.size() == 1) {
                     Finish.notify_one();
+                }
+                while (Queue.size() == 3) {
+                    Start.wait(lock);
                 }
             }
         });
@@ -304,6 +307,9 @@ private:
             }
             auto part = std::move(Queue.front());
             Queue.pop();
+            if (Queue.size() == 2) {
+                Start.notify_one();
+            }
             lock.unlock();
             if (!ProcessPart<WithPK>(std::move(part), cb)) {
                 return;
@@ -358,6 +364,7 @@ private:
     ui64 RowsCount = 0;
 
     std::mutex M;
+    std::condition_variable Start;
     std::condition_variable Finish;
     std::queue<TSimpleStreamPart<TResultSet>> Queue;
 
@@ -374,10 +381,12 @@ static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
 }
 
 struct TBulkSender {
-    TBulkSender(const TOptions& options, TTableClient& client)
+    TBulkSender(const TOptions& options, TTableClient& client, ui32 cores)
         : Options{options}
         , Client{client}
     {
+        ToSend.reserve(std::max<ui32>(cores, 2));
+        ToWait.reserve(std::max<ui32>(cores, 2));
     }
 
     void CreateLevel(ui8 level) {
@@ -402,28 +411,38 @@ struct TBulkSender {
 
     void Send(TString table, TValue&& value) {
         std::lock_guard lock{M};
+        if (ToSend.size() == ToSend.capacity()) {
+            WaitImpl();
+        }
         auto f = Client.RetryOperation([table = std::move(table), value = std::move(value)](TTableClient& client) {
             auto r = value;
             return client.BulkUpsert(table, std::move(r)).Apply([](TAsyncBulkUpsertResult result) -> TStatus {
                 return result.ExtractValueSync();
             });
         });
-        Futures.emplace_back(std::move(f));
+        ToSend.emplace_back(std::move(f));
     }
 
     void Wait() {
-        for (auto& f : Futures) {
-            ThrowOnError(f.ExtractValueSync());
-        }
-        Futures.clear();
+        WaitImpl();
+        WaitImpl();
     }
 
     const TOptions& Options;
 
 private:
+    void WaitImpl() {
+        for (auto& f : ToWait) {
+            ThrowOnError(f.ExtractValueSync());
+        }
+        ToWait.clear();
+        ToWait.swap(ToSend);
+    }
+
     std::mutex M;
     TTableClient& Client;
-    std::vector<TAsyncStatus> Futures;
+    std::vector<TAsyncStatus> ToSend;
+    std::vector<TAsyncStatus> ToWait;
 };
 
 struct TBulkWriter {
@@ -522,8 +541,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         TId ParentId = 0;
         ui64 Count = 0;
     };
-    std::deque<TMeta> curr;
-    std::deque<TMeta> next;
+    std::vector<TMeta> next;
     auto processCluster = [&](const TClusterizer::TClusters& clusters) {
         for (size_t i = 0; auto id : clusters.Ids) {
             auto count = clusters.Count[i];
@@ -535,22 +553,22 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     };
 
     NVectorIndex::TWaitGroup wg;
-    std::deque<TClusterizer::TClusters> smallClusters;
+    std::deque<TClusterizer::TClusters> clusters;
     auto processClusters = [&](ui32 count) {
-        if (smallClusters.size() < count) {
+        if (clusters.size() < count) {
             return;
         }
         wg.Wait();
-        for (auto& cluster : smallClusters) {
+        for (auto& cluster : clusters) {
             processCluster(cluster);
         }
-        smallClusters.clear();
+        clusters.clear();
     };
-
-    NVectorIndex::TThreadPool tpCompute{std::thread::hardware_concurrency() / 2};
-    NVectorIndex::TThreadPool tpIO{std::thread::hardware_concurrency() / 2};
+    auto cores = std::thread::hardware_concurrency() / 2;
+    NVectorIndex::TThreadPool tpCompute{cores};
+    NVectorIndex::TThreadPool tpIO{cores};
     TTableIterator reader{options, client, tpIO};
-    TBulkSender sender{options, client};
+    TBulkSender sender{options, client, cores};
     TBulkWriter writer{sender};
     TClusterizer clusterizer{reader, CosineDistance,
                              [&](TId parentId, TId id, TRawEmbedding embedding) {
@@ -560,12 +578,13 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     sender.DropLevel(options.Levels);
 
     auto makeClusters = [&](ui8 level, TId parentId, ui64 count) {
-        if (count > kSmallClusterSize) {
+        if (ui64(level - 1) * options.Clusters * 2 < cores) {
             auto clusters = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
             processCluster(clusters);
             return;
         }
-        auto& p = smallClusters.emplace_back();
+        processClusters(cores);
+        auto& p = clusters.emplace_back();
         wg.Add();
         tpCompute.Submit([&, level, parentId, count]() mutable {
             TTableIterator reader{options, client, tpIO};
@@ -578,14 +597,18 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             wg.Done();
         });
     };
+    // TODO(mbkkt) start as bfs but continue as dfs?
     next.push_back({0, options.Rows});
     for (ui8 level = 1; !next.empty(); ++level) {
         sender.CreateLevel(level);
-        curr.swap(next);
+        auto curr = std::move(next);
+        if (level < options.Levels) {
+            next.reserve(curr.size() * options.Clusters);
+        }
         for (auto& meta : curr) {
             makeClusters(level, meta.ParentId, meta.Count);
         }
-        curr.clear();
+        curr = {};
         processClusters(0);
         sender.DropLevel(level);
         sender.Wait();

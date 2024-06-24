@@ -403,7 +403,7 @@ private:
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "IdleFiberPool",
         BIND_NO_PROPAGATE(&TIdleFiberPool::Shutdown, this),
-        /*priority*/std::numeric_limits<int>::min() + 1);
+        /*priority*/ std::numeric_limits<int>::min() + 1);
 
     void Shutdown()
     {
@@ -500,12 +500,17 @@ Y_FORCE_INLINE TClosure PickCallback(TFiberSchedulerThread* fiberThread)
     TCallback<void()> callback;
     // We wrap fiberThread->OnExecute() into a propagating storage guard to ensure
     // that the propagating storage created there won't spill into the fiber callbacks.
+
     TNullPropagatingStorageGuard guard;
     YT_VERIFY(guard.GetOldStorage().IsNull());
     callback = fiberThread->OnExecute();
 
     return callback;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -521,6 +526,20 @@ void FiberTrampoline()
     // Break loop to terminate fiber
     while (auto* fiberThread = TryGetFiberThread()) {
         YT_VERIFY(!TryGetResumerFiber());
+        YT_VERIFY(CurrentFls() == nullptr);
+
+        if (auto perThreadFls = NDetail::PerThreadFls()) {
+            const auto* propStorage = TryGetPropagatingStorage(*perThreadFls);
+            if (propStorage != nullptr) {
+                if (!propStorage->IsNull()) {
+                    Cerr << "Unexpected propagating storage" << Endl;
+                    PrintLocationToStderr();
+                    YT_ABORT();
+                }
+            }
+        }
+
+        YT_VERIFY(GetCurrentPropagatingStorage().IsNull());
 
         auto callback = PickCallback(fiberThread);
 

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dq_solomon_read_actor.cpp
     dq_solomon_write_actor.cpp
     metrics_encoder.cpp
 )
@@ -8,13 +9,13 @@ SRCS(
 PEERDIR(
     library/cpp/json/easy_parse
     library/cpp/monlib/encode/json
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/solomon/proto
+    ydb/library/yql/providers/solomon/scheme
     ydb/library/yql/public/types
     ydb/library/yql/public/udf
     ydb/library/yql/utils/log
-    ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/solomon/proto
 )
 
 YQL_LAST_ABI_VERSION()

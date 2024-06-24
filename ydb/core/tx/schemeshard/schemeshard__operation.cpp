@@ -683,12 +683,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         targetName = tx.GetCreatePersQueueGroup().GetName();
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        targetName = tx.GetAllocatePersQueueGroup().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        targetName = tx.GetDeallocatePersQueueGroup().GetName();
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
         targetName = tx.GetSubDomain().GetName();
@@ -725,6 +719,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         targetName = tx.GetCreateView().GetName();
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        targetName = tx.GetCreateResourcePool().GetName();
         break;
     default:
         result.Transactions.push_back(tx);
@@ -779,12 +776,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
             create.MutableCreatePersQueueGroup()->SetName(name);
             break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-            create.MutableAllocatePersQueueGroup()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-            create.MutableDeallocatePersQueueGroup()->SetName(name);
-            break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
             create.MutableSubDomain()->SetName(name);
@@ -821,6 +812,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
             create.MutableCreateView()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+            create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
             Y_UNREACHABLE();
@@ -940,7 +934,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropPQGroup:
         return CreateDropPQ(NextPartId(), txState);
     case TTxState::ETxType::TxAllocatePQ:
-        return CreateAllocatePQ(NextPartId(), txState);
+        Y_ABORT("deprecated");
 
     case TTxState::ETxType::TxCreateSolomonVolume:
         return CreateNewSolomon(NextPartId(), txState);
@@ -1093,6 +1087,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropContinuousBackup:
         Y_ABORT("TODO: implement");
 
+    // ResourcePool
+    case TTxState::ETxType::TxCreateResourcePool:
+        return CreateNewResourcePool(NextPartId(), txState);
+    case TTxState::ETxType::TxDropResourcePool:
+        return CreateDropResourcePool(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterResourcePool:
+        return CreateAlterResourcePool(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1152,10 +1154,6 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateAlterPQ(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return CreateDropPQ(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        return CreateAllocatePQ(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        return CreateDeallocatePQ(NextPartId(), tx);
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
         return CreateNewSolomon(NextPartId(), tx);
@@ -1328,6 +1326,14 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // ResourcePool
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
+        return CreateNewResourcePool(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
+        return CreateDropResourcePool(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
+        return CreateAlterResourcePool(NextPartId(), tx);
 
     }
 

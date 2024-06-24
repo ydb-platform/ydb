@@ -51,7 +51,7 @@ public:
         , LookupJoinColumns(std::move(lookupJoinColumns))
         , InputRowType(inputRowType)
         , LookupKeyType(lookupKeyType)
-        , KeyTypeHelper(lookupKeyType)
+        , KeyTypeHelper(std::make_shared<IDqAsyncLookupSource::TKeyTypeHelper>(lookupKeyType))
         , LookupPayloadType(lookupPayloadType)
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(outputRowColumnOrder)
@@ -67,6 +67,7 @@ public:
         Become(&TInputTransformStreamLookupBase::StateFunc);
         NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
             .Alloc = Alloc,
+            .KeyTypeHelper = KeyTypeHelper,
             .ParentId = SelfId(),
             .LookupSource = Settings.GetRightSource().GetLookupSource(),
             .KeyType = LookupKeyType,
@@ -90,22 +91,7 @@ private: //events
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
         auto guard = BindAllocator();
-        THashMap<
-            NUdf::TUnboxedValue, 
-            NUdf::TUnboxedValue,
-            NKikimr::NMiniKQL::TValueHasher,
-            NKikimr::NMiniKQL::TValueEqual,
-            NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
-        > map(
-            ev->Get()->Data.size(), 
-            KeyTypeHelper.GetValueHash(), 
-            KeyTypeHelper.GetValueEqual()
-        );
-        for (auto& r: ev->Get()->Data) {
-            Y_ABORT_UNLESS(r.first.IsBoxed());
-            Y_ABORT_UNLESS(!r.second || r.second.IsBoxed());
-            map.emplace(std::move(r));
-        }
+        const auto lookupResult = std::move(ev->Get()->Result);
         while (!AwaitingQueue.empty()) {
             const auto wideInputRow = AwaitingQueue.Head();
             NUdf::TUnboxedValue* keyItems;
@@ -113,7 +99,7 @@ private: //events
             for (size_t i = 0; i != InputJoinColumns.size(); ++i) {
                 keyItems[i] = wideInputRow[InputJoinColumns[i]];
             }
-            auto lookupPayload = map.FindPtr(lookupKey);
+            auto lookupPayload = lookupResult.FindPtr(lookupKey);
 
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
@@ -163,7 +149,7 @@ private: //IDqComputeActorAsyncInput
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         InputFlow.Clear();
-        KeyTypeHelper = TKeyTypeHelper{};
+        KeyTypeHelper.reset();
         NMiniKQL::TUnboxedValueBatch{}.swap(AwaitingQueue);
         NMiniKQL::TUnboxedValueBatch{}.swap(ReadyQueue);
     }
@@ -180,21 +166,21 @@ private: //IDqComputeActorAsyncInput
             NUdf::TUnboxedValue* inputRowItems;
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
-            NKikimr::NMiniKQL::TUnboxedValueVector keysForLookup;
+            IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
             while (
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok) && 
                 (keysForLookup.size() < maxKeysInRequest)
             ) {
                 NUdf::TUnboxedValue* keyItems;
-                auto key = HolderFactory.CreateDirectArrayHolder(InputJoinColumns.size(), keyItems);
+                NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(InputJoinColumns.size(), keyItems);
                 for (size_t i = 0; i != InputJoinColumns.size(); ++i) {
                     keyItems[i] = inputRowItems[InputJoinColumns[i]];
                 }                
-                keysForLookup.push_back(key);
+                keysForLookup.emplace(std::move(key), NUdf::TUnboxedValue{});
                 AwaitingQueue.PushRow(inputRowItems, InputRowType->GetElementsCount());
             }
             if (!keysForLookup.empty()) {
-                LookupSource.first->AsyncLookup(keysForLookup);
+                LookupSource.first->AsyncLookup(std::move(keysForLookup));
                 WaitingForLookupResults = true;
             }
         }
@@ -241,8 +227,7 @@ protected:
     const TVector<size_t> LookupJoinColumns;
     const NMiniKQL::TMultiType* const InputRowType;
     const NMiniKQL::TStructType* const LookupKeyType; //key column types in LookupTable
-    using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
-    TKeyTypeHelper KeyTypeHelper;
+    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
     const NMiniKQL::TStructType* const LookupPayloadType; //other column types in LookupTable
     const NMiniKQL::TMultiType* const OutputRowType;
     const TOutputRowColumnOrder OutputRowColumnOrder;

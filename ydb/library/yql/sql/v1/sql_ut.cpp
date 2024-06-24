@@ -4599,14 +4599,6 @@ select FormatType($f());
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
     }
 
-    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
-        NSQLTranslation::TTranslationSettings settings;
-        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
-    }
-
     Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError){
         TString query = R"(
             $init = ($_row) -> (min(1, 2)); -- error: aggregation func min() can not be used here

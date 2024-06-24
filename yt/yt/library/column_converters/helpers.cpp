@@ -15,7 +15,7 @@ using namespace NTableClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillColumnarNullBitmap(
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* column,
+    IUnversionedColumnarRowBatch::TColumn* column,
     i64 startIndex,
     i64 valueCount,
     TRef bitmap)
@@ -23,16 +23,16 @@ void FillColumnarNullBitmap(
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    auto& nullBitmap = column->NullBitmap.emplace();
+    column->NullBitmap = IUnversionedColumnarRowBatch::TBitmap{};
+    auto& nullBitmap = *column->NullBitmap;
     nullBitmap.Data = bitmap;
 }
 
-
 void FillColumnarDictionary(
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* primaryColumn,
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* dictionaryColumn,
-    NTableClient::IUnversionedColumnarRowBatch::TDictionaryId dictionaryId,
-    NTableClient::TLogicalTypePtr type,
+    IUnversionedColumnarRowBatch::TColumn* primaryColumn,
+    IUnversionedColumnarRowBatch::TColumn* dictionaryColumn,
+    IUnversionedColumnarRowBatch::TDictionaryId dictionaryId,
+    TLogicalTypePtr type,
     i64 startIndex,
     i64 valueCount,
     TRef ids)
@@ -44,11 +44,13 @@ void FillColumnarDictionary(
         ? type->AsOptionalTypeRef().GetElement()
         : type;
 
-    auto& primaryValues = primaryColumn->Values.emplace();
+    primaryColumn->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
+    auto& primaryValues = *primaryColumn->Values;
     primaryValues.BitWidth = 32;
     primaryValues.Data = ids;
 
-    auto& dictionary = primaryColumn->Dictionary.emplace();
+    primaryColumn->Dictionary = IUnversionedColumnarRowBatch::TDictionaryEncoding{};
+    auto& dictionary = *primaryColumn->Dictionary;
     dictionary.DictionaryId = dictionaryId;
     dictionary.ZeroMeansNull = true;
     dictionary.ValueColumn = dictionaryColumn;

@@ -33,6 +33,9 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     // Processing variable length string columns
     if ( NumberOfKeyStringColumns != 0 || NumberOfKeyIColumns != 0) {
 
+        totalBytesForStrings += sizeof(ui32)*NumberOfKeyStringColumns;
+        totalBytesForStrings += sizeof(ui32)*NumberOfKeyIColumns;
+
         for( ui64 i = 0; i < NumberOfKeyStringColumns; i++ ) {
             totalBytesForStrings += stringsSizes[i];
         }
@@ -55,11 +58,15 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         char * currStrPtr = reinterpret_cast< char* > (startPtr);
 
         for( ui64 i = 0; i < NumberOfKeyStringColumns; i++) {
+            WriteUnaligned<ui32>(currStrPtr, stringsSizes[i] );
+            currStrPtr+=sizeof(ui32);
             std::memcpy(currStrPtr, stringColumns[i], stringsSizes[i] );
             currStrPtr+=stringsSizes[i];
         }
 
         for( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
+            WriteUnaligned<ui32>(currStrPtr, IColumnsVals[i].size() );
+            currStrPtr+=sizeof(ui32);
             std::memcpy(currStrPtr, IColumnsVals[i].data(), IColumnsVals[i].size() );
             currStrPtr+=IColumnsVals[i].size();
         }
@@ -214,13 +221,15 @@ inline bool CompareIColumns(    const ui32* stringSizes1, const char * vals1,
     for (ui32 i = 0; i < nStringColumns; i ++) {
         currSize1 = *(stringSizes1 + i);
         currSize2 = *(stringSizes2 + i);
-        currOffset1 += currSize1;
-        currOffset2 += currSize2;
+        currOffset1 += currSize1 + sizeof(ui32);
+        currOffset2 += currSize2 + sizeof(ui32);
     }
     for (ui32 i = 0; i < nIColumns; i ++) {
 
         currSize1 = *(stringSizes1 + nStringColumns + i );
         currSize2 = *(stringSizes2 + nStringColumns + i );
+        currOffset1 += sizeof(ui32);
+        currOffset2 += sizeof(ui32);
         str1 = TStringBuf(vals1 + currOffset1, currSize1);
         val1 = (colInterfaces + i)->Packer->Unpack(str1, colInterfaces->HolderFactory);
         str2 = TStringBuf(vals2 + currOffset2, currSize2 );
@@ -599,13 +608,17 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
 
         for (ui64 i = 0; i < NumberOfKeyStringColumns; ++i)
         {
-            td.StrColumns[i] = strPtr;
             td.StrSizes[i] = tb.StringsOffsets[stringsOffsetsIdx + 2 + i];
+            Y_ENSURE(ReadUnaligned<ui32>(strPtr) == td.StrSizes[i]);
+            strPtr += sizeof(ui32);
+            td.StrColumns[i] = strPtr;
             strPtr += td.StrSizes[i];
         }
 
         for ( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
             ui32 currSize = tb.StringsOffsets[stringsOffsetsIdx + 2 + NumberOfKeyStringColumns + i];
+            Y_ENSURE(ReadUnaligned<ui32>(strPtr) == currSize);
+            strPtr += sizeof(ui32);
             *(td.IColumns + i) = (ColInterfaces + i)->Packer->Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
             strPtr += currSize;
         }

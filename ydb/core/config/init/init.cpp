@@ -329,6 +329,11 @@ class TDefaultNodeBrokerClient
                     env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Node name: ";
+                    if (result.HasNodeName()) {
+                        logger.Out() << result.GetNodeName();
+                    }
+                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;

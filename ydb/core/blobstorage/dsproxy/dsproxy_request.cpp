@@ -321,7 +321,7 @@ namespace NKikimr {
         }
         PutBatchedBucketQueue.clear();
         ++*Mon->EventStopPutBatching;
-        LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId);
+        LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
         BatchedPutRequestCount = 0;
         EnablePutBatching.Update(TActivationContext::Now());
     }
@@ -329,7 +329,7 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {
         StopGetBatchingEvent = ev;
         ++*Mon->EventStopGetBatching;
-        LWPROBE(DSProxyBatchedGetRequest, BatchedGetRequestCount, GroupId);
+        LWPROBE(DSProxyBatchedGetRequest, BatchedGetRequestCount, GroupId.GetRawId());
         BatchedGetRequestCount = 0;
     }
 

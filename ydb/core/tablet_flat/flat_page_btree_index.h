@@ -84,9 +84,21 @@ namespace NKikimr::NTable::NPage {
         static_assert(sizeof(TIsNullBitmap) == 1, "Invalid TBtreeIndexNode TIsNullBitmap size");
 
         struct TShortChild {
-            TPageId PageId;
-            TRowId RowCount;
-            ui64 DataSize;
+            TPageId PageId_;
+            TRowId RowCount_;
+            ui64 DataSize_;
+
+            inline TPageId GetPageId() const noexcept {
+                return PageId_;
+            }
+
+            inline TRowId GetRowCount() const noexcept {
+                return RowCount_;
+            }
+
+            inline ui64 GetDataSize() const noexcept {
+                return DataSize_;
+            }
 
             auto operator<=>(const TShortChild&) const = default;
         } Y_PACKED;
@@ -94,38 +106,58 @@ namespace NKikimr::NTable::NPage {
         static_assert(sizeof(TShortChild) == 20, "Invalid TBtreeIndexNode TShortChild size");
 
         struct TChild {
-            TPageId PageId;
-            TRowId RowCount;
-            ui64 DataSize;
-            ui64 GroupDataSize;
-            TRowId ErasedRowCount;
+            TPageId PageId_;
+            TRowId RowCount_;
+            ui64 DataSize_;
+            ui64 GroupDataSize_;
+            TRowId ErasedRowCount_;
 
             auto operator<=>(const TChild&) const = default;
 
-            TRowId GetNonErasedRowCount() const noexcept {
-                return RowCount - ErasedRowCount;
+            inline TPageId GetPageId() const noexcept {
+                return PageId_;
             }
 
-            ui64 GetTotalDataSize() const noexcept {
-                return DataSize + GroupDataSize;
+            inline TRowId GetRowCount() const noexcept {
+                return RowCount_;
+            }
+
+            inline ui64 GetDataSize() const noexcept {
+                return DataSize_;
+            }
+
+            inline ui64 GetGroupDataSize() const noexcept {
+                return GroupDataSize_;
+            }
+
+            inline TRowId GetErasedRowCount() const noexcept {
+                return ErasedRowCount_;
+            }
+
+            inline TRowId GetNonErasedRowCount() const noexcept {
+                return RowCount_ - ErasedRowCount_;
+            }
+
+            inline ui64 GetTotalDataSize() const noexcept {
+                return DataSize_ + GroupDataSize_;
             }
 
             TString ToString() const noexcept {
                 TStringBuilder result;
-                result << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize;
-                if (GroupDataSize) {
-                    result << " GroupDataSize: " << GroupDataSize;
+                result << "PageId: " << GetPageId() << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
+                if (GetGroupDataSize()) {
+                    result << " GroupDataSize: " << GetGroupDataSize();
                 }
-                result << " ErasedRowCount: " << ErasedRowCount;
+                result << " ErasedRowCount: " << GetErasedRowCount();
                 return result;
             }
         } Y_PACKED;
 
         static_assert(sizeof(TChild) == 36, "Invalid TBtreeIndexNode TChild size");
 
-        static_assert(offsetof(TChild, PageId) == offsetof(TShortChild, PageId));
-        static_assert(offsetof(TChild, RowCount) == offsetof(TShortChild, RowCount));
-        static_assert(offsetof(TChild, DataSize) == offsetof(TShortChild, DataSize));
+        static_assert(offsetof(TChild, PageId_) == offsetof(TShortChild, PageId_));
+        static_assert(offsetof(TChild, RowCount_) == offsetof(TShortChild, RowCount_));
+        static_assert(offsetof(TChild, DataSize_) == offsetof(TShortChild, DataSize_));
 
 #pragma pack(pop)
 
@@ -357,19 +389,19 @@ namespace NKikimr::NTable::NPage {
 
             auto range = xrange(0u, childrenCount);
             const auto cmp = [this](TRowId rowId, TPos pos) {
-                return rowId < GetShortChild(pos).RowCount;
+                return rowId < GetShortChild(pos).GetRowCount();
             };
 
             TRecIdx result;
             if (!on) {
                 // Will do a full binary search on full range
-            } else if (GetShortChild(*on).RowCount <= rowId) {
+            } else if (GetShortChild(*on).GetRowCount() <= rowId) {
                 // Try a short linear search first
                 result = *on;
                 for (int linear = 0; linear < 4; ++linear) {
                     result++;
                     Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
-                    if (GetShortChild(result).RowCount > rowId) {
+                    if (GetShortChild(result).GetRowCount() > rowId) {
                         return result;
                     }
                 }
@@ -383,7 +415,7 @@ namespace NKikimr::NTable::NPage {
                     if (result == 0) {
                         return 0;
                     }
-                    if (GetShortChild(result - 1).RowCount <= rowId) {
+                    if (GetShortChild(result - 1).GetRowCount() <= rowId) {
                         return result;
                     }
                     result--;

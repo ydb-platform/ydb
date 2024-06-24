@@ -2678,9 +2678,17 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
 TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand Version";
     const TString branch(GetBranch());
+    TString result;
+    auto pos = branch.rfind("/");
+    if (pos != TString::npos) {
+        result = branch.substr(branch.rfind("/") + 1);
+    }
+    if (result.empty()) {
+        result = "unknown";
+    }
     return ctx.Builder(node->Pos())
         .Callable("String")
-            .Atom(0, branch.substr(branch.rfind("/") + 1))
+            .Atom(0, result)
         .Seal().Build();
 }
 

@@ -126,13 +126,14 @@ runs:
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
-        
+
+    
     - name: Notify about failed build
       if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
       shell: bash
@@ -152,8 +153,44 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
         python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
+
+    - name: show_build_size_diff
+      shell: bash
+      continue-on-error: true
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        export branch_to_compare="$GITHUB_REF_NAME" 
+        export yellow_treshold=102400
+        export red_treshold=2097152 
+        export commit_git_sha="$(git rev-parse HEAD)"
+
+        python3 -m pip install ydb ydb[yc] humanize
+
+        get_sizes_comment_script=.github/scripts/get_build_diff.py
+        comment_raw=`$get_sizes_comment_script`
+        
+        IFS=';;;'
+        read -ra comment_arr <<< "$comment_raw"
+
+        printf "$comment"
+        if [[ ${comment_raw} != "Error"* ]];then
+          color=${comment_arr[0]}
+          replace=$color";;;"
+          comment=${comment_raw/$replace/""}
+          
+          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
+
+        else
+          echo "Skipped build size difference, comment_raw = ${comment_raw}"
+        fi
 
     - name: comment-if-cancel
       shell: bash

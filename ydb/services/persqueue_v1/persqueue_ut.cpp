@@ -42,6 +42,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 #include <thread>
 
 
@@ -7223,6 +7224,100 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         readConsistently2.join();
         diff = (TInstant::Now() - startTime).Seconds();
         UNIT_ASSERT(diff >= timeNeededToWaitQuotaAfterReadToEnd * 2);
+    }
+
+    Y_UNIT_TEST(TxCounters) {
+        TServerSettings settings = PQSettings(0, 1);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+        settings.SetEnableTopicServiceTx(true);
+        NPersQueue::TTestServer server{settings, true};
+
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
+
+
+        NYdb::TDriverConfig config;
+        config.SetEndpoint(TStringBuilder() << "localhost:" + ToString(server.GrpcPort));
+        config.SetDatabase("/Root");
+        config.SetAuthToken("root@builtin");
+        auto driver = NYdb::TDriver(config);
+
+        NYdb::NTable::TTableClient client(driver);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto result = client.CreateSession().ExtractValueSync();
+        auto tableSession = result.GetSession();
+        auto txResult = tableSession.BeginTransaction().ExtractValueSync();
+        auto tx = txResult.GetTransaction();
+
+        TString topic = "topic";
+        NYdb::NTopic::TCreateTopicSettings createSettings;
+        createSettings.BeginConfigurePartitioningSettings()
+              .MinActivePartitions(1)
+              .MaxActivePartitions(1);
+
+        auto status = topicClient.CreateTopic(topic, createSettings).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        server.WaitInit(topic);
+
+        NYdb::NTopic::TWriteSessionSettings options;
+        options.Path(topic);
+        options.ProducerId("123");
+        auto writer = topicClient.CreateWriteSession(options);
+
+        auto send = [&](ui64 dataSize, const TDuration& writeLag) {
+            while (true) {
+                auto msg = writer->GetEvent(true);
+                UNIT_ASSERT(msg);
+                auto ev = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
+                if (!ev)
+                    continue;
+                TString data(dataSize, 'a');
+                NYdb::NTopic::TWriteMessage writeMsg{data};
+                writeMsg.CreateTimestamp(TInstant::Now() - writeLag);
+                writeMsg.Codec = NYdb::NTopic::ECodec::RAW;
+                writeMsg.Tx(tx);
+                writer->Write(std::move(ev->ContinuationToken), std::move(writeMsg));
+                return;
+            }
+        };
+        send(10, TDuration::MilliSeconds(1001));
+        send(5 * 1024 + 1, TDuration::MilliSeconds(1101));
+        send(5 * 1024 + 1, TDuration::MilliSeconds(1201));
+        send(10241, TDuration::MilliSeconds(2505));
+        writer->Close();
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT(commitResult.GetStatus() == NYdb::EStatus::SUCCESS);
+
+        auto counters = server.GetRuntime()->GetAppData(0).Counters;
+        auto serviceCounters = GetServiceCounters(counters, "datastreams", false);
+        auto dbGroup = serviceCounters->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "")
+                                ->GetSubgroup("folder_id", "")
+                                ->GetSubgroup("database_id", "")->GetSubgroup("topic", "topic");
+        TStringStream countersStr;
+        dbGroup->OutputHtml(countersStr);
+        Cerr << "Counters: ================================ \n" << countersStr.Str() << Endl;
+        auto checkSingleCounter = [&](const TString& name, ui64 expected) {
+            auto counter = dbGroup->GetNamedCounter("name", name);
+            UNIT_ASSERT(counter);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)counter->Val(), expected);
+        };
+        checkSingleCounter("api.grpc.topic.stream_write.bytes", 20796);
+        checkSingleCounter("api.grpc.topic.stream_write.messages", 4);
+        {
+            auto group = dbGroup->GetSubgroup("name", "topic.write.lag_milliseconds");
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "2000")->Val(), 3);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "5000")->Val(), 1);
+        }
+        {
+            auto group = dbGroup->GetSubgroup("name", "topic.write.message_size_bytes");
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "1024")->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "10240")->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "20480")->Val(), 1);
+        }
     }
 
 }

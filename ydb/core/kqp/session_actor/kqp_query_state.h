@@ -85,6 +85,7 @@ public:
         } else {
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
+        UserRequestContext->PoolId = RequestEv->GetPoolId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -136,6 +137,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    bool PlacedInWorkloadPool = false;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;

@@ -102,7 +102,7 @@ message TConfig {
     optional uint64 EpochDuration = 1 [default = 3600000000];
     // Don't allocate and extend lease for IDs from banned intervals.
     repeated TNodeIds BannedNodeIds = 2;
-    optional string NodeNamePrefix = 3 [default = "slot-"];
+    optional string StableNodeNamePrefix = 3 [default = "slot-"];
 }
 
 message TGetConfigRequest {

@@ -12,20 +12,16 @@ EXCLUDED_SUITES = [
 EXCLUDED_TESTS = [
     # FAULT, CalcHash(): requirement false failed, YQ-3139
     'pg/pg_types_dict',
-
     # FAULT, requirement !HasNullInKey(key1) failed, YQ-3141
     'join/convert_check_key_mem',
     'join/inmem_with_set_key',
-
     # INTERNAL_ERROR, Visit(): requirement stagePlanNode.StageProto failed, YQ-3137
     'action/runtime_for_select',
     'pg_catalog/pg_set_config',
-
     # INTERNAL_ERROR, Peephole optimization failed, YQ-3138
-    'flatten_by/flatten_mode',  
+    'flatten_by/flatten_mode',
     'in/in_scalar_vector_subquery',
     'join/inmem_with_set_key_any',
-
     # INTERNAL_ERROR, Cannot cast type Variant to Struct, YQ-3173
     'produce/reduce_multi_in',
     'produce/reduce_multi_in_difftype',
@@ -33,7 +29,6 @@ EXCLUDED_TESTS = [
     'produce/reduce_multi_in_keytuple_difftype',
     'produce/reduce_multi_in_presort',
     'produce/reduce_multi_in_ref',
-
     # GENERIC_ERROR, Expected set on right side but got Dict, YQ-3140
     'in/in_tuple_table',
     'join/inmem_by_uncomparable_structs',
@@ -41,10 +36,8 @@ EXCLUDED_TESTS = [
     'join/join_comp_inmem',
     'pg/sublink_having_in',
     'pg/sublink_columns_in_test_expr_columns',
-
     # GENERIC_ERROR, JOIN with null type key, YQ-3142
     'join/inmem_with_null_key',
-
     # GENERIC_ERROR, Failed to build query results, YQ-3149
     'hor_join/max_outtables',
     'hor_join/sorted_out_mix',
@@ -52,14 +45,12 @@ EXCLUDED_TESTS = [
     'in/in_tablesource_on_raw_list',
     'optimizers/flatmap_with_non_struct_out',
     'optimizers/yt_shuffle_by_keys',
-
     # GENERIC_ERROR, Mismatch dict key types: Int64 and Optional<Int64>, YQ-3164
     'simple_columns/simple_columns_join_coalesce_all_1',
     'simple_columns/simple_columns_join_coalesce_all_2',
     'simple_columns/simple_columns_join_coalesce_bug8923',
     'simple_columns/simple_columns_join_coalesce_qualified_all_disable',
     'simple_columns/simple_columns_join_coalesce_qualified_all_enable',
-
     # PRECONDITION_FAILED, Unexpected flow status, YQ-3174
     'produce/reduce_typeinfo',
 ]
@@ -78,7 +69,13 @@ def validate_sql(sql_query):
     if 'concat(' in sql_query.lower() or 'each(' in sql_query.lower():
         pytest.skip('CONCAT is not supported on Kikimr clusters')
 
-    if 'range(' in sql_query.lower() or 'regexp(' in sql_query.lower() or 'filter(' in sql_query.lower() or 'like(' in sql_query.lower() or '_strict(' in sql_query.lower():
+    if (
+        'range(' in sql_query.lower()
+        or 'regexp(' in sql_query.lower()
+        or 'filter(' in sql_query.lower()
+        or 'like(' in sql_query.lower()
+        or '_strict(' in sql_query.lower()
+    ):
         pytest.skip('RANGE is not supported on Kikimr clusters')
 
     if 'discard' in sql_query.lower():
@@ -182,16 +179,9 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(
-        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
-    )
+    kqprun = KqpRun(udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
 
-    return kqprun.yql_exec(
-        program=sql_query,
-        verbose=True,
-        check_error=True,
-        tables=in_tables
-    )
+    return kqprun.yql_exec(program=sql_query, verbose=True, check_error=True, tables=in_tables)
 
 
 def run_file_kqp(suite, case, cfg):

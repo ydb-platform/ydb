@@ -1,5 +1,4 @@
 import base64
-import binascii
 import yaml
 import os
 import io
@@ -177,11 +176,16 @@ def _parse_package_integrity(integrity):
     """
     algo, hash_b64 = integrity.split("-", 1)
 
+    if algo not in ("sha1", "sha512"):
+        raise LockfilePackageMetaInvalidError(
+            f"Invalid package integrity algorithm, expected one of ('sha1', 'sha512'), got '{algo}'"
+        )
+
     try:
-        hash_hex = binascii.hexlify(base64.b64decode(hash_b64))
+        base64.b64decode(hash_b64)
     except TypeError as e:
         raise LockfilePackageMetaInvalidError(
             "Invalid package integrity encoding, integrity: {}, error: {}".format(integrity, e)
         )
 
-    return (algo, hash_hex)
+    return (algo, hash_b64)

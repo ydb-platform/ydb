@@ -5,10 +5,13 @@
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 {%- set errorprone_plugin_version = "4.0.0" -%}
 plugins {
-{# error prone plugin configuration #}
+{# some plugins configuration #}
 {%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
+    
     id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+
 {%-     endif -%}
 {%- endfor -%}
 {# lombok configuration #}

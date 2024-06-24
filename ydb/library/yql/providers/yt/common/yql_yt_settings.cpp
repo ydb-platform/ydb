@@ -152,14 +152,6 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, OptimizeFor)
         .Parser([](const TString& v) {
             return FromString<NYT::EOptimizeForAttr>(v);
-        })
-        .ValueSetter([this](const TString& cluster, const NYT::EOptimizeForAttr& value) {
-            OptimizeFor[cluster] = value;
-            if (value == NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) {
-                if (ColumnGroupMode.Get(cluster).GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable) {
-                    ColumnGroupMode[cluster] = EColumnGroupMode::Disable;
-                }
-            }
         });
 
     REGISTER_SETTING(*this, DefaultCluster)
@@ -504,15 +496,9 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, ColumnGroupMode)
         .Parser([](const TString& v) {
             return FromString<EColumnGroupMode>(v);
-        })
-        .ValueSetter([this](const TString& cluster, EColumnGroupMode value) {
-            ColumnGroupMode[cluster] = value;
-            if (value != EColumnGroupMode::Disable) {
-                if (OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_SCAN_ATTR) {
-                    OptimizeFor[cluster] = NYT::EOptimizeForAttr::OF_SCAN_ATTR;
-                }
-            }
         });
+    REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
+    REGISTER_SETTING(*this, MaxColumnGroups);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

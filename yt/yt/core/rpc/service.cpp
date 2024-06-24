@@ -77,14 +77,16 @@ TServiceId::TServiceId(std::string serviceName, TRealmId realmId)
     , RealmId(realmId)
 { }
 
-TString ToString(const TServiceId& serviceId)
+void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf /*spec*/)
 {
-    auto result = TString(serviceId.ServiceName);
-    if (!serviceId.RealmId.IsEmpty()) {
-        result.append(':');
-        result.append(ToString(serviceId.RealmId));
-    }
-    return result;
+    builder->AppendFormat(
+        "%v%v",
+        id.ServiceName,
+        MakeFormatterWrapper([&] (TStringBuilderBase* builder) {
+            if (!id.RealmId.IsEmpty()) {
+                builder->AppendFormat(":%v", id.RealmId);
+            }
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

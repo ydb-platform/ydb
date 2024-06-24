@@ -662,7 +662,7 @@ public:
             Y_ABORT_UNLESS(!Responded);
             const TDuration duration = TActivationContext::Now() - StartTime;
             LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                    TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", true);
+                    TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", true);
             SendResponseAndDie(std::move(response));
             Responded = true;
         }
@@ -675,7 +675,7 @@ public:
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
         const TDuration duration = TActivationContext::Now() - StartTime;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", false);
+                TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", false);
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response(new TEvBlobStorage::TEvDiscoverResult(
                     status, MinGeneration, 0U));
         response->ErrorReason = ErrorReason;

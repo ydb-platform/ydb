@@ -13,6 +13,7 @@ std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActo
     NFile::TYtFileServices::TPtr ytServices,
     NActors::TActorId parentId,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     NYql::NYt::NSource::TLookupSource&& lookupSource,
     const NKikimr::NMiniKQL::TStructType* keyType,

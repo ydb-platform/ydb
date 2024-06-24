@@ -22,6 +22,7 @@ SRCS(
     kqp_params_ut.cpp
     kqp_query_ut.cpp
     kqp_stats_ut.cpp
+    kqp_types_ut.cpp
 )
 
 PEERDIR(

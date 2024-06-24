@@ -7,6 +7,9 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/formats/config.h>
+#include <yt/yt/client/formats/parser.h>
+
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
@@ -18,9 +21,6 @@
 #include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
-
-#include <yt/yt/client/formats/config.h>
-#include <yt/yt/client/formats/parser.h>
 
 #include <yt/yt/client/ypath/public.h>
 
@@ -802,6 +802,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         "execution_backend",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionBackend;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
+        "versioned_read_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.VersionedReadOptions;
         })
         .Optional(/*init*/ false);
 }

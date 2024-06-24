@@ -224,11 +224,6 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
         (context.Sampled ? 1u : 0) | (context.Debug ? 2u : 0));
 }
 
-TString ToString(const TSpanContext& context)
-{
-    return ToStringViaBuilder(context);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TTraceContext::TTraceContext(
@@ -598,19 +593,9 @@ void FormatValue(TStringBuilderBase* builder, const TTraceContext* context, TStr
     }
 }
 
-TString ToString(const TTraceContext* context)
-{
-    return ToStringViaBuilder(context);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTraceContextPtr& context, TStringBuf spec)
 {
     FormatValue(builder, context.Get(), spec);
-}
-
-TString ToString(const TTraceContextPtr& context)
-{
-    return ToStringViaBuilder(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -738,6 +723,32 @@ Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcu
 {
     auto result = storage.Find<TTraceContextPtr>();
     return result ? result->Get() : nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTraceContextHandler::TTraceContextHandler()
+    : TraceContext_(NTracing::TryGetCurrentTraceContext())
+{ }
+
+NTracing::TCurrentTraceContextGuard TTraceContextHandler::MakeTraceContextGuard() const
+{
+    return NTracing::TCurrentTraceContextGuard(TraceContext_);
+}
+
+void TTraceContextHandler::UpdateTraceContext()
+{
+    TraceContext_ = NTracing::TryGetCurrentTraceContext();
+}
+
+std::optional<TTracingAttributes> TTraceContextHandler::GetTracingAttributes() const
+{
+    return TraceContext_
+        ? std::make_optional<TTracingAttributes>({
+            .TraceId = TraceContext_->GetTraceId(),
+            .SpanId = TraceContext_->GetSpanId()
+        })
+        : std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

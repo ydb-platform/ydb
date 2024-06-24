@@ -1605,6 +1605,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithTtlOnDatetime64Column) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(true);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithTtlSettings";
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Datetime64Column Datetime64,
+                PRIMARY KEY (Key)
+            ) WITH (
+                TTL = Interval("P1D") ON Datetime64Column 
+            ))";   
+            Cerr << query << Endl;             
+        {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }    
+
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -5987,6 +6016,51 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto describe = session.DescribeTable("/Root/replica").GetValueSync();
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(DisableResourcePools) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto checkDisabled = [&session](const TString& query) {
+            Cerr << "Check query:\n" << query << "\n";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled. Please contact your system administrator to enable it");
+        };
+
+        // CREATE RESOURCE POOL
+        checkDisabled(R"(
+            CREATE RESOURCE POOL `MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUERY_CANCEL_AFTER_SECONDS=86400,
+                QUERY_COUNT_LIMIT=1000
+            );)");
+
+        // ALTER RESOURCE POOL
+        checkDisabled(R"(
+            ALTER RESOURCE POOL `MyResourcePool`
+                SET (CONCURRENT_QUERY_LIMIT = 30),
+                SET QUERY_COUNT_LIMIT 100,
+                RESET (QUERY_CANCEL_AFTER_SECONDS);
+            )");
+
+        // DROP RESOURCE POOL
+        checkDisabled("DROP RESOURCE POOL `MyResourcePool`;");
+    }
+
+    Y_UNIT_TEST(ResourcePoolsValidation) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL `MyFolder/MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol");
     }
 }
 

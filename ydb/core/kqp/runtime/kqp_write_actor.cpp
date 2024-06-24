@@ -568,7 +568,7 @@ private:
 
         for (size_t payloadIndex : serializationResult.PayloadIndexes) {
             evWrite->AddOperation(
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+                GetOperation(),
                 {
                     Settings.GetTable().GetOwnerId(),
                     Settings.GetTable().GetTableId(),
@@ -592,8 +592,7 @@ private:
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
-        // TODO: fix retries for columnshard
-        if (SchemeEntry->Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        if (InconsistentTx) {
             TlsActivationContext->Schedule(
                 CalculateNextAttemptDelay(metadata->SendAttempts),
                 new IEventHandle(
@@ -602,6 +601,23 @@ private:
                     new TEvPrivate::TEvShardRequestTimeout(shardId),
                     0,
                     metadata->Cookie));
+        }
+    }
+
+    NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation() {
+        switch (Settings.GetType()) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+        default:
+            RuntimeError(
+                TStringBuilder() << "Unknown operation.",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
     }
 
@@ -622,12 +638,19 @@ private:
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         CA_LOG_W("Timeout shardID=" << ev->Get()->ShardId);
+        YQL_ENSURE(InconsistentTx);
         RetryShard(ev->Get()->ShardId, ev->Cookie);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        RetryShard(ev->Get()->TabletId, std::nullopt);
+        if (InconsistentTx) {
+            RetryShard(ev->Get()->TabletId, std::nullopt);
+        } else {
+            RuntimeError(
+                TStringBuilder() << "Error while delivering message to tablet " << ev->Get()->TabletId,
+                NYql::NDqProto::StatusIds::UNAVAILABLE);
+        }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {

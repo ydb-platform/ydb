@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
 #include <optional>
@@ -58,7 +59,17 @@ private:
     > Credentials_;
 };
 
-struct TRunningState {};
+struct TRunningState {
+public:
+    TRunningState() = default;
+    explicit TRunningState(const std::optional<TDuration>& lag);
+
+    const std::optional<TDuration>& GetLag() const;
+
+private:
+    std::optional<TDuration> Lag_;
+};
+
 struct TDoneState {};
 
 class TErrorState {

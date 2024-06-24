@@ -49,18 +49,16 @@ public:
     TCallLookupActor(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NActors::TActorId& lookupActor,
-        NKikimr::NMiniKQL::TUnboxedValueVector&& keysToLookUp)
+        NDq::IDqAsyncLookupSource::TUnboxedValueMap&& request)
         : Alloc(alloc)
         , LookupActor(lookupActor)
-        , KeysToLookUp(std::move(keysToLookUp))
+        , Request(std::move(request))
     {
     }
 
     void Bootstrap() {
-        auto ev = new NDq::IDqAsyncLookupSource::TEvLookupRequest(Alloc, std::move(KeysToLookUp));
+        auto ev = new NDq::IDqAsyncLookupSource::TEvLookupRequest(Alloc, std::move(Request));
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
-        auto guard = Guard(*Alloc);
-        KeysToLookUp = NKikimr::NMiniKQL::TUnboxedValueVector{};
     }
 
 private:
@@ -69,7 +67,7 @@ private:
 private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const NActors::TActorId LookupActor;
-    NKikimr::NMiniKQL::TUnboxedValueVector KeysToLookUp;
+    NDq::IDqAsyncLookupSource::TUnboxedValueMap Request;
 };
 
 Y_UNIT_TEST(Lookup) {
@@ -127,10 +125,12 @@ Y_UNIT_TEST(Lookup) {
         mapping
     );
     auto guard = Guard(*alloc.get());
+    auto keyTypeHelper = std::make_shared<NDq::IDqAsyncLookupSource::TKeyTypeHelper>(keyTypeBuilder.Build());
     auto [_, lookupActor] = NYql::NDq::CreateYtLookupActor(
         ytServices,
         edge,
         alloc,
+        keyTypeHelper,
         *functionRegistry,
         std::move(source),
         keyTypeBuilder.Build(),
@@ -140,43 +140,41 @@ Y_UNIT_TEST(Lookup) {
         1'000'000);
     runtime.Register(lookupActor);
 
-    NKikimr::NMiniKQL::TUnboxedValueVector keys {\
-        CreateStructValue(holderFactory, {"host1", "vpc1"}),
-        CreateStructValue(holderFactory, {"host2", "vpc1"}),
-        CreateStructValue(holderFactory, {"host2", "vpc2"}), //NOT_FOUND expected
-        CreateStructValue(holderFactory, {"very very long hostname to for test 2", "vpc2"}),
-    };
+    NDq::IDqAsyncLookupSource::TUnboxedValueMap request{4, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual()};
+    request.emplace(CreateStructValue(holderFactory, {"host1", "vpc1"}), NUdf::TUnboxedValue{});
+    request.emplace(CreateStructValue(holderFactory, {"host2", "vpc1"}), NUdf::TUnboxedValue{});
+    request.emplace(CreateStructValue(holderFactory, {"host2", "vpc2"}), NUdf::TUnboxedValue{}); //NOT_FOUND expected
+    request.emplace(CreateStructValue(holderFactory, {"very very long hostname to for test 2", "vpc2"}), NUdf::TUnboxedValue{});
 
     guard.Release(); //let actors use alloc
 
-    auto callLookupActor = new TCallLookupActor(alloc, lookupActor->SelfId(), std::move(keys));
+    auto callLookupActor = new TCallLookupActor(alloc, lookupActor->SelfId(), std::move(request));
     runtime.Register(callLookupActor);
 
     auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);
     auto guard2 = Guard(*alloc.get());
-    NKikimr::NMiniKQL::TKeyPayloadPairVector lookupResult = std::move(ev->Get()->Data);
+    auto lookupResult = std::move(ev->Get()->Result);
     UNIT_ASSERT_EQUAL(4, lookupResult.size());
     {
-        auto& [k, v] = lookupResult[0];
-        UNIT_ASSERT(CheckStructValue(k, {"host1", "vpc1"}));
-        UNIT_ASSERT(CheckStructValue(v, {"host1.vpc1.net", "192.168.1.1"}));
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host1", "vpc1"}));
+        UNIT_ASSERT(v);
+        UNIT_ASSERT(CheckStructValue(*v, {"host1.vpc1.net", "192.168.1.1"}));
     }
     {
-        auto& [k, v] = lookupResult[1];
-        UNIT_ASSERT(CheckStructValue(k, {"host2", "vpc1"}));
-        UNIT_ASSERT(CheckStructValue(v, {"host2.vpc1.net", "192.168.1.2"}));
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc1"}));
+        UNIT_ASSERT(v);
+        UNIT_ASSERT(CheckStructValue(*v, {"host2.vpc1.net", "192.168.1.2"}));
     }
     {
-        auto& [k, v] = lookupResult[2];
-        UNIT_ASSERT(CheckStructValue(k, {"host2", "vpc2"}));
-        UNIT_ASSERT(!v);
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"host2", "vpc2"}));
+        UNIT_ASSERT(v);
+        UNIT_ASSERT(!*v);
     }
     {
-        auto& [k, v] = lookupResult[3];
-        UNIT_ASSERT(CheckStructValue(k, {"very very long hostname to for test 2", "vpc2"}));
-        UNIT_ASSERT(CheckStructValue(v, {"very very long fqdn for test 2", "192.168.100.2"}));
+        const auto* v = lookupResult.FindPtr(CreateStructValue(holderFactory, {"very very long hostname to for test 2", "vpc2"}));
+        UNIT_ASSERT(v);
+        UNIT_ASSERT(CheckStructValue(*v, {"very very long fqdn for test 2", "192.168.100.2"}));
     }
-    
 }
 
 } //Y_UNIT_TEST_SUITE(GenericProviderLookupActor)

@@ -281,6 +281,10 @@ TPingTaskParams ConstructHardPingTask(
             *job.mutable_statistics()->mutable_json() = statistics;
         }
 
+        if (request.current_load()) {
+            internal.set_current_load(request.current_load());
+        }
+
         if (request.flat_stats_size() != 0) {
             internal.clear_statistics();
             auto stats = DeserializeFlatStats(request.flat_stats());
@@ -515,6 +519,18 @@ TPingTaskParams ConstructHardPingTask(
                     statistics = query.statistics().json();
                 }
                 finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
+                finalStatus->FinalStatistics.push_back(std::make_pair("IsAutomatic", query.content().automatic()));
+                if (query.content().name().Contains("DataLens YQ query")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsDataLens", 1));
+                } else if (query.content().name().Contains("Audit-trails")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsAuditTrails", 1));
+                } else if (query.content().name().Contains("Query from YDB SDK")) {
+                    finalStatus->FinalStatistics.push_back(std::make_pair("IsSDK", 1));
+                }
+                finalStatus->FinalStatistics.push_back(std::make_pair("RetryCount", retryLimiter.RetryCount));
+                finalStatus->FinalStatistics.push_back(std::make_pair("RetryRate", retryLimiter.RetryRate * 100));
+                finalStatus->FinalStatistics.push_back(std::make_pair("Load", internal.current_load()));
+
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
@@ -692,7 +708,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
 
     Statistics statistics{event.Statistics};
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], "  << statistics << ", " <<
+                              event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], " << statistics << ", " <<
                               "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 

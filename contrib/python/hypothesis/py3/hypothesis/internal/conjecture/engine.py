@@ -168,6 +168,7 @@ class CallStats(TypedDict):
     status: str
     runtime: float
     drawtime: float
+    gctime: float
     events: List[str]
 
 
@@ -298,7 +299,9 @@ class ConjectureRunner:
         """
         # We ensure that the test has this much stack space remaining, no
         # matter the size of the stack when called, to de-flake RecursionErrors
-        # (#2494, #3671).
+        # (#2494, #3671). Note, this covers the data generation part of the test;
+        # the actual test execution is additionally protected at the call site
+        # in hypothesis.core.execute_once.
         with ensure_free_stackframes():
             try:
                 self._test_function(data)
@@ -342,7 +345,7 @@ class ConjectureRunner:
             for node in nodes + extension
         )
 
-    def _cache(self, data: Union[ConjectureData, ConjectureResult]) -> None:
+    def _cache(self, data: ConjectureData) -> None:
         result = data.as_result()
         # when we shrink, we try out of bounds things, which can lead to the same
         # data.buffer having multiple outcomes. eg data.buffer=b'' is Status.OVERRUN
@@ -357,8 +360,25 @@ class ConjectureRunner:
         # write to the buffer cache here as we move more things to the ir cache.
         if data.invalid_at is None:
             self.__data_cache[data.buffer] = result
-        key = self._cache_key_ir(data=data)
-        self.__data_cache_ir[key] = result
+
+        # interesting buffer-based data can mislead the shrinker if we cache them.
+        #
+        #   @given(st.integers())
+        #   def f(n):
+        #     assert n < 100
+        #
+        # may generate two counterexamples, n=101 and n=m > 101, in that order,
+        # where the buffer corresponding to n is large due to eg failed probes.
+        # We shrink m and eventually try n=101, but it is cached to a large buffer
+        # and so the best we can do is n=102, a non-ideal shrink.
+        #
+        # We can cache ir-based buffers fine, which always correspond to the
+        # smallest buffer via forced=. The overhead here is small because almost
+        # all interesting data are ir-based via the shrinker (and that overhead
+        # will tend towards zero as we move generation to the ir).
+        if data.ir_tree_nodes is not None or data.status < Status.INTERESTING:
+            key = self._cache_key_ir(data=data)
+            self.__data_cache_ir[key] = result
 
     def cached_test_function_ir(
         self, nodes: List[IRNode]
@@ -413,6 +433,7 @@ class ConjectureRunner:
                     "status": data.status.name.lower(),
                     "runtime": data.finish_time - data.start_time,
                     "drawtime": math.fsum(data.draw_times.values()),
+                    "gctime": data.gc_finish_time - data.gc_start_time,
                     "events": sorted(
                         k if v == "" else f"{k}: {v}" for k, v in data.events.items()
                     ),
@@ -1218,7 +1239,7 @@ class ConjectureRunner:
             self.interesting_examples.values(), key=lambda d: sort_key(d.buffer)
         ):
             assert prev_data.status == Status.INTERESTING
-            data = self.new_conjecture_data_for_buffer(prev_data.buffer)
+            data = self.new_conjecture_data_ir(prev_data.examples.ir_tree_nodes)
             self.test_function(data)
             if data.status != Status.INTERESTING:
                 self.exit_with(ExitReason.flaky)

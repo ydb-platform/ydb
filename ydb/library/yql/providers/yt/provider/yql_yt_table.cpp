@@ -901,8 +901,14 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash, ctx)) {
+    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups, ctx)) {
         return false;
+    }
+
+    if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+            return false;
+        }
     }
 
     return true;
@@ -963,6 +969,15 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
         }
     }
     return *this;
+}
+
+NYT::TNode TYtOutTableInfo::GetColumnGroups() const {
+    if (Settings) {
+        if (auto setting = NYql::GetSetting(Settings.Ref(), EYtSettingType::ColumnGroups)) {
+            return NYT::NodeFromYsonString(setting->Tail().Content());
+        }
+    }
+    return {};
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2859,7 +2874,7 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
             .Value(*AdditionalAttributes, TNodeFlags::MultilineContent)
         .Build();
     }
-    
+
     return pathBuilder.Done();
 }
 

@@ -46,6 +46,7 @@ RECURSE(
     public_http
     quoter
     raw_socket
+    resource_pools
     scheme
     scheme_types
     security

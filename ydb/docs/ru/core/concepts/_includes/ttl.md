@@ -64,7 +64,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 * [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
 * {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go и Python [SDK](../../reference/ydb-sdk/index.md).
 
-### Включение TTL для существующей таблицы {#enable-on-existent-table}
+### Включение TTL для существующих строковых и колоночных таблиц {#enable-on-existent-table}
 
 В приведенном ниже примере строки таблицы `mytable` будут удаляться спустя час после наступления времени, записанного в колонке `created_at`:
 

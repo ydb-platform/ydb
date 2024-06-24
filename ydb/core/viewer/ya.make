@@ -29,6 +29,7 @@ SRCS(
     json_graph.h
     json_handlers_operation.cpp
     json_handlers_pdisk.cpp
+    json_handlers_scheme.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
     json_healthcheck.h
@@ -65,6 +66,7 @@ SRCS(
     operation_list.h
     pdisk_info.h
     pdisk_status.h
+    scheme_directory.h
     query_autocomplete_helper.h
     viewer_request.cpp
     viewer_request.h

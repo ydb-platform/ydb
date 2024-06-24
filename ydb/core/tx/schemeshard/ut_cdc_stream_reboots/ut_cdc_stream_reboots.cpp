@@ -649,8 +649,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
-                UploadRows(runtime, "/MyRoot/Table", 1, {1}, {2}, {Max<ui32>()});
+                UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+                UploadRow(runtime, "/MyRoot/Table", 1, {1}, {2}, {TCell::Make(Max<ui32>())}, {TCell::Make(Max<ui32>())});
                 CheckRegistrations(runtime, {"/MyRoot/Table", 2}, {"/MyRoot/Table/Stream/streamImpl", 1});
             }
         });
@@ -694,7 +694,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1, Max<ui32>()});
+                UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+                UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(Max<ui32>())}, {TCell::Make(Max<ui32>())});
                 CheckRegistrations(runtime, {"/MyRoot/Table", 1}, {"/MyRoot/Table/Stream/streamImpl", 2});
             }
         });

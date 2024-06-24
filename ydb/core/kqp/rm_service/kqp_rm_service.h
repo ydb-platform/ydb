@@ -38,6 +38,7 @@ struct TKqpResourcesRequest {
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
+    bool ReleaseAllResources = false;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
@@ -50,6 +51,7 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
+    ui64 TotalAllocatedQueryMemory = 0;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;

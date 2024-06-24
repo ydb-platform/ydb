@@ -164,6 +164,9 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
         case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
         case TRule_sql_stmt_core::kAltSqlStmtCore44: // alter replication
+        case TRule_sql_stmt_core::kAltSqlStmtCore45: // create resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore46: // alter resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore47: // drop resource pool
             return false;
     }
 }

@@ -37,7 +37,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
     }
     auto take = node.Cast<TCoTake>();
 
-    if (!IsDqPureExpr(take.Count())) {
+    if (!IsDqCompletePureExpr(take.Count())) {
         return node;
     }
 
@@ -51,7 +51,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
             return node;
         }
 
-        if (!IsDqPureExpr(maybeSkip.Cast().Count())) {
+        if (!IsDqCompletePureExpr(maybeSkip.Cast().Count())) {
             return node;
         }
     }

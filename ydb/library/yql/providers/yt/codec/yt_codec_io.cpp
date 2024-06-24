@@ -995,6 +995,9 @@ protected:
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {

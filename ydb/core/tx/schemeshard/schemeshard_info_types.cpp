@@ -261,6 +261,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
     bool pgTypesEnabled,
+    bool datetime64TypesEnabled,
     TString& errStr, const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
@@ -399,6 +400,19 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     return nullptr;
                 }
                 typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+
+                if (!datetime64TypesEnabled) {
+                    switch (type->GetTypeId()) {
+                        case NScheme::NTypeIds::Date32:
+                        case NScheme::NTypeIds::Datetime64:
+                        case NScheme::NTypeIds::Timestamp64:
+                        case NScheme::NTypeIds::Interval64:
+                            errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
+                            return nullptr;
+                        default:
+                            break;
+                    }                    
+                }
             } else {
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
@@ -2099,6 +2113,8 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     for (const auto& x : DataColumns) {
         *index.AddDataColumnNames() = x;
     }
+
+    *index.MutableIndexImplTableDescription() = ImplTableDescription;
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {

@@ -232,7 +232,7 @@ class TDefaultNodeBrokerClient
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdb::TDriverConfig config;
-        if (endpoint.EnableSsl.Defined()) {
+        if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
             if (grpcSettings.PathToGrpcCaFile) {
                 config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
             }
@@ -321,6 +321,7 @@ class TDefaultNodeBrokerClient
         size_t currentNumberReceivedCallUnimplemented = 0;
         while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
             for (const auto& addr : addrs) {
+                logger.Out() << "Trying to register dynamic node to " << addr << Endl;
                 result = TryToRegisterDynamicNodeViaDiscoveryService(
                     grpcSettings,
                     addr,
@@ -328,6 +329,11 @@ class TDefaultNodeBrokerClient
                     env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Node name: ";
+                    if (result.HasNodeName()) {
+                        logger.Out() << result.GetNodeName();
+                    }
+                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
@@ -752,7 +758,7 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
     grpcConfig.LoadBalancingPolicy = "round_robin";
-    if (endpoint.EnableSsl.Defined()) {
+    if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
         grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
         auto& sslCredentials = grpcConfig.SslCredentials;
         if (cf.PathToGrpcCaFile) {

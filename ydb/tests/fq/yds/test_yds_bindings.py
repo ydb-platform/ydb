@@ -17,16 +17,19 @@ class TestBindings(TestYdsBase):
     def test_yds_insert(self, client):
         self.init_topics("yds_insert")
 
-        connection_id = client.create_yds_connection("ydsconnection", os.getenv("YDB_DATABASE"),
-                                                     os.getenv("YDB_ENDPOINT")).result.connection_id
+        connection_id = client.create_yds_connection(
+            "ydsconnection", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
+        ).result.connection_id
 
         foo_type = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         bar_type = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
-        client.create_yds_binding(name="ydsbinding",
-                                  stream=self.input_topic,
-                                  format="json_each_row",
-                                  connection_id=connection_id,
-                                  columns=[foo_type, bar_type])
+        client.create_yds_binding(
+            name="ydsbinding",
+            stream=self.input_topic,
+            format="json_each_row",
+            connection_id=connection_id,
+            columns=[foo_type, bar_type],
+        )
 
         sql = R'''
             insert into bindings.`ydsbinding`
@@ -59,14 +62,18 @@ class TestBindings(TestYdsBase):
     @yq_v1
     def test_raw_empty_schema_binding(self, kikimr, client, yq_version):
         self.init_topics(f"pq_test_raw_empty_schema_binding_{yq_version}")
-        connection_response = client.create_yds_connection("myyds2", os.getenv("YDB_DATABASE"),
-                                                           os.getenv("YDB_ENDPOINT"))
+        connection_response = client.create_yds_connection(
+            "myyds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
+        )
         assert not connection_response.issues, str(connection_response.issues)
-        binding_response = client.create_yds_binding(name="my_binding",
-                                                     stream=self.input_topic,
-                                                     format="raw",
-                                                     connection_id=connection_response.result.connection_id,
-                                                     columns=[],
-                                                     check_issues=False)
+        binding_response = client.create_yds_binding(
+            name="my_binding",
+            stream=self.input_topic,
+            format="raw",
+            connection_id=connection_response.result.connection_id,
+            columns=[],
+            check_issues=False,
+        )
         assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
-            binding_response.issues)
+            binding_response.issues
+        )

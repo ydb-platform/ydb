@@ -962,6 +962,31 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     }
 }
 
+TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
+{
+    std::vector<TColumnSchema> columns;
+    if (IsSorted()) {
+        for (const auto& column : Columns()) {
+            if (!column.Expression()) {
+                columns.push_back(column);
+            }
+        }
+    } else {
+        columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
+            .SetSortOrder(ESortOrder::Ascending));
+        columns.push_back(TColumnSchema(SequenceNumberColumnName, ESimpleLogicalValueType::Int64));
+        for (const auto& column : Columns()) {
+            if (column.StableName().Underlying() != TimestampColumnName &&
+                column.StableName().Underlying() != CumulativeDataWeightColumnName)
+            {
+                columns.push_back(column);
+            }
+        }
+    }
+    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
+        ETableSchemaModification::None, DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::ToWrite() const
 {
     std::vector<TColumnSchema> columns;
@@ -1539,6 +1564,16 @@ void ValidateKeyColumns(const TKeyColumns& keyColumns)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ValidateDynamicTableKeyColumnCount(int count)
+{
+    THROW_ERROR_EXCEPTION_IF(count > MaxKeyColumnCountInDynamicTable,
+        "Too many key columns: expected <= %v, got %v",
+        MaxKeyColumnCountInDynamicTable,
+        count);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateSystemColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
@@ -1741,11 +1776,7 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         THROW_ERROR_EXCEPTION("There must be at least one non-key column");
     }
 
-    if (schema.GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
-        THROW_ERROR_EXCEPTION("Too many key columns: limit %v, actual: %v",
-            MaxKeyColumnCountInDynamicTable,
-            schema.GetKeyColumnCount());
-    }
+    ValidateDynamicTableKeyColumnCount(schema.GetKeyColumnCount());
 
     for (const auto& column : schema.Columns()) {
         try {

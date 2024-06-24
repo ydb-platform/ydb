@@ -11,11 +11,6 @@ void FormatValue(TStringBuilderBase* builder, const TDnsResolveOptions options, 
         options.EnableIPv6);
 }
 
-TString ToString(const TDnsResolveOptions& options)
-{
-    return ToStringViaBuilder(options);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDns

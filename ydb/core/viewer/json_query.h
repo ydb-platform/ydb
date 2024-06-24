@@ -106,7 +106,8 @@ public:
     }
 
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
+        : TBase(ev)
+        , Viewer(viewer)
         , Event(ev)
     {
     }
@@ -193,6 +194,9 @@ public:
         auto event = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         if (Database) {
             event->Record.MutableRequest()->SetDatabase(Database);
+            if (Span) {
+                Span.Attribute("database", Database);
+            }
         }
         BLOG_TRACE("Creating session");
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
@@ -231,8 +235,6 @@ public:
         } else if (Action == "execute-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -310,6 +312,14 @@ private:
                 return valueParser.GetTimestamp().ToString();
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
+            case NYdb::EPrimitiveType::Date32:
+                return valueParser.GetInt32();
+            case NYdb::EPrimitiveType::Datetime64:
+                return valueParser.GetDatetime64();
+            case NYdb::EPrimitiveType::Timestamp64:
+                return valueParser.GetTimestamp64();
+            case NYdb::EPrimitiveType::Interval64:
+                return valueParser.GetInterval64();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:
@@ -442,6 +452,9 @@ private:
 
     void ReplyAndPassAway(TString data) {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        if (Span) {
+            Span.End();
+        }
         PassAway();
     }
 
@@ -456,13 +469,18 @@ private:
         while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
             protoIssues = (*protoIssues)[0].mutable_issues();
         }
+        TString message;
         if (protoIssues->size() > 0) {
             const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
             NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
+            message = issue.message();
         }
         for (const auto& queryIssue : *protoIssues) {
             NJson::TJsonValue& issue = jsonIssues.AppendValue({});
             NProtobufJson::Proto2Json(queryIssue, issue);
+        }
+        if (Span) {
+            Span.EndError(message);
         }
     }
 
@@ -593,6 +611,9 @@ private:
         if (response.HasQueryStats()) {
             NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
         }
+        if (Span) {
+            Span.EndOk();
+        }
     }
 };
 
@@ -621,6 +642,11 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `explain-scan` - explain scan query (ScanQuery)
                * `explain-script` - explain script query (ScriptingService)
                * `cancel-query` - cancel query (using query_id)
+          - name: database
+            in: query
+            description: database name
+            type: string
+            required: false
           - name: query
             in: query
             description: SQL query text
@@ -638,11 +664,6 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `pg` - PostgreSQL compatible
             type: string
             enum: [yql_v1, pg]
-            required: false
-          - name: database
-            in: query
-            description: database name
-            type: string
             required: false
           - name: schema
             in: query

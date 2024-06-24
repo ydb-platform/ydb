@@ -520,9 +520,9 @@
     ],
     "test.test[blocks-date_sub_interval_scalar--Peephole]": [
         {
-            "checksum": "2db4d4aaca61e2b95eeb933293009b71",
-            "size": 7319,
-            "uri": "https://{canondata_backend}/1689644/80b616663fb2c16aa8de3d761fd8bf8793b9b1e4/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Peephole_/opt.yql"
+            "checksum": "4e604fe5bea327eda5dd70d380f9d6ac",
+            "size": 5464,
+            "uri": "https://{canondata_backend}/1880306/df93df6841bdcd08117444ad7210bc8fbdc789c2/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-date_sub_interval_scalar--Plan]": [
@@ -576,9 +576,9 @@
     ],
     "test.test[blocks-interval_mul--Peephole]": [
         {
-            "checksum": "1565de7fb6f252b0acd4b02c5cf4c5ec",
-            "size": 8772,
-            "uri": "https://{canondata_backend}/212715/6f6bf2bb89b40fafbd6da226e87aee6b3a8a07d5/resource.tar.gz#test.test_blocks-interval_mul--Peephole_/opt.yql"
+            "checksum": "96f4dcac9913e1de6b18faf5568e3151",
+            "size": 7350,
+            "uri": "https://{canondata_backend}/1880306/df93df6841bdcd08117444ad7210bc8fbdc789c2/resource.tar.gz#test.test_blocks-interval_mul--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-interval_mul--Plan]": [
@@ -593,6 +593,20 @@
             "checksum": "1e145b70440532852cdcb19fce3804f1",
             "size": 16526,
             "uri": "https://{canondata_backend}/212715/6f6bf2bb89b40fafbd6da226e87aee6b3a8a07d5/resource.tar.gz#test.test_blocks-interval_mul--Results_/results.txt"
+        }
+    ],
+    "test.test[column_group-hint_non_str_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_str_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_str_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_str_yson_fail--Results_/extracted"
+        }
+    ],
+    "test.test[column_group-hint_non_yson_fail--Debug]": [],
+    "test.test[column_group-hint_non_yson_fail--Plan]": [],
+    "test.test[column_group-hint_non_yson_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_non_yson_fail--Results_/extracted"
         }
     ],
     "test.test[column_order-insert--Debug]": [

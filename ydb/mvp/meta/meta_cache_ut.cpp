@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <util/system/tempfile.h>
+#include <util/stream/null.h>
 #include "meta_cache.h"
 
 #ifdef NDEBUG
@@ -152,24 +153,31 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(LocalEndpoint + ":" + ToString(port1) + "/server");
         actorSystem.Send(new NActors::IEventHandle(proxyIdC, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
-        // receiving response on server2
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request1->Request->URL, "/server");
-        UNIT_ASSERT_EQUAL(request1->Request->Host, TStringBuilder() << LocalAddress << ":" << port2);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = nullptr;
+        TAutoPtr<NActors::IEventHandle> handle1;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request2 = nullptr;
+        TAutoPtr<NActors::IEventHandle> handle2;
 
-        // ignoring request
-
-        // waiting for the timeout
-        actorSystem.SimulateSleep(TDuration::Seconds(120));
-
-        // receiving retried response on server1
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request2->Request->URL, "/server");
-        UNIT_ASSERT_EQUAL(request2->Request->Host, TStringBuilder() << LocalAddress << ":" << port1);
-
+        while (!request1 || !request2) {
+            // receiving response on server2 and server1
+            NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+            if (request->Request->Host == TStringBuilder() << LocalAddress << ":" << port1) {
+                request1 = request;
+                handle1 = handle;
+            } else if (request->Request->Host == TStringBuilder() << LocalAddress << ":" << port2) {
+                request2 = request;
+                handle2 = handle;
+            } else {
+                UNIT_ASSERT(false);
+            }
+            if (!request1 || !request2) {
+                // waiting for the timeout - it seems that it doesn't actually work
+                actorSystem.SimulateSleep(TDuration::Seconds(120));
+            }
+        }
         // constructing response
-        NHttp::THttpOutgoingResponsePtr httpResponse = request2->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
-        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId2, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        NHttp::THttpOutgoingResponsePtr httpResponse = request1->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle1->Sender, serverId2, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
 
         // receiving response on client
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);

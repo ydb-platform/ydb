@@ -344,6 +344,8 @@ private:
 
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
+                                     NKikimrPQ::TError::EKind kind,
+                                     const TString& reason,
                                      const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);

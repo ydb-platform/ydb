@@ -41,6 +41,7 @@ enum EObjectType {
     ExternalTable = 24;
     ExternalDataSource = 25;
     View = 26;
+    ResourcePool = 27;
 }
 
 message TBrowseInfo {
@@ -72,6 +73,7 @@ message TMetaCommonInfo {
         string Subject = 3;
         repeated string InheritanceType = 4;
         string AccessRule = 5;
+        repeated string AccessRules = 6;
     }
 
     EObjectType Type = 1;
@@ -91,6 +93,7 @@ message TMetaCommonInfo {
     repeated uint32 Nodes = 15;
     repeated uint32 Disks = 16;
     repeated TACE ACL = 17;
+
     TBackupInfo Backup = 18;
     TResources Resources = 19;
 
@@ -115,6 +118,7 @@ message TMetaCommonInfo {
     uint64 RowReads = 36;
     uint64 RangeReads = 37;
     uint64 RangeReadRows = 38;
+    repeated TACE EffectiveACL = 39;
 }
 
 message TMetaColumnInfo {

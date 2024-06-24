@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/public/udf)
 SRCS(
     udf_counter_ut.cpp
     udf_value_ut.cpp
+    udf_data_type_ut.cpp
     udf_value_builder_ut.cpp
 )
 

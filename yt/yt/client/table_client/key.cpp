@@ -125,18 +125,13 @@ bool operator==(const TKey& lhs, const TKey& rhs)
     return CompareValueRanges(lhs.Elements(), rhs.Elements()) == 0;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*spec*/)
 {
     if (key) {
         builder->AppendFormat("[%v]", JoinToString(key.Begin(), key.End()));
     } else {
         builder->AppendString("#");
     }
-}
-
-TString ToString(const TKey& key)
-{
-    return ToStringViaBuilder(key);
 }
 
 void Serialize(const TKey& key, IYsonConsumer* consumer)

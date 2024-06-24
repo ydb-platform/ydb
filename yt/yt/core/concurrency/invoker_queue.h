@@ -179,7 +179,7 @@ public:
     // NB(arkady-e1ppa): Calling shutdown is not
     // enough to prevent leaks of callbacks
     // as there might be some callbacks left in
-    // local queue of mpsc queue if shutdown
+    // local queue of MPSC queue if shutdown
     // was not graceful.
     void OnConsumerFinished();
 

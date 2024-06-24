@@ -22,11 +22,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             auto baseStatsRowset = db.Table<Schema::BaseStats>().Range().Select();
             auto statisticsRowset = db.Table<Schema::Statistics>().Range().Select();
             auto scanTablesRowset = db.Table<Schema::ScanTables>().Range().Select();
+            auto scanOperationsRowset = db.Table<Schema::ScanOperations>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !baseStatsRowset.IsReady() ||
                 !statisticsRowset.IsReady() ||
-                !scanTablesRowset.IsReady())
+                !scanTablesRowset.IsReady() ||
+                !scanOperationsRowset.IsReady())
             {
                 return false;
             }
@@ -68,6 +70,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loading scan start time: " << us);
                         break;
                     }
+                    case Schema::SysParam_LastScanOperationId: {
+                        auto id = FromString<ui64>(value);
+                        Self->LastScanOperationId = id;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << id);
+                        break;
+                    }
+
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }
@@ -129,9 +138,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         // ScanTables
         {
-            TStatisticsAggregator::TScanTableQueue emptyQueue;
-            Self->ScanTablesByTime.swap(emptyQueue);
+            Self->ScanTablesByTime.Clear();
             Self->ScanTablesBySchemeShard.clear();
+            Self->ScanTables.clear();
 
             auto rowset = db.Table<Schema::ScanTables>().Range().Select();
             if (!rowset.IsReady()) {
@@ -150,8 +159,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 scanTable.PathId = pathId;
                 scanTable.SchemeShardId = schemeShardId;
                 scanTable.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
-                Self->ScanTablesByTime.push(scanTable);
 
+                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
+                Self->ScanTablesByTime.Add(&it->second);
                 Self->ScanTablesBySchemeShard[schemeShardId].insert(pathId);
 
                 if (!rowset.Next()) {
@@ -160,7 +170,38 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
 
             SA_LOG_D("[" << Self->TabletID() << "] Loading scan tables: "
-                << "table count# " << Self->ScanTablesByTime.size());
+                << "table count# " << Self->ScanTables.size());
+        }
+
+        // ScanOperations
+        {
+            Self->ScanOperations.Clear();
+            Self->ScanOperationsByPathId.clear();
+
+            auto rowset = db.Table<Schema::ScanOperations>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 operationId = rowset.GetValue<Schema::ScanOperations::OperationId>();
+                ui64 ownerId = rowset.GetValue<Schema::ScanOperations::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ScanOperations::LocalPathId>();
+
+                auto pathId = TPathId(ownerId, localPathId);
+
+                TScanOperation& operation = Self->ScanOperationsByPathId[pathId];
+                operation.PathId = pathId;
+                operation.OperationId = operationId;
+                Self->ScanOperations.PushBack(&operation);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loading scan operations: "
+                << "table count# " << Self->ScanOperationsByPathId.size());
         }
 
         return true;
@@ -172,17 +213,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SignalTabletActive(ctx);
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
+        Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
 
-        Self->Initialize();
+        Self->InitializeStatisticsTable();
 
         if (Self->ScanTableId.PathId) {
-            Self->InitStartKey = false;
             Self->Navigate();
-        } else {
-            Self->ScheduleNextScan();
         }
 
         Self->Become(&TThis::StateWork);

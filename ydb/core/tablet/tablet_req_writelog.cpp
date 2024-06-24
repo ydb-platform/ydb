@@ -49,8 +49,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
 
-            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
-            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
+            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId.GetRawId())] += msg->Id.BlobSize();
+            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId.GetRawId())] += 1;
 
             ResponseCookies ^= ev->Cookie;
 

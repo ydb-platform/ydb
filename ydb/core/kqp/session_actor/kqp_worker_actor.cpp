@@ -99,8 +99,7 @@ public:
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-        const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig,
-        const TGUCSettings::TPtr& gUCSettings
+        const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
         )
         : Owner(owner)
         , SessionId(sessionId)
@@ -110,7 +109,6 @@ public:
         , Counters(counters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , QueryServiceConfig(queryServiceConfig)
-        , MetadataProviderConfig(metadataProviderConfig)
         , CreationTime(TInstant::Now())
         , QueryId(0)
         , ShutdownState(std::nullopt)
@@ -183,7 +181,7 @@ public:
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
+            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
@@ -1085,7 +1083,6 @@ private:
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKikimrConfiguration::TPtr Config;
     TQueryServiceConfig QueryServiceConfig;
-    TMetadataProviderConfig MetadataProviderConfig;
     TInstant CreationTime;
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
@@ -1102,12 +1099,11 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig,
-    const TGUCSettings::TPtr& gUCSettings
+    const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
     )
 {
     return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
-                               moduleResolverState, counters, queryServiceConfig, metadataProviderConfig, gUCSettings);
+                               moduleResolverState, counters, queryServiceConfig, gUCSettings);
 }
 
 } // namespace NKqp

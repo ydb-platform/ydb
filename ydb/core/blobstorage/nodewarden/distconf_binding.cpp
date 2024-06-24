@@ -194,6 +194,8 @@ namespace NKikimr::NStorage {
 
             AbortAllScatterTasks(binding);
 
+            ApplyConfigUpdateToDynamicNodes(true);
+
             IssueNextBindRequest();
 
             for (const auto& [nodeId, info] : DirectBoundNodes) {
@@ -441,6 +443,10 @@ namespace NKikimr::NStorage {
 
     ui32 TDistributedConfigKeeper::GetRootNodeId() const {
         return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
+    }
+
+    bool TDistributedConfigKeeper::PartOfNodeQuorum() const {
+        return Scepter || GetRootNodeId() != SelfId().NodeId();
     }
 
 } // NKikimr::NStorage

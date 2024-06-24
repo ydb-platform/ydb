@@ -119,6 +119,7 @@
 
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ticket_parser_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -1635,10 +1636,19 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
     }
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
+        auto grpcConfig = Config.GetGRpcConfig();
+        TTicketParserSettings settings {
+            .AuthConfig = Config.GetAuthConfig(),
+            .CertificateAuthValues = {
+                .ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
+                .ServerCertificateFilePath = grpcConfig.GetCert(),
+                .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()
+            }
+        };
         if (Factories && Factories->CreateTicketParser) {
-            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = Factories->CreateTicketParser(settings);
         } else {
-            ticketParser = CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = CreateTicketParser(settings);
         }
         if (ticketParser) {
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTicketParserID(),
@@ -2148,7 +2158,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
-            Config.GetQueryServiceConfig(),  Config.GetMetadataProviderConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
+            Config.GetQueryServiceConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
             federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
@@ -2157,7 +2167,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         // Create finalize script service
         auto finalize = NKqp::CreateKqpFinalizeScriptService(
-            Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory, s3ActorsFactory
+            Config.GetQueryServiceConfig(), federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),

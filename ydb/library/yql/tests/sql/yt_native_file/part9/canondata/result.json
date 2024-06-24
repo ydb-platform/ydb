@@ -408,9 +408,9 @@
     ],
     "test.test[blocks-combine_all_sum_filter--Peephole]": [
         {
-            "checksum": "b51e783a59ea0f1082d08fd75bb2e244",
-            "size": 2649,
-            "uri": "https://{canondata_backend}/1937367/bf3daea8b53db195e51f49431b822900029c2a5d/resource.tar.gz#test.test_blocks-combine_all_sum_filter--Peephole_/opt.yql"
+            "checksum": "81ee3765373af586662b427793a726b7",
+            "size": 2558,
+            "uri": "https://{canondata_backend}/1936947/dd735d32257373e0e81a1a0c690b04eb821b17d3/resource.tar.gz#test.test_blocks-combine_all_sum_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_sum_filter--Plan]": [
@@ -464,9 +464,9 @@
     ],
     "test.test[blocks-distinct_pure_keys--Peephole]": [
         {
-            "checksum": "5823e74c422702af19b81ef670c6dc1d",
-            "size": 7251,
-            "uri": "https://{canondata_backend}/1937367/bf3daea8b53db195e51f49431b822900029c2a5d/resource.tar.gz#test.test_blocks-distinct_pure_keys--Peephole_/opt.yql"
+            "checksum": "c59c6d34d5ee19a75a2f78eeeac2c5ff",
+            "size": 6736,
+            "uri": "https://{canondata_backend}/1936947/dd735d32257373e0e81a1a0c690b04eb821b17d3/resource.tar.gz#test.test_blocks-distinct_pure_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_pure_keys--Plan]": [
@@ -579,6 +579,20 @@
             "checksum": "c6c52838091f95a75967641f85713dcb",
             "size": 915,
             "uri": "https://{canondata_backend}/1775059/59a8dbe71df1bdc11b3f063ab535eee737c36649/resource.tar.gz#test.test_case-case_then_else-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[column_group-hint_dup_col_fail--Debug]": [],
+    "test.test[column_group-hint_dup_col_fail--Plan]": [],
+    "test.test[column_group-hint_dup_col_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_dup_col_fail--Results_/extracted"
+        }
+    ],
+    "test.test[column_group-hint_short_grp_fail--Debug]": [],
+    "test.test[column_group-hint_short_grp_fail--Plan]": [],
+    "test.test[column_group-hint_short_grp_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_short_grp_fail--Results_/extracted"
         }
     ],
     "test.test[column_order-ordered_plus_native--Debug]": [

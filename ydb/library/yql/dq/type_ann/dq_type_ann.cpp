@@ -793,12 +793,13 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
 
         auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        if (!EnsureStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+
+        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
             return TStatus::Error;
         }
 
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
         if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
             return TStatus::Error;
         }
@@ -1134,6 +1135,9 @@ bool IsTypeSupportedInMergeCn(EDataSlot type) {
         case EDataSlot::Datetime64:
         case EDataSlot::Timestamp64:
         case EDataSlot::Interval64:
+        case EDataSlot::TzDate32:
+        case EDataSlot::TzDatetime64:
+        case EDataSlot::TzTimestamp64:
             return false;
     }
     return false;

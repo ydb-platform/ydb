@@ -112,7 +112,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (bootstrap) {
                 GetTableProfiles();
             } else {
-                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, {}));
+                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
+                    .WithKeyShardBoundary(true)));
             }
             break;
         }
@@ -167,7 +168,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         Ydb::StatusIds::StatusCode status;
         TString error;
-        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error)) {
+
+        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, scheme.indexes_size())) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
@@ -176,15 +178,28 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
-        // TODO: support indexed tables
-        TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
         TxBody.SetWorkingDir(pathPair.first);
 
-        auto& desc = *TxBody.MutableCreateTable();
-        desc.SetName(pathPair.second);
+        NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+        if (scheme.indexes_size()) {
+            TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+            tableDesc = TxBody.MutableCreateIndexedTable()->MutableTableDescription();
+            TxBody.SetInternal(true);
+        } else {
+            TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+            tableDesc = TxBody.MutableCreateTable();
+        }
+
+        Ydb::StatusIds::StatusCode dummyCode;
+
+        if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, dummyCode, error)) {
+            return Error(NKikimrScheme::StatusSchemeError, error);
+        }
+
+        tableDesc->SetName(pathPair.second);
 
         // TODO: support other modes
-        auto& replicationConfig = *desc.MutableReplicationConfig();
+        auto& replicationConfig = *tableDesc->MutableReplicationConfig();
         replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
 

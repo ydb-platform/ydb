@@ -305,6 +305,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigUnbind::TPtr ev);
         void UnbindNode(ui32 nodeId, const char *reason);
         ui32 GetRootNodeId() const;
+        bool PartOfNodeQuorum() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Root node operation
@@ -381,7 +382,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes
-        void ApplyConfigUpdateToDynamicNodes();
+        void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
         void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
@@ -605,7 +606,7 @@ namespace NKikimr::NStorage {
                 continue;
             }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            const auto it = groups.find(vdiskId.GroupID);
+            const auto it = groups.find(vdiskId.GroupID.GetRawId());
             if (it == groups.end()) {
                 return makeError(TStringBuilder() << "VDisk " << vdiskId << " does not match any static group");
             }
@@ -631,7 +632,7 @@ namespace NKikimr::NStorage {
             const auto [begin, end] = confirm.equal_range(key);
             for (auto it = begin; it != end; ++it) {
                 const TVDiskID& vdiskId = it->second;
-                TGroupRecord& group = groups.at(vdiskId.GroupID);
+                TGroupRecord& group = groups.at(vdiskId.GroupID.GetRawId());
                 group.Confirmed |= {&group.Info->GetTopology(), vdiskId};
             }
         });

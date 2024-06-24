@@ -63,8 +63,7 @@ TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,

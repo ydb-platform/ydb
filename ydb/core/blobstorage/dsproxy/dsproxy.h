@@ -198,7 +198,7 @@ public:
     {
         TDerived::ActiveCounter(Mon)->Inc();
         Span
-            .Attribute("GroupId", Info->GroupID)
+            .Attribute("GroupId", Info->GroupID.GetRawId())
             .Attribute("RestartCounter", RestartCounter);
 
         Y_ABORT_UNLESS(CostModel);
@@ -306,7 +306,7 @@ public:
             std::optional<NKikimrBlobStorage::TGroupInfo> group;
             if (record.HasRecentGroup()) {
                 group = record.GetRecentGroup();
-                if (group->GetGroupID() != Info->GroupID || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
+                if (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
                     return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
                 }
             }
@@ -464,7 +464,7 @@ public:
             TLogoBlobID id = GetBlobId(request);
             TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
             LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),
-                    Info->GroupID, id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
+                    Info->GroupID.GetRawId(), id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
             SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
         }
     }

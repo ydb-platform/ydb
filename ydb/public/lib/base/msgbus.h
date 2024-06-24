@@ -120,10 +120,6 @@ struct TBusSchemeOperationStatus : TBusMessage<TBusSchemeOperationStatus, NKikim
 struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeRequest : TBusMessage<TBusOldFlatDescribeRequest, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeResponse : TBusMessage<TBusOldFlatDescribeResponse, NKikimrClient::TFlatDescribeResponse, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE> {};
-struct TBusDbSchema : TBusMessage<TBusDbSchema, NKikimrClient::TJSON, MTYPE_CLIENT_DB_SCHEMA> {};
-struct TBusDbOperation : TBusMessage<TBusDbOperation, NKikimrClient::TJSON, MTYPE_CLIENT_DB_OPERATION> {};
-struct TBusDbResponse : TBusMessage<TBusDbResponse, NKikimrClient::TJSON, MTYPE_CLIENT_DB_RESPONSE> {};
-struct TBusDbBatch : TBusMessage<TBusDbBatch, NKikimrClient::TJSON, MTYPE_CLIENT_DB_BATCH> {};
 struct TBusBlobStorageConfigRequest : TBusMessage<TBusBlobStorageConfigRequest, NKikimrClient::TBlobStorageConfigRequest, MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST> {};
 struct TBusDrainNode : TBusMessage<TBusDrainNode, NKikimrClient::TDrainNodeRequest, MTYPE_CLIENT_DRAIN_NODE> {};
 struct TBusFillNode : TBusMessage<TBusFillNode, NKikimrClient::TFillNodeRequest, MTYPE_CLIENT_FILL_NODE> {};
@@ -209,10 +205,6 @@ public:
         RegisterType(new TBusSchemeDescribe);
         RegisterType(new TBusOldFlatDescribeRequest);
         RegisterType(new TBusOldFlatDescribeResponse);
-        RegisterType(new TBusDbSchema);
-        RegisterType(new TBusDbOperation);
-        RegisterType(new TBusDbResponse);
-        RegisterType(new TBusDbBatch);
         RegisterType(new TBusBlobStorageConfigRequest);
         RegisterType(new TBusDrainNode);
         RegisterType(new TBusFillNode);

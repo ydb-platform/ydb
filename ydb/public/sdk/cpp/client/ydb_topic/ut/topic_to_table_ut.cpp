@@ -113,6 +113,9 @@ protected:
                                    ui32 partition);
 
     struct TTableRecord {
+        TTableRecord() = default;
+        TTableRecord(const TString& key, const TString& value);
+
         TString Key;
         TString Value;
     };
@@ -157,6 +160,12 @@ private:
     THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 };
+
+TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
+    Key(key),
+    Value(value)
+{
+}
 
 void TFixture::SetUp(NUnitTest::TTestContext&)
 {

@@ -38,6 +38,7 @@ int ConvertOption(const EOption& option) {
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
+const TString LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const TString& password) {
     return ldap_simple_bind_s(ld, dn.c_str(), password.c_str());
@@ -49,7 +50,6 @@ int Unbind(LDAP* ld) {
 
 int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
     Y_UNUSED(scheme, port);
-    Cerr << "+++ Initialize connection to: " << uris << Endl;
     return ldap_initialize(ld, uris.c_str());
 }
 

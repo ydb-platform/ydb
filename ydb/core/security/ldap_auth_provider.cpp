@@ -230,9 +230,6 @@ private:
             }
         }
 
-        // ldap debug
-        // int dl = 0x0001;
-        // NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
         return {};
     }
 

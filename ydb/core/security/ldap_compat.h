@@ -8,6 +8,7 @@
 namespace NKikimrLdap {
 
 extern char* noAttributes[];
+extern const TString LDAPS_SCHEME;
 
 enum class EScope : int {
     BASE,
@@ -22,8 +23,6 @@ enum class EOption {
     TLS_REQUIRE_CERT,
     PROTOCOL_VERSION,
 };
-
-constexpr const char* LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const TString& password);
 int Unbind(LDAP* ld);

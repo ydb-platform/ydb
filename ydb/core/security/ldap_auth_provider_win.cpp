@@ -18,6 +18,7 @@ char ldapNoAttribute[] = LDAP_NO_ATTRS;
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
+const TString LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const TString& password) {
     char* bindDn = const_cast<char*>(dn.c_str());

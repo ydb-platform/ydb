@@ -1276,7 +1276,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate was pushed down. Query: " << query);
 #endif
     }
-#if SSA_RUNTIME_VERSION < 5U
+#if SSA_RUNTIME_VERSION < 4U
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2076,7 +2076,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-#if SSA_RUNTIME_VERSION >= 4U
+#if SSA_RUNTIME_VERSION >= 3U
         const std::set<std::string> numerics = {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
         const std::map<std::string, std::set<std::string>> exceptions = {
             {"Int8", numerics},

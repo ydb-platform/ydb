@@ -383,7 +383,8 @@ public:
     bool UpdateSpillingAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
-                if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                return false;
+                /* if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                     const auto used = TlsAllocState->GetUsed();
                     const auto limit = TlsAllocState->GetLimit();
 
@@ -391,9 +392,10 @@ public:
                     YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
                     SwitchMode(EOperatingMode::Spilling);
+                    return UpdateSpillingAndWait();
                 }
-
-                return UpdateSpillingAndWait();
+                return false;*/ 
+                
             case EOperatingMode::ProcessSpilled:
                 return ProcessSpilledData();
                return false;
@@ -423,7 +425,7 @@ public:
 
     NUdf::TUnboxedValuePod* GetThroat() const {
         if (GetMode() == EOperatingMode::InMemory) {
-            return InMemoryProcessingState.Tongue;
+            return InMemoryProcessingState.Throat;
         }
 
         MKQL_ENSURE(CurrentBucketId != -1, "Internal logic error");
@@ -732,9 +734,13 @@ private:
         // return !HasMemoryForProcessing();
     }
 
+public:
+    TState InMemoryProcessingState;
+    ui64 FetchesCount = 0;
+
 private:
     ui64 NextBucketToSpill = 0;
-    TState InMemoryProcessingState;
+    // TState InMemoryProcessingState;
     const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
@@ -1264,6 +1270,7 @@ public:
 
                 if (ptr->IsFetchRequired()) {
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
+                    ptr->FetchesCount++;
                     if (ptr->InputStatus == EFetchResult::Yield) return EFetchResult::Yield;
                 }
 
@@ -1271,11 +1278,11 @@ public:
                     for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                         fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
 
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Tongue));
 
                     bool isNew = ptr->TasteIt();
                     if (ptr->IsImmediateProcessingAvaliable()) {
-                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
+                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->InMemoryProcessingState.Throat));
                     }
                     continue;
                 }
@@ -1541,6 +1548,8 @@ private:
             allowSpilling,
             ctx
         );
+
+        std::cerr << "SpillingSupportState created\n";
     }
 
     void RegisterDependencies() const final {

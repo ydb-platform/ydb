@@ -1,5 +1,7 @@
 #pragma once
 
+#include <format>
+#include <iostream>
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -219,6 +221,7 @@ public:
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
+        std::cerr << std::format("USED: {} of {}\n", GetUsed(), GetLimit());
         return IsMemoryYellowZoneReached;
     }
 

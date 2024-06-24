@@ -607,7 +607,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return;
     }
 
@@ -884,7 +884,7 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -916,7 +916,7 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -940,7 +940,7 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -985,7 +985,7 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -1004,7 +1004,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return false;
     }
     if (DiskIsFull) {

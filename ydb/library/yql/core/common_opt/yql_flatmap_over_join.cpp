@@ -855,7 +855,9 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
         return equiJoin;
     }
 
-    if (left->GetTypeAnn() != right->GetTypeAnn()) {
+    const auto* lType = left->GetTypeAnn();
+    const auto* rType = right->GetTypeAnn();
+    if (lType->GetKind() == ETypeAnnotationKind::Pg && rType->GetKind() == ETypeAnnotationKind::Pg && lType != rType) {
         return equiJoin;
     }
 

@@ -22,7 +22,6 @@ class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : ReplyActor(request->Sender)
         , ExecutionId(request->Get()->Description.ExecutionId)
@@ -30,7 +29,6 @@ public:
         , FinalizationStatus(request->Get()->Description.FinalizationStatus)
         , Request(std::move(request))
         , FinalizationTimeout(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
-        , MaximalSecretsSnapshotWaitTime(2 * TDuration::Seconds(metadataProviderConfig.GetRefreshPeriodSeconds()))
         , FederatedQuerySetup(federatedQuerySetup)
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
@@ -99,7 +97,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem(), MaximalSecretsSnapshotWaitTime);
+        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -227,7 +225,6 @@ private:
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;
-    const TDuration MaximalSecretsSnapshotWaitTime;
     const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
     const NFq::TCompressor Compressor;
 
@@ -243,9 +240,8 @@ private:
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
-    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, metadataProviderConfig, federatedQuerySetup);
+    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, federatedQuerySetup);
 }
 
 }  // namespace NKikimr::NKqp

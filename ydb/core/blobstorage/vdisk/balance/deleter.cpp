@@ -63,6 +63,7 @@ namespace {
                 }
 
                 ev->AddExtremeQuery(key.FullID(), 0, 0, &i);
+                ++MonGroup.CandidatesToDeleteAskedFromMain();
             }
 
             for (auto& [vDiskId, ev]: vDiskToQueries) {
@@ -72,14 +73,12 @@ namespace {
                     std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
                     msgSize
                 );
-                ++MonGroup.CandidatesToDeleteAskedFromMain();
                 ++RequestsSent;
             }
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
             ++Responses;
-            ++MonGroup.CandidatesToDeleteAskedFromMainResponse();
             auto msg = ev->Get()->Record;
             if (msg.GetStatus() != NKikimrProto::EReplyStatus::OK) {
                 return;
@@ -93,6 +92,7 @@ namespace {
                         Result[i].HasOnMain = true;
                     }
                 }
+                ++MonGroup.CandidatesToDeleteAskedFromMainResponse();
             }
         }
 

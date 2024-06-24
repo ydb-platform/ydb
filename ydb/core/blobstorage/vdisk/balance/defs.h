@@ -20,7 +20,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
 
-        THashMap<TLogoBlobID, TInstant>& LastBalancingTime;
+        ui32 MinREALHugeBlobInBytes;
 
         TBalancingCtx(
             TIntrusivePtr<TVDiskContext> vCtx,
@@ -30,7 +30,7 @@ namespace NKikimr {
             NKikimr::THullDsSnap snap,
             TIntrusivePtr<TVDiskConfig> vDiskCfg,
             TIntrusivePtr<TBlobStorageGroupInfo> gInfo,
-            THashMap<TLogoBlobID, TInstant>& lastBalancingTime
+            ui32 minREALHugeBlobInBytes
         )
             : VCtx(std::move(vCtx))
             , PDiskCtx(std::move(pDiskCtx))
@@ -40,7 +40,7 @@ namespace NKikimr {
             , Snap(std::move(snap))
             , VDiskCfg(std::move(vDiskCfg))
             , GInfo(std::move(gInfo))
-            , LastBalancingTime(lastBalancingTime)
+            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
         {
         }
     };
@@ -59,7 +59,6 @@ namespace NBalancing {
     static constexpr ui32 DELETER_ID = 1;
 
     static constexpr TDuration JOB_GRANULARITY = TDuration::MilliSeconds(1);
-    static constexpr TDuration SEND_TIMEOUT = TDuration::Minutes(5);
 
     static constexpr TDuration READ_BATCH_TIMEOUT = TDuration::Seconds(10);
     static constexpr TDuration SEND_BATCH_TIMEOUT = TDuration::Seconds(10);

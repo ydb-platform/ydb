@@ -106,7 +106,7 @@ namespace NBalancing {
             THPTimer timer;
 
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
-                if (cnt % 1000 == 999 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
+                if (cnt % 100 == 99 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
                     STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
@@ -123,19 +123,8 @@ namespace NBalancing {
 
                 if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
                     // collect parts to send on main
-                    auto lastBalancingTimeIt = Ctx->LastBalancingTime.find(key);
-                    if (lastBalancingTimeIt == Ctx->LastBalancingTime.end()) {
-                        lastBalancingTimeIt = Ctx->LastBalancingTime.emplace(key, TlsActivationContext->Now()).first;
-                    }
-                    // if (lastBalancingTimeIt->second + SEND_TIMEOUT + TDuration::Seconds(rand() % SEND_TIMEOUT.Seconds()) > TlsActivationContext->Now()) {
-                    if (lastBalancingTimeIt->second + SEND_TIMEOUT > TlsActivationContext->Now()) {
-                        // skip balancing for this key
-                        continue;
-                    }
-
                     for (const auto& [parts, data]: merger.Parts) {
                         if (!(partsToSend & parts).Empty()) {
-                            lastBalancingTimeIt->second = TlsActivationContext->Now();
                             SendOnMainParts.Data.emplace_back(TPartInfo{
                                 .Key=It.GetCurKey().LogoBlobID(),
                                 .PartsMask=parts,
@@ -154,14 +143,6 @@ namespace NBalancing {
                 }
 
                 merger.Clear();
-            }
-
-            for (auto it = Ctx->LastBalancingTime.begin(); it != Ctx->LastBalancingTime.end();) {
-                if (it->second + SEND_TIMEOUT < TlsActivationContext->Now()) {
-                    Ctx->LastBalancingTime.erase(it++);
-                } else {
-                    ++it;
-                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),

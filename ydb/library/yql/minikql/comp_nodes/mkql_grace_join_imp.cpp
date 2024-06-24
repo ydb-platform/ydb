@@ -1066,6 +1066,12 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit)
 
         td1.AllNulls = true;
 
+        if (!Table2Initialized_) {
+            CurrIterBucket = 0;
+            CurrJoinIdsIterIndex = 0;
+            Table2Initialized_ = true;
+        }
+
         while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, bucketLimit)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {

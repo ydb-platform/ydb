@@ -853,7 +853,7 @@ namespace NKikimr {
 
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(
                     new NSyncLog::TEvSyncLogPut(Db->GType, seg.Point(), msg->Id, msg->Ingress));
-            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->Id, msg->OrderId, msg->Cookie, now,
+            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->Id, msg->OrderId, now,
                     nullptr, nullptr));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);

@@ -46,13 +46,11 @@ namespace NKikimr {
         const TLogoBlobID Id;
         const TIngress Ingress;
         const ui64 OrderId;
-        const ui64 Cookie;
 
-        TEvDelLogoBlobDataSyncLog(const TLogoBlobID &id, const TIngress &ingress, ui64 orderId, ui64 cookie)
+        TEvDelLogoBlobDataSyncLog(const TLogoBlobID &id, const TIngress &ingress, ui64 orderId)
             : Id(id)
             , Ingress(ingress)
             , OrderId(orderId)
-            , Cookie(cookie)
         {}
     };
 
@@ -62,15 +60,13 @@ namespace NKikimr {
     {
         const TLogoBlobID Id;
         const ui64 OrderId;
-        const ui64 Cookie;
 
-        TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, ui64 cookie, const TInstant &now,
+        TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, const TInstant &now,
                 ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr)
             : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, counterPtr,
                 histoPtr)
             , Id(id)
             , OrderId(orderId)
-            , Cookie(cookie)
         {}
     };
 

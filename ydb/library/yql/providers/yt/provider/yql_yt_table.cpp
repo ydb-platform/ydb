@@ -906,18 +906,8 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
     }
 
     if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
-        auto rowType = node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>();
-        const auto columnGroups = NYT::NodeFromYsonString(setting->Tail().Content());
-        for (const auto& grp: columnGroups.AsMap()) {
-            if (!grp.second.IsEntity()) {
-                for (const auto& col: grp.second.AsList()) {
-                    if (!rowType->FindItem(col.AsString())) {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder()
-                            << "Column group " << grp.first.Quote() << " refers to unknown column " << col.AsString().Quote()));
-                        return false;
-                    }
-                }
-            }
+        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+            return false;
         }
     }
 

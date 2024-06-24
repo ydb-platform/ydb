@@ -301,12 +301,12 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
-    sinkEffect = NeedSinks(table, kqpCtx);
-
     TKqpUpsertRowsSettings settings;
     if (node.Settings()) {
         settings = TKqpUpsertRowsSettings::Parse(node.Settings().Cast());
     }
+
+    sinkEffect = NeedSinks(table, kqpCtx) || (kqpCtx.IsGenericQuery() && settings.AllowInconsistentWrites);
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {

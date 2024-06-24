@@ -13,6 +13,7 @@ PY3_LIBRARY()
         contrib/python/allure-python-commons
         contrib/python/requests
         library/python/testing/yatest_common
+        ydb/public/api/client/yc_public/iam
         ydb/tests/oss/ydb_sdk_import
     )
 

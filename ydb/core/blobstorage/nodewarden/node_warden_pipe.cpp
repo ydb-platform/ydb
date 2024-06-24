@@ -18,9 +18,22 @@ void TNodeWarden::EstablishPipe() {
     STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId),
         (PipeClientId, PipeClientId), (ControllerId, controllerId));
 
+    for (auto& [key, pdisk] : LocalPDisks) {
+        if (pdisk.PDiskMetrics) {
+            PDisksWithUnreportedMetrics.PushBack(&pdisk);
+        }
+    }
+    for (auto& [key, vdisk] : LocalVDisks) {
+        vdisk.ScrubCookieForController = 0; // invalidate all pending requests to BS_CONTROLLER
+        if (vdisk.VDiskMetrics) {
+            VDisksWithUnreportedMetrics.PushBack(&vdisk);
+        }
+    }
+
     SendRegisterNode();
     SendInitialGroupRequests();
     SendScrubRequests();
+    SendDiskMetrics(true);
 }
 
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -44,17 +57,6 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
 }
 
 void TNodeWarden::OnPipeError() {
-    for (auto& [key, pdisk] : LocalPDisks) {
-        if (pdisk.PDiskMetrics) {
-            PDisksWithUnreportedMetrics.PushBack(&pdisk);
-        }
-    }
-    for (auto& [key, vdisk] : LocalVDisks) {
-        vdisk.ScrubCookieForController = 0; // invalidate all pending requests to BS_CONTROLLER
-        if (vdisk.VDiskMetrics) {
-            VDisksWithUnreportedMetrics.PushBack(&vdisk);
-        }
-    }
     for (const auto& [cookie, callback] : ConfigInFlight) {
         callback(nullptr);
     }

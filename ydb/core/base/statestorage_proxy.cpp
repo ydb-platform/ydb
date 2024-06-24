@@ -743,7 +743,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TMap<TActorId, TActorId> ReplicaProbes;
 
-    THashMap<std::tuple<TActorId, ui64>, ui64> Subscriptions;
+    THashMap<std::tuple<TActorId, ui64>, std::tuple<ui64, TIntrusivePtr<TStateStorageInfo> TThis::*>> Subscriptions;
     THashSet<std::tuple<TActorId, ui64>> SchemeBoardSubscriptions;
 
     void Handle(TEvStateStorage::TEvRequestReplicasDumps::TPtr &ev) {
@@ -768,7 +768,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {
         if (ev->Get()->Subscribe) {
-            Subscriptions.emplace(std::make_tuple(ev->Sender, ev->Cookie), ev->Get()->TabletID);
+            Subscriptions.try_emplace(std::make_tuple(ev->Sender, ev->Cookie), ev->Get()->TabletID, &TThis::Info);
         }
         ResolveReplicas(ev, ev->Get()->TabletID, Info);
     }
@@ -787,6 +787,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
         const auto *msg = ev->Get();
         const ui64 pathHash = CityHash64(msg->Path);
+
+        if (msg->Subscribe) {
+            Subscriptions.try_emplace(std::make_tuple(ev->Sender, ev->Cookie), pathHash, &TThis::BoardInfo);
+        }
 
         ResolveReplicas(ev, pathHash, BoardInfo);
     }
@@ -811,6 +815,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
         default:
             Y_ABORT("unreachable");
+        }
+
+        if (ev->Get()->Subscribe) {
+            Subscriptions.try_emplace(std::make_tuple(ev->Sender, ev->Cookie), fakeTabletId, &TThis::SchemeBoardInfo);
         }
 
         ResolveReplicas(ev, fakeTabletId, SchemeBoardInfo);
@@ -866,10 +874,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
         RegisterDerivedServices(TlsActivationContext->ExecutorThread.ActorSystem, old.Get());
 
-        for (const auto& [key, tabletId] : Subscriptions) {
+        for (const auto& [key, value] : Subscriptions) {
             const auto& [sender, cookie] = key;
+            const auto& [tabletId, ptr] = value;
             struct { TActorId Sender; ui64 Cookie; } ev{sender, cookie};
-            ResolveReplicas(&ev, tabletId, Info);
+            ResolveReplicas(&ev, tabletId, this->*ptr);
         }
         for (const auto& [sender, cookie] : SchemeBoardSubscriptions) {
             Send(sender, new TEvStateStorage::TEvListSchemeBoardResult(SchemeBoardInfo), 0, cookie);

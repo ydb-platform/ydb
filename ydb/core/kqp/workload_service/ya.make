@@ -8,8 +8,9 @@ SRCS(
 
 PEERDIR(
     ydb/core/cms/console
-    ydb/core/protos
     ydb/core/kqp/common/events
+    ydb/core/protos
+    ydb/core/resource_pools
 
     ydb/library/actors/core
     ydb/library/query_actor

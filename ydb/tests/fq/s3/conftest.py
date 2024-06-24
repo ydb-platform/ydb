@@ -38,12 +38,7 @@ def s3(request) -> S3:
     s3_port = port_manager.get_port()
     s3_url = "http://localhost:{port}".format(port=s3_port)
 
-    command = [
-        yatest.common.binary_path(MOTO_SERVER_PATH),
-        "s3",
-        "--host", "::1",
-        "--port", str(s3_port)
-    ]
+    command = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(s3_port)]
 
     def is_s3_ready():
         try:
@@ -55,10 +50,7 @@ def s3(request) -> S3:
             return False
 
     recipes_common.start_daemon(
-        command=command,
-        environment=None,
-        is_alive_check=is_s3_ready,
-        pid_file_name=S3_PID_FILE
+        command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=S3_PID_FILE
     )
 
     try:
@@ -80,15 +72,17 @@ def kikimr_params(request: pytest.FixtureRequest):
 
 
 def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external_ydb_endpoint):
-    return [AddInflightExtension(),
-            AddDataInflightExtension(),
-            AddFormatSizeLimitExtension(),
-            DefaultConfigExtension(s3.s3_url),
-            YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
-            ComputeExtension(),
-            YdbMvpExtension(mvp_external_ydb_endpoint),
-            StatsModeExtension(kikimr_settings.get("stats_mode", "")),
-            BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version)]
+    return [
+        AddInflightExtension(),
+        AddDataInflightExtension(),
+        AddFormatSizeLimitExtension(),
+        DefaultConfigExtension(s3.s3_url),
+        YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
+        ComputeExtension(),
+        YdbMvpExtension(mvp_external_ydb_endpoint),
+        StatsModeExtension(kikimr_settings.get("stats_mode", "")),
+        BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version),
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -123,10 +117,9 @@ def kikimr(yq_version: str, kikimr_yqv1, kikimr_yqv2):
 
 @pytest.fixture
 def client(kikimr, request=None):
-    client = FederatedQueryClient(request.param["folder_id"]
-                                  if request is not None
-                                  else "my_folder",
-                                  streaming_over_kikimr=kikimr)
+    client = FederatedQueryClient(
+        request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
+    )
     yield client
 
     kikimr.control_plane.ensure_is_alive()

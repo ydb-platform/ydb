@@ -219,7 +219,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
         Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
 
-        Self->Initialize();
+        Self->InitializeStatisticsTable();
 
         if (Self->ScanTableId.PathId) {
             Self->Navigate();

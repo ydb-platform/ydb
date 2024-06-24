@@ -125,4 +125,34 @@ TFiberWallTimer::TFiberWallTimer()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFiberSliceTimer::TFiberSliceTimer(TCpuDuration threshold, std::function<void(TCpuDuration)> callback)
+    : TContextSwitchGuard(
+        [this] () noexcept { OnOut(); },
+        [this] () noexcept { OnIn(); })
+    , Threshold_(threshold)
+    , Callback_(callback)
+{
+    OnIn();
+}
+
+TFiberSliceTimer::~TFiberSliceTimer()
+{
+    OnOut();
+}
+
+void TFiberSliceTimer::OnIn() noexcept
+{
+    LastInTime_ = GetCpuInstant();
+}
+
+void TFiberSliceTimer::OnOut() noexcept
+{
+    auto execution = GetCpuInstant() - LastInTime_;
+    if (execution > Threshold_) {
+        Callback_(execution);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NProfiling

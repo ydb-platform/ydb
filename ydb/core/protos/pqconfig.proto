@@ -409,14 +409,14 @@ message TPQTabletConfig {
     // Strategy for automatically changing the number of topic partitions depending on the load
     message TPartitionStrategy {
         // The minimum number of partitions that will be supported by the strategy
-        required uint32 MinPartitionCount = 1 [default = 1];
+        optional uint32 MinPartitionCount = 1 [default = 1];
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
-        required uint32 MaxPartitionCount = 2 [default = 1];;
-        required uint32 ScaleThresholdSeconds = 3 [default = 300];
-        required uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
-        required uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
-        required TPartitionStrategyType PartitionStrategyType = 6;
+        optional uint32 MaxPartitionCount = 2 [default = 1];;
+        optional uint32 ScaleThresholdSeconds = 3 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
+        required TPartitionStrategyType PartitionStrategyType = 6 [default = DISABLED];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 

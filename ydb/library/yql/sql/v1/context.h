@@ -263,6 +263,7 @@ namespace NSQLTranslationV1 {
         bool PragmaRegexUseRe2 = true;
         bool PragmaPullUpFlatMapOverJoin = true;
         bool FilterPushdownOverJoinOptionalSide = false;
+        bool RotateJoinTree = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
         bool EnableSystemColumns = true;

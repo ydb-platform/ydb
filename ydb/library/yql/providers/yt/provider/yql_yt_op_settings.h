@@ -3,6 +3,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 #include <util/system/types.h>
 #include <util/string/cast.h>
 #include <util/str_stl.h>
@@ -138,6 +139,10 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
     return ctx.NewList(pos, std::move(children));
 }
+
+bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
+TString NormalizeColumnGroupSpec(const TStringBuf spec);
+const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
 

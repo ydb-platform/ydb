@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -29,8 +30,20 @@ class TPlanPrinter {
 public:
     TStringBuilder b;
 
-    void PrintChannel(const auto& ch, const auto& inputName) {
-        b << "T" << ch.GetSrcTaskId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"Ch" << ch.GetId() << "," << inputName << "\"];\n";
+    void DescribeChannel(const auto& ch, bool spilling) {
+        if (spilling) {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\", color=\"red\"];";
+        } else {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\"];";
+        }
+    }
+
+    void PrintInputChannel(const auto& ch, const auto& type) {
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintOutputChannel(const auto& ch, const auto& type) {
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
     }
 
     void PrintSource(auto taskId, auto sourceIndex) {
@@ -54,7 +67,7 @@ public:
                 PrintSource(task.GetId(), index);
             } else {
                 for (const auto& ch : input.GetChannels()) {
-                    PrintChannel(ch, inputName);
+                    PrintInputChannel(ch, inputName);
                 }
             }
             index ++;
@@ -67,7 +80,7 @@ public:
             else if (output.HasBroadcast()) { outputName = "Broadcast"; }
             // TODO: effects, sink
             for (const auto& ch : output.GetChannels()) {
-                PrintChannel(ch, outputName);
+                PrintOutputChannel(ch, outputName);
             }
         }
     }
@@ -80,6 +93,11 @@ public:
                 DescribeSource(task.GetId(), index);
             }
             index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            for (const auto& ch : output.GetChannels()) {
+                DescribeChannel(ch, task.GetEnableSpilling());
+            }
         }
     }
  
@@ -643,9 +661,13 @@ public:
                 session = it->second;
             }
         }
+        TFailureInjector::Reach("dq_session_was_closed", [&] { session = nullptr; });
         if (!session) {
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+            auto res = NCommon::ResultFromException<TResult>(yexception() << "Session was closed");
+            res.Fallback = true;
+            res.SetSuccess();
+            return MakeFuture(res);
         }
         return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {

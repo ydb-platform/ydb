@@ -2339,6 +2339,7 @@ private:
                     continue;
                 }
 
+                const size_t opOutTables = op.Output().Size();
                 std::map<size_t, std::pair<std::vector<const TExprNode*>, std::vector<const TExprNode*>>> maps; // output -> pair<vector<YtMap>, vector<other YtOutput's>>
                 for (size_t i = 0; i < x.second.size(); ++i) {
                     auto reader = std::get<0>(x.second[i]);
@@ -2354,7 +2355,9 @@ private:
                     if (newPair && TYtMap::Match(reader)) {
                         const auto outerMap = TYtMap(reader);
                         if ((outerMap.World().Ref().IsWorld() || outerMap.World().Raw() == op.World().Raw())
-                            && outerMap.Input().Size() == 1 && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
+                            && outerMap.Input().Size() == 1
+                            && outerMap.Output().Size() + item.first.size() <= maxOutTables // fast check for too many operations
+                            && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
                             && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
                             && !NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)
@@ -2382,7 +2385,7 @@ private:
                 if (AnyOf(maps, [](const auto& item) { return item.second.first.size() > 0; })) {
                     TMap<TStringBuf, ui64> memUsage;
                     size_t currenFiles = 1; // jobstate. Take into account only once
-                    size_t currOutTables = op.Output().Size();
+                    size_t currOutTables = opOutTables;
 
                     TExprNode::TPtr updatedBody = lambda.Body().Ptr();
                     if (maxJobMemoryLimit) {
@@ -2397,10 +2400,11 @@ private:
                     TMap<TStringBuf, double> cpuUsage;
                     for (auto& item: maps) {
                         if (!item.second.first.empty()) {
+                            size_t otherTablesDelta = item.second.second.empty() ? 1 : 0;
                             for (auto it = item.second.first.begin(); it != item.second.first.end(); ) {
                                 const auto outerMap = TYtMap(*it);
 
-                                const size_t outTablesDelta = outerMap.Output().Size() - size_t(item.second.second.empty());
+                                const size_t outTablesDelta = outerMap.Output().Size() - otherTablesDelta;
 
                                 updatedBody = outerMap.Mapper().Body().Ptr();
                                 if (maxJobMemoryLimit) {
@@ -2418,7 +2422,7 @@ private:
                                 cpuUsage.clear();
                                 ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, pMemUsage, &cpuUsage, &newCurrenFiles);
 
-                                auto usedMemory = Accumulate(memUsage.begin(), memUsage.end(), switchLimit,
+                                auto usedMemory = Accumulate(newMemUsage.begin(), newMemUsage.end(), switchLimit,
                                     [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
 
                                 // Take into account codec input/output buffers (one for all inputs and one per output)
@@ -2453,12 +2457,16 @@ private:
                                 if (skip) {
                                     // Move to other usages
                                     it = item.second.first.erase(it);
+                                    if (item.second.second.empty()) {
+                                        ++currOutTables;
+                                    }
                                     item.second.second.push_back(outerMap.Input().Item(0).Paths().Item(0).Table().Raw());
                                     continue;
                                 }
                                 currenFiles = newCurrenFiles;
                                 memUsage = std::move(newMemUsage);
                                 currOutTables += outTablesDelta;
+                                otherTablesDelta = 0; // Take into account only once
                                 ++it;
                             }
                         }
@@ -2625,7 +2633,7 @@ private:
             columnUsage.resize(outTypes.size());
             std::vector<bool> fullUsage;
             fullUsage.resize(outTypes.size());
-            std::vector<bool> publishUsage;
+            std::vector<std::unordered_set<TString>> publishUsage;
             publishUsage.resize(outTypes.size());
             // Collect column usage per consumer
             for (auto& item: x.second) {
@@ -2636,8 +2644,10 @@ private:
                     if (TYtLength::Match(std::get<0>(item))) {
                         continue;
                     }
-                    if (TYtPublish::Match(std::get<0>(item))) {
-                        publishUsage.at(outIndex) = true;
+                    if (auto maybePublish = TMaybeNode<TYtPublish>(std::get<0>(item))) {
+                        TYtTableInfo dstInfo = maybePublish.Cast().Publish();
+                        const auto& desc = State_->TablesData->GetTable(dstInfo.Cluster, dstInfo.Name, dstInfo.CommitEpoch);
+                        publishUsage.at(outIndex).insert(desc.ColumnGroupSpec);
                     } else {
                         fullUsage.at(outIndex) = true;
                     }
@@ -2661,12 +2671,17 @@ private:
 
             std::map<size_t, TString> groupSpecs;
             for (size_t i = 0; i < columnUsage.size(); ++i) {
-                if (publishUsage[i]) {
+                if (!publishUsage[i].empty()) {
+                    if (publishUsage[i].size() == 1) {
+                        if (auto spec = *publishUsage[i].cbegin(); !spec.empty()) {
+                            groupSpecs[i] = spec;
+                        }
+                    }
                     continue;
                 }
                 if (EColumnGroupMode::Single == mode) {
                     if (fullUsage[i]) {
-                        groupSpecs[i] = NYT::NodeToYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+                        groupSpecs[i] = NYql::GetSingleColumnGroupSpec();
                     }
                 } else {
                     if (fullUsage[i]) {
@@ -2731,7 +2746,7 @@ private:
                             }
                         }
                         if (!groupSpec.IsUndefined()) {
-                            groupSpecs[i] = NYT::NodeToYsonString(groupSpec, NYson::EYsonFormat::Text);
+                            groupSpecs[i] = NYT::NodeToCanonicalYsonString(groupSpec, NYson::EYsonFormat::Text);
                         }
                     }
                 }

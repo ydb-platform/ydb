@@ -23,6 +23,10 @@ static bool IsIntegerType(NScheme::TTypeInfo type) {
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:
     case NScheme::NTypeIds::Interval:
+    case NScheme::NTypeIds::Date32:
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
         return true;
 
     default:

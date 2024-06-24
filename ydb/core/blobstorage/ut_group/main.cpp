@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/testactorsys.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <util/system/env.h>
 #include <random>
 
@@ -379,7 +380,7 @@ private:
                 const ui32 vdiskSlotId = ++NextVDiskSlotId[std::make_tuple(nodeId, pdiskId)];
                 const TActorId& vdiskActorId = MakeBlobStorageVDiskID(nodeId, pdiskId, vdiskSlotId);
                 vdiskActorIds.push_back(vdiskActorId);
-                const TVDiskID vdiskId(GroupId, 1, 0, i, 0);
+                const TVDiskID vdiskId(TGroupId::FromValue(GroupId), 1, 0, i, 0);
                 Disks.push_back(TDiskRecord{
                     vdiskId,
                     serviceId,

@@ -98,28 +98,6 @@ public:
         }
 
         auto status = OptimizeExpr(input, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            if (auto maybeWrite = TMaybeNode<TSoWrite>(node)) {
-                if (!maybeWrite.DataSink()) {
-                    return node;
-                }
-                auto write = maybeWrite.Cast();
-
-                if (!EnsureArgsCount(write.Ref(), 5, ctx)) {
-                    return {};
-                }
-
-                return Build<TSoWrite>(ctx, write.Pos())
-                    .World(write.World())
-                    .DataSink(write.DataSink())
-                    .FreeArgs()
-                        .Add<TCoAtom>()
-                            .Value("")
-                        .Build()
-                        .Add(write.Arg(3))
-                    .Build()
-                    .Done().Ptr();
-            }
-
             if (auto maybeRead = TMaybeNode<TSoRead>(node)) {
                 auto read = maybeRead.Cast();
                 if (read.DataSource().Category().Value() != SolomonProviderName) {

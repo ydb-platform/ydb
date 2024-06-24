@@ -1,4 +1,5 @@
 #include <ydb/core/util/testactorsys.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include "skeleton_front_mock.h"
 #include "loader.h"
 
@@ -10,7 +11,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
         TTestActorSystem runtime(1);
         runtime.Start();
 
-        const TVDiskID vdiskId(0, 1, 0, 0, 0);
+        const TVDiskID vdiskId(TGroupId::Zero(), 1, 0, 0, 0);
         TActorId vdiskActorId = runtime.Register(new TSkeletonFrontMockActor, TActorId(), 0, std::nullopt, 1);
 
         std::vector<TActorId> clients;

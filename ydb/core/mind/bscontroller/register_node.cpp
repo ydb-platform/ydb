@@ -10,9 +10,8 @@ class TBlobStorageController::TTxUpdateNodeDrives
 {
     NKikimrBlobStorage::TEvControllerUpdateNodeDrives Record;
     std::optional<TConfigState> State;
-    std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> Result;
 
-    void UpdateDevicesInfo(TConfigState& state, TEvBlobStorage::TEvControllerNodeServiceSetUpdate* result) {
+    void UpdateDevicesInfo(TConfigState& state) {
         auto nodeId = Record.GetNodeId();
 
         auto createLog = [&] () {
@@ -83,9 +82,6 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (pdiskInfo.LastSeenSerial != serial) {
                 auto *item = getMutableItem();
                 item->LastSeenSerial = serial;
-                if (serial) {
-                    Self->ReadPDisk(pdiskId, *item, result, NKikimrBlobStorage::RESTART);
-                }
             }
 
             return true;
@@ -164,14 +160,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        Result = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;
         try {
-            UpdateDevicesInfo(*State, Result.get());
+            UpdateDevicesInfo(*State);
             State->CheckConsistency();
         } catch (const TExError& e) {
             updateIsSuccessful = false;
@@ -180,10 +174,6 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
-
-        Result->Record.SetInstanceId(Self->InstanceId);
-        Result->Record.SetComprehensive(false);
-        Result->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
 
         TString error;
         if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
@@ -199,9 +189,6 @@ public:
             // Send new TNodeWardenServiceSet to NodeWarder inside
             State->ApplyConfigUpdates();
             State.reset();
-        }
-        if (Result) {
-            Self->SendToWarden(Record.GetNodeId(), std::move(Result), 0);
         }
     }
 };
@@ -269,7 +256,7 @@ public:
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId);
+                groupIDsToRead.insert(it->second->GroupId.GetRawId());
             }
         }
 
@@ -286,7 +273,7 @@ public:
 
         if (startedGroups.size() <= Self->GroupMap.size() / 10) {
             for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(p.first));
+                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
             }
         } else {
             auto started = startedGroups.begin();
@@ -296,8 +283,8 @@ public:
                 TGroupInfo *group = nullptr;
 
                 // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first <= started->first; ++groupIt) {
-                    if (groupIt->first == started->first) {
+                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
+                    if (groupIt->first.GetRawId() == started->first) {
                         group = groupIt->second.Get();
                     }
                 }
@@ -333,8 +320,8 @@ public:
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
         for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(groupId);
-            Self->GroupToNode.emplace(groupId, nodeId);
+            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
+            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
         }
 
         return true;
@@ -374,13 +361,13 @@ public:
 void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = *it;
+        const TGroupId groupId = TGroupId::FromValue(*it);
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
             NKikimrBlobStorage::TGroupInfo *groupProto = serviceSetProto->AddGroups();
             if (!group) {
-                groupProto->SetGroupID(groupId);
+                groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
                 const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);

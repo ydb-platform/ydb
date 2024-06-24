@@ -115,7 +115,7 @@ private:
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
     void Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev);
 
-    void Initialize();
+    void InitializeStatisticsTable();
     void Navigate();
     void Resolve();
     void NextRange();

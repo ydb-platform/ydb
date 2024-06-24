@@ -42,6 +42,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
+        optional uint64 ReasonableSpillingTreshold = 22 [default = 104857600]; // 100 MiB
     }
 
     message TSpillingServiceConfig {
@@ -273,10 +274,10 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = false];
+    optional bool EnableOlapSink = 55 [default = true];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
-    optional bool EnableCreateTableAs = 57 [default = false];
+    optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
     optional bool OldLookupJoinBehaviour = 59 [default = false]; 

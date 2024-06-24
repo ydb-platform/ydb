@@ -12,7 +12,6 @@ SRCS(
     msgbus_server_cms.cpp
     msgbus_server_configdummy.cpp
     msgbus_server_console.cpp
-    msgbus_server_db.cpp
     msgbus_server_drain_node.cpp
     msgbus_server_fill_node.cpp
     msgbus_server_hive_create_tablet.cpp

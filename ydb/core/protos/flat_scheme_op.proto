@@ -973,6 +973,10 @@ enum EIndexState {
     EIndexStateWriteOnly = 3;
 }
 
+message TExplicitPartitions {
+    repeated TSplitBoundary SplitBoundary = 1;
+}
+
 message TIndexDescription {
     optional string Name = 1;
     optional uint64 LocalPathId = 2;
@@ -989,6 +993,13 @@ message TIndexDescription {
     repeated string DataColumnNames = 8;
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
+
+    // indexImplTable settings
+    oneof Partitions {
+        uint32 UniformPartitions = 10;
+        TExplicitPartitions ExplicitPartitions = 11;
+    }
+    optional TPartitioningPolicy PartitioningPolicy = 12;
 }
 
 message TIndexCreationConfig {
@@ -1542,8 +1553,7 @@ enum EOperationType {
     // Move index
     ESchemeOpMoveIndex = 82;
 
-    ESchemeOpAllocatePersQueueGroup = 83;
-    ESchemeOpDeallocatePersQueueGroup = 84;
+    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
 
     // AlterExtSubDomain suboperations
     ESchemeOpAlterExtSubDomainCreateHive = 85;
@@ -1574,6 +1584,11 @@ enum EOperationType {
     ESchemeOpAlterContinuousBackup = 98;
     // Drop
     ESchemeOpDropContinuousBackup = 99;
+
+    // Resource Pool
+    ESchemeOpCreateResourcePool = 100;
+    ESchemeOpDropResourcePool = 101;
+    ESchemeOpAlterResourcePool = 102;
 }
 
 message TApplyIf {
@@ -1741,7 +1756,7 @@ message TModifyScheme {
 
     optional TViewDescription CreateView = 64;
 
-    optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+    optional NActorsProto.TActorId TempDirOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;
@@ -1749,6 +1764,13 @@ message TModifyScheme {
     optional TCreateContinuousBackup CreateContinuousBackup = 68;
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
+
+    // This flag is required for TModifyScheme to create any new objects inside temporary zone.
+    // Reads/Updates can be executed without flag.
+    // Object is in temporary zone if there is a directory with nonempty OwnerActorId on it's path.
+    optional bool AllowCreateInTempDir = 71 [default = false];
+
+    optional TResourcePoolDescription CreateResourcePool = 72;
 }
 
 message TCopySequence {
@@ -1812,6 +1834,7 @@ enum EPathType {
     EPathTypeExternalTable = 18;
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
+    EPathTypeResourcePool = 21;
 }
 
 enum EPathSubType {
@@ -1865,6 +1888,7 @@ message TPathVersion {
     optional uint64 ExternalTableVersion = 27;
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
+    optional uint64 ResourcePoolVersion = 30;
 }
 
 // Describes single path
@@ -1953,6 +1977,7 @@ message TPathDescription {
     optional TExternalTableDescription ExternalTableDescription = 27;
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
+    optional TResourcePoolDescription ResourcePoolDescription = 30;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2080,4 +2105,15 @@ message TViewDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional string QueryText = 4;
+}
+
+message TResourcePoolProperties {
+    map<string, string> Properties = 1;
+}
+
+message TResourcePoolDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TResourcePoolProperties Properties = 4;
 }

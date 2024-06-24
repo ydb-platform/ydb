@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
@@ -238,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
         NWorkload::TWorkloadManagerConfig workloadManagerConfig;
-        workloadManagerConfig.Pools.insert({"sample_pool_id", NWorkload::TWorkloadManagerConfig::TPoolConfig()});
+        workloadManagerConfig.Pools.insert({"sample_pool_id", NResourcePool::TPoolSettings()});
         SetWorkloadManagerConfig(workloadManagerConfig);
 
         NKikimrConfig::TAppConfig config;
@@ -1172,6 +1173,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
+            const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
+            const auto queryCreateRestricted = Q_(fmt::format(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/.tmp/sessions/{}/Test` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );)", sessionIdSplitted.back()));
+
+            auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
+            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().Contains("error: path is temporary"), resultCreateRestricted.GetIssues().ToString());
+
             bool allDoneOk = true;
             NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
 
@@ -1187,6 +1201,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto resultSelect = client.ExecuteQuery(
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+
+        Sleep(TDuration::Seconds(1));
+
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto listResult = schemeClient.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 0);
         }
     }
 
@@ -1370,7 +1393,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const auto queryCreate = Q_(R"(
             --!syntax_v1
-            CREATE TEMPORARY TABLE Temp (
+            CREATE TEMPORARY TABLE `/Root/test/Temp` (
                 Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
@@ -1382,7 +1405,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = session.ExecuteQuery(
@@ -1392,7 +1415,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const auto queryDrop = Q_(R"(
             --!syntax_v1
-            DROP TABLE Temp;
+            DROP TABLE `/Root/test/Temp`;
         )");
 
         auto resultDrop = session.ExecuteQuery(
@@ -1402,7 +1425,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = session.ExecuteQuery(
@@ -1422,7 +1445,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = sessionAnother.ExecuteQuery(
@@ -3473,6 +3496,41 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(
                 output,
                 R"([[8u]])");
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceIntoWithDefaultValue) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        // auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/tb` (
+                    id UInt32,
+                    val UInt32 NOT NULL DEFAULT(100),
+                    PRIMARY KEY(id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/tb` (id) VALUES
+                    ( 1 )
+                ;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
         }
     }
 }

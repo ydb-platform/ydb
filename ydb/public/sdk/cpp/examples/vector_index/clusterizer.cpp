@@ -112,6 +112,7 @@ void TClusterizer::ComputeBatch(Func&& func) {
                 });
             }
         }
+        Progress.Report(0);
     } else {
         for (size_t start = 0; const auto& rawEmbedding : ToFill.RawData) {
             auto embedding = GetArray<float>(rawEmbedding);
@@ -119,11 +120,12 @@ void TClusterizer::ComputeBatch(Func&& func) {
             ToFill.Min[start++] = min;
         }
     }
-    Progress.Report(0);
     if (!ToFill.Empty()) {
         func();
         ToFill.Clear();
-        Progress.Report(0);
+        if (ThreadPool) {
+            Progress.Report(0);
+        }
     }
 }
 
@@ -149,6 +151,7 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     } else {
         auto rows = It.Rows();
         Cout << "Bad dataset (" << rows << ") for such clusterization ( iterations: " << options.maxIterations << ", k: " << options.maxK << " )" << Endl;
+#if 0
         Progress.Reset("read", rows);
         auto parentId = ++gId;
         // It.Iterate([&](ui32, TId id, TRawEmbedding rawEmbedding) {
@@ -159,6 +162,7 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
         Clusters.Ids.emplace_back(parentId);
         Clusters.Count.emplace_back(rows);
         Clusters.Coords.emplace_back();
+#endif
     }
     return std::move(Clusters);
 }
@@ -206,14 +210,18 @@ void TClusterizer::EmbeddingsTrigger() {
 }
 
 void TClusterizer::Handle(std::span<const TString> embeddings) {
-    Progress.Report(embeddings.size());
+    if (ThreadPool) {
+        Progress.Report(embeddings.size());
+    }
     ToFill.RawData = embeddings;
     ToFill.Min.resize(embeddings.size());
     ComputeBatch([this] { StepUpdate(); });
 }
 
 void TClusterizer::Handle(TRawEmbedding rawEmbedding) {
-    Progress.Report(1);
+    if (ThreadPool) {
+        Progress.Report(1);
+    }
     ToFill.RawDataStorage.emplace_back(std::move(rawEmbedding));
     ToFill.Min.emplace_back();
     if (ToFill.RawDataStorage.size() >= BatchSize) {
@@ -223,7 +231,9 @@ void TClusterizer::Handle(TRawEmbedding rawEmbedding) {
 }
 
 bool TClusterizer::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
-    Progress.Reset(std::format("step {} / {}", iteration, maxIterations), It.Rows());
+    if (ThreadPool) {
+        Progress.Reset(std::format("step {} / {}", iteration, maxIterations), It.Rows());
+    }
 
     It.IterateEmbedding(*this);
     EmbeddingsTrigger();
@@ -256,9 +266,11 @@ bool TClusterizer::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
         }
     });
     newMean += zeroCount * maxDistance;
-    Progress.ForceReport();
-    Cout << "old mean: " << OldMean / NewClusters.size()
-         << " new mean: " << newMean / NewClusters.size() << Endl;
+    if (ThreadPool) {
+        Progress.ForceReport();
+        Cout << "old mean: " << OldMean / NewClusters.size()
+             << " new mean: " << newMean / NewClusters.size() << Endl;
+    }
     if (newMean > OldMean) {
         return false;
     }
@@ -289,7 +301,9 @@ void TClusterizer::IdsTrigger() {
 }
 
 void TClusterizer::Handle(TId id, TRawEmbedding rawEmbedding) {
-    Progress.Report(1);
+    if (ThreadPool) {
+        Progress.Report(1);
+    }
     ToFill.IdData.emplace_back(id);
     ToFill.RawDataStorage.emplace_back(std::move(rawEmbedding));
     ToFill.Min.emplace_back();
@@ -300,9 +314,13 @@ void TClusterizer::Handle(TId id, TRawEmbedding rawEmbedding) {
 }
 
 void TClusterizer::Finalize() {
-    Progress.Reset("finalize", It.Rows());
+    if (ThreadPool) {
+        Progress.Reset("finalize", It.Rows());
+    }
 
     It.IterateId(*this);
     IdsTrigger();
-    Progress.ForceReport();
+    if (ThreadPool) {
+        Progress.ForceReport();
+    }
 }

@@ -22,7 +22,7 @@
 
 ![Таблица](https://storage.yandexcloud.net/ydb-www-prod-site-assets/howitworks/table.png)
 
-{{ ydb-short-name}} предоставляет пользователям хорошо известную абстракцию — таблицы, которых в {{ ydb-short-name}} два типа:
+{{ ydb-short-name}} предоставляет пользователям хорошо известную абстракцию — таблицы. В {{ ydb-short-name }} существует два основных типа таблиц:
 * [Строковые таблицы](../../datamodel/_includes/table.md#row-tables) предназначены для OLTP-нагрузок.
 * [Колоночные таблицы](../../datamodel/_includes/table.md#column-tables) предназначены для OLAP-нагрузок.
 

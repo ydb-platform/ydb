@@ -467,9 +467,9 @@ SELECT CAST(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate);
 /* Fatal: Timestamp 1970-01-01T23:59:59.000000,Europe/Moscow cannot be casted to TzDate */
 ```
 
-There is no valid value, starting from the Unix epoch, to represent the 01/01/1970 midnight for Europe/Moscow timezone. As a result, such cast is impossible and fails at runtime.
+Starting from the Unix epoch, there is no valid value representing midnight on 01/01/1970 for the Europe/Moscow timezone. As a result, such a cast is impossible and fails at runtime.
 
-At the same time, values with the negative timezone offset are converted the right way:
+At the same time, values with a negative timezone offset are converted correctly:
 
 ```yql
 select cast(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate)

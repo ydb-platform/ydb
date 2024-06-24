@@ -12,7 +12,7 @@ namespace GraceJoin {
 
 class TTableBucketSpiller;
         
-const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
+const ui64 BitsForNumberOfBuckets = 7; // 2^7 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number of hashed keys buckets to distribute incoming tables tuples
 const ui64 DefaultTuplesNum = 100; // Default initial number of tuples in one bucket to allocate memory

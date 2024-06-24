@@ -212,9 +212,9 @@ public:
 
 }; // TListClusterNodes
 
-template <typename TResult>
 class TCompositeActionGroupHandler {
 protected:
+    template <typename TResult>
     Ydb::Maintenance::ActionGroupStates* GetActionGroupState(TResult& result) const {
         if (HasSingleCompositeActionGroup && !result.action_group_states().empty()) {
             return result.mutable_action_group_states(0);
@@ -227,9 +227,10 @@ protected:
 };
 
 template <typename TDerived, typename TEvRequest>
-class TPermissionResponseProcessor: 
-    public TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>,
-    public TCompositeActionGroupHandler<Ydb::Maintenance::MaintenanceTaskResult> {
+class TPermissionResponseProcessor  
+    : public TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>  
+    , public TCompositeActionGroupHandler
+{
 protected:
     using TBase = TPermissionResponseProcessor<TDerived, TEvRequest>;
 
@@ -394,7 +395,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
     }
 
     void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
-            NKikimrCms::TPermissionRequest& cmsRequest)
+            NKikimrCms::TPermissionRequest& cmsRequest) const
     {
         const auto& opts = request.task_options();
 
@@ -515,12 +516,12 @@ public:
 
 }; // TRefreshMaintenanceTask
 
-class TGetMaintenanceTask: 
-    public TAdapterActor<
-        TGetMaintenanceTask,
-        TEvCms::TEvGetMaintenanceTaskRequest,
-        TEvCms::TEvGetMaintenanceTaskResponse>,
-    public TCompositeActionGroupHandler<Ydb::Maintenance::GetMaintenanceTaskResult>
+class TGetMaintenanceTask  
+    : public TAdapterActor<  
+        TGetMaintenanceTask,  
+        TEvCms::TEvGetMaintenanceTaskRequest,  
+        TEvCms::TEvGetMaintenanceTaskResponse>  
+    , public TCompositeActionGroupHandler 
 {
 public:
     using TBase::TBase;

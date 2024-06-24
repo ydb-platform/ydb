@@ -52,98 +52,98 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     case TType::EKind::Data:
         {
             auto dataType = AS_TYPE(TDataType, type);
-            switch (dataType->GetSchemeType()) {
-            case NUdf::TDataType<bool>::Id:
+            switch (*dataType->GetDataSlot()) {
+            case NUdf::EDataSlot::Bool:
                 writer.OnBooleanScalar(value.Get<bool>());
                 return;
-            case NUdf::TDataType<i32>::Id:
+            case NUdf::EDataSlot::Int32:
                 writer.OnInt64Scalar(value.Get<i32>());
                 return;
-            case NUdf::TDataType<ui32>::Id:
+            case NUdf::EDataSlot::Uint32:
                 writer.OnUint64Scalar(value.Get<ui32>());
                 return;
-            case NUdf::TDataType<i64>::Id:
+            case NUdf::EDataSlot::Int64:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::TDataType<ui64>::Id:
+            case NUdf::EDataSlot::Uint64:
                 writer.OnUint64Scalar(value.Get<ui64>());
                 return;
-            case NUdf::TDataType<ui8>::Id:
+            case NUdf::EDataSlot::Uint8:
                 writer.OnUint64Scalar(value.Get<ui8>());
                 return;
-            case NUdf::TDataType<i8>::Id:
+            case NUdf::EDataSlot::Int8:
                 writer.OnInt64Scalar(value.Get<i8>());
                 return;
-            case NUdf::TDataType<ui16>::Id:
+            case NUdf::EDataSlot::Uint16:
                 writer.OnUint64Scalar(value.Get<ui16>());
                 return;
-            case NUdf::TDataType<i16>::Id:
+            case NUdf::EDataSlot::Int16:
                 writer.OnInt64Scalar(value.Get<i16>());
                 return;
-            case NUdf::TDataType<float>::Id:
+            case NUdf::EDataSlot::Float:
                 writer.OnFloatScalar(value.Get<float>());
                 return;
-            case NUdf::TDataType<double>::Id:
+            case NUdf::EDataSlot::Double:
                 writer.OnDoubleScalar(value.Get<double>());
                 return;
 
-            case NUdf::TDataType<NUdf::TJson>::Id:
-            case NUdf::TDataType<NUdf::TUtf8>::Id:
+            case NUdf::EDataSlot::Json:
+            case NUdf::EDataSlot::Utf8:
                 // assume underlying string is utf8
                 writer.OnUtf8StringScalar(value.AsStringRef());
                 return;
 
-            case NUdf::TDataType<char*>::Id:
-            case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TDyNumber>::Id:
+            case NUdf::EDataSlot::String:
+            case NUdf::EDataSlot::Uuid:
+            case NUdf::EDataSlot::DyNumber:
                 writer.OnStringScalar(value.AsStringRef());
                 return;
 
-            case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            case NUdf::EDataSlot::Decimal: {
                 const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
                 const auto str = NDecimal::ToString(value.GetInt128(), params.first, params.second);
                 const auto size = str ? std::strlen(str) : 0;
                 writer.OnUtf8StringScalar(TStringBuf(str, size));
                 return;
             }
-            case NUdf::TDataType<NUdf::TYson>::Id:
+            case NUdf::EDataSlot::Yson:
                 EncodeRestrictedYson(writer, value.AsStringRef());
                 return;
-            case NUdf::TDataType<NUdf::TDate>::Id:
+            case NUdf::EDataSlot::Date:
                 writer.OnUint64Scalar(value.Get<ui16>());
                 return;
-            case NUdf::TDataType<NUdf::TDatetime>::Id:
+            case NUdf::EDataSlot::Datetime:
                 writer.OnUint64Scalar(value.Get<ui32>());
                 return;
-            case NUdf::TDataType<NUdf::TTimestamp>::Id:
+            case NUdf::EDataSlot::Timestamp:
                 writer.OnUint64Scalar(value.Get<ui64>());
                 return;
-            case NUdf::TDataType<NUdf::TInterval>::Id:
+            case NUdf::EDataSlot::Interval:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::TDataType<NUdf::TTzDate>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            case NUdf::EDataSlot::TzDate:
+            case NUdf::EDataSlot::TzDatetime:
+            case NUdf::EDataSlot::TzTimestamp:
+            case NUdf::EDataSlot::TzDate32:
+            case NUdf::EDataSlot::TzDatetime64:
+            case NUdf::EDataSlot::TzTimestamp64:
+            case NUdf::EDataSlot::JsonDocument: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
                 writer.OnUtf8StringScalar(out.AsStringRef());
                 return;
             }
-            case NUdf::TDataType<NUdf::TDate32>::Id:
+            case NUdf::EDataSlot::Date32:
                 writer.OnInt64Scalar(value.Get<i32>());
                 return;
-            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            case NUdf::EDataSlot::Datetime64:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            case NUdf::EDataSlot::Timestamp64:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::TDataType<NUdf::TInterval64>::Id:
+            case NUdf::EDataSlot::Interval64:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-
-            default:
-                throw yexception() << "Unknown data type: " << dataType->GetSchemeType();
             }
         }
         break;
@@ -386,6 +386,21 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
             return NYT::TNode(ToString(TStringBuf(value.AsStringRef())));
         }
+        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+            TStringStream out;
+            out << value.Get<i32>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return NYT::TNode(out.Str());
+        }
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return NYT::TNode(out.Str());
+        }
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return NYT::TNode(out.Str());
+        }
     }
     YQL_ENSURE(false, "Unsupported type: " << static_cast<int>(dataType->GetSchemeType()));
 }
@@ -494,6 +509,22 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
             out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return out.Str();
         }
+        case NUdf::EDataSlot::TzDate32: {
+            TStringStream out;
+            out << value.Get<i32>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            TStringStream out;
+            out << value.Get<i64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+            return out.Str();
+        }
+
         case NUdf::EDataSlot::JsonDocument: {
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
             return ToString(TStringBuf(value.AsStringRef()));
@@ -1066,6 +1097,57 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
 
             const auto json = ReadYsonStringInResultFormat(cmd, buf);
             return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef());
+        }
+
+        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+            auto nextString = ReadNextString(cmd, buf);
+            NUdf::TUnboxedValuePod data;
+            if (isTableFormat) {
+                i32 value;
+                ui16 tzId = 0;
+                YQL_ENSURE(DeserializeTzDate32(nextString, value, tzId));
+                data = NUdf::TUnboxedValuePod(value);
+                data.SetTimezoneId(tzId);
+            } else {
+                data = ValueFromString(NUdf::EDataSlot::TzDate32, nextString);
+                YQL_ENSURE(data, "incorrect tz date format for value " << nextString);
+            }
+
+            return data;
+        }
+
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+            auto nextString = ReadNextString(cmd, buf);
+            NUdf::TUnboxedValuePod data;
+            if (isTableFormat) {
+                i64 value;
+                ui16 tzId = 0;
+                YQL_ENSURE(DeserializeTzDatetime64(nextString, value, tzId));
+                data = NUdf::TUnboxedValuePod(value);
+                data.SetTimezoneId(tzId);
+            } else {
+                data = ValueFromString(NUdf::EDataSlot::TzDatetime64, nextString);
+                YQL_ENSURE(data, "incorrect tz datetime format for value " << nextString);
+            }
+
+            return data;
+        }
+
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            auto nextString = ReadNextString(cmd, buf);
+            NUdf::TUnboxedValuePod data;
+            if (isTableFormat) {
+                i64 value;
+                ui16 tzId = 0;
+                YQL_ENSURE(DeserializeTzTimestamp64(nextString, value, tzId));
+                data = NUdf::TUnboxedValuePod(value);
+                data.SetTimezoneId(tzId);
+            } else {
+                data = ValueFromString(NUdf::EDataSlot::TzTimestamp64, nextString);
+                YQL_ENSURE(data, "incorrect tz timestamp format for value " << nextString);
+            }
+
+            return data;
         }
 
         default:
@@ -2182,6 +2264,39 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
             break;
         }
 
+        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+            ui16 tzId = SwapBytes(value.GetTimezoneId());
+            ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
+            ui32 size = sizeof(data) + sizeof(tzId);
+            buf.Write(StringMarker);
+            buf.WriteVarI32(size);
+            buf.WriteMany((const char*)&data, sizeof(data));
+            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+            ui16 tzId = SwapBytes(value.GetTimezoneId());
+            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
+            ui32 size = sizeof(data) + sizeof(tzId);
+            buf.Write(StringMarker);
+            buf.WriteVarI32(size);
+            buf.WriteMany((const char*)&data, sizeof(data));
+            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            ui16 tzId = SwapBytes(value.GetTimezoneId());
+            ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
+            ui32 size = sizeof(data) + sizeof(tzId);
+            buf.Write(StringMarker);
+            buf.WriteVarI32(size);
+            buf.WriteMany((const char*)&data, sizeof(data));
+            buf.WriteMany((const char*)&tzId, sizeof(tzId));
+            break;
+        }
+
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             buf.Write(StringMarker);
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
@@ -2463,6 +2578,36 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
         buf.WriteMany((const char*)&tzId, sizeof(tzId));
         break;
     }
+
+    case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+        ui16 tzId = SwapBytes(value.GetTimezoneId());
+        ui32 data = 0x80 ^ SwapBytes((ui32)value.Get<i32>());
+        ui32 size = sizeof(data) + sizeof(tzId);
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany((const char*)&data, sizeof(data));
+        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+        ui16 tzId = SwapBytes(value.GetTimezoneId());
+        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
+        ui32 size = sizeof(data) + sizeof(tzId);
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany((const char*)&data, sizeof(data));
+        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+        ui16 tzId = SwapBytes(value.GetTimezoneId());
+        ui64 data = 0x80 ^ SwapBytes((ui64)value.Get<i64>());
+        ui32 size = sizeof(data) + sizeof(tzId);
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany((const char*)&data, sizeof(data));
+        buf.WriteMany((const char*)&tzId, sizeof(tzId));
+        break;
+    }    
 
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);

@@ -1483,6 +1483,18 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzTimestamp>();
         return true;
     }
+    case NUdf::EDataSlot::TzDate32: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzDate32>();
+        return true;
+    }
+    case NUdf::EDataSlot::TzDatetime64: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzDatetime64>();
+        return true;
+    }
+    case NUdf::EDataSlot::TzTimestamp64: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzTimestamp64>();
+        return true;
+    }
     case NUdf::EDataSlot::Uuid: {
         return false;
     }
@@ -2456,6 +2468,12 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             return sizeof(typename NUdf::TDataType<NUdf::TTzDatetime>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
         case NUdf::EDataSlot::TzTimestamp:
             return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzDate32:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDate32>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzDatetime64:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDatetime64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzTimestamp64:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
         case NUdf::EDataSlot::Uuid: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }

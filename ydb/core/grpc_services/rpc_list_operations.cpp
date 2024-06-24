@@ -198,5 +198,10 @@ void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacility
     f.RegisterActor(new TListOperationsRPC(p.release()));
 }
 
+template<>
+IActor* TEvListOperationsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return new TListOperationsRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

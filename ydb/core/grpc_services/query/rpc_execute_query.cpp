@@ -293,7 +293,8 @@ private:
             GetCollectStatsMode(req->stats_mode()),
             cachePolicy,
             nullptr, // operationParams
-            settings);
+            settings,
+            req->pool_id());
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;

@@ -1605,6 +1605,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithTtlOnDatetime64Column) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(true);
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithTtlSettings";
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Datetime64Column Datetime64,
+                PRIMARY KEY (Key)
+            ) WITH (
+                TTL = Interval("P1D") ON Datetime64Column 
+            ))";   
+            Cerr << query << Endl;             
+        {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }    
+
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -5988,6 +6017,51 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(DisableResourcePools) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto checkDisabled = [&session](const TString& query) {
+            Cerr << "Check query:\n" << query << "\n";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled. Please contact your system administrator to enable it");
+        };
+
+        // CREATE RESOURCE POOL
+        checkDisabled(R"(
+            CREATE RESOURCE POOL `MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUERY_CANCEL_AFTER_SECONDS=86400,
+                QUERY_COUNT_LIMIT=1000
+            );)");
+
+        // ALTER RESOURCE POOL
+        checkDisabled(R"(
+            ALTER RESOURCE POOL `MyResourcePool`
+                SET (CONCURRENT_QUERY_LIMIT = 30),
+                SET QUERY_COUNT_LIMIT 100,
+                RESET (QUERY_CANCEL_AFTER_SECONDS);
+            )");
+
+        // DROP RESOURCE POOL
+        checkDisabled("DROP RESOURCE POOL `MyResourcePool`;");
+    }
+
+    Y_UNIT_TEST(ResourcePoolsValidation) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL `MyFolder/MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
@@ -6374,145 +6448,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
     }
 
-    Y_UNIT_TEST(UseTime64Columns) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64),
-            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp64)
-        };
-
-        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        TTestHelper::TColumnTable testTable;
-
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(123).Add(-456);
-            tableInserter.AddRow().Add(2).Add(-789).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;[123];[-456]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;[-789];#]]");
-    }
-
-    Y_UNIT_TEST(UseTimestamp64AsPrimaryKey) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
-        };
-
-        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        TTestHelper::TColumnTable testTable;
-
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"timestamp"}).SetSharding({"timestamp"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(-7000000).Add(3000001);
-            tableInserter.AddRow().Add(-3000000).Add(-1000002);
-            tableInserter.AddRow().Add(0).AddNull();
-            tableInserter.AddRow().Add(4000000).Add(-2000003);
-            tableInserter.AddRow().Add(9000000).Add(5000004);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` = Timestamp64('1970-01-01T00:00:00Z')", "[[#;0]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` < Timestamp64('1970-01-01T00:00:00Z')",
-            "[[[3000001];-7000000];[[-1000002];-3000000]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` > Timestamp64('1970-01-01T00:00:00Z')",
-            "[[[-2000003];4000000];[[5000004];9000000]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` <= Timestamp64('1970-01-01T00:00:00Z')",
-            "[[[3000001];-7000000];[[-1000002];-3000000];[#;0]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` >= Timestamp64('1970-01-01T00:00:00Z')",
-            "[[#;0];[[-2000003];4000000];[[5000004];9000000]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` != Timestamp64('1970-01-01T00:00:00Z')",
-            "[[[3000001];-7000000];[[-1000002];-3000000];[[-2000003];4000000];[[5000004];9000000]]");
-    }
-
-    Y_UNIT_TEST(UseDatetime64AsPrimaryKey) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("datetime").SetType(NScheme::NTypeIds::Datetime64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
-        };
-
-        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        TTestHelper::TColumnTable testTable;
-
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"datetime"}).SetSharding({"datetime"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(-7).Add(3000001);
-            tableInserter.AddRow().Add(-3).Add(-1000002);
-            tableInserter.AddRow().Add(0).AddNull();
-            tableInserter.AddRow().Add(4).Add(-2000003);
-            tableInserter.AddRow().Add(9).Add(5000004);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` = Datetime64('1970-01-01T00:00:00Z')", "[[0;#]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` < Datetime64('1970-01-01T00:00:00Z')",
-            "[[-7;[3000001]];[-3;[-1000002]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` > Datetime64('1970-01-01T00:00:00Z')",
-            "[[4;[-2000003]];[9;[5000004]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` <= Datetime64('1970-01-01T00:00:00Z')",
-            "[[-7;[3000001]];[-3;[-1000002]];[0;#]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` >= Datetime64('1970-01-01T00:00:00Z')",
-            "[[0;#];[4;[-2000003]];[9;[5000004]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` != Datetime64('1970-01-01T00:00:00Z')",
-            "[[-7;[3000001]];[-3;[-1000002]];[4;[-2000003]];[9;[5000004]]]");
-    }
-
-    Y_UNIT_TEST(UseDate32AsPrimaryKey) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("date").SetType(NScheme::NTypeIds::Date32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
-        };
-
-        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        TTestHelper::TColumnTable testTable;
-
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"date"}).SetSharding({"date"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(-7).Add(3000001);
-            tableInserter.AddRow().Add(-3).Add(-1000002);
-            tableInserter.AddRow().Add(0).AddNull();
-            tableInserter.AddRow().Add(4).Add(-2000003);
-            tableInserter.AddRow().Add(9).Add(5000004);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` = Date32('1969-12-29')", "[[-3;[-1000002]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` < Date32('1970-01-03')", "[[-7;[3000001]];[-3;[-1000002]];[0;#]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` > Date32('1969-12-30')", "[[0;#];[4;[-2000003]];[9;[5000004]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` <= Date32('1970-01-05')", "[[-7;[3000001]];[-3;[-1000002]];[0;#];[4;[-2000003]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` >= Date32('1969-12-29')", "[[-3;[-1000002]];[0;#];[4;[-2000003]];[9;[5000004]]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` != Date32('1970-01-01')", "[[-7;[3000001]];[-3;[-1000002]];[4;[-2000003]];[9;[5000004]]]");
-    }
 /*
     Y_UNIT_TEST(AddColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;

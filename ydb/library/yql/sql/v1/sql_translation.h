@@ -175,6 +175,8 @@ protected:
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings, ETableType tableType, bool alter = false);
     bool StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
+    bool StoreResourcePoolSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
+    bool StoreResourcePoolSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
 
     TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
@@ -229,6 +231,8 @@ protected:
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
+    bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
+    bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);

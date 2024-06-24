@@ -106,14 +106,13 @@ def save_canonical_data(data, fname):
 @pytest.mark.parametrize("executer", ["scan", "generic"])
 def test_run_benchmark(store, executer):
     path = "clickbench/benchmark/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
         [
-            "import", "file", "csv", "--path", path,
-            "--input-file",
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+            "workload", "clickbench", "--path", path, "import", "files",
+            "--input", yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
         ]
     )
     assert_that(ret.exit_code, is_(0))
@@ -127,13 +126,12 @@ def test_run_benchmark(store, executer):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_determentistic(store):
     path = "clickbench/determentistic/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
     assert_that(ret.exit_code, is_(0))
     ret = run_cli(
         [
-            "import", "file", "csv", "--path", path,
-            "--input-file",
-            yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
+            "workload", "clickbench", "--path", path, "import", "files",
+            "--input", yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")
         ]
     )
     assert_that(ret.exit_code, is_(0))
@@ -158,7 +156,7 @@ def test_run_determentistic(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_plans(store):
     ret = run_cli(
-        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store]
+        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime"]
     )
     assert_that(ret.exit_code, is_(0))
 

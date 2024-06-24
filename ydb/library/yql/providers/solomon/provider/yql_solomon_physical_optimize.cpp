@@ -63,9 +63,21 @@ public:
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TSoPhysicalOptProposalTransformer::name)
         AddHandler(0, &TSoWriteToShard::Match, HNDL(SoWriteToShard));
+        AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
 #undef HNDL
 
         SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+    }
+
+    TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+
+        const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TSoReadObject>();
+        if (!maybeRead) {
+            return node;
+        }
+
+        return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
     TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {

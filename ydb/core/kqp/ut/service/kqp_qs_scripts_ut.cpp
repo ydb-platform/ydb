@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -29,17 +31,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteScript) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto scriptExecutionOperation = db.ExecuteScript(R"(
-            SELECT 42
-        )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
-
-        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+    void CheckScriptResults(TScriptExecutionOperation scriptExecutionOperation, TScriptExecutionOperation readyOp, TQueryClient& db) {
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
@@ -56,6 +48,20 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
         UNIT_ASSERT(resultSet.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+    }
+
+    Y_UNIT_TEST(ExecuteScript) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
     Y_UNIT_TEST(ExecuteMultiScript) {
@@ -91,6 +97,44 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
             UNIT_ASSERT(resultSet.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 101);
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
+        NWorkload::TWorkloadManagerConfig workloadManagerConfig;
+        workloadManagerConfig.Pools.insert({"sample_pool_id", NResourcePool::TPoolSettings()});
+        SetWorkloadManagerConfig(workloadManagerConfig);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableResourcePools(true)
+            .SetEnableScriptExecutionOperations(true));
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteScriptSettings settings;
+
+        {  // Existing pool
+            settings.PoolId("sample_pool_id");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+            CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
+        }
+
+        {  // Not existing pool (check workload manager enabled)
+            settings.PoolId("another_pool_id");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
         }
     }
 

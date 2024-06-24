@@ -9,7 +9,7 @@ void RegisterS3WriteActorFactory(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy()) {
-        CreateS3ActorsFactory().RegisterS3WriteActorFactory(factory, credentialsFactory, gateway, retryPolicy);
+        CreateS3ActorsFactory()->RegisterS3WriteActorFactory(factory, credentialsFactory, gateway, retryPolicy);
 }
 
 }

@@ -316,12 +316,6 @@ void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringB
     FormatValue(builder, static_cast<const TError&>(error), spec);
 }
 
-template <class T>
-TString ToString(const TErrorOr<T>& valueOrError)
-{
-    return ToString(TError(valueOrError));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TException>

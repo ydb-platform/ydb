@@ -238,6 +238,7 @@ protected:
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
+    friend class TLoggedMonTransaction;
 
     friend class TDeleteTabletActor;
 
@@ -412,6 +413,7 @@ protected:
     TSequenceGenerator Sequencer;
     TOwnershipKeeper Keeper;
     TEventPriorityQueue<THive> EventQueue{*this};
+    ui64 OperationsLogIndex = 0;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;

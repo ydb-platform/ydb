@@ -475,7 +475,7 @@ TEST(TConsistentHashingRing, ServerAdditionBarrierStress)
         /*fileGenerator*/ GenerateItem,
         /*fileCount*/ 1000,
         /*serverCount*/ 1000,
-        /*queryCount=*/ 2000,
+        /*queryCount*/ 2000,
         /*queryGenerator*/ generateQuery,
         /*candidateCount*/ 3);
     EXPECT_LE(result, 0.05);
@@ -598,7 +598,7 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*serverCount*/ 1000,
             /*queryCount*/ 600,
             /*queryGenerator*/ GenerateQuery<10, 40, 250>,
-            /*candidateCount=*/ 1,
+            /*candidateCount*/ 1,
             /*batchSize*/ 200) / testCases;
 
         manyReplicasSmallResult += GetPercentageInconsistentFiles(

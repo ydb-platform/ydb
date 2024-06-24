@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <ydb/library/yql/providers/yt/actors/yql_yt_provider_factories.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
@@ -39,6 +40,7 @@
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
@@ -262,14 +264,20 @@ private:
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     const NYdb::TDriver& driver,
     IHTTPGateway::TPtr httpGateway,
+    NFile::TYtFileServices::TPtr ytFileServices,
     NYql::NConnector::IClient::TPtr genericClient,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     size_t HTTPmaxTimeSeconds, 
     size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterDqInputTransformLookupActorFactory(*factory);
+    if (ytFileServices) {
+        RegisterYtLookupActorFactory(*factory, ytFileServices, functionRegistry);
+    }
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
+    RegisterDQSolomonReadActorFactory(*factory, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
@@ -814,8 +822,10 @@ int RunMain(int argc, const char* argv[])
         GetPgFactory()
     };
 
+    NFile::TYtFileServices::TPtr ytFileServices;
+
     if (emulateYt) {
-        auto ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
+        ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
@@ -950,7 +960,7 @@ int RunMain(int argc, const char* argv[])
 
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
-                CreateAsyncIoFactory(driver, httpGateway, genericClient, credentialsFactory, requestTimeout, maxRetries), threads,
+                CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries), threads,
                 metricsRegistry, metricsPusherFactory);
         }
 

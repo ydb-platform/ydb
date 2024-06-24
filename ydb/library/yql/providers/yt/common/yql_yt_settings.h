@@ -64,6 +64,11 @@ enum class EInferSchemaMode {
     RPC        = 2ULL  /* "rpc" */,
 };
 
+enum class EColumnGroupMode {
+    Disable     /* "disable" */,
+    Single      /* "single" */,
+    PerUsage    /* "perusage", "per-usage" */,
+};
 
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
@@ -271,6 +276,9 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
     NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
+    NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
+    NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
+    NCommon::TConfSetting<ui16, false> MaxColumnGroups;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

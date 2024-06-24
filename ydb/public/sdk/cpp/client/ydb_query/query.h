@@ -77,6 +77,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
+    FLUENT_SETTING(TString, PoolId);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
@@ -100,6 +101,7 @@ struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptS
     FLUENT_SETTING_DEFAULT(Ydb::Query::ExecMode, ExecMode, Ydb::Query::EXEC_MODE_EXECUTE);
     FLUENT_SETTING_DEFAULT(Ydb::Query::StatsMode, StatsMode, Ydb::Query::STATS_MODE_NONE);
     FLUENT_SETTING(TDuration, ResultsTtl);
+    FLUENT_SETTING(TString, PoolId);
 };
 
 class TQueryContent {

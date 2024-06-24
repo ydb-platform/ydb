@@ -66,9 +66,26 @@ message TEvPropagateStatisticsResponse {
 message TEvStatisticsIsDisabled {
 }
 
-// for tests
 message TEvScanTable {
     optional NKikimrProto.TPathID PathId = 1;
 }
+
+message TEvScanTableAccepted {
+    optional uint64 OperationId = 1;
+}
+
 message TEvScanTableResponse {
+}
+
+message TEvGetScanStatus {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvGetScanStatusResponse {
+    enum EStatus {
+        NO_OPERATION = 0;
+        ENQUEUED = 1;
+        IN_PROGRESS = 2;
+    }
+    optional EStatus Status = 1;
 }

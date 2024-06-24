@@ -82,14 +82,17 @@ struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
     static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
     static constexpr TStringBuf AllowInconsistentWritesSettingName = "AllowInconsistentWrites";
+    static constexpr TStringBuf ModeSettingName = "Mode";
 
     bool Inplace = false;
     bool IsUpdate = false;
     bool AllowInconsistentWrites = false;
+    TString Mode = "";
 
     void SetInplace() { Inplace = true; }
     void SetIsUpdate() { IsUpdate = true; }
     void SetAllowInconsistentWrites() { AllowInconsistentWrites = true; }
+    void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);

@@ -307,6 +307,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
+
     void FreeQuota(ui64 memorySize) override {
         Y_ABORT_UNLESS(Quota >= memorySize);
         Quota -= memorySize;
@@ -382,7 +386,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level);
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
+    IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const TTaskRunnerFactory& taskRunnerFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);

@@ -295,7 +295,7 @@ namespace NActors {
         void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
-        void SetupMonitoring();
+        void SetupMonitoring(ui16 monitoringPortOffset = 0);
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -655,6 +655,7 @@ namespace NActors {
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
         bool NeedMonitoring;
+        ui16 MonitoringPortOffset = 0;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;

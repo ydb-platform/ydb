@@ -489,7 +489,7 @@ message StreamReadMessage {
         PartitionLocation partition_location = 4;
     }
 
-    // Signal for server that cient is ready to recive data for partition.
+    // Signal for server that client is ready to recive data for partition.
     message StartPartitionSessionResponse {
         // Partition session identifier of partition to start read.
         int64 partition_session_id = 1;
@@ -582,18 +582,21 @@ message StreamReadMessage {
 message StreamDirectReadMessage {
 
     // Client-server message for direct read session.
-    //     InitDirectRead - command from client to create and start a direct read session.
-    //     StartDirectReadPartitionSession - command from client to create and start a direct read partition session.
+    //     InitRequest - command from client to create and start a direct read session.
+    //     StartDirectReadPartitionSessionRequest - command from client to create and start a direct read partition session.
+    //         Client signals it is ready to get data from partition.
     //     UpdateTokenRequest - request to update auth token
     message FromClient {
         oneof client_message {
-            InitDirectRead init_direct_read = 1;
-            StartDirectReadPartitionSession start_direct_read_partition_session = 2;
+            InitRequest init_request = 1;
+            StartDirectReadPartitionSessionRequest start_direct_read_partition_session_request = 2;
             UpdateTokenRequest update_token_request = 3;
         }
     }
 
     // Server-client message for direct read session.
+    //     InitResponse - correct handshake response.
+    //     StartDirectReadPartitionSessionResponse - Response to StartDirectReadPartitionSessionRequest.
     //     DirectReadResponse - portion of message data.
     //     StopDirectReadPartitionSession - command from server to stop a direct read partition session.
     //     UpdateTokenResponse - acknowledgment of token update.
@@ -604,8 +607,9 @@ message StreamDirectReadMessage {
         // Issues if any.
         repeated Ydb.Issue.IssueMessage issues = 2;
 
-
         oneof server_message {
+            InitResponse init_response = 6;
+            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 7;
             StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
             DirectReadResponse direct_read_response = 4;
             UpdateTokenResponse update_token_response = 5;
@@ -614,7 +618,7 @@ message StreamDirectReadMessage {
 
     // Command from client to create and start a direct read session.
     // Server should not send a response to the command.
-    message InitDirectRead {
+    message InitRequest {
         // Read session identifier.
         string session_id = 1;
         // Topics that will be read by this session.
@@ -628,9 +632,12 @@ message StreamDirectReadMessage {
         }
     }
 
+    // Response to the handshake.
+    message InitResponse {
+    }
+
     // Command from client to create and start a direct read partition session.
-    // Server should not send a response to the command.
-    message StartDirectReadPartitionSession {
+    message StartDirectReadPartitionSessionRequest {
         // Partition session identifier.
         int64 partition_session_id = 1;
 
@@ -639,6 +646,15 @@ message StreamDirectReadMessage {
 
         // Partition generation.
         int64 generation = 3;
+    }
+
+    // Signal for server that client is ready to receive data for partition.
+    message StartDirectReadPartitionSessionResponse {
+        // Partition session identifier of partition to start read.
+        int64 partition_session_id = 1;
+
+        // Partition generation.
+        int64 generation = 2;
     }
 
     // Command from server to stop a direct read partition session.
@@ -652,8 +668,10 @@ message StreamDirectReadMessage {
 
         // Partition session identifier.
         int64 partition_session_id = 3;
-    }
 
+        // Partition generation.
+        int64 generation = 4;
+    }
 
     // Messages that have been read directly from the partition node.
     // It's a response to StreamRead.ReadRequest

@@ -769,6 +769,7 @@ message TEvGetTableStats {
     optional uint64 DataSizeResolution = 2;
     optional uint64 RowCountResolution = 3;
     optional bool CollectKeySample = 4;
+    optional uint32 HistogramBucketsCount = 5;
 }
 
 message TEvGetTableStatsResult {

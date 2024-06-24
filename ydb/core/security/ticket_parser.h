@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/ticket_parser.h>
+#include "ticket_parser_settings.h"
 
 namespace NKikimr {
-    IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig);
+    IActor* CreateTicketParser(const TTicketParserSettings& settings);
 }

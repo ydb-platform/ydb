@@ -51,6 +51,7 @@ struct TKqpBuildQueryContext : TThrRefBase {
 };
 
 bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
+bool NeedSinks(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx);
 
 TMaybe<NYql::NNodes::TKqlQueryList> BuildKqlQuery(NYql::NNodes::TKiDataQueryBlocks queryBlocks,
     const NYql::TKikimrTablesData& tablesData, NYql::TExprContext& ctx, bool withSystemColumns,

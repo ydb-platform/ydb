@@ -271,14 +271,14 @@ struct TPDiskMockState::TImpl {
 
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
-            ReadOnlyVDisks.insert(vDiskId.GroupID);
+            ReadOnlyVDisks.insert(vDiskId.GroupID.GetRawId());
         } else {
-            ReadOnlyVDisks.erase(vDiskId.GroupID);
+            ReadOnlyVDisks.erase(vDiskId.GroupID.GetRawId());
         }
     }
 
     bool IsReadOnly(const TVDiskID& vDiskId) const {
-        return ReadOnlyVDisks.contains(vDiskId.GroupID);
+        return ReadOnlyVDisks.contains(vDiskId.GroupID.GetRawId());
     }
 };
 

@@ -295,6 +295,130 @@ TEST(TPhoenixTest, SinceVersionNew)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NInVersions {
+
+struct S
+{
+    int A;
+    int B;
+    int C;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x81be71aa);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template Field<1, &TThis::A>("a");
+    registrar.template Field<2, &TThis::B>("b")
+        .InVersions([] (int version) {
+            return version >= 150 && version <= 250;
+        });
+    registrar.template Field<3, &TThis::C>("c")
+        .InVersions([] (int version) {
+            return version >= 100 && version <= 200;
+        })
+        .WhenMissing([] (TThis* this_, auto& /*context*/) {
+            this_->C = 777;
+        });
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NVersions
+
+TEST(TPhoenixTest, InVersion1)
+{
+    using namespace NInVersions;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 0;
+    s1.C = 777;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto s2 = Deserialize<S>(buffer, /*version*/ 10);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, InVersion2)
+{
+    using namespace NInVersions;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 0;
+    s1.C = 456;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+        Save<int>(context, 456);
+    });
+
+    auto s2 = Deserialize<S>(buffer, /*version*/ 100);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, InVersion3)
+{
+    using namespace NInVersions;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 456;
+    s1.C = 789;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+        Save<int>(context, 456);
+        Save<int>(context, 789);
+    });
+
+    auto s2 = Deserialize<S>(buffer, /*version*/ 150);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, InVersion4)
+{
+    using namespace NInVersions;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 456;
+    s1.C = 777;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+        Save<int>(context, 456);
+    });
+
+    auto s2 = Deserialize<S>(buffer, /*version*/ 210);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, InVersion5)
+{
+    using namespace NInVersions;
+
+    S s1;
+    s1.A = 123;
+    s1.B = 0;
+    s1.C = 777;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto s2 = Deserialize<S>(buffer, /*version*/ 300);
+    EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NAfterLoad {
 
 struct S

@@ -312,7 +312,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
 
-            if (PartitionWriteQuotaWaitCounter) {
+            if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
@@ -524,15 +524,20 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         "TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize;
     );
 
+    if (SupportivePartitionTimeLag) {
+        SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
+    }
     if (SplitMergeEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
+        SplitMergeAvgWriteBytes->Update(WriteNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
     WriteCycleSize = 0;
     WriteNewSize = 0;
+    WriteNewSizeFull = 0;
     WriteNewSizeInternal = 0;
     WriteNewSizeUncompressed = 0;
+    WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
     UpdateWriteBufferIsFullState(now);
@@ -1044,14 +1049,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
-
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
-            MsgsDiscarded.Inc();
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
-            BytesDiscarded.Inc(p.Msg.Data.size());
+            if (!p.Internal) {
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+                MsgsDiscarded.Inc();
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+                BytesDiscarded.Inc(p.Msg.Data.size());
+            }
         } else {
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
+            if (!p.Internal) {
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
+            }
         }
 
         TString().swap(p.Msg.Data);
@@ -1153,14 +1161,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         return false;
     }
-
-    WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-    WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
-    WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-    if (p.Msg.PartNo == 0) {
-            ++WriteNewMessages;
-            if (!p.Msg.External)
-                ++WriteNewMessagesInternal;
+    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
+    WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+    if (!p.Internal) {
+        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
+        WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+    }
+    if (p.Msg.PartNo == 0 && !p.Internal) {
+        ++WriteNewMessages;
+        if (!p.Msg.External)
+            ++WriteNewMessagesInternal;
     }
 
     TMaybe<TPartData> partData;
@@ -1176,13 +1187,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
     WriteLagMs.Update(writeLagMs, WriteTimestamp);
-    if (InputTimeLag) {
+    if (InputTimeLag && !p.Internal) {
         InputTimeLag->IncFor(writeLagMs, 1);
-        if (p.Msg.PartNo == 0) {
-            MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
-        }
+    } else if (SupportivePartitionTimeLag) {
+        SupportivePartitionTimeLag->Insert(writeLagMs, 1);
     }
-
+    if (p.Msg.PartNo == 0  && !p.Internal) {
+        MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
+    }
     bool lastBlobPart = blob.IsLastPart();
 
     //will return compacted tmp blob
@@ -1615,6 +1627,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
+    WriteNewSizeUncompressed = 0;
     WriteNewSizeUncompressed = 0;
     WriteNewMessages = 0;
     UpdateWriteBufferIsFullState(ctx.Now());

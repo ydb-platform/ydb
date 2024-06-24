@@ -66,7 +66,8 @@ public:
         const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
-        const TQueryRequestSettings& querySettings = TQueryRequestSettings());
+        const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
+        const TString& poolId = "");
 
     TEvQueryRequest() = default;
 
@@ -329,6 +330,13 @@ public:
         return ProgressStatsPeriod;
     }
 
+    TString GetPoolId() const {
+        if (PoolId) {
+            return PoolId;
+        }
+        return Record.GetRequest().GetPoolId();
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -344,6 +352,7 @@ private:
     TString SessionId;
     TString YqlText;
     TString QueryId;
+    TString PoolId;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
     const ::Ydb::Table::TransactionControl* TxControl = nullptr;

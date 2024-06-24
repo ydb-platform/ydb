@@ -63,6 +63,13 @@ struct TEvService {
             Record.SetReason(reason);
             Record.SetErrorDescription(errorDescription);
         }
+
+        explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
+            Record.SetLagMilliSeconds(lag.MilliSeconds());
+        }
     };
 };
 

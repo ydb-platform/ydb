@@ -308,6 +308,7 @@ public:
 
             auto& tx = txBucket.Txs[txId];
             ui64 txTotalRequestedMemory = tx.TxScanQueryMemory + resources.Memory;
+            result.TotalAllocatedQueryMemory = txTotalRequestedMemory;
             if (txTotalRequestedMemory > queryMemoryLimit) {
                 TStringBuilder reason;
                 reason << "TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
@@ -350,50 +351,13 @@ public:
         return result;
     }
 
-    void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
-
-        if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
-            return;
-        }
-
-        auto& txBucket = TxBucket(txId);
-
-        {
-            TGuard<TMutex> guard(txBucket.Lock);
-
-            auto txIt = txBucket.Txs.find(txId);
-            if (txIt == txBucket.Txs.end()) {
-                return;
-            }
-
-            auto taskIt = txIt->second.Tasks.find(taskId);
-            if (taskIt == txIt->second.Tasks.end()) {
-                return;
-            }
-
-            taskIt->second.ScanQueryMemory -= resources.Memory;
-
-            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
-                taskIt->second.ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
-            Y_DEBUG_ABORT_UNLESS(reduced);
-
-            txIt->second.TxScanQueryMemory -= resources.Memory;
-
-            ScanQueryMemoryResource.Release(resources.Memory);
-        }
-
-        Counters->RmMemory->Sub(resources.Memory);
-
-        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
-
-        FireResourcesPublishing();
+    void FreeResources(ui64 txId, ui64 taskId) override {
+        FreeResources(txId, taskId, TKqpResourcesRequest{.ReleaseAllResources=true});
     }
 
-    void FreeResources(ui64 txId, ui64 taskId) override {
+    void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
         ui64 releaseScanQueryMemory = 0;
         ui64 releaseExternalDataQueryMemory = 0;
-        ui32 remainsTasks = 0;
 
         auto& txBucket = TxBucket(txId);
 
@@ -413,32 +377,53 @@ public:
             }
 
             auto& task = taskIt->second;
-            if (task.ExecutionUnits) {
+            if (resources.ReleaseAllResources && task.ExecutionUnits) {
                 FreeExecutionUnits(task.ExecutionUnits);
             }
 
-            releaseExternalDataQueryMemory = task.ExternalDataQueryMemory;
-            releaseScanQueryMemory = task.ScanQueryMemory;
-
-            if (task.ResourceBrokerTaskId) {
-                bool finished = ResourceBroker->FinishTaskInstant(
-                    TEvResourceBroker::TEvFinishTask(task.ResourceBrokerTaskId), SelfId);
-                Y_DEBUG_ABORT_UNLESS(finished);
+            if (resources.ReleaseAllResources) {
+                releaseExternalDataQueryMemory = task.ExternalDataQueryMemory;
+                releaseScanQueryMemory = task.ScanQueryMemory;
+            } else {
+                releaseScanQueryMemory = std::min(task.ScanQueryMemory, resources.Memory);
+                ui64 leftToRelease = resources.Memory - releaseScanQueryMemory;
+                releaseExternalDataQueryMemory = std::min(task.ExternalDataQueryMemory, resources.ExternalMemory + leftToRelease);
             }
 
-            remainsTasks = tx.Tasks.size() - 1;
+            task.ScanQueryMemory -= releaseScanQueryMemory;
+            tx.TxScanQueryMemory -= releaseScanQueryMemory;
 
-            if (remainsTasks == 0) {
-                txBucket.Txs.erase(txIt);
+            task.ExternalDataQueryMemory -= releaseExternalDataQueryMemory;
+            tx.TxExternalDataQueryMemory -= releaseExternalDataQueryMemory;
+
+            if (task.ScanQueryMemory == 0) {
+                if (task.ResourceBrokerTaskId) {
+                    bool finished = ResourceBroker->FinishTaskInstant(
+                        TEvResourceBroker::TEvFinishTask(task.ResourceBrokerTaskId), SelfId);
+                    Y_DEBUG_ABORT_UNLESS(finished);
+                    task.ResourceBrokerTaskId = 0;
+                }
+
             } else {
-                tx.Tasks.erase(taskIt);
-                tx.TxScanQueryMemory -= releaseScanQueryMemory;
-                tx.TxExternalDataQueryMemory -= releaseExternalDataQueryMemory;
+                bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
+                    taskIt->second.ResourceBrokerTaskId, {0, releaseScanQueryMemory}, SelfId);
+                Y_DEBUG_ABORT_UNLESS(reduced);
+            }
+
+            if (resources.ExecutionUnits) {
+                ui64 remainsTasks = tx.Tasks.size() - 1;
+                if (remainsTasks == 0) {
+                    txBucket.Txs.erase(txIt);
+                } else {
+                    tx.Tasks.erase(taskIt);
+                }
             }
 
             i64 prev = ExternalDataQueryMemory.fetch_sub(releaseExternalDataQueryMemory);
             Counters->RmExternalMemory->Sub(releaseExternalDataQueryMemory);
             Y_DEBUG_ABORT_UNLESS(prev >= 0);
+            Counters->RmMemory->Sub(releaseScanQueryMemory);
+            Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
@@ -446,13 +431,9 @@ public:
         } // with_lock (Lock)
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Released resources, "
-            << "ScanQueryMemory: " << releaseScanQueryMemory << ". "
-            << "Remains " << remainsTasks << " tasks in this tx.");
-
-        Counters->RmMemory->Sub(releaseScanQueryMemory);
-
-        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
-        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
+            << "ScanQueryMemory: " << releaseScanQueryMemory << ", "
+            << "ExternalDataQueryMemory " << releaseExternalDataQueryMemory << ", "
+            << "ExecutionUnits " << resources.ExecutionUnits << ".");
 
         FireResourcesPublishing();
     }

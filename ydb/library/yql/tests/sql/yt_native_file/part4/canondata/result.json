@@ -460,6 +460,27 @@
             "uri": "https://{canondata_backend}/1936997/9b8859f70925a58b024145127cca3e8e612258c0/resource.tar.gz#test.test_bigdate-table_int_cast-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[bigdate-tzstrliterals-default.txt-Debug]": [
+        {
+            "checksum": "80da9ce9555db734fda92b84985e2c66",
+            "size": 2919,
+            "uri": "https://{canondata_backend}/1130705/5eb6dee50052fc5539e60667d719f433b2c5a0f7/resource.tar.gz#test.test_bigdate-tzstrliterals-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-tzstrliterals-default.txt-Plan]": [
+        {
+            "checksum": "b2a2eb5d6b0a138ee924c128fc7738ef",
+            "size": 1331,
+            "uri": "https://{canondata_backend}/1130705/5eb6dee50052fc5539e60667d719f433b2c5a0f7/resource.tar.gz#test.test_bigdate-tzstrliterals-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-tzstrliterals-default.txt-Results]": [
+        {
+            "checksum": "404e08227ea498605ee953b38b3e652b",
+            "size": 14747,
+            "uri": "https://{canondata_backend}/1130705/5eb6dee50052fc5539e60667d719f433b2c5a0f7/resource.tar.gz#test.test_bigdate-tzstrliterals-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[binding-tie_bad_count_fail--Debug]": [],
     "test.test[binding-tie_bad_count_fail--Plan]": [],
     "test.test[binding-tie_bad_count_fail--Results]": [
@@ -504,9 +525,9 @@
     ],
     "test.test[blocks-combine_all_min_filter_opt--Peephole]": [
         {
-            "checksum": "7bf1d1599835459bc33ca572a25f9d32",
-            "size": 2716,
-            "uri": "https://{canondata_backend}/1920236/c34645de20a8a878f0bfb4aa6d7eb4335cbe03ff/resource.tar.gz#test.test_blocks-combine_all_min_filter_opt--Peephole_/opt.yql"
+            "checksum": "429946297f0706ea2bbc1687e8096786",
+            "size": 2625,
+            "uri": "https://{canondata_backend}/1881367/3c4475d094b3c588d8338b62d96be9c333514faf/resource.tar.gz#test.test_blocks-combine_all_min_filter_opt--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_min_filter_opt--Plan]": [

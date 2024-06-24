@@ -34,6 +34,7 @@ ENDIF()
         ydb/library/yql/core/file_storage/http_download
         ydb/library/yql/core/services
         ydb/library/yql/core/services/mounts
+        ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
         ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/integration/transform
@@ -56,6 +57,7 @@ ENDIF()
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
         ydb/library/yql/providers/s3/provider
+        ydb/library/yql/providers/solomon/async_io
         ydb/library/yql/providers/solomon/gateway
         ydb/library/yql/providers/solomon/provider
         ydb/library/yql/providers/ydb/actors
@@ -70,6 +72,7 @@ ENDIF()
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
+        ydb/library/yql/providers/yt/actors
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/yt/gateway/file

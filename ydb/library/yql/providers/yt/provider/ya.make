@@ -111,6 +111,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/opt
     ydb/library/yql/providers/yt/gateway/qplayer
+    ydb/library/yql/providers/yt/proto
 )
 
 YQL_LAST_ABI_VERSION()

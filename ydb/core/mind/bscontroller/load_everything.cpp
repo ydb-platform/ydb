@@ -69,8 +69,8 @@ public:
             if (!state.IsReady())
                 return false;
             if (state.IsValid()) {
-                Self->NextGroupID = state.GetValue<T::NextGroupID>();
-                Self->NextVirtualGroupId = state.GetValueOrDefault<T::NextVirtualGroupId>();
+                Self->NextGroupID = TGroupId::FromValue(state.GetValue<T::NextGroupID>());
+                Self->NextVirtualGroupId = TGroupId::FromValue(state.GetValueOrDefault<T::NextVirtualGroupId>());
                 Self->NextStoragePoolId = state.GetValue<T::NextStoragePoolId>();
                 Self->NextOperationLogIndex = state.GetValueOrDefault<T::NextOperationLogIndex>(1);
                 Self->DefaultMaxSlots = state.GetValue<T::DefaultMaxSlots>();
@@ -120,9 +120,9 @@ public:
                 const auto groupId = groupStoragePool.GetValue<Table::GroupId>();
                 const auto boxId = groupStoragePool.GetValue<Table::BoxId>();
                 const auto storagePoolId = groupStoragePool.GetValue<Table::StoragePoolId>();
-                const bool inserted = groupToStoragePool.try_emplace(groupId, boxId, storagePoolId).second;
+                const bool inserted = groupToStoragePool.try_emplace(TGroupId::FromValue(groupId), boxId, storagePoolId).second;
                 Y_ABORT_UNLESS(inserted);
-                Self->StoragePoolGroups.emplace(TBoxStoragePoolId(boxId, storagePoolId), groupId);
+                Self->StoragePoolGroups.emplace(TBoxStoragePoolId(boxId, storagePoolId), TGroupId::FromValue(groupId));
                 if (!groupStoragePool.Next()) {
                     return false;
                 }
@@ -364,7 +364,7 @@ public:
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();
-                Y_ABORT_UNLESS(groupId);
+                Y_ABORT_UNLESS(groupId.GetRawId());
 
                 auto& x = Self->AddVSlot(vslotId, pdisk, groupId, slot.GetValueOrDefault<T::GroupPrevGeneration>(),
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
@@ -408,7 +408,7 @@ public:
                 return false;
             }
             while (!table.EndOfSet()) {
-                const TVDiskID key(table.GetValue<Table::GroupID>(), table.GetValue<Table::GroupGeneration>(),
+                const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
                     slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
@@ -430,7 +430,7 @@ public:
                 return false;
             }
             while (groupLatencies.IsValid()) {
-                const TGroupId groupId = groupLatencies.GetValue<Table::GroupId>();
+                const TGroupId groupId = TGroupId::FromValue(groupLatencies.GetValue<Table::GroupId>());
                 if (TGroupInfo *groupInfo = Self->FindGroup(groupId)) {
                     if (groupLatencies.HaveValue<Table::PutTabletLogLatencyUs>()) {
                         groupInfo->LatencyStats.PutTabletLog = TDuration::MicroSeconds(groupLatencies.GetValue<Table::PutTabletLogLatencyUs>());

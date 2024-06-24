@@ -119,7 +119,7 @@ public:
             std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay), ev->Deadline);
 
         auto& blob = Blobs.back();
-        LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID, blob.BlobId.ToString(), Tactic,
+        LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
             NKikimrBlobStorage::EPutHandleClass_Name(GetPutHandleClass()));
     }
 
@@ -149,7 +149,7 @@ public:
                 msg.Deadline);
 
             auto& blob = Blobs.back();
-            LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID, blob.BlobId.ToString(), Tactic,
+            LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
                 NKikimrBlobStorage::EPutHandleClass_Name(GetPutHandleClass()));
         }
 

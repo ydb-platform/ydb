@@ -1222,3 +1222,8 @@
     - YOTTA_CFG_MBEDTLS_TARGET_CONFIG_FILE
     - YOTTA_CFG_MBEDTLS_USER_CONFIG_FILE
     - xstr(MQTTCLIENT_PLATFORM_HEADER)
+
+- source_filter: "^contrib/libs/openthread"
+  includes:
+    - MBEDTLS_CONFIG_FILE: contrib/libs/openthread/third_party/mbedtls/openthread-mbedtls-config.h
+    - OPENTHREAD_CONFIG_FILE

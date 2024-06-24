@@ -1,7 +1,7 @@
 {createExternal}
 
 CREATE {external} TABLE `{path}/customer` (
-    c_acctbal Double {notnull}, -- it should be Decimal(12, 2)
+    c_acctbal {float_type} {notnull}, -- it should be Decimal(12, 2)
     c_address {string_type} {notnull},
     c_comment {string_type} {notnull},
     c_custkey Int64 {notnull}, -- Identifier
@@ -19,20 +19,20 @@ WITH ({store}"{s3_prefix}/customer/",
 CREATE {external} TABLE `{path}/lineitem` (
     l_comment {string_type} {notnull},
     l_commitdate {date_type} {notnull},
-    l_discount Double {notnull}, -- it should be Decimal(12, 2)
-    l_extendedprice Double {notnull}, -- it should be Decimal(12, 2)
+    l_discount {float_type} {notnull}, -- it should be Decimal(12, 2)
+    l_extendedprice {float_type} {notnull}, -- it should be Decimal(12, 2)
     l_linenumber Int32 {notnull},
     l_linestatus {string_type} {notnull},
     l_orderkey Int64 {notnull}, -- FK to O_ORDERKEY
     l_partkey Int64 {notnull}, -- FK to P_PARTKEY, first part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_SUPPKEY
-    l_quantity Double {notnull}, -- it should be Decimal(12, 2)
+    l_quantity {float_type} {notnull}, -- it should be Decimal(12, 2)
     l_receiptdate {date_type} {notnull},
     l_returnflag {string_type} {notnull},
     l_shipdate {date_type} {notnull},
     l_shipinstruct {string_type} {notnull},
     l_shipmode {string_type} {notnull},
     l_suppkey Int64 {notnull}, -- FK to S_SUPPKEY, second part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_PARTKEY
-    l_tax Double {notnull} -- it should be Decimal(12, 2)
+    l_tax {float_type} {notnull} -- it should be Decimal(12, 2)
     {primary_key} (l_orderkey, l_linenumber)
 )
 {partition_by}(l_orderkey)
@@ -62,7 +62,7 @@ CREATE {external} TABLE `{path}/orders` (
     o_orderpriority {string_type} {notnull},
     o_orderstatus {string_type} {notnull},
     o_shippriority Int32 {notnull},
-    o_totalprice Double {notnull} -- it should be Decimal(12, 2)
+    o_totalprice {float_type} {notnull} -- it should be Decimal(12, 2)
     {primary_key} (o_orderkey)
 )
 {partition_by}(o_orderkey)
@@ -77,7 +77,7 @@ CREATE {external} TABLE `{path}/part` (
     p_mfgr {string_type} {notnull},
     p_name {string_type} {notnull},
     p_partkey Int64 {notnull}, -- Identifier
-    p_retailprice Double {notnull}, -- it should be Decimal(12, 2)
+    p_retailprice {float_type} {notnull}, -- it should be Decimal(12, 2)
     p_size Int32 {notnull},
     p_type {string_type} {notnull}
     {primary_key}(p_partkey)
@@ -92,7 +92,7 @@ CREATE {external} TABLE `{path}/partsupp` (
     ps_comment {string_type} {notnull},
     ps_partkey Int64 {notnull}, -- FK to P_PARTKEY
     ps_suppkey Int64 {notnull}, -- FK to S_SUPPKEY
-    ps_supplycost Double {notnull} -- it should be Decimal(12, 2)
+    ps_supplycost {float_type} {notnull} -- it should be Decimal(12, 2)
     {primary_key}(ps_partkey, ps_suppkey)
 )
 {partition_by}(ps_partkey)
@@ -112,7 +112,7 @@ WITH ({store}"{s3_prefix}/region/",
 );
 
 CREATE {external} TABLE `{path}/supplier` (
-    s_acctbal Double {notnull}, -- it should be Decimal(12, 2)
+    s_acctbal {float_type} {notnull}, -- it should be Decimal(12, 2)
     s_address {string_type} {notnull},
     s_comment {string_type} {notnull},
     s_name {string_type} {notnull},

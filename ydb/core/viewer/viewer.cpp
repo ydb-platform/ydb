@@ -42,6 +42,8 @@ using namespace NNodeWhiteboard;
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -107,7 +109,6 @@ public:
                 }
             }
             mon->RegisterActorPage({
-                .Title = "Viewer (classic)",
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -140,7 +141,6 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
-                .Title = "VDisk",
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -148,12 +148,25 @@ public:
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
-                .Title = "PDisk",
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "operation",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "scheme",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = viewerAllowedSIDs,
             });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
@@ -164,6 +177,8 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
+            InitOperationJsonHandlers(JsonHandlers);
+            InitSchemeJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths
@@ -987,6 +1002,26 @@ NKikimrViewer::EFlag GetBSGroupOverallFlag(
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
         const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
     return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
+}
+
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag) {
+    switch (flag) {
+    case Ydb::Monitoring::StatusFlag::GREY:
+    case Ydb::Monitoring::StatusFlag::UNSPECIFIED:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MAX_SENTINEL_DO_NOT_USE_:
+        return NKikimrViewer::EFlag::Grey;
+    case Ydb::Monitoring::StatusFlag::GREEN:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::BLUE:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::YELLOW:
+        return NKikimrViewer::EFlag::Yellow;
+    case Ydb::Monitoring::StatusFlag::ORANGE:
+        return NKikimrViewer::EFlag::Orange;
+    case Ydb::Monitoring::StatusFlag::RED:
+        return NKikimrViewer::EFlag::Red;
+    }
 }
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag) {

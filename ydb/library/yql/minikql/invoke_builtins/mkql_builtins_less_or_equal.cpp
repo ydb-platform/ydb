@@ -287,6 +287,7 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
     RegisterAggrComparePrimitive<TLessOrEqual, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateLessOrEqual, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLessOrEqual, TCompareArgsOpt>(registry, aggrName);

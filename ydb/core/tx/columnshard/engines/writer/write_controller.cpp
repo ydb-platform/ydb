@@ -4,7 +4,7 @@
 namespace NKikimr::NColumnShard {
 
 void IWriteController::OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
-    NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
+    NOlap::TUnifiedBlobId blobId(result.GroupId.GetRawId(), result.Id);
     auto it = WaitingActions.find(result.StorageId ? result.StorageId : NOlap::IStoragesManager::DefaultStorageId);
     AFL_VERIFY(it != WaitingActions.end());
     it->second->OnBlobWriteResult(blobId, result.Status);

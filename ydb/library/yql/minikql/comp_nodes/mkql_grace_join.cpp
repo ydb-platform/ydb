@@ -836,12 +836,11 @@ private:
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
-    if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
-        bool isWaitingForReduce = TryToReduceMemoryAndWait();
-        if (isWaitingForReduce) return;
-    }
-
     while (*HaveMoreLeftRows || *HaveMoreRightRows) {
+        if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
+            bool isWaitingForReduce = TryToReduceMemoryAndWait();
+            if (isWaitingForReduce) return;
+        }
         bool isYield = FetchAndPackData(ctx);
         if (isYield) return;
     }

@@ -4075,6 +4075,12 @@ ui32 ConvertToPgType(NUdf::EDataSlot slot) {
         return TIMESTAMPOID;
     case NUdf::EDataSlot::Interval64:
         return INTERVALOID;
+    case NUdf::EDataSlot::TzDate32:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzDatetime64:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzTimestamp64:
+        return TEXTOID;
     }
 }
 

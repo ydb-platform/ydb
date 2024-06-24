@@ -67,6 +67,7 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     SubstGlobal(createSql, "{string_type}", Params.GetStringType());
     SubstGlobal(createSql, "{date_type}", Params.GetDateType());
     SubstGlobal(createSql, "{timestamp_type}", Params.GetTimestampType());
+    SubstGlobal(createSql, "{float_type}", Params.GetFloatType());
     return createSql.c_str();
 }
 
@@ -116,8 +117,10 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .Optional()
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
-        opts.AddLongOption("date32", "Use Date32 type in tables instead Date one.").NoArgument().StoreValue(&DateType, "Date32");
-        opts.AddLongOption("timestamp64", "Use Timestamp64 type in tables instead Timestamp one.").NoArgument().StoreValue(&TimestampType, "Timestamp64");
+        opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
+            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+        opts.AddLongOption("decimal", "Use Decimal(22,9) type in tables instead Double one.").NoArgument()
+            .StoreValue(&FloatType, "Decimal(22,9)");
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")

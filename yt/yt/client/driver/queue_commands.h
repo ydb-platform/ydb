@@ -100,15 +100,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TAdvanceConsumerOptions
+struct TAdvanceQueueConsumerOptions
     : public TTabletWriteOptions
 { };
 
-class TAdvanceConsumerCommand
-    : public TTypedCommand<TAdvanceConsumerOptions>
+class TAdvanceQueueConsumerCommand
+    : public TTypedCommand<TAdvanceQueueConsumerOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TAdvanceConsumerCommand);
+    REGISTER_YSON_STRUCT_LITE(TAdvanceQueueConsumerCommand);
 
     static void Register(TRegistrar registrar);
 
@@ -156,6 +156,30 @@ private:
     NYPath::TRichYPath ProducerPath;
     NYPath::TRichYPath QueuePath;
     TString SessionId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPushQueueProducerOptions
+    : public NApi::TPushQueueProducerOptions
+    , public TTabletWriteOptions
+{ };
+
+class TPushQueueProducerCommand
+    : public TTypedCommand<TPushQueueProducerOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPushQueueProducerCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    TString SessionId;
+    i64 Epoch;
 
     void DoExecute(ICommandContextPtr context) override;
 };

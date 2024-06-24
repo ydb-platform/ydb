@@ -65,7 +65,7 @@ void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
 
     NStat::TRequest req;
     req.PathId = pathId;
-    req.ColumnName = "Key";
+    req.ColumnTag = 1;
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
@@ -96,7 +96,7 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
 
     NStat::TRequest req;
     req.PathId = pathId;
-    req.ColumnName = "Key";
+    req.ColumnTag = 1;
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;

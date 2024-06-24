@@ -936,7 +936,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
                                                         TopicConverter,
                                                         MakeSupportivePartitionConfig(),
-                                                        true,
+                                                        false,
                                                         ctx));
 }
 

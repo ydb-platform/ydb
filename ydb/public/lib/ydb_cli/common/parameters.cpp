@@ -164,9 +164,11 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
         "or the waiting time reaches batch-max-delay."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("columns", "String with column names that replaces header. "
+            "Relevant when passing parameters in CSV/TSV format only. "
             "It is assumed that there is no header in the file")
             .RequiredArgument("STR").StoreResult(&Columns);
-    config.Opts->AddLongOption("skip-rows", "Number of header rows to skip (not including the row of column names, if any)")
+    config.Opts->AddLongOption("skip-rows", "Number of header rows to skip (not including the row of column names, if any). "
+            "Relevant when passing parameters in CSV/TSV format only.")
             .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
     config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
             .RequiredArgument("STRING").AppendTo(&StdinParameters);

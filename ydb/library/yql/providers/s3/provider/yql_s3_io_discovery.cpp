@@ -502,6 +502,16 @@ private:
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 
+            auto row = Build<TCoArgument>(ctx, read.Pos())
+                .Name("row")
+                .Done();
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+            
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())
                     .World(read.World())
@@ -509,6 +519,7 @@ private:
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
                     .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                     .ColumnOrder(std::move(userSchema.back()))
                 .Done().Ptr():
                 Build<TS3ReadObject>(ctx, read.Pos())
@@ -517,6 +528,7 @@ private:
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
                     .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                 .Done().Ptr());
         }
 

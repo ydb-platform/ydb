@@ -69,10 +69,10 @@ with year_total as (
          and t_s_secyear.dyear = 1999+1
          and t_w_firstyear.dyear = 1999
          and t_w_secyear.dyear = 1999+1
-         and t_s_firstyear.year_total > 0::numeric
-         and t_w_firstyear.year_total > 0::numeric
-         and case when t_w_firstyear.year_total > 0::numeric then t_w_secyear.year_total / t_w_firstyear.year_total else 0.0::numeric end
-             > case when t_s_firstyear.year_total > 0::numeric then t_s_secyear.year_total / t_s_firstyear.year_total else 0.0::numeric end
+         and t_s_firstyear.year_total > 0
+         and t_w_firstyear.year_total > 0
+         and case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else 0.0 end
+             > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else 0.0 end
  order by t_s_secyear.customer_id
          ,t_s_secyear.customer_first_name
          ,t_s_secyear.customer_last_name

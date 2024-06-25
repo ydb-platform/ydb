@@ -2035,7 +2035,7 @@ TPipeline::TWaitingDataTxOp::TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev)
     : Event(std::move(ev))
 {
     if (Event->TraceId) {
-        Span = NWilson::TSpan(15, std::move(Event->TraceId), "DataShard.WaitSnapshot");
+        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.WaitSnapshot");
         Event->TraceId = Span.GetTraceId();
     }
 }
@@ -2143,7 +2143,7 @@ TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPt
     : Event(std::move(ev))
 {
     if (Event->TraceId) {
-        Span = NWilson::TSpan(15, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
+        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
         Event->TraceId = Span.GetTraceId();
     }
 }

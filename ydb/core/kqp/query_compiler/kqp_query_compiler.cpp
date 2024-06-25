@@ -441,7 +441,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& SecretNames) {
     THashMap<TString, TString> secureParams;
     NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
-    
+
     for (auto& [secretName, structuredToken] : secureParams) {
         const auto& tokenParser = CreateStructuredTokenParser(structuredToken);
         tokenParser.ListReferences(SecretNames);
@@ -796,6 +796,7 @@ private:
         auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
+        stageProto.SetAllowWithSpilling(Config->EnableSpillingGenericQuery);
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
@@ -1081,7 +1082,7 @@ private:
             } else if (settings.Mode().Cast().StringValue() == "delete") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
             } else {
-                YQL_ENSURE(false, "Unsupported sink mode");    
+                YQL_ENSURE(false, "Unsupported sink mode");
             }
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);

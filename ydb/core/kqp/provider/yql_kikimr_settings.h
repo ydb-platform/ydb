@@ -168,6 +168,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
+    bool EnableSpillingGenericQuery = false;
 };
 
 }

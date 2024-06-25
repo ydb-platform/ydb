@@ -68,3 +68,4 @@ SELECT * FROM ydb_datasource.<table_name>
 |`Date`|
 |`Datetime`|
 |`Timestamp`|
+|`Json`|

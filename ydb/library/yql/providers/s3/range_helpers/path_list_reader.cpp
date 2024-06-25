@@ -25,7 +25,7 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
         currentPath += path.GetName();
         if (path.GetRead()) {
             auto isDirectory = path.GetIsDirectory();
-            auto readPath = isDirectory ? currentPath + "/" : currentPath;
+            auto readPath = isDirectory && currentPath ? currentPath + "/" : currentPath;
             paths.emplace_back(TPath{readPath, path.GetSize(), path.GetIsDirectory(), nextPathIndex++});
         }
         BuildPathsFromTree(path.GetChildren(), paths, currentPath, currentDepth + 1, nextPathIndex);

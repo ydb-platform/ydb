@@ -715,9 +715,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             TAlterTopicSettings alterSettings;
             alterSettings
                 .BeginAlterPartitioningSettings()
-                    .BeginAlterAutoscalingSettings()
+                    .BeginAlterAutoPartitioningSettings()
                         .Strategy(EAutoPartitioningStrategy::Disabled)
-                    .EndAlterAutoscalingSettings()
+                    .EndAlterAutoPartitioningSettings()
                 .EndAlterTopicPartitioningSettings();
             auto f = client.AlterTopic(topicName, alterSettings);
             f.Wait();
@@ -731,9 +731,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             alterSettings
                 .BeginAlterPartitioningSettings()
                     .MaxActivePartitions(0)
-                    .BeginAlterAutoscalingSettings()
+                    .BeginAlterAutoPartitioningSettings()
                         .Strategy(EAutoPartitioningStrategy::Disabled)
-                    .EndAlterAutoscalingSettings()
+                    .EndAlterAutoPartitioningSettings()
                 .EndAlterTopicPartitioningSettings();
             auto f = client.AlterTopic(topicName, alterSettings);
             f.Wait();

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NColumnShard {
 

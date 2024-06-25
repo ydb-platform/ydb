@@ -473,7 +473,7 @@ void TBlobManager::OnGCFinishedOnComplete(const TGenStep& genStep) {
 }
 
 void TBlobManager::OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db) {
-    AFL_VERIFY(LastCollectedGenStep < genStep)("last", LastCollectedGenStep)("prepared", genStep);
+    AFL_VERIFY(LastCollectedGenStep <= genStep)("last", LastCollectedGenStep)("prepared", genStep);
     db.SaveGCBarrierPreparation(genStep);
 }
 

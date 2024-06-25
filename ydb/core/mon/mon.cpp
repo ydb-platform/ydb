@@ -2,8 +2,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 #include <ydb/core/protos/auth.pb.h>
+
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NActors {
 
@@ -12,6 +16,7 @@ using namespace NKikimr;
 
 namespace {
 
+/*
 const std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries(const TString& ticket) {
     if (ticket.StartsWith("Bearer")) {
         if (AppData()->AuthConfig.GetUseAccessService()
@@ -25,6 +30,32 @@ const std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntr
     static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
     return emptyEntries;
 }
+*/
+
+TString GetDatabase(NMonitoring::IMonHttpRequest& request) {
+    if (const auto dbIt = request.GetParams().Find("database"); dbIt != request.GetParams().end()) {
+        return dbIt->second;
+    }
+    if (request.GetMethod() == HTTP_METHOD_POST) {
+        static NJson::TJsonReaderConfig JsonConfig;
+        NJson::TJsonValue requestData;
+        if (NJson::ReadJsonTree(request.GetPostContent(), &JsonConfig, &requestData)) {
+            return requestData["database"].GetString();
+        }
+    }
+    return {};
+}
+
+IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket) {
+    return new NActors::IEventHandle(
+        NGRpcService::CreateGRpcRequestProxyId(),
+        owner,
+        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+            database,
+            ticket ? TMaybe<TString>(ticket) : Nothing()),
+        IEventHandle::FlagTrackDelivery
+    );
+}
 
 } // namespace
 
@@ -32,9 +63,9 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     TStringBuf ydbSessionId = request.GetCookie("ydb_session_id");
     TStringBuf authorization = request.GetHeader("Authorization");
     if (!authorization.empty()) {
-        return GetAuthorizeTicketHandle(owner, TString(authorization));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization));
     } else if (!ydbSessionId.empty()) {
-        return GetAuthorizeTicketHandle(owner, TString("Login ") + TString(ydbSessionId));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId));
     } else {
         return nullptr;
     }
@@ -45,33 +76,24 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
         return new NActors::IEventHandle(
             owner,
             owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), {
-                .Message = "No security credentials were provided",
-                .Retryable = false
-            })
+            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
+                Ydb::StatusIds::UNAUTHORIZED,
+                "No security credentials were provided")
         );
     } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
         TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
         return new NActors::IEventHandle(
             owner,
             owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), token)
+            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
+                {},
+                {},
+                token
+            )
         );
     } else {
         return nullptr;
     }
-}
-
-IEventHandle* GetAuthorizeTicketHandle(const NActors::TActorId& owner, const TString& ticket) {
-    return new NActors::IEventHandle(
-        NKikimr::MakeTicketParserID(),
-        owner,
-        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-            .Ticket = ticket,
-            .Entries = GetEntries(ticket),
-        }),
-        IEventHandle::FlagTrackDelivery
-    );
 }
 
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,

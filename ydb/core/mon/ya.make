@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    library/cpp/json
     library/cpp/lwtrace/mon
     library/cpp/string_utils/url
     ydb/core/base

@@ -41,29 +41,29 @@ public:
 
 NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     switch (SchemaTxBody.TxBody_case()) {
-    case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
-    {
-        auto validationStatus = ValidateTables(SchemaTxBody.GetInitShard().GetTables());
-        if (validationStatus.IsFail()) {
-            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
+        case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
+        {
+            auto validationStatus = ValidateTables(SchemaTxBody.GetInitShard().GetTables());
+            if (validationStatus.IsFail()) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
+            }
+            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
         }
-        WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
-    }
-    break;
-    case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
-    {
-        auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
-        if (validationStatus.IsFail()) {
-            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
-        }
-        WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
-    }
-    break;
-    case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
-    case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
-    case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
-    case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
         break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
+        {
+            auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
+            if (validationStatus.IsFail()) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
+            }
+            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
+        }
+        break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
+            break;
     }
 
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
@@ -195,8 +195,10 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(WaitPathIdsToErase.size())("error", "not implemented for non-async operator by default")("method", "DoStartProposeOnComplete");
-    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    AFL_VERIFY(IsAsync())("error", "not implemented for non-async operator by default")("method", "DoStartProposeOnComplete");
+    if (!AfterStartFlag) {
+        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    }
 }
 
 }

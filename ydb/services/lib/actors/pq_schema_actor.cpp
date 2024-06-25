@@ -1272,10 +1272,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
                 if (settings.has_alter_auto_partitioning_settings()) {
                     if (settings.alter_auto_partitioning_settings().has_set_partition_write_speed()) {
-                        if (settings.alter_auto_partitioning_settings().set_partition_write_speed().has_set_scale_up_threshold_percent()) {
+                        if (settings.alter_auto_partitioning_settings().set_partition_write_speed().has_set_up_utilization_percent()) {
                             pqTabletConfig->MutablePartitionStrategy()->SetScaleUpPartitionWriteSpeedThresholdPercent(settings.alter_auto_partitioning_settings().set_partition_write_speed().set_up_utilization_percent());
                         }
-                        if (settings.alter_auto_partitioning_settings().set_partition_write_speed().has_set_scale_down_threshold_percent()) {
+                        if (settings.alter_auto_partitioning_settings().set_partition_write_speed().has_set_down_utilization_percent()) {
                             pqTabletConfig->MutablePartitionStrategy()->SetScaleDownPartitionWriteSpeedThresholdPercent(settings.alter_auto_partitioning_settings().set_partition_write_speed().set_down_utilization_percent());
                         }
                         if (settings.alter_auto_partitioning_settings().set_partition_write_speed().has_set_stabilization_window()) {

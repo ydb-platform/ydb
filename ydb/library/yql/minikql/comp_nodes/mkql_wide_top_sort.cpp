@@ -755,7 +755,10 @@ private:
     EOperatingMode GetMode() const { return Mode; }
 
     bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        // We decided to turn off spilling in Sort nodes for now
+        // Because in current benchmarks we don't have huge amount of data to sort
+        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        return true;
     }
 
     bool IsReadFromChannelFinished() const {

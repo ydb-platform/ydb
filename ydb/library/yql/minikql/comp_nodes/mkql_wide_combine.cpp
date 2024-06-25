@@ -1266,11 +1266,13 @@ public:
                 }
 
                 if (ptr->InputStatus != EFetchResult::Finish) {
-                    ptr->InputStatus = Flow->FetchValues(ctx, fields);
-                    if (ptr->InputStatus == EFetchResult::Yield) return EFetchResult::Yield;
-
-                    if (ptr->InputStatus == EFetchResult::Finish) {
-                        continue;
+                    switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
+                        case EFetchResult::One:
+                            break;
+                        case EFetchResult::Finish:
+                            continue;
+                        case EFetchResult::Yield:
+                            return EFetchResult::Yield;
                     }
                 }
 

@@ -359,13 +359,13 @@ public:
         return !TxCtx->TxHasEffects();
     }
 
-    bool ShouldAcquireLocks() {
+    bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
             return false;
         }
 
         // Inconsistent writes (CTAS) don't require locks.
-        if (IsSplitted() && !HasTxSink()) {
+        if (!HasTxSinkInTx(tx)) {
             return false;
         }
 

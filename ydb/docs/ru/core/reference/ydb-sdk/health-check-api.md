@@ -45,18 +45,20 @@ message IssueLog {
 | `self_check_result` | содержит результат проверки БД:<ul><li>`GOOD`: Проблем не обнаружено.</li><li>`DEGRADED`: Обнаружена деградация одной из систем базы данных, но база данных все еще функционирует (например, допустимая потеря диска).</li><li>`MAINTENANCE_REQUIRED`: Обнаружена значительная деградация, есть риск потери доступности, требуется обслуживание.</li><li>`EMERGENCY`: Обнаружена серьезная проблема в базе данных с полной или частичной потерей доступности.</li></ul> |
 | `issue_log` | Это набор элементов, каждый из которых описывает проблему в системе на определенном уровне. |
 | `issue_log.id` | Уникальный идентификатор проблемы в этом ответе. |
-| `issue_log.status` | Статус (серьезность) текущей проблемы.<br/>Может принимать одно из следующих значений:<ul><li>`RED`: Компонент неисправен или недоступен.</li><li>`ORANGE`: Серьезная проблема, мы в шаге от потери доступности. Может потребоваться обслуживание.</li><li>`YELLOW`: Небольшая проблема, нет рисков для доступности. Рекомендуется продолжать мониторинг проблемы.</li><li>`BLUE`: Временная небольшая деградация, не влияющая на доступность базы данных. Ожидается переход системы в `GREEN`.</li><li>`GREEN`: Проблем не обнаружено.</li><li>`GREY`: Не удалось определить статус (проблема с механизмом самодиагностики).</li></ul> |
+| `issue_log.status` | Статус (серьезности) текущей проблемы.<br/>Может принимать одно из следующих значений:<ul><li>`RED`: Компонент неисправен или недоступен.</li><li>`ORANGE`: Серьезная проблема, мы в шаге от потери доступности. Может потребоваться обслуживание.</li><li>`YELLOW`: Небольшая проблема, нет рисков для доступности. Рекомендуется продолжать мониторинг проблемы.</li><li>`BLUE`: Временная небольшая деградация, не влияющая на доступность базы данных. Ожидается переход системы в `GREEN`.</li><li>`GREEN`: Проблем не обнаружено.</li><li>`GREY`: Не удалось определить статус (проблема с механизмом самодиагностики).</li></ul> |
 | `issue_log.message` | Текст, описывающий проблему. |
-| `issue_log.location` | Местоположение проблемы. |
+| `issue_log.location` | Местоположение проблемы. Это может быть физической местоположение или контекст выполнения. |
 | `issue_log.reason` | Это набор элементов, каждый из которых описывает причину проблемы в системе на определенном уровне. |
-| `issue_log.type` | Категория проблемы. |
+| `issue_log.type` | Категория проблемы. Каждый тип находится на определённом уровне и связан с другими через жёсткую иерархию (как показано на изображении выше). |
 | `issue_log.level` | Глубина вложенности проблемы. |
-| `database_status` | Если в настройках содержится параметр `verbose`, то поле `database_status` будет заполнено.<br/>Оно предоставляет сводку общего состояния базы данных.<br/>Используется для быстрой оценки состояния базы данных и выявления серьезных проблем на высоком уровне. |
+| `database_status` | Если в настройках содержится параметр `verbose`, то поле `database_status` будет заполнено.<br/>Оно предоставляет сводку общего состояния базы данных.<br/>Используется для быстрой оценки состояния базы данных и выявления серьезных проблем на высоком уровне. [Пример](#example-verbose). |
 | `location` | Содержит информацию о хосте, на котором был вызван сервис `HealthCheck`. |
 
 
 ## Call parameters {#call-parameters}
 Полный список дополнительных параметров представлен ниже:
+{% list tabs %}
+- C++
 ```c++
 struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
     FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
@@ -64,12 +66,13 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
     FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
 };
 ```
+{% endlist %}
 
-| Параметр | Описание |
+| Параметр | Тип | Описание |
 |:----|:----|
-| `ReturnVerboseStatus` | Как было сказано ранее, этот параметр влияет на заполнение поля `database_status`. |
-| `MinimumStatus` | Минимальный статус, который будет указан в ответе. Проблемы с лучшим статусом будут отброшены. |
-| `MaximumLevel` | Максимальная глубина проблем в ответе. Более глубокие уровни будут отброшены. |
+| `ReturnVerboseStatus` | 'bool'        | Как было сказано ранее, этот параметр влияет на заполнение поля `database_status`. По-умолчанию `false`. |
+| `MinimumStatus`       | 'EStatusFlag' | Минимальный статус опасности, который будет появляться в ответе. Менее важные проблемы будут отброшены. По-умолчанию все проблемы будут перечислены. |
+| `MaximumLevel`        | 'int32'       | Максимальная глубина проблем в ответе. Проблемы более глубокого уровня будут отброшены. По-умолчанию все проблемы будут перечислены. |
 
 ## Возможные проблемы {#problems}
 
@@ -81,9 +84,9 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `There are no storage pools` | Пулы хранения не настроены. |
 | `Storage degraded`</br>`Storage has no redundancy`</br>`Storage failed` | Зависит от нижележащего слоя `STORAGE_POOLS`. |
 | `System tablet BSC didn't provide information` | Информация о сторадже не доступна. |
-| `Storage usage over 75%/85%/90%` | Необходимо увеличить дисковое пространство. |
+| `Storage usage over 75%` <br>`Storage usage over 85%` <br>`Storage usage over 90%` | Необходимо увеличить дисковое пространство. |
 | **STORAGE_POOL** ||
-| `Pool degraded/has no redundancy/failed` | Зависит от нижележащего слоя `STORAGE_GROUP`. |
+| `Pool degraded` <br>`Pool has no redundancy` <br>`Pool failed` | Зависит от нижележащего слоя `STORAGE_GROUP`. |
 | **STORAGE_GROUP** ||
 | `Group has no vslots` | Эта ошибка не ожидается. Внутренняя ошибка. |
 | `Group degraded` | В группе недоступно допустимое число дисков. |
@@ -98,8 +101,8 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `VDisk have space issue` | Зависит от нижележащего слоя `PDISK`. |
 | **PDISK** ||
 | `Unknown PDisk state` | `HealthCheck` не может разобрать состояние PDisk. Внутренняя ошибка. |
-| `PDisk is inactive/PDisk state is FAULTY/BROKEN/TO_BE_REMOVED` | Cообщает о проблемах с физическим диском. |
-| `Available size is less than 12%/9%/6%` | Заканчивается свободное место на физическом диске. |
+| `PDisk is inactive` <br>`PDisk state is FAULTY` <br>`PDisk state is BROKEN` <br>`PDisk state is TO_BE_REMOVED` | Cообщает о проблемах с физическим диском. |
+| `Available size is less than 12%` <br>`Available size is less than 9%` <br>`Available size is less than 6%` | Заканчивается свободное место на физическом диске. |
 | `PDisk is not available` | Отсутствует физический диск. |
 | **STORAGE_NODE** ||
 | `Storage node is not available` | Отсутствует нода с дисками. |
@@ -111,17 +114,17 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `Compute quota usage` | Зависит от нижележащего слоя `COMPUTE_QUOTA`. |
 | `Compute has issues with tablets` | Зависит от нижележащего слоя `TABLET`. |
 | **COMPUTE_QUOTA** ||
-| `Paths quota usage is over than 90%/99%/Paths quota exhausted` </br>`Shards quota usage is over than 90%/99%/Shards quota exhausted` | Квоты исчерпаны. |
+| `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` <br>`Shards quota usage is over than 99%` <br>`Shards quota exhausted` | Квоты исчерпаны. |
 | **COMPUTE_NODE** | *Нет сообщений на этом уровне.* |
 | **SYSTEM_TABLET** ||
-| `System tablet is unresponsive / response time over 1000ms/5000ms` | Системная таблетка не отвечает или отвечает долго |
+| `System tablet is unresponsive ` <br>`System tablet response time over 1000ms` <br>`System tablet response time over 5000ms` | Системная таблетка не отвечает или отвечает долго |
 | **TABLET** ||
 | `Tablets are restarting too often` | Таблетки слишком часто перезапускаются. |
-| `Tablets/Followers are dead` | Таблетки не запущены (или не могут быть запущены). |
+| `Tablets are dead` <br>`Followers are dead` | Таблетки не запущены (или не могут быть запущены). |
 | **LOAD_AVERAGE** ||
 | `LoadAverage above 100%` | Физический хост перегружен. </br>Сервис `Healthcheck`  мониторит системную нагрузку, оценивая ее в терминах выполняющихся, ожидающих процессов (load) и сравнивая её с общим числом логических ядер на хосте (cores). Например, если у системы 8 логических ядер и текущая нагрузка составляет 16, нагрузка считается равной 200%. </br>`Healthcheck` проверяет только превышение нагрузки над количеством ядер (load > cores) и сообщает на основе этого предупреждение. Это указывает на то, что система работает на пределе, скорее всего из-за большого количества процессов, ожидающих операций ввода-вывода. </br></br>Информация о нагрузке: </br>Источник: </br>`/proc/loadavg` </br>Информация о логических ядрах </br></br>Количество логических ядер: </br>Основной источник: </br>`/sys/fs/cgroup/cpu.max` </br></br>Дополнительный источник: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br>`/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>Количество ядер вычисляется путем деления квоты на период (quota / period) |
 | **COMPUTE_POOL** ||
-| `Pool usage is over than 90/95/99%` | один из CPU пулов перегружен. |
+| `Pool usage is over than 90%` <br>`Pool usage is over than 95%` <br>`Pool usage is over than 99%` | один из CPU пулов перегружен. |
 | **NODE_UPTIME** ||
 | `The number of node restarts has increased` | Количество рестартов ноды превысило порог. По-умолчанию, это 10 рестартов в час. |
 | `Node is restarting too often` | Узлы слишком часто перезапускаются. По-умолчанию, это 30 рестартов в час. |
@@ -138,6 +141,255 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 }
 ```
 
+#### Пример verbose {#example-verbose}
+Ответ `GOOD` при использовании параметра `verbose`:
+```json
+{
+    "self_check_result": "GOOD",
+    "database_status": [
+        {
+            "name": "/amy/db",
+            "overall": "GREEN",
+            "storage": {
+                "overall": "GREEN",
+                "pools": [
+                    {
+                        "id": "/amy/db:ssdencrypted",
+                        "overall": "GREEN",
+                        "groups": [
+                            {
+                                "id": "2181038132",
+                                "overall": "GREEN",
+                                "vdisks": [
+                                    {
+                                        "id": "9-1-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "9-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "11-1004-1009",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "11-1004",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "10-1003-1011",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "10-1003",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "8-1005-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "8-1005",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "7-1-1008",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "7-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "6-1-1007",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "6-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "4-1005-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "4-1005",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "2-1003-1013",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "2-1003",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "1-1-1008",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "1-1",
+                                            "overall": "GREEN"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "compute": {
+                "overall": "GREEN",
+                "nodes": [
+                    {
+                        "id": "50073",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000405479
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00265229
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000347933
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.000312022
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.000945925
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.2,
+                            "cores": 4
+                        }
+                    },
+                    {
+                        "id": "50074",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000619053
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00463859
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000596071
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.0006241
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.00218465
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.08,
+                            "cores": 4
+                        }
+                    },
+                    {
+                        "id": "50075",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000579126
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00344293
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000592347
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.000525747
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.00174265
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.26,
+                            "cores": 4
+                        }
+                    }
+                ],
+                "tablets": [
+                    {
+                        "overall": "GREEN",
+                        "type": "SchemeShard",
+                        "state": "GOOD",
+                        "count": 1
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "SysViewProcessor",
+                        "state": "GOOD",
+                        "count": 1
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Coordinator",
+                        "state": "GOOD",
+                        "count": 3
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Mediator",
+                        "state": "GOOD",
+                        "count": 3
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Hive",
+                        "state": "GOOD",
+                        "count": 1
+                    }
+                ]
+            }
+        }
+    ]
+}
+```
+
+#### пример EMERGENCY: {#example-emergency}
 Ответ в случаи проблем может выглядеть так
 
 ```json

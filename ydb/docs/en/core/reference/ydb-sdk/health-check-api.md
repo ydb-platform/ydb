@@ -46,16 +46,19 @@ Each issue has a nesting `level` - the higher the `level`, the deeper the ish is
 | `issue_log.id` | A unique problem ID within this response. |
 | `issue_log.status` | Status (severity) of the current problem. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious problem, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor problem, no risks to availability. We recommend you continue monitoring the problem.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No problems were detected.</li><li>`GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).</li></ul> |
 | `issue_log.message` | Text that describes the problem. |
-| `issue_log.location` | Location of the problem. |
+| `issue_log.location` | Location of the problem. This can be a physical location or an execution context. |
 | `issue_log.reason` | This is a set of elements, each of which describes a problem in the system at a certain level. |
-| `issue_log.type` | Problem category (by subsystem). |
-| `issue_log.level` | Depth of the problem nesting. |
-| `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious problems at a high level. |
+| `issue_log.type` | Problem category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
+| `issue_log.level` | The depth of problem nesting. |
+| `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious problems at a high level. [Example](#example-verbose). |
 | `location` | Contains information about host, where `HealthCheck` service was called |
 
 
 ## Call parameters {#call-parameters}
 The whole list of extra parameters presented below:
+
+{% list tabs %}
+- C++
 ```c++
 struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
     FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
@@ -63,12 +66,13 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
     FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
 };
 ```
+{% endlist %}
 
-| Parameter | Description |
+| Parameter | Type | Description |
 |:----|:----|
-| `ReturnVerboseStatus` | This parameter determins whether the `database_status` response field is filled. |
-| `MinimumStatus` | The minimum status that will be included in the response. Issues with a lower status will be discarded. |
-| `MaximumLevel` | The maximum depth of issues to include in the response. Deeper levels will be discarded. |
+| `ReturnVerboseStatus` | `bool`        | As mentioned earlier, this parameter affects the filling of the `database_status` field. Default is false. |
+| `MinimumStatus`       | `EStatusFlag` | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
+| `MaximumLevel`        | `int32`       | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |
 
 ## Possible problems {#problems}
 
@@ -80,9 +84,9 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `There are no storage pools` | Storage pools aren't configured. |
 | `Storage degraded`</br>`Storage has no redundancy`</br>`Storage failed` | These issues depend solely on the underlying `STORAGE_POOLS` layer. |
 | `System tablet BSC didn't provide information` | Storage diagnostics will be generated with alternative way. |
-| `Storage usage over 75%/85%/90%` | Need to increase disk space. |
+| `Storage usage over 75%` <br>`Storage usage over 85%` <br>`Storage usage over 90%` | Need to increase disk space. |
 | **STORAGE_POOL** ||
-| `Pool degraded/has no redundancy/failed` | These issues depend solely on the underlying `STORAGE_GROUP` layer. |
+| `Pool degraded` <br>`Pool has no redundancy` <br>`Pool failed` | These issues depend solely on the underlying `STORAGE_GROUP` layer. |
 | **STORAGE_GROUP** ||
 | `Group has no vslots` | This case is not expected, it inner problem. |
 | `Group degraded` | The number of disks allowed in the group is not available. |
@@ -97,8 +101,8 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `VDisk have space issue` | These issues depend solely on the underlying `PDISK` layer. |
 | **PDISK** ||
 | `Unknown PDisk state` | `HealthCheck` the system can't parse pdisk state. |
-| `PDisk is inactive/PDisk state is FAULTY/BROKEN/TO_BE_REMOVED` | Indicates problems with a physical disk. |
-| `Available size is less than 12%/9%/6%` | Free space on the physical disk is running out. |
+| `PDisk is inactive` <br>`PDisk state is FAULTY` <br>`PDisk state is BROKEN` <br>`PDisk state is TO_BE_REMOVED` | Indicates problems with a physical disk. |
+| `Available size is less than 12%` <br>`Available size is less than 9%` <br>`Available size is less than 6%` | Free space on the physical disk is running out. |
 | `PDisk is not available` | A physical disk is not available. |
 | **STORAGE_NODE** ||
 | `Storage node is not available` | A node with disks is not available. |
@@ -110,17 +114,17 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `Compute quota usage` | These issues depend solely on the underlying `COMPUTE_QUOTA` layer. |
 | `Compute has issues with tablets`| These issues depend solely on the underlying `TABLET` layer. |
 | **COMPUTE_QUOTA** ||
-| `Paths quota usage is over than 90%/99%/Paths quota exhausted` </br>`Shards quota usage is over than 90%/99%/Shards quota exhausted` |Quotas exhausted|
+| `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` </br>`Shards quota usage is over than 99%` </br>`Shards quota exhausted` |Quotas exhausted|
 | **COMPUTE_NODE** | *There is no specific issues on this layer.* |
 | **SYSTEM_TABLET** ||
-| `System tablet is unresponsive / response time over 1000ms/5000ms`|  The system tablet is not responding or it takes too long to respond. |
+| `System tablet is unresponsive ` <br>`System tablet response time over 1000ms` <br>`System tablet response time over 5000ms`|  The system tablet is not responding or it takes too long to respond. |
 | **TABLET** ||
 | `Tablets are restarting too often` | Tablets are restarting too often. |
 | `Tablets/Followers are dead` | Tablets are not running (probably cannot be started). |
 | **LOAD_AVERAGE** ||
 | `LoadAverage above 100%` | A physical host is overloaded. </br> The `Healthcheck` tool monitors system load by evaluating the current workload in terms of running and waiting processes (load) and comparing it to the total number of logical cores on the host (cores). For example, if a system has 8 logical cores and the current load value is 16, the load is considered to be 200%. </br> `Healthcheck` only checks if the load exceeds the number of cores (load > cores) and reports based on this condition. This indicates that the system is working at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. </br></br> Load Information: </br> Source: </br>`/proc/loadavg` </br> Logical Cores Information </br></br>The number of logical cores: </br>Primary Source: </br>`/sys/fs/cgroup/cpu.max` </br></br>Fallback Source: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br> `/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>The number of cores is calculated by dividing the quota by the period (quota / period)
 | **COMPUTE_POOL** ||
-| `Pool usage is over than 90/95/99%` | One of the pools' CPUs is overloaded. |
+| `Pool usage is over than 90%` <br>`Pool usage is over than 95%` <br>`Pool usage is over than 99%` | One of the pools' CPUs is overloaded. |
 | **NODE_UPTIME** ||
 | `The number of node restarts has increased` | The number of node restarts has exceeded the threshold. By default, 10 restarts per hour |
 | `Node is restarting too often` | The number of node restarts has exceeded the threshold. By default, 30 restarts per hour |
@@ -136,7 +140,256 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
-Response with `EMERGENCY` status
+#### Verbose example {#example-verbose}
+`GOOD` response with `verbose` parameter:
+```json
+{
+    "self_check_result": "GOOD",
+    "database_status": [
+        {
+            "name": "/amy/db",
+            "overall": "GREEN",
+            "storage": {
+                "overall": "GREEN",
+                "pools": [
+                    {
+                        "id": "/amy/db:ssdencrypted",
+                        "overall": "GREEN",
+                        "groups": [
+                            {
+                                "id": "2181038132",
+                                "overall": "GREEN",
+                                "vdisks": [
+                                    {
+                                        "id": "9-1-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "9-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "11-1004-1009",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "11-1004",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "10-1003-1011",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "10-1003",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "8-1005-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "8-1005",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "7-1-1008",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "7-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "6-1-1007",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "6-1",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "4-1005-1010",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "4-1005",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "2-1003-1013",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "2-1003",
+                                            "overall": "GREEN"
+                                        }
+                                    },
+                                    {
+                                        "id": "1-1-1008",
+                                        "overall": "GREEN",
+                                        "pdisk": {
+                                            "id": "1-1",
+                                            "overall": "GREEN"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "compute": {
+                "overall": "GREEN",
+                "nodes": [
+                    {
+                        "id": "50073",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000405479
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00265229
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000347933
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.000312022
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.000945925
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.2,
+                            "cores": 4
+                        }
+                    },
+                    {
+                        "id": "50074",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000619053
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00463859
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000596071
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.0006241
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.00218465
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.08,
+                            "cores": 4
+                        }
+                    },
+                    {
+                        "id": "50075",
+                        "overall": "GREEN",
+                        "pools": [
+                            {
+                                "overall": "GREEN",
+                                "name": "System",
+                                "usage": 0.000579126
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "User",
+                                "usage": 0.00344293
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "Batch",
+                                "usage": 0.000592347
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IO",
+                                "usage": 0.000525747
+                            },
+                            {
+                                "overall": "GREEN",
+                                "name": "IC",
+                                "usage": 0.00174265
+                            }
+                        ],
+                        "load": {
+                            "overall": "GREEN",
+                            "load": 0.26,
+                            "cores": 4
+                        }
+                    }
+                ],
+                "tablets": [
+                    {
+                        "overall": "GREEN",
+                        "type": "SchemeShard",
+                        "state": "GOOD",
+                        "count": 1
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "SysViewProcessor",
+                        "state": "GOOD",
+                        "count": 1
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Coordinator",
+                        "state": "GOOD",
+                        "count": 3
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Mediator",
+                        "state": "GOOD",
+                        "count": 3
+                    },
+                    {
+                        "overall": "GREEN",
+                        "type": "Hive",
+                        "state": "GOOD",
+                        "count": 1
+                    }
+                ]
+            }
+        }
+    ]
+}
+```
+
+#### Emergency example {#example-emergency}
+Response with `EMERGENCY` status:
 ```json
 {
   "self_check_result": "EMERGENCY",

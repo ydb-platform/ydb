@@ -187,7 +187,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-    if (IsPKJoin(leftStats,leftJoinKeys)) {
+    if (IsPKJoin(rightStats,rightJoinKeys)) {
         switch (joinKind) {
             case EJoinKind::InnerJoin:
             case EJoinKind::LeftSemi:
@@ -210,7 +210,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 outputType = leftStats.Type;
             }
         }
-    } else if (IsPKJoin(rightStats,rightJoinKeys)) {
+    } else if (IsPKJoin(leftStats,leftJoinKeys)) {
         switch (joinKind) {
             case EJoinKind::InnerJoin:
             case EJoinKind::LeftSemi:

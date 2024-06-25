@@ -395,7 +395,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
     }
 
     void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
-            NKikimrCms::TPermissionRequest& cmsRequest) const
+            NKikimrCms::TPermissionRequest& cmsRequest)
     {
         const auto& opts = request.task_options();
 

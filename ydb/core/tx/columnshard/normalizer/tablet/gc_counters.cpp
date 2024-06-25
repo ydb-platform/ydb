@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TGCCountersNormalizer::DoInit(const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
-    TBlobManagerDb::SaveGCBarrierPreparation(txc.DB, TGenStep())
+    TBlobManagerDb::SaveGCBarrierPreparation(txc.DB, TGenStep());
     return std::vector<INormalizerTask::TPtr>();
 }
 

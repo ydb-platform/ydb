@@ -474,7 +474,6 @@ public:
         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
         for (size_t i = 0; i < ItemNodesSize; ++i) {
             if (fields[i]) {
-                UsedNodes.insert(i);
                 BufferForUsedInputItems.push_back(*fields[i]);
             }
         }
@@ -535,8 +534,6 @@ public:
         return ProcessSpilledDataAndWait();
     }
 
-    EFetchResult InputStatus = EFetchResult::One;
-    bool HasDataForProcessing = false;
 private:
     void SplitStateIntoBuckets() {
        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
@@ -676,10 +673,8 @@ private:
             }
             auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
             for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
-                if (UsedNodes.contains(i)) {
+                if (fields[i]) {
                     fields[i] = &(BufferForUsedInputItems[j++]);
-                } else {
-                    fields[i] = nullptr;
                 }
             }
             
@@ -734,10 +729,14 @@ private:
     }
 
 public:
-    TState InMemoryProcessingState;
+    EFetchResult InputStatus = EFetchResult::One;
 
 private:
     ui64 NextBucketToSpill = 0;
+
+    bool HasDataForProcessing = false;
+
+    TState InMemoryProcessingState;
     const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
@@ -760,7 +759,6 @@ private:
     const bool AllowSpilling;
 
     TComputationContext& Ctx;
-    std::unordered_set<size_t> UsedNodes;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN

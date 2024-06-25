@@ -156,6 +156,11 @@ public:
         return Client.CreateTable(std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    auto CreateTableWithIndex(Args&&... args) {
+        return Client.CreateTableWithUniformShardedIndex(std::forward<Args>(args)...);
+    }
+    
     void SendAsync(const TActorId& recipient, IEventBase* ev) {
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
     }

@@ -223,6 +223,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            scheme.SetInternal(tx.GetInternal());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
             if (!indexDescription.HasType()) {

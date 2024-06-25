@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
@@ -31,6 +33,7 @@ protected:
     bool WithRetry = true;
     ui32 Requests = 0;
     static constexpr ui32 MaxRequestsInFlight = 50;
+    NWilson::TSpan Span;
 
     struct TPipeInfo {
         TActorId PipeClient;
@@ -51,6 +54,20 @@ protected:
             clientConfig.RetryPolicy = {.RetryLimitCount = 3};
         }
         return clientConfig;
+    }
+
+    TViewerPipeClient() = default;
+
+    TViewerPipeClient(NMon::TEvHttpInfo::TPtr& ev) {
+        InitConfig(ev->Get()->Request.GetParams());
+        TStringBuf traceparent = ev->Get()->Request.GetHeader("traceparent");
+        if (traceparent) {
+            NWilson::TTraceId traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+            if (traceId) {
+                Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+                Span.Attribute("request_type", TString(ev->Get()->Request.GetPathInfo()));
+            }
+        }
     }
 
     TActorId ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId) {

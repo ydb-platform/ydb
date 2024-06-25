@@ -68,7 +68,8 @@
             "Children": [
                 {"Index": 4, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 6, "Name": "Settings", "Type": "TExprBase", "Optional": true}
+                {"Index": 6, "Name": "FilterPredicate", "Type": "TCoLambda"},
+                {"Index": 7, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -109,7 +110,8 @@
                 {"Index": 2, "Name": "Object", "Type": "TS3Object"},
                 {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Path", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

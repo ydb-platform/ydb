@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-import logging
 import io
+import json
+import logging
 import yatest
 
 import pyarrow as pa
@@ -15,10 +16,11 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v2
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 import ydb.tests.library.common.yatest_common as yatest_common
 
+from datetime import datetime
 from google.protobuf import struct_pb2
 
 
@@ -2004,3 +2006,69 @@ Pear;15;33'''
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].text_value == "2024-04-02"
+
+    @yq_v2
+    def test_s3_push_down_parquet(self, kikimr, s3, client, unique_prefix):
+        data = [
+            [
+                int(datetime.fromisoformat("2024-06-17 00:00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-16 00:00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-15 00:00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-14 00:00:00").timestamp() * 1000),
+            ],
+            ['apple', "banana", "pineapple", "watermelon"],
+        ]
+
+        # Define the schema for the data
+        schema = pa.schema([('ts', pa.timestamp('ms')), ('fruit', pa.string())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_s3_push_down_parquet.parquet'
+        pq.write_table(table, yatest_common.work_path(filename), row_group_size=2)
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "hcpp"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT
+                `fruit`, CAST(`ts` as Utf8)
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                  `ts` Timestamp NOT NULL,
+                  `fruit` Utf8 NOT NULL
+                ))
+            WHERE Timestamp("2024-06-14T00:00:00Z") <= ts and ts < Timestamp("2024-06-15T00:00:00Z")
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "watermelon"
+        assert rows[0].items[1].text_value == "2024-06-14T00:00:00Z"
+
+        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+
+        graph_name = "ResultSet"
+        without_predicate_ingress_bytes = int(stat[graph_name]["IngressBytes"]["sum"])
+
+        sql = 'pragma s3.UsePredicatePushdown = "true";\n' + sql
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "watermelon"
+        assert rows[0].items[1].text_value == "2024-06-14T00:00:00Z"
+
+        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        with_predicate_ingress_bytes = int(stat[graph_name]["IngressBytes"]["sum"])
+
+        assert without_predicate_ingress_bytes > with_predicate_ingress_bytes, stat

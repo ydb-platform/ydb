@@ -1697,8 +1697,9 @@ public:
 
         if (replyQueryParameters) {
             YQL_ENSURE(QueryState->PreparedQuery);
-            response->MutableQueryParameters()->CopyFrom(
-                    QueryState->PreparedQuery->GetParameters());
+            for (auto& param : QueryState->GetResultParams()) {
+                *response->AddQueryParameters() = param;
+            }
         }
 
         if (replyQueryId) {
@@ -1902,7 +1903,9 @@ public:
             response.SetPreparedQuery(compileResult->Uid);
 
             auto& preparedQuery = compileResult->PreparedQuery;
-            response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
+            for (auto& param : QueryState->GetResultParams()) {
+                *response.AddQueryParameters() = param;
+            }
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());

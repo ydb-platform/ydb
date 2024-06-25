@@ -188,8 +188,10 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
     }
     AfterStartFlag = true;
     if (WaitPathIdsToErase.empty()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_remove_path_id")("pathes", JoinSeq(",", WaitPathIdsToErase))("tx_id", GetTxId());
         owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
     }
 }

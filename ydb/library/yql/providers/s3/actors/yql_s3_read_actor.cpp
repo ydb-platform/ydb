@@ -467,6 +467,7 @@ public:
     std::map<TEvS3Provider::TReadRange, TReadCache, TReadRangeCompare> RangeCache;
     std::map<ui64, ui64> ReadInflightSize;
     std::optional<ui64> CurrentRowGroupIndex;
+    ui64 CurrentPriority = 0;
     std::map<ui64, ui64> RowGroupRangeInflight;
     std::priority_queue<ui64, std::vector<ui64>, std::greater<ui64>> ReadyRowGroups;
     std::map<ui64, ui64> RowGroupReaderIndex;
@@ -496,7 +497,10 @@ public:
         if (it != RangeCache.end()) {
             return it->second;
         }
-        RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
+        RetryStuff->Gateway->Download(
+                            CurrentPriority,
+                            RetryStuff->Url,
+                            RetryStuff->Headers,
                             range.Offset,
                             range.Length,
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
@@ -608,6 +612,7 @@ public:
 
         // init the 1st reader, get meta/rg count
         readers.resize(1);
+        CurrentPriority = 0;
         THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
         THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
@@ -665,6 +670,7 @@ public:
             for (ui64 i = 0; i < readerCount; i++) {
                 if (!columnIndices.empty()) {
                     CurrentRowGroupIndex = i;
+                    CurrentPriority = (i == 0) ? 0 : 1;
                     THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
                     SourceContext->IncChunkCount();
                 }
@@ -743,6 +749,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
+                        CurrentPriority = 1;
                         THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
@@ -2035,6 +2042,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     std::optional<ui64> rowsLimitHint;
     if (params.GetRowsLimitHint() != 0) {
         rowsLimitHint = params.GetRowsLimitHint();
+    }
+
+    if (params.GetParallelRequestsPerNode()) {
+        auto tx = ToString(txId);
+        if (tx) {
+            gateway = gateway->GetScopedGateway(tx, params.GetParallelRequestsPerNode());
+        }
     }
 
     TActorId fileQueueActor;

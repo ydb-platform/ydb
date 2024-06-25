@@ -158,7 +158,7 @@ struct TAlterPartitioningSettings;
 struct TAlterTopicSettings;
 
 struct TAutoPartitioningSettings {
-friend struct TAutoscalingSettingsBuilder;
+friend struct TAutoPartitioningSettingsBuilder;
 public:
     TAutoPartitioningSettings()
         : Strategy_(EAutoPartitioningStrategy::Disabled)
@@ -566,10 +566,10 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     TPartitioningSettingsBuilder BeginConfigurePartitioningSettings();
 };
 
-struct TAutoscalingSettingsBuilder {
-    using TSelf = TAutoscalingSettingsBuilder;
+struct TAutoPartitioningSettingsBuilder {
+    using TSelf = TAutoPartitioningSettingsBuilder;
 public:
-    TAutoscalingSettingsBuilder(TPartitioningSettingsBuilder& parent, TAutoPartitioningSettings& settings): Parent_(parent), Settings_(settings) {}
+    TAutoPartitioningSettingsBuilder(TPartitioningSettingsBuilder& parent, TAutoPartitioningSettings& settings): Parent_(parent), Settings_(settings) {}
 
     TSelf Strategy(EAutoPartitioningStrategy value) {
         Settings_.Strategy_ = value;
@@ -615,7 +615,7 @@ public:
         return *this;
     }
 
-    TAutoscalingSettingsBuilder BeginConfigureAutoPartitioningSettings() {
+    TAutoPartitioningSettingsBuilder BeginConfigureAutoPartitioningSettings() {
         return {*this, Parent_.PartitioningSettings_.AutoPartitioningSettings_};
     }
 

@@ -25,7 +25,7 @@ class YdbCliHelper:
             return [cli]
 
     class QueuePlan:
-        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str  | None = None) -> None:
+        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str | None = None) -> None:
             self.plan = plan
             self.table = table
             self.ast = ast

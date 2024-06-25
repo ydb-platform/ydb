@@ -383,29 +383,20 @@ public:
     bool UpdateSpillingAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
-                if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-                    const auto used = TlsAllocState->GetUsed();
-                    const auto limit = TlsAllocState->GetLimit();
-
-                    YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-                    YQL_LOG(INFO) << "switching Memory mode to Spilling";
-
-                    SwitchMode(EOperatingMode::Spilling);
+                if (CheckMemoryAndSwitchToSpilling()) {
                     return UpdateSpillingAndWait();
                 }
                 return false;
             }
                 
             case EOperatingMode::ProcessSpilled:
-                return ProcessSpilledData();
-               return false;
+                return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
                 CurrentBucketId = -1;
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish) {
-                    bool isWaitingForReduce = TryToReduceMemory();
-                    if (isWaitingForReduce) return true;
+                    if (TryToReduceMemoryAndWait()) return true;
                 }
 
                 if (BufferForUsedInputItems.size()) {
@@ -436,7 +427,6 @@ public:
         return SpilledBuckets[CurrentBucketId].InMemoryProcessingState->Throat;
     }
 
-    // TODO make const
     NUdf::TUnboxedValuePod* GetTongue() {
         if (GetMode() == EOperatingMode::InMemory) {
             return InMemoryProcessingState.Tongue;
@@ -533,11 +523,7 @@ public:
         return SpilledBuckets[CurrentBucketId].BucketState == TSpilledBucket::EBucketState::InMemory;
     }
 
-
-
     bool FlushSpillingBuffersAndWait() {
-        if (GetMode() != EOperatingMode::Spilling || InputStatus != EFetchResult::Finish) return false;
-
         UpdateSpillingBuckets();
 
         ui64 finishedCount = 0;
@@ -558,7 +544,7 @@ public:
         YQL_LOG(INFO) << "switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled);
 
-        return ProcessSpilledData();
+        return ProcessSpilledDataAndWait();
     }
 
     EFetchResult InputStatus = EFetchResult::One;
@@ -594,7 +580,7 @@ private:
         InMemoryProcessingState.ReadMore<false>();
     }
 
-    void CheckMemoryConsumption() {
+    bool CheckMemoryAndSwitchToSpilling() {
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
@@ -603,7 +589,10 @@ private:
             YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
             SwitchMode(EOperatingMode::Spilling);
+            return true;
         }
+
+        return false;
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -648,7 +637,7 @@ private:
         }
     }
 
-    bool TryToReduceMemory() {
+    bool TryToReduceMemoryAndWait() {
         for (ui64 i = 0; i < NextBucketToSpill; ++i) {
             if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::SpillingState) return true;
         }
@@ -665,7 +654,7 @@ private:
 
     ui64 RecoveredFromBucket = 0;
 
-    bool ProcessSpilledData() {
+    bool ProcessSpilledDataAndWait() {
         if (SpilledBuckets.empty()) return false;
 
         if (AsyncReadOperation) {
@@ -766,10 +755,9 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return true;
         // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:
@@ -778,7 +766,6 @@ public:
 
 private:
     ui64 NextBucketToSpill = 0;
-    // TState InMemoryProcessingState;
     const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
@@ -792,7 +779,6 @@ private:
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
-    // size_t CurrentAsyncOperationBucketId;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
     TUnboxedValueVector BufferForKeyAnsState;
@@ -1309,9 +1295,8 @@ public:
                     return EFetchResult::Yield;
                 }
 
-                if (ptr->IsFetchRequired()) {
+                if (ptr->InputStatus != EFetchResult::Finish) {
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
-                    if (ptr->InputStatus == EFetchResult::One) ptr->FetchesCount++;
                     if (ptr->InputStatus == EFetchResult::Yield) return EFetchResult::Yield;
 
                     if (ptr->InputStatus == EFetchResult::Finish) {
@@ -1320,7 +1305,6 @@ public:
                 }
 
                 if (ptr->IsProcessingRequired()) {
-
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
 
                     bool isNew = ptr->TasteIt();

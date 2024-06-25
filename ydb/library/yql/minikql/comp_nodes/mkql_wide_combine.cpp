@@ -361,7 +361,7 @@ public:
         , Ctx(ctx)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
-        BufferForKeyAnsState.reserve(keyAndStateType->GetElementsCount());
+        BufferForKeyAndState.reserve(keyAndStateType->GetElementsCount());
     }
     ~TSpillingSupportState() {
     }
@@ -436,8 +436,8 @@ public:
         }
 
         if (CurrentBucketId == -1) {
-            BufferForKeyAnsState.resize(KeyWidth);
-            return BufferForKeyAnsState.data();
+            BufferForKeyAndState.resize(KeyWidth);
+            return BufferForKeyAndState.data();
         }
 
         return SpilledBuckets[CurrentBucketId].InMemoryProcessingState->Tongue;
@@ -451,8 +451,8 @@ public:
             return SpilledBuckets.front().InMemoryProcessingState->TasteIt();
         }
 
-        MKQL_ENSURE(!BufferForKeyAnsState.empty(), "Internal logic error");
-        auto hash = Hasher(BufferForKeyAnsState.data());
+        MKQL_ENSURE(!BufferForKeyAndState.empty(), "Internal logic error");
+        auto hash = Hasher(BufferForKeyAndState.data());
 
         MKQL_ENSURE(CurrentBucketId == -1, "Internal logic error");
         CurrentBucketId = hash % SpilledBucketCount;
@@ -462,13 +462,13 @@ public:
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             for (size_t i = 0; i < KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
             }
-            BufferForKeyAnsState.resize(0);
+            BufferForKeyAndState.resize(0);
             return bucket.InMemoryProcessingState->TasteIt();
         }
 
-        BufferForKeyAnsState.resize(0);
+        BufferForKeyAndState.resize(0);
 
         auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
@@ -645,23 +645,23 @@ private:
         //recover spilled state
         while(!bucket.SpilledState->Empty()) {
             RecoverState = true;
-            BufferForKeyAnsState.resize(KeyAndStateType->GetElementsCount());
-            AsyncReadOperation = bucket.SpilledState->ExtractWideItem(BufferForKeyAnsState);
+            BufferForKeyAndState.resize(KeyAndStateType->GetElementsCount());
+            AsyncReadOperation = bucket.SpilledState->ExtractWideItem(BufferForKeyAndState);
             if (AsyncReadOperation) {
-                BufferForKeyAnsState.resize(0);
+                BufferForKeyAndState.resize(0);
                 return true;
             }
             for (size_t i = 0; i< KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAnsState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
             }
             auto isNew = bucket.InMemoryProcessingState->TasteIt();
             MKQL_ENSURE(isNew, "Internal logic error");
             for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAnsState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAndState[i]);
             }
-            BufferForKeyAnsState.resize(0);
+            BufferForKeyAndState.resize(0);
         }
         //process spilled data
         if (!bucket.SpilledData->Empty()) {
@@ -752,7 +752,7 @@ private:
     std::deque<TSpilledBucket> SpilledBuckets;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
-    TUnboxedValueVector BufferForKeyAnsState;
+    TUnboxedValueVector BufferForKeyAndState;
 
     TMemoryUsageInfo* MemInfo = nullptr;
     TEqualsFunc const Equal;

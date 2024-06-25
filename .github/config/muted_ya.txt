@@ -6,7 +6,7 @@ ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/external_sources *
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.Write*
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*

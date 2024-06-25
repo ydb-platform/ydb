@@ -703,7 +703,6 @@ public:
     }
 
     static void OnResult(THTTPScopedGateway::TWeakPtr weakSelf, TOnResult clientCallback, IHTTPGateway::TResult&& result) {
-// Cerr << TStringBuilder() << "DOWNLOAD FINISHED " << Endl;
         if (auto self = weakSelf.lock()) {
             self->DecCount();
         }
@@ -734,7 +733,6 @@ public:
     void DecCount() {
         std::unique_lock lock(Mutex);
         auto count = Count.fetch_sub(1);
-// Cerr << TStringBuilder() << "DOWNLOAD RELEASED " << count << "=>" << (count - 1) << Endl;
         if (count >= Limit) {
             return;
         }
@@ -745,7 +743,6 @@ public:
                 if (!item.CancelInfo->Final) {
                     auto count = Count.fetch_add(1);
                     limitReached = count >= Limit;
-// Cerr << TStringBuilder() << "DOWNLOAD STARTED (FROM QUEUE) " << count << "=>" << (count + 1) << Endl;
                     item.CancelInfo->CancelHook = Gateway->Download(item.Url, item.Headers, item.Offset, item.SizeLimit, item.OnStart, item.OnNewData,
                         std::bind(&THTTPScopedGateway::OnFinished, Self, item.CancelInfo, item.OnFinish, std::placeholders::_1, std::placeholders::_2),
                         *item.InflightCounter
@@ -754,7 +751,6 @@ public:
             } else {
                 auto count = Count.fetch_add(1);
                 limitReached = count >= Limit;
-// Cerr << TStringBuilder() << "DOWNLOAD STARTED (FROM QUEUE) " << count << "=>" << (count + 1) << Endl;
                 Gateway->Download(item.Url, item.Headers, item.Offset, item.SizeLimit,
                     std::bind(&THTTPScopedGateway::OnResult, Self, item.Callback, std::placeholders::_1),
                     item.Data, item.RetryPolicy
@@ -830,7 +826,6 @@ public:
         TRetryPolicy::TPtr retryPolicy) final {
         if (priority == 0 || Limit == 0) {
             auto count = Count.fetch_add(1);
-// Cerr << TStringBuilder() << "DOWNLOAD STARTED (PRIORITY) " << count << "=>" << (count + 1) << Endl;
             Gateway->Download(url, headers, offset, sizeLimit,
                 std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
                 data, retryPolicy
@@ -839,13 +834,11 @@ public:
         } else {
             auto count = Count.fetch_add(1);
             if (count < Limit) {
-// Cerr << TStringBuilder() << "DOWNLOAD STARTED (UNDER LIMIT) " << count << "=>" << (count + 1) << Endl;
                 Gateway->Download(url, headers, offset, sizeLimit,
                     std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
                     data, retryPolicy
                 );
             } else {
-// Cerr << TStringBuilder() << "DOWNLOAD PENDED (OVER LIMIT) " << count << "=>" << (count + 1) << Endl;
                 {
                     std::unique_lock lock(Mutex);
                     Queue.emplace(priority, url, headers, offset, sizeLimit, callback, data, retryPolicy);

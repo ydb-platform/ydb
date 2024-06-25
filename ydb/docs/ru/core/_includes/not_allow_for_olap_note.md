@@ -1,5 +1,5 @@
 {% note alert %}
 
-Поддерживается только для [строчных](../concepts/datamodel/table.md#strokovye-tablicy) таблиц. Поддержка функциональности для [колоночных](../concepts/datamodel/table.md#column-tables) таблиц находится в разработке.
+{% include [not_allow_for_olap_text](not_allow_for_olap_text.md) %}
 
 {% endnote %}

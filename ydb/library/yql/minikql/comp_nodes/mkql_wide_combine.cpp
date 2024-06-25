@@ -395,9 +395,7 @@ public:
                 CurrentBucketId = -1;
                 UpdateSpillingBuckets();
 
-                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish) {
-                    if (TryToReduceMemoryAndWait()) return true;
-                }
+                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
 
                 if (BufferForUsedInputItems.size()) {
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];

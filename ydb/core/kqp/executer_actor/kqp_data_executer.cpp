@@ -141,8 +141,6 @@ public:
     {
         Target = creator;
 
-        Cerr << "CREATED DATA EXE" << Endl;
-
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {

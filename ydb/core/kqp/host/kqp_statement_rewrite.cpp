@@ -253,9 +253,6 @@ namespace {
             }),
         });
 
-        Cerr << "CREATE ::  " << NYql::NCommon::ExprToPrettyString(exprCtx, *result.CreateTable) << Endl;
-        Cerr << "REPLACE ::  " << NYql::NCommon::ExprToPrettyString(exprCtx, *result.ReplaceInto) << Endl;
-
         if (isAtomicOperation) {
             result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
                 exprCtx.NewWorld(pos),
@@ -288,8 +285,6 @@ namespace {
                     }),
                 }),
             });
-
-            Cerr << "MOVE ::  " << NYql::NCommon::ExprToPrettyString(exprCtx, *result.MoveTable) << Endl;
         }
 
         return result;

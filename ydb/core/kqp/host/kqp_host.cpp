@@ -1062,7 +1062,6 @@ public:
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
-            Cerr << "TEMP:: " << tempTablesState->SessionId << Endl;
             SessionCtx->SetSessionId(tempTablesState->SessionId);
             SessionCtx->SetTempTables(std::move(tempTablesState));
         }

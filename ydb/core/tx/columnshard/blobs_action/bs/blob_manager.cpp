@@ -478,6 +478,7 @@ void TBlobManager::OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& d
 }
 
 void TBlobManager::OnGCStartOnComplete(const TGenStep& genStep) {
+    AFL_VERIFY(GCBarrierPreparation <= genStep)("last", GCBarrierPreparation)("prepared", genStep);
     GCBarrierPreparation = genStep;
 }
 

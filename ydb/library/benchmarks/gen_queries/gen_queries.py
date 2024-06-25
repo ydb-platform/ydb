@@ -75,9 +75,9 @@ def main():
         b.add("pragmas.sql", "")
     if args.syntax == "yql":
         if args.decimal:
-            b.add_link("consts.jinja", "consts.yql")
-        else:
             b.add_link("consts.jinja", "consts_decimal.yql")
+        else:
+            b.add_link("consts.jinja", "consts.yql")
     b.add_link("tables.jinja", p.tables)
     queries = None
     if args.variant == "h":

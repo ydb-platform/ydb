@@ -80,6 +80,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     for (auto&& i : batch->schema()->fields()) {
         AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
+        if (!dstSchema->GetFieldByName(i->name())->Equals(i)) {
+            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "'");
+        }
         if (GetIndexInfo().IsNullableVerified(i->name())) {
             continue;
         }

@@ -681,8 +681,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
         ManageWriteTimestampEstimate = IsLocalDC;
     }
 
-    CreationTime = ctx.Now();
-    WriteCycleStartTime = ctx.Now();
+    auto now = ctx.Now();
+    CreationTime = now;
+    WriteCycleStartTime = now;
 
     ReadQuotaTrackerActor = Register(new TReadQuoter(
         ctx,
@@ -696,9 +697,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
     ));
 
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-    WriteTimestamp = ctx.Now();
-    LastUsedStorageMeterTimestamp = ctx.Now();
-    WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
+    WriteTimestamp = now;
+    LastUsedStorageMeterTimestamp = now;
+    WriteTimestampEstimate = ManageWriteTimestampEstimate ? now : TInstant::Zero();
 
     InitSplitMergeSlidingWindow();
 

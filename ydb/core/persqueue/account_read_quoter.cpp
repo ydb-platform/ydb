@@ -80,11 +80,12 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
         LimiterDescription() << ": quota required for cookie=" << ev->Get()->Cookie
     );
     InitCounters(ctx);
-    bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
+    auto now = ctx.Now();
+    bool hasActualErrors = now - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
     if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
-        Queue.emplace_back(ev, ctx.Now());
+        Queue.emplace_back(ev, now);
     } else {
-        ApproveQuota(ev, ctx.Now(), ctx);
+        ApproveQuota(ev, now, ctx);
     }
 }
 
@@ -133,9 +134,10 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
-        if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
+        auto now = ctx.Now();
+        if (now - LastReportedErrorTime > TDuration::Minutes(1)) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got quota request error: " << ev->Get()->Result);
-            LastReportedErrorTime = ctx.Now();
+            LastReportedErrorTime = now;
         }
         return;
     }

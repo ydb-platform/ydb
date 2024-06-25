@@ -1034,10 +1034,6 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) {
-    if (State != ES_INITED) {
-        return CloseSession("got write response but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
-    }
-
     const auto& result = *ev->Get();
     if (!result.IsSuccess()) {
         const auto& record = result.Record;
@@ -1048,9 +1044,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         }
     }
 
+    if (State != ES_INITED) {
+        return CloseSession(TStringBuilder() << "got write response but not wait for it (" << static_cast<int>(State) << ")", PersQueue::ErrorCode::BAD_REQUEST, ctx);
+    }
+
     if (AcceptedRequests.empty()) {
-        CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
-        return;
+        return CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
     }
 
     const auto& writeRequest = AcceptedRequests.front();
@@ -1064,8 +1063,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
-    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx) {
+    CloseSession(TStringBuilder() << "pipe to partition's " << Partition << " tablet is dead #" << static_cast<int>(ev->Get()->ErrorCode),
+             PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>

@@ -5,8 +5,8 @@ select  ss_customer_sk
       from (select ss_item_sk
                   ,ss_ticket_number
                   ,ss_customer_sk
-                  ,case when sr_return_quantity is not null then (ss_quantity-sr_return_quantity)::numeric*ss_sales_price
-                                                            else (ss_quantity::numeric*ss_sales_price) end act_sales
+                  ,case when sr_return_quantity is not null then (ss_quantity-sr_return_quantity)*ss_sales_price
+                                                            else (ss_quantity*ss_sales_price) end act_sales
             from {{store_sales}} left outer join {{store_returns}} on (sr_item_sk = ss_item_sk
                                                                and sr_ticket_number = ss_ticket_number)
                 ,{{reason}}

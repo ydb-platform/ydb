@@ -1015,6 +1015,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
+    req->set_versioned_read_options(ConvertToYsonString(options.VersionedReadOptions).ToString());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

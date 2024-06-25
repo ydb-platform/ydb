@@ -374,6 +374,7 @@ message TKqpPhyStage {
     bool IsSinglePartition = 10;
     repeated TKqpSink Sinks = 11;
     map<string, string> SecureParams = 12;
+    bool AllowWithSpilling = 13;
 }
 
 message TKqpPhyResult {

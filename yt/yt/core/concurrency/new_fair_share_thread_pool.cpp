@@ -618,6 +618,11 @@ public:
         ThreadCount_.store(threadCount);
     }
 
+    void Configure(TDuration pollingPeriod)
+    {
+        TNotifyManager::Reconfigure(pollingPeriod);
+    }
+
     // (arkady-e1ppa): Explanation of memory orders and fences around Stopped_:
     /*
         We have two concurrent actions: Invoke and Shutdown.
@@ -770,9 +775,11 @@ public:
             }
         }
 
+        InvokeQueue_.DequeueAll();
+
+        guard.Release();
         actions.clear();
 
-        InvokeQueue_.DequeueAll();
     }
 
     void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
@@ -1319,6 +1326,11 @@ public:
     void Configure(int threadCount) override
     {
         TThreadPoolBase::Configure(threadCount);
+    }
+
+    void Configure(TDuration pollingPeriod) override
+    {
+        Queue_->Configure(pollingPeriod);
     }
 
     IInvokerPtr GetInvoker(

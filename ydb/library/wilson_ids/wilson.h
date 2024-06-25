@@ -20,6 +20,7 @@ namespace NKikimr {
         };
 
 
+        DEFINE_TRACING_LEVELS(THttp, 0, 5, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TGrpcProxy, 0, 5, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TQueryProcessor, 1, 6, 10, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 7, 11, 14, 15)
@@ -77,7 +78,7 @@ namespace NKikimr {
 
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
-                
+
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };

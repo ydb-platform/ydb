@@ -51,6 +51,16 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 
+inline TActorId CreateGRpcRequestProxyId(int n = 0) {
+    if (n == 0) {
+        const auto actorId = TActorId(0, "GRpcReqProxy");
+        return actorId;
+    }
+
+    const auto actorId = TActorId(0, TStringBuilder() << "GRpcReqPro" << n);
+    return actorId;
+}
+
 struct TRpcServices {
     enum EServiceId {
         EvMakeDirectory = EventSpaceBegin(TKikimrEvents::ES_GRPC_CALLS),
@@ -224,7 +234,9 @@ struct TRpcServices {
         EvAcquireYndxRateLimiterResource,
         EvGrpcRuntimeRequest,
         EvNodeCheckRequest,
-        EvStreamWriteRefreshToken    // internal call, pair to EvRefreshToken
+        EvStreamWriteRefreshToken,    // internal call, pair to EvRefreshToken
+        EvRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
+        EvRequestAuthAndCheckResult,
         // !!! DO NOT ADD NEW REQUEST !!!
     };
 
@@ -1551,6 +1563,51 @@ public:
 
 private:
     bool RlAllowed;
+};
+
+class TEvRequestAuthAndCheck
+    : /*public IRequestProxyCtx // TODO: implement
+    ,*/ public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
+public:
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken)
+        : Database(database)
+        , YdbToken(ydbToken)
+    {}
+
+    TString Database;
+    TMaybe<TString> YdbToken;
+};
+
+class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
+public:
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+        : Status(status)
+        , Issues(issues)
+    {}
+
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
+        : Status(status)
+    {
+        Issues.AddIssue(issue);
+    }
+
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error)
+        : Status(status)
+    {
+        Issues.AddIssue(error);
+    }
+
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+        : Database(database)
+        , YdbToken(ydbToken)
+        , UserToken(userToken)
+    {}
+
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    NYql::TIssues Issues;
+    TString Database;
+    TMaybe<TString> YdbToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 } // namespace NGRpcService

@@ -686,6 +686,13 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
     return i - 1;
 }
 
+TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size) :
+    OldKey(oldKey),
+    NewKey(newKey),
+    Size(size)
+{
+}
+
 TPartitionedBlob& TPartitionedBlob::operator=(const TPartitionedBlob& x)
 {
     Partition = x.Partition;

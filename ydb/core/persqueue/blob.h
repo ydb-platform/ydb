@@ -297,6 +297,9 @@ public:
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 
     struct TRenameFormedBlobInfo {
+        TRenameFormedBlobInfo() = default;
+        TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size);
+
         TKey OldKey;
         TKey NewKey;
         ui32 Size;

@@ -41,6 +41,7 @@ private:
     const NActors::TActorId BufferActorId;
     const std::shared_ptr<ISnapshotSchema> ActualSchema;
     const TSnapshot ActualSnapshot;
+    void ReplyError(const TString& message);
 protected:
     virtual bool DoExecute() override;
 public:

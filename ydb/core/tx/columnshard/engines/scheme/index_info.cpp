@@ -159,17 +159,11 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) 
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
-    const auto& primaryKeyNames = NamesOnly(GetPrimaryKeyColumns());
-    AFL_VERIFY(primaryKeyNames.size());
-    // Update set of required columns with names from primary key.
     {
-        std::vector<std::shared_ptr<arrow::Field>> pkFields;
-        for (const auto& name : primaryKeyNames) {
-            RequiredColumns.insert(name);
-            pkFields.emplace_back(ArrowSchema()->GetFieldByName(name));
-            AFL_VERIFY(pkFields.back());
-        }
-        PrimaryKey = std::make_shared<arrow::Schema>(std::move(pkFields));
+        const auto& primaryKeyNames = NamesOnly(GetPrimaryKeyColumns());
+        auto columnIds = GetColumnIds(primaryKeyNames);
+        AFL_VERIFY(columnIds.size());
+        PrimaryKey = MakeArrowSchema(Columns, columnIds);
     }
 
     for (const auto& [colId, column] : Columns) {

@@ -292,17 +292,33 @@ public:
     }
 };
 
+void TBuildBatchesTask::ReplyError(const TString& message) {
+    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+    auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
+        NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
+    TActorContext::AsActorContext().Send(ParentActorId, result.release());
+}
+
 bool TBuildBatchesTask::DoExecute() {
     std::shared_ptr<arrow::RecordBatch> batch = WriteData.GetData()->ExtractBatch();
     if (!batch) {
-        auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
-        auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
-            NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), "cannot extract incoming batch");
-        TActorContext::AsActorContext().Send(ParentActorId, result.release());
+        ReplyError("cannot extract incoming batch");
         return true;
     }
     const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
+    for (auto&& i : batch->schema()->fields()) {
+        if (i->nullable() && !ActualSchema->GetIndexInfo().IsNullableVerified(i->name())) {
+            ReplyError("nullable data for not null column " + i->name());
+            return true;
+        }
+    }
+    for (auto&& i : defaultFields) {
+        if (!ActualSchema->GetIndexInfo().IsNullableVerified(i->name())) {
+            ReplyError("not initialized not null column " + i->name());
+            return true;
+        }
+    }
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Replace: {

@@ -52,6 +52,12 @@ private:
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
 
+    bool IsNullableVerified(const std::string& fName) const {
+        auto it = Columns.find(GetColumnIdVerified(fName));
+        AFL_VERIFY(it != Columns.end());
+        return !it->second.NotNull;
+    }
+
     std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const {
         auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
         return features.GetDefaultWriteValue();

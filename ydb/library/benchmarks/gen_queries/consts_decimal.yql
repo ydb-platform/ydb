@@ -13,3 +13,4 @@ $z1_2_35 = cast("1.2" as decimal(35,2));
 $z0_05_35 = cast("0.05" as decimal(35,2));
 $z0_9_35 = cast("0.9" as decimal(35,2));
 $z1_1_35 = cast("1.1" as decimal(35,2));
+$round = ($x,$y) -> {return $x;}

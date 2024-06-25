@@ -104,7 +104,6 @@ Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -126,10 +125,24 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+        for (const auto& tableStat : stats.query_phases(0).table_access()) {
+            if (tableStat.name() == "/Root/Left") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 7);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
+            }
+        }
+    } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/Right");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), rightTableReads);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Right");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), rightTableReads);
     } else {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
@@ -535,6 +548,39 @@ Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
             [["Value1"];["Value22"]];
             [["Value2"];["Value23"]]
         ])", 4, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(SimpleLeftSemiJoin, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value1"]];
+            [["Value1"]];
+            [["Value2"]];
+            [["Value2"]]
+        ])", 4, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftSemiJoinWithLeftFilter, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            WHERE l.Value != 'Value1'  
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value2"]];
+            [["Value2"]]
+        ])", 2, StreamLookup);
 }
 
 void CreateSimpleTableWithKeyType(TSession session, const TString& tableName, const TString& columnType) {

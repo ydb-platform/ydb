@@ -174,6 +174,10 @@ public:
         return ColumnFeatures.contains(columnId);
     }
 
+    bool HasColumnName(const std::string& columnName) const {
+        return !!GetColumnIdOptional(columnName);
+    }
+
     bool HasIndexId(const ui32 indexId) const {
         return Indexes.contains(indexId);
     }

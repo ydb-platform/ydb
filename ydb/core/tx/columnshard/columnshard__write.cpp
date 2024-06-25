@@ -237,7 +237,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData),
-             TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema(), GetLastTxSnapshot());
+            snapshotSchema, GetLastTxSnapshot());
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -390,7 +390,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId, *mType);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    writeOperation->Start(*this, tableId, arrowData, source, ctx);
+    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx);
 }
 
 }

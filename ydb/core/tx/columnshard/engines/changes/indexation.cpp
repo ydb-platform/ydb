@@ -182,7 +182,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         }
 
         batch = AddSpecials(batch, indexInfo, inserted);
-        batch = resultSchema->NormalizeBatch(*blobSchema, batch);
+        batch = resultSchema->NormalizeBatch(*blobSchema, batch).DetachResult();
         pathBatches.Add(inserted, shardingFilterCommit, batch);
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
     }

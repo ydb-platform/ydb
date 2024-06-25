@@ -29,9 +29,9 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
     return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty();
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowData::ExtractBatch() {
+TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    auto result = IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema(), ModificationType);
+    auto result = NArrow::DeserializeBatch(IncomingData, BatchSchema->GetSchema());
     IncomingData = "";
     return result;
 }
@@ -60,9 +60,9 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
     return !IncomingData.empty() && IncomingData.size() <= NColumnShard::TLimits::GetMaxBlobSize();
 }
 
-std::shared_ptr<arrow::RecordBatch> TProtoArrowData::ExtractBatch() {
+TConclusion<std::shared_ptr<arrow::RecordBatch>> TProtoArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    auto result = IndexSchema->PrepareForInsert(IncomingData, ArrowSchema, ModificationType);
+    auto result = NArrow::DeserializeBatch(IncomingData, ArrowSchema);
     IncomingData = "";
     return result;
 }

@@ -325,41 +325,21 @@ void TBuildBatchesTask::ReplyError(const TString& message) {
 }
 
 bool TBuildBatchesTask::DoExecute() {
-    std::shared_ptr<arrow::RecordBatch> batch = WriteData.GetData()->ExtractBatch();
-    if (!batch) {
-        ReplyError("cannot extract incoming batch");
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> batchConclusion = WriteData.GetData()->ExtractBatch();
+    if (batchConclusion.IsFail()) {
+        ReplyError("cannot extract incoming batch: " + batchConclusion.GetErrorMessage());
         return true;
     }
-    {
-        auto validationResult = batch->ValidateFull();
-        if (!validationResult.ok()) {
-            ReplyError("incorrect incoming batch: " + validationResult.ToString());
-            return true;
-        }
+
+    auto preparedConclusion = ActualSchema->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());
+    if (preparedConclusion.IsFail()) {
+        ReplyError("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage());
+        return true;
     }
+    auto batch = preparedConclusion.DetachResult();
     const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
-    for (auto&& i : batch->schema()->fields()) {
-        if (i->nullable() && !ActualSchema->GetIndexInfo().IsNullableVerified(i->name())) {
-            ReplyError("nullable data for not null column " + i->name());
-            return true;
-        }
-    }
-    for (auto&& i : defaultFields) {
-        if (!ActualSchema->GetIndexInfo().IsNullableVerified(i->name())) {
-            ReplyError("not initialized not null column " + i->name());
-            return true;
-        }
-    }
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
-        case NEvWrite::EModificationType::Replace: {
-            batch = ActualSchema->AddDefault(batch);
-            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
-                TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
-            NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
-            return true;
-        }
-
         case NEvWrite::EModificationType::Upsert: {
             if (defaultFields.empty()) {
                 std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
@@ -367,7 +347,9 @@ bool TBuildBatchesTask::DoExecute() {
                 NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
                 return true;
             } else {
-                auto batchDefault = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1);
+                auto conclusion = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1);
+                AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
+                auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
                 merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, pos);
                 break;
@@ -381,14 +363,13 @@ bool TBuildBatchesTask::DoExecute() {
             merger = std::make_shared<TUpdateMerger>(batch, ActualSchema);
             break;
         }
+        case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Delete: {
-            batch = ActualSchema->AddDefault(batch);
             std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
                 TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
             NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
             return true;
         }
-
     }
     std::shared_ptr<NDataReader::IRestoreTask> task = std::make_shared<NOlap::TModificationRestoreTask>(
         TabletId, ParentActorId, BufferActorId, std::move(WriteData), merger, ActualSchema, ActualSnapshot, batch);

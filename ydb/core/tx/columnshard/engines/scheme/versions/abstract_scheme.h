@@ -36,8 +36,8 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetDefaultWriteValueVerified(const std::string& columnName) const;
 
-    std::shared_ptr<arrow::RecordBatch> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
-    std::shared_ptr<arrow::RecordBatch> AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch) const;
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const;
 
 
     std::vector<std::string> GetPKColumnNames() const;
@@ -61,8 +61,9 @@ public:
 
     std::set<ui32> GetPkColumnsIds() const;
 
-    std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema, const NEvWrite::EModificationType modificationType) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
+        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
 };
 
 } // namespace NKikimr::NOlap

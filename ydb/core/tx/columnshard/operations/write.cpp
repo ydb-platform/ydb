@@ -23,7 +23,8 @@ namespace NKikimr::NColumnShard {
     {
     }
 
-    void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
+    void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data,
+        const NActors::TActorId& source, const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
@@ -31,7 +32,7 @@ namespace NKikimr::NColumnShard {
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)),
-            owner.TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema(), owner.GetLastTxSnapshot());
+            schema, owner.GetLastTxSnapshot());
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
         Status = EOperationStatus::Started;

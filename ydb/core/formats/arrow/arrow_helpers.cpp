@@ -199,7 +199,7 @@ std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>
 namespace {
 template <class TDataContainer>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TString>& columnNames) {
+    const std::vector<TString>& columnNames, const bool necessaryColumns) {
     if (!srcBatch) {
         return srcBatch;
     }
@@ -214,7 +214,11 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        if (necessaryColumns) {
+            AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        } else if (pos == -1) {
+            continue;
+        }
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
     }
@@ -225,12 +229,22 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
@@ -1068,6 +1082,27 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
         return nullptr;
     }
     return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+}
+
+bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
+    AFL_VERIFY(column);
+    return column->null_bitmap_data();
+}
+
+std::vector<TString> ConvertStrings(const std::vector<std::string>& input) {
+    std::vector<TString> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
+}
+
+std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
+    std::vector<std::string> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
 }
 
 }

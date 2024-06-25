@@ -6,6 +6,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <ydb/library/actors/core/monotonic.h>
+#include <ydb/library/conclusion/result.h>
 #include <util/generic/guid.h>
 
 namespace NKikimr::NOlap {
@@ -18,7 +19,7 @@ class IDataContainer {
 public:
     using TPtr = std::shared_ptr<IDataContainer>;
     virtual ~IDataContainer() {}
-    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() = 0;
+    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() = 0;
     virtual ui64 GetSchemaVersion() const = 0;
     virtual ui64 GetSize() const = 0;
 };

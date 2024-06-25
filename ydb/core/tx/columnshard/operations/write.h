@@ -51,7 +51,8 @@ namespace NKikimr::NColumnShard {
 
         TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
 
-        void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx);
+        void Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, 
+            const NActors::TActorId& source, const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx);
         void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds);
         void Commit(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
         void Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;

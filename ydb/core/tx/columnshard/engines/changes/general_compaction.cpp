@@ -35,7 +35,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema);
-            batch = resultSchema->NormalizeBatch(*dataSchema, batch);
+            batch = resultSchema->NormalizeBatch(*dataSchema, batch).DetachResult();
             batch = IIndexInfo::NormalizeDeletionColumn(batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
             auto filter = BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), portionsInUsage, resultSchema);

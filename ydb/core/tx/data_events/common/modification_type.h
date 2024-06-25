@@ -25,6 +25,18 @@ class TEnumOperator<NEvWrite::EModificationType> {
 public:
     using TProto = NKikimrTxColumnShard::TEvWrite::EModificationType;
 
+    static bool NeedDefaultForNotInitializedColumns(const NEvWrite::EModificationType value) {
+        switch (value) {
+            case NEvWrite::EModificationType::Upsert:
+            case NEvWrite::EModificationType::Delete:
+            case NEvWrite::EModificationType::Update:
+                return false;
+            case NEvWrite::EModificationType::Insert:
+            case NEvWrite::EModificationType::Replace:
+                return true;
+        }
+    }
+
     static bool NeedSchemaRestore(const NEvWrite::EModificationType value) {
         switch (value) {
             case NEvWrite::EModificationType::Upsert:

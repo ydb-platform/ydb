@@ -19,6 +19,9 @@
         ["u32";["DataType";"Uint32"]];
         ["i64";["DataType";"Int64"]];
         ["u64";["DataType";"Uint64"]];
+        ["waz";["DataType";"TzDate32"]];
+        ["wdz";["DataType";"TzDatetime64"]];
+        ["wtz";["DataType";"TzTimestamp64"]];
     ]];
 }}
 

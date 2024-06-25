@@ -122,8 +122,8 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     TVector<TCell> cells;
                     TString error;
                     TVector<TString> memoryOwner;
-                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false,
-                                                  cells, error, memoryOwner)) {
+                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, {},
+                                                  false, cells, error, memoryOwner)) {
                         status = NKikimrScheme::StatusSchemeError;
                         errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
                         return nullptr;

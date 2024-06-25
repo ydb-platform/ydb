@@ -785,6 +785,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
 
                 if (columnDesc.GetNotNull()) {
+                    column.IsNotNullColumn = true;
                     NotNullColumns.insert(columnDesc.GetName());
                 }
             }

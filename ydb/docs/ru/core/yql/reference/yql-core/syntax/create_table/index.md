@@ -42,8 +42,7 @@
 * [строковые](../../../../concepts/datamodel/table.md);
 * [колоночные](../../../../concepts/datamodel/table.md#column-tables).
 
-Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица:
-
+Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables):
 ```sql
 CREATE <table_name> (
   columns 
@@ -54,6 +53,7 @@ WITH (
   STORE = COLUMN -- Default value ROW
 )
 ```
+По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
 {% endif %}
 
@@ -121,8 +121,6 @@ WITH (
 
 {% else %}
 
-### Пример создания таблицы
-
 {% if feature_column_container_type == true %}
 Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
 {% else %}
@@ -152,7 +150,13 @@ WITH (
 ```
 {% endif %}
 
-При создании {% if backend_name == "YDB" %}строковых и колоночных таблиц{% else %}таблиц{% endif %} возможно задать:
+{% if backend_name == "YDB" %}
+
+При создании строковых таблиц возможно задать:
 * [Вторичный индекс](secondary_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+
+Для колоночных таблиц при их создании возможно задать только [дополнительные параметры](with.md)
+
+{% endif %}

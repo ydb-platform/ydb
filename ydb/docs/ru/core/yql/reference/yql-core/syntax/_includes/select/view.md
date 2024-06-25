@@ -1,11 +1,5 @@
 # Представления данных (VIEW)
 
-{% note warning %}
-
-{% include [olap_warning](../../../../../_includes/not_allow_for_olap.md) %}
-
-{% endnote %}
-
 В YQL реализовано два вида представления данных:
 
 * привязанные к конкретным таблицам;

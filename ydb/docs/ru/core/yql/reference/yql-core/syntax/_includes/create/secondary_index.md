@@ -1,6 +1,6 @@
 # INDEX
 
-Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для строчных и колоночных таблиц{% else %}на таблице{% endif %}:
+Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для строковых и колоночных таблиц{% else %}на таблице{% endif %}:
 
 ```sql
 CREATE TABLE table_name (

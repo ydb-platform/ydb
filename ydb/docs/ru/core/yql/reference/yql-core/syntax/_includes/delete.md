@@ -6,11 +6,7 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% cut "Удаление данных из таблиц с помощью TTL" %}
-
-Удалить данные из строковой и колоночной таблицы можно с помощью [TTL](../../../../concepts/ttl.md), который можно задать при [создании таблицы](../create_table/index.md) (`CREATE TABLE`) или при [изменении таблицы](../alter_table/set.md) (`ALTER TABLE`).
-
-{% endcut %}
+Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../../../concepts/ttl.md). TTL можно задать при создании строковой или колоночной таблицы (`CREATE TABLE`) или при их [изменении](../alter_table/set.md) (`ALTER TABLE`).
 
 {% endnote %}
 

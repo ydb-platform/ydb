@@ -108,6 +108,8 @@ void ValidateObjectId(const TString& objectId) {
 }
 
 void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& resourcePoolDescription, const NYql::TCreateObjectSettings& settings) {
+    resourcePoolDescription.SetName(settings.GetObjectId());
+
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     featuresExtractor.ValidateResetFeatures();
 
@@ -219,12 +221,10 @@ void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperat
     ValidateObjectId(settings.GetObjectId());
 
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
-    schemeTx.SetWorkingDir(context.GetExternalData().GetDatabase());
+    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
 
-    auto& resourcePoolDescription = *schemeTx.MutableCreateResourcePool();
-    resourcePoolDescription.SetName(TStringBuilder() << ".resource_pools/" << settings.GetObjectId());
-    FillResourcePoolDescription(resourcePoolDescription, settings);
+    FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
 }
 
 void TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
@@ -232,9 +232,7 @@ void TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperati
     schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterResourcePool);
 
-    auto& resourcePoolDescription = *schemeTx.MutableCreateResourcePool();
-    resourcePoolDescription.SetName(settings.GetObjectId());
-    FillResourcePoolDescription(resourcePoolDescription, settings);
+    FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
 }
 
 void TResourcePoolManager::PrepareDropResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {

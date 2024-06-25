@@ -7,10 +7,28 @@ description: "The article will tell you how to initiate the check using the Heal
 
 {{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing problems.
 
-To initiate the check, call the `SelfCheck` method from `Ydb.Monitoring`. You must also pass the name of the checked DB as usual.
+To initiate the check, call the `SelfCheck` method from SDK `Ydb.Monitoring`. You must also pass the name of the checked DB as usual.
+
+{% list tabs %}
+
+- C++
+  App code snippet for creating a client:
+  ```cpp
+  auto client = NYdb::NMonitoring::TMonitoringClient(driver);
+  ```
+  Calling `SelfCheck` method:
+  ```
+
+  auto settings = TSelfCheckSettings();
+  settings.ReturnVerboseStatus(true);
+  auto result = client.SelfCheck(settings).GetValueSync();
+  ```
+
+{% endlist %}
 
 ## Response Structure {#response-structure}
-Calling the method will return the following structure:
+For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
+Calling the `SelfCheck` method will return the following message:
 
 ```protobuf
 message SelfCheckResult {
@@ -44,6 +62,8 @@ Each issue has a nesting `level` - the higher the `level`, the deeper the ish is
 | `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No problems were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious problem was detected in the database, with complete or partial loss of availability.</li></ul> |
 | `issue_log` | This is a set of elements, each of which describes a problem in the system at a certain level. |
 | `issue_log.id` | A unique problem ID within this response. |
+| `issue_log.id` | A unique problem ID within this response. |
+| `issue_log.id` | A unique problem ID within this response. |
 | `issue_log.status` | Status (severity) of the current problem. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious problem, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor problem, no risks to availability. We recommend you continue monitoring the problem.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No problems were detected.</li><li>`GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).</li></ul> |
 | `issue_log.message` | Text that describes the problem. |
 | `issue_log.location` | Location of the problem. This can be a physical location or an execution context. |
@@ -58,14 +78,16 @@ Each issue has a nesting `level` - the higher the `level`, the deeper the ish is
 The whole list of extra parameters presented below:
 
 {% list tabs %}
+
 - C++
-```c++
-struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
-    FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
-    FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
-    FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
-};
-```
+  ```c++
+  struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
+      FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
+      FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
+      FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
+  };
+  ```
+
 {% endlist %}
 
 | Parameter | Type | Description |
@@ -79,20 +101,20 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | Message | Description |
 |:----|:----|
 | **DATABASE** ||
-| `Database has multiple issues`</br>`Database has compute issues`</br>`Database has storage issues` | These issues depend solely on the underlying `COMPUTE` and `STORAGE` layers. This is the most general status of the database. |
+| `Database has multiple issues`</br>`Database has compute issues`</br>`Database has storage issues` | These issues depend solely on the underlying `COMPUTE` and `STORAGE` layers. This is the most general status of a database. |
 | **STORAGE** ||
 | `There are no storage pools` | Storage pools aren't configured. |
 | `Storage degraded`</br>`Storage has no redundancy`</br>`Storage failed` | These issues depend solely on the underlying `STORAGE_POOLS` layer. |
-| `System tablet BSC didn't provide information` | Storage diagnostics will be generated with alternative way. |
-| `Storage usage over 75%` <br>`Storage usage over 85%` <br>`Storage usage over 90%` | Need to increase disk space. |
+| `System tablet BSC didn't provide information` | Storage diagnostics will be generated alternatively. |
+| `Storage usage over 75%` <br>`Storage usage over 85%` <br>`Storage usage over 90%` | Some data needs to be removed, or the database needs to be reconfigured with additional disk space. |
 | **STORAGE_POOL** ||
 | `Pool degraded` <br>`Pool has no redundancy` <br>`Pool failed` | These issues depend solely on the underlying `STORAGE_GROUP` layer. |
 | **STORAGE_GROUP** ||
 | `Group has no vslots` | This case is not expected, it inner problem. |
-| `Group degraded` | The number of disks allowed in the group is not available. |
+| `Group degraded` | A number of disks allowed in the group are not available. |
 | `Group has no redundancy` | A storage group lost its redundancy. Аnother failure of vdisk may lead to the loss of the group. |
 | `Group failed` | A storage group lost its integrity. Data is not available |
-||`HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and, depending on this, sets the appropriate status and displays a message. |
+||`HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and, depending on them, sets the appropriate status and displays a message. |
 | **VDISK** ||
 | `System tablet BSC didn't provide known status` | This case is not expected, it inner problem. |
 | `VDisk is not available` | the disk is not operational at all. |
@@ -101,7 +123,7 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `VDisk have space issue` | These issues depend solely on the underlying `PDISK` layer. |
 | **PDISK** ||
 | `Unknown PDisk state` | `HealthCheck` the system can't parse pdisk state. |
-| `PDisk is inactive` <br>`PDisk state is FAULTY` <br>`PDisk state is BROKEN` <br>`PDisk state is TO_BE_REMOVED` | Indicates problems with a physical disk. |
+| `PDisk state is ...` | Indicates state of physical disk. |
 | `Available size is less than 12%` <br>`Available size is less than 9%` <br>`Available size is less than 6%` | Free space on the physical disk is running out. |
 | `PDisk is not available` | A physical disk is not available. |
 | **STORAGE_NODE** ||
@@ -114,22 +136,21 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `Compute quota usage` | These issues depend solely on the underlying `COMPUTE_QUOTA` layer. |
 | `Compute has issues with tablets`| These issues depend solely on the underlying `TABLET` layer. |
 | **COMPUTE_QUOTA** ||
-| `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` </br>`Shards quota usage is over than 99%` </br>`Shards quota exhausted` |Quotas exhausted|
-| **COMPUTE_NODE** | *There is no specific issues on this layer.* |
+| `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` </br>`Shards quota usage is over than 99%` </br>`Shards quota exhausted` | Quotas exhausted |
 | **SYSTEM_TABLET** ||
 | `System tablet is unresponsive ` <br>`System tablet response time over 1000ms` <br>`System tablet response time over 5000ms`|  The system tablet is not responding or it takes too long to respond. |
 | **TABLET** ||
 | `Tablets are restarting too often` | Tablets are restarting too often. |
 | `Tablets/Followers are dead` | Tablets are not running (probably cannot be started). |
 | **LOAD_AVERAGE** ||
-| `LoadAverage above 100%` | A physical host is overloaded. </br> The `Healthcheck` tool monitors system load by evaluating the current workload in terms of running and waiting processes (load) and comparing it to the total number of logical cores on the host (cores). For example, if a system has 8 logical cores and the current load value is 16, the load is considered to be 200%. </br> `Healthcheck` only checks if the load exceeds the number of cores (load > cores) and reports based on this condition. This indicates that the system is working at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. </br></br> Load Information: </br> Source: </br>`/proc/loadavg` </br> Logical Cores Information </br></br>The number of logical cores: </br>Primary Source: </br>`/sys/fs/cgroup/cpu.max` </br></br>Fallback Source: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br> `/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>The number of cores is calculated by dividing the quota by the period (quota / period)
+| `LoadAverage above 100%` | ([Load](https://en.wikipedia.org/wiki/Load_(computing))) A physical host is overloaded . </br> This indicates that the system is working at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. </br></br> Load Information: </br> Source: </br>`/proc/loadavg` </br> Logical Cores Information </br></br>The number of logical cores: </br>Primary Source: </br>`/sys/fs/cgroup/cpu.max` </br></br>Fallback Source: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br> `/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>The number of cores is calculated by dividing the quota by the period (quota / period)
 | **COMPUTE_POOL** ||
 | `Pool usage is over than 90%` <br>`Pool usage is over than 95%` <br>`Pool usage is over than 99%` | One of the pools' CPUs is overloaded. |
 | **NODE_UPTIME** ||
 | `The number of node restarts has increased` | The number of node restarts has exceeded the threshold. By default, 10 restarts per hour |
 | `Node is restarting too often` | The number of node restarts has exceeded the threshold. By default, 30 restarts per hour |
 | **NODES_TIME_DIFFERENCE** ||
-| `The nodes have a time difference of ... ms` | Time drift on nodes might lead to potential issues with coordinating distributed transactions. This message starts to appear from 5 ms |
+| `The nodes have a time difference of ... ms` | Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issus starts to appear from 5 ms |
 
 
 ## Example {#examples}

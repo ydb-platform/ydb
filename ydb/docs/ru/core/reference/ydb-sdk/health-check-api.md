@@ -7,8 +7,27 @@ description: "Из статьи вы узнаете, как инициирова
 
 {{ ydb-short-name }} имеет встроенную систему самодиагностики, с помощью которой можно получить краткий отчет о состоянии базы данных и информацию об имеющихся проблемах.
 
-Для инициации проверки необходимо сделать вызов метода `SelfCheck` из сервиса `Ydb.Monitoring`. Также необходимо передать имя проверяемой БД стандартным способом.
+Для инициации проверки необходимо сделать вызов метода `SelfCheck` из сервиса YDB `Ydb.Monitoring`. Также необходимо передать имя проверяемой БД стандартным способом.
 
+{% list tabs %}
+
+- C++
+  Пример кода приложения для создания клиента:
+  ```cpp
+  auto client = NYdb::NMonitoring::TMonitoringClient(driver);
+  ```
+
+  Вызов метода `SelfCheck`:
+  ```
+  auto settings = TSelfCheckSettings();
+  settings.ReturnVerboseStatus(true);
+  auto result = client.SelfCheck(settings).GetValueSync();
+  ```
+
+{% endlist %}
+
+## Response Structure {#response-structure}
+Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) в {{ ydb-short-name }} Git репозитории.
 В результате вызова этого метода будет возвращена следующая структура:
 
 ```protobuf
@@ -57,15 +76,18 @@ message IssueLog {
 
 ## Call parameters {#call-parameters}
 Полный список дополнительных параметров представлен ниже:
+
 {% list tabs %}
+
 - C++
-```c++
-struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
-    FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
-    FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
-    FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
-};
-```
+  ```c++
+  struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
+      FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
+      FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
+      FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
+  };
+  ```
+
 {% endlist %}
 
 | Параметр | Тип | Описание |
@@ -101,7 +123,7 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `VDisk have space issue` | Зависит от нижележащего слоя `PDISK`. |
 | **PDISK** ||
 | `Unknown PDisk state` | `HealthCheck` не может разобрать состояние PDisk. Внутренняя ошибка. |
-| `PDisk is inactive` <br>`PDisk state is FAULTY` <br>`PDisk state is BROKEN` <br>`PDisk state is TO_BE_REMOVED` | Cообщает о проблемах с физическим диском. |
+| `PDisk state is ...` | Cообщает состояние физического диска. |
 | `Available size is less than 12%` <br>`Available size is less than 9%` <br>`Available size is less than 6%` | Заканчивается свободное место на физическом диске. |
 | `PDisk is not available` | Отсутствует физический диск. |
 | **STORAGE_NODE** ||
@@ -115,21 +137,20 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | `Compute has issues with tablets` | Зависит от нижележащего слоя `TABLET`. |
 | **COMPUTE_QUOTA** ||
 | `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` <br>`Shards quota usage is over than 99%` <br>`Shards quota exhausted` | Квоты исчерпаны. |
-| **COMPUTE_NODE** | *Нет сообщений на этом уровне.* |
 | **SYSTEM_TABLET** ||
 | `System tablet is unresponsive ` <br>`System tablet response time over 1000ms` <br>`System tablet response time over 5000ms` | Системная таблетка не отвечает или отвечает долго |
 | **TABLET** ||
 | `Tablets are restarting too often` | Таблетки слишком часто перезапускаются. |
 | `Tablets are dead` <br>`Followers are dead` | Таблетки не запущены (или не могут быть запущены). |
 | **LOAD_AVERAGE** ||
-| `LoadAverage above 100%` | Физический хост перегружен. </br>Сервис `Healthcheck`  мониторит системную нагрузку, оценивая ее в терминах выполняющихся, ожидающих процессов (load) и сравнивая её с общим числом логических ядер на хосте (cores). Например, если у системы 8 логических ядер и текущая нагрузка составляет 16, нагрузка считается равной 200%. </br>`Healthcheck` проверяет только превышение нагрузки над количеством ядер (load > cores) и сообщает на основе этого предупреждение. Это указывает на то, что система работает на пределе, скорее всего из-за большого количества процессов, ожидающих операций ввода-вывода. </br></br>Информация о нагрузке: </br>Источник: </br>`/proc/loadavg` </br>Информация о логических ядрах </br></br>Количество логических ядер: </br>Основной источник: </br>`/sys/fs/cgroup/cpu.max` </br></br>Дополнительный источник: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br>`/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>Количество ядер вычисляется путем деления квоты на период (quota / period) |
+| `LoadAverage above 100%` | ([Load](https://en.wikipedia.org/wiki/Load_(computing))) Физический хост перегружен. </br>Это указывает на то, что система работает на пределе, скорее всего из-за большого количества процессов, ожидающих операций ввода-вывода. </br></br>Информация о нагрузке: </br>Источник: </br>`/proc/loadavg` </br>Информация о логических ядрах </br></br>Количество логических ядер: </br>Основной источник: </br>`/sys/fs/cgroup/cpu.max` </br></br>Дополнительный источник: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br>`/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>Количество ядер вычисляется путем деления квоты на период (quota / period) |
 | **COMPUTE_POOL** ||
 | `Pool usage is over than 90%` <br>`Pool usage is over than 95%` <br>`Pool usage is over than 99%` | один из CPU пулов перегружен. |
 | **NODE_UPTIME** ||
 | `The number of node restarts has increased` | Количество рестартов ноды превысило порог. По-умолчанию, это 10 рестартов в час. |
 | `Node is restarting too often` | Узлы слишком часто перезапускаются. По-умолчанию, это 30 рестартов в час. |
 | **NODES_TIME_DIFFERENCE** ||
-| `The nodes have a time difference of ... ms` | Расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций. |
+| `The nodes have a time difference of ... ms` | Расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций. Начинает появляться с расхождения в 5ms|
 
 
 ## Пример ответа {#examples}

@@ -18,13 +18,6 @@ message SelfCheckResult {
 }
 ```
 
-Самый короткий ответ сервиса будет выглядеть следующим образом. Он возвращается, если с базой данных все в порядке:
-
-```protobuf
-SelfCheckResult {
-    self_check_result: GOOD
-}
-```
 Если обнаружены проблемы, поле `issue_log` будет содержать описания проблем со следующей структурой:
 
 ```protobuf
@@ -85,17 +78,17 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | **DATABASE** ||
 | `Database has multiple issues`</br>`Database has compute issues`</br>`Database has storage issues` | Зависит от нижележащих слоев `COMPUTE` и `STORAGE`. Это самый общий статус базы данных. |
 | **STORAGE** ||
-| `There are no storage pools` | Недоступна информация по пулам на уровне `STORAGE_POOLS`. |
+| `There are no storage pools` | Пулы хранения не настроены. |
 | `Storage degraded`</br>`Storage has no redundancy`</br>`Storage failed` | Зависит от нижележащего слоя `STORAGE_POOLS`. |
 | `System tablet BSC didn't provide information` | Информация о сторадже не доступна. |
 | `Storage usage over 75%/85%/90%` | Необходимо увеличить дисковое пространство. |
 | **STORAGE_POOL** ||
 | `Pool degraded/has no redundancy/failed` | Зависит от нижележащего слоя `STORAGE_GROUP`. |
 | **STORAGE_GROUP** ||
-| `Group has no vslots` ||
+| `Group has no vslots` | Эта ошибка не ожидается. Внутренняя ошибка. |
 | `Group degraded` | В группе недоступно допустимое число дисков. |
-| `Group has no redundancy` | Группа хранения потеряла избыточность. |
-| `Group failed` | Группа хранения потеряла целостность. |
+| `Group has no redundancy` | Группа хранения потеряла избыточность. Еще один сбой в работе диска может привести к потере группы. |
+| `Group failed` | Группа хранения потеряла целостность. Данные не доступны. |
 || `HealthCheck` проверяет различные параметры (режим отказоустойчивости, количество отказавших дисков, статус дисков и т. д.) и в зависимости от этого устанавливает соответствующий статус у группы. |
 | **VDISK** ||
 | `System tablet BSC didn't provide known status` | Эта ошибка не ожидается. Внутренняя ошибка. |
@@ -130,7 +123,216 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 | **COMPUTE_POOL** ||
 | `Pool usage is over than 90/95/99%` | один из CPU пулов перегружен. |
 | **NODE_UPTIME** ||
-| `Node is restarting too often` | Узлы слишком часто перезапускаются. |
-| `The number of node restarts has increased` | Количество рестартов ноды превысило порог. |
-| **NODES_SYNC** ||
+| `The number of node restarts has increased` | Количество рестартов ноды превысило порог. По-умолчанию, это 10 рестартов в час. |
+| `Node is restarting too often` | Узлы слишком часто перезапускаются. По-умолчанию, это 30 рестартов в час. |
+| **NODES_TIME_DIFFERENCE** ||
 | `The nodes have a time difference of ... ms` | Расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций. |
+
+
+## Пример ответа {#examples}
+Самый короткий ответ сервиса будет выглядеть следующим образом. Он возвращается, если с базой данных все в порядке:
+
+```json
+{
+  "self_check_result": "GOOD"
+}
+```
+
+Ответ в случаи проблем может выглядеть так
+
+```json
+{
+  "self_check_result": "EMERGENCY",
+  "issue_log": [
+    {
+      "id": "RED-27c3-70fb",
+      "status": "RED",
+      "message": "Database has multiple issues",
+      "location": {
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "RED-27c3-4e47",
+        "RED-27c3-53b5",
+        "YELLOW-27c3-5321"
+      ],
+      "type": "DATABASE",
+      "level": 1
+    },
+    {
+      "id": "RED-27c3-4e47",
+      "status": "RED",
+      "message": "Compute has issues with system tablets",
+      "location": {
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "RED-27c3-c138-BSController"
+      ],
+      "type": "COMPUTE",
+      "level": 2
+    },
+    {
+      "id": "RED-27c3-c138-BSController",
+      "status": "RED",
+      "message": "System tablet is unresponsive",
+      "location": {
+        "compute": {
+          "tablet": {
+            "type": "BSController",
+            "id": [
+              "72057594037989391"
+            ]
+          }
+        },
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "type": "SYSTEM_TABLET",
+      "level": 3
+    },
+    {
+      "id": "RED-27c3-53b5",
+      "status": "RED",
+      "message": "System tablet BSC didn't provide information",
+      "location": {
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "type": "STORAGE",
+      "level": 2
+    },
+    {
+      "id": "YELLOW-27c3-5321",
+      "status": "YELLOW",
+      "message": "Storage degraded",
+      "location": {
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "YELLOW-27c3-595f-8d1d"
+      ],
+      "type": "STORAGE",
+      "level": 2
+    },
+    {
+      "id": "YELLOW-27c3-595f-8d1d",
+      "status": "YELLOW",
+      "message": "Pool degraded",
+      "location": {
+        "storage": {
+          "pool": {
+            "name": "static"
+          }
+        },
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "YELLOW-27c3-ef3e-0"
+      ],
+      "type": "STORAGE_POOL",
+      "level": 3
+    },
+    {
+      "id": "RED-84d8-3-3-1",
+      "status": "RED",
+      "message": "PDisk is not available",
+      "location": {
+        "storage": {
+          "node": {
+            "id": 3,
+            "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
+            "port": 19001
+          },
+          "pool": {
+            "group": {
+              "vdisk": {
+                "pdisk": [
+                  {
+                    "id": "3-1",
+                    "path": "/dev/disk/by-partlabel/NVMEKIKIMR01"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "type": "PDISK",
+      "level": 6
+    },
+    {
+      "id": "RED-27c3-4847-3-0-1-0-2-0",
+      "status": "RED",
+      "message": "VDisk is not available",
+      "location": {
+        "storage": {
+          "node": {
+            "id": 3,
+            "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
+            "port": 19001
+          },
+          "pool": {
+            "name": "static",
+            "group": {
+              "vdisk": {
+                "id": [
+                  "0-1-0-2-0"
+                ]
+              }
+            }
+          }
+        },
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "RED-84d8-3-3-1"
+      ],
+      "type": "VDISK",
+      "level": 5
+    },
+    {
+      "id": "YELLOW-27c3-ef3e-0",
+      "status": "YELLOW",
+      "message": "Group degraded",
+      "location": {
+        "storage": {
+          "pool": {
+            "name": "static",
+            "group": {
+              "id": [
+                "0"
+              ]
+            }
+          }
+        },
+        "database": {
+          "name": "/slice"
+        }
+      },
+      "reason": [
+        "RED-27c3-4847-3-0-1-0-2-0"
+      ],
+      "type": "STORAGE_GROUP",
+      "level": 4
+    }
+  ],
+  "location": {
+    "id": 5,
+    "host": "man0-0028.ydb-dev.nemax.nebiuscloud.net",
+    "port": 19001
+  }
+}
+```

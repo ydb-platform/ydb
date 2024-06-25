@@ -92,9 +92,9 @@ The whole list of extra parameters presented below:
 
 | Parameter | Type | Description |
 |:----|:----|
-| `ReturnVerboseStatus` | `bool`        | As mentioned earlier, this parameter affects the filling of the `database_status` field. Default is false. |
-| `MinimumStatus`       | `EStatusFlag` | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
-| `MaximumLevel`        | `int32`       | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |
+| `ReturnVerboseStatus` | `bool`         | As mentioned earlier, this parameter affects the filling of the `database_status` field. Default is false. |
+| `MinimumStatus`       | `EStatusFlag`  | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
+| `MaximumLevel`        | `int32`        | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |
 
 ## Possible problems {#problems}
 

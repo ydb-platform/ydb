@@ -77,6 +77,10 @@ bool IsSupportedDataType(const TCoDataCtor& node, const TSettings& settings) {
         return true;
     }
 
+    if (settings.IsEnabled(TSettings::EFeatureFlag::TimestampCtor) && node.Maybe<TCoTimestamp>()) {
+        return true;
+    }
+
     if (settings.IsEnabled(TSettings::EFeatureFlag::StringTypes)) {
         if (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>()) {
             return true;
@@ -99,11 +103,9 @@ bool IsSupportedCast(const TCoSafeCast& cast, const TSettings& settings) {
     }
     YQL_ENSURE(maybeDataType.IsValid());
 
-    auto dataType = maybeDataType.Cast();
-    if (dataType.Type().Value() == "Int32") {
-        return cast.Value().Maybe<TCoString>().IsValid();
-    } else if (dataType.Type().Value() == "Timestamp") {
-        return cast.Value().Maybe<TCoUint32>().IsValid();
+    const auto dataType = maybeDataType.Cast();
+    if (dataType.Type().Value() == "Int32") { // TODO: Support any numeric casts.
+        return cast.Value().Maybe<TCoString>() || cast.Value().Maybe<TCoUtf8>();
     }
     return false;
 }
@@ -496,15 +498,16 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
-    if (!opNode.Maybe<TCoAnd>() && !opNode.Maybe<TCoOr>() && !opNode.Maybe<TCoXor>()) {
-        return;
-    }
-    predicateTree.Children.reserve(opNode.Ptr()->ChildrenSize());
+void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+    predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
-    for (auto& childNodePtr: opNode.Ptr()->Children()) {
+    for (const auto& childNodePtr: opNode.Children()) {
         TPredicateNode child(childNodePtr);
-        CollectPredicates(TExprBase(childNodePtr), child, lambdaArg, lambdaBody, settings);
+        const TExprBase base(childNodePtr);
+        if (const auto maybeCtor = base.Maybe<TCoDataCtor>())
+            child.CanBePushed = IsSupportedDataType(maybeCtor.Cast(), settings);
+        else
+            CollectPredicates(base, child, lambdaArg, lambdaBody, settings);
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
     }
@@ -518,8 +521,12 @@ void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& 
 
 void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Maybe<TCoCoalesce>()) {
-        auto coalesce = predicate.Cast<TCoCoalesce>();
-        predicateTree.CanBePushed = CoalesceCanBePushed(coalesce, lambdaArg, lambdaBody, settings);
+        if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators))
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
+        else {
+            auto coalesce = predicate.Cast<TCoCoalesce>();
+            predicateTree.CanBePushed = CoalesceCanBePushed(coalesce, lambdaArg, lambdaBody, settings);
+        }
     } else if (predicate.Maybe<TCoCompare>()) {
         auto compare = predicate.Cast<TCoCompare>();
         predicateTree.CanBePushed = CompareCanBePushed(compare, lambdaArg, lambdaBody, settings);
@@ -535,18 +542,20 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         predicateTree.Children.emplace_back(child);
     } else if (predicate.Maybe<TCoAnd>()) {
         predicateTree.Op = EBoolOp::And;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoAnd>(), predicateTree, lambdaArg, lambdaBody, settings);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (predicate.Maybe<TCoOr>()) {
         predicateTree.Op = EBoolOp::Or;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoOr>(), predicateTree, lambdaArg, lambdaBody, settings);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::LogicalXorOperator) && predicate.Maybe<TCoXor>()) {
         predicateTree.Op = EBoolOp::Xor;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoXor>(), predicateTree, lambdaArg, lambdaBody, settings);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonExistsOperator) && predicate.Maybe<TCoJsonExists>()) {
         auto jsonExists = predicate.Cast<TCoJsonExists>();
         predicateTree.CanBePushed = JsonExistsCanBePushed(jsonExists, lambdaArg);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ExpressionAsPredicate) && predicate.Maybe<TCoMember>()) {
         CollectExpressionPredicate(predicateTree, predicate.Cast<TCoMember>(), lambdaArg);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators) && (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>())) {
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
     } else {
         predicateTree.CanBePushed = false;
     }

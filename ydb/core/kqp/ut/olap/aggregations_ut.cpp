@@ -1148,7 +1148,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1164,7 +1166,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1180,7 +1184,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1" RETURNING String) = "val1" AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1196,7 +1202,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1212,7 +1220,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.col1") = "val1" AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1228,7 +1238,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1244,7 +1256,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int"), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonValue")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1261,7 +1275,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE
                     JSON_EXISTS(jsonval, "$.col1") AND level = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonExists")
 #else
             .AddExpectedPlanOptions("Udf")
@@ -1278,7 +1294,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE
                     JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonExists")
 #else
             .AddExpectedPlanOptions("Udf")

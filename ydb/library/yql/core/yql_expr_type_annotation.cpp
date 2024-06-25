@@ -9,6 +9,7 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
+#include <ydb/library/yql/minikql/jsonpath/jsonpath.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
 #include "ydb/library/yql/parser/pg_catalog/catalog.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
@@ -6043,6 +6044,25 @@ bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type,
         return false;
     }
 
+    return true;
+}
+
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx) {
+    if (!EnsureSpecificDataType(node, EDataSlot::Utf8, ctx))
+        return false;
+
+    if (node.IsCallable("Utf8")) {
+        if (TIssues issues; !NJsonPath::ParseJsonPath(node.Tail().Content(), issues, 7U)) {
+            TIssue issue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Invalid json path: " << node.Tail().Content());
+            if (bool(issues)) {
+                for (const auto& i : issues) {
+                    issue.AddSubIssue(new TIssue(i));
+                }
+            }
+            ctx.AddError(issue);
+            return false;
+        }
+    }
     return true;
 }
 

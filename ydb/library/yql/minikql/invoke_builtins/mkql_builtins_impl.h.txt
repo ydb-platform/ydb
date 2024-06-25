@@ -1609,6 +1609,9 @@ void AddDateComparisonKernelsForDate(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDate32>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDatetime64>, TPred>(owner);
     AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTimestamp64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDate32>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDatetime64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzTimestamp64>, TPred>(owner);
 }
 
 template<template<typename, typename, typename> class TPred>
@@ -1622,6 +1625,9 @@ void AddDateComparisonKernels(TKernelFamilyBase& owner) {
     AddDateComparisonKernelsForDate<NUdf::TDate32, TPred>(owner);
     AddDateComparisonKernelsForDate<NUdf::TDatetime64, TPred>(owner);
     AddDateComparisonKernelsForDate<NUdf::TTimestamp64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDate32, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDatetime64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzTimestamp64, TPred>(owner);
 
     // Interval can only be compared with itself
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);

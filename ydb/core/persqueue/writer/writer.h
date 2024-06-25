@@ -151,6 +151,11 @@ struct TEvPartitionWriter {
     };
 
     struct TEvDisconnected: public TEventLocal<TEvDisconnected, EvDisconnected> {
+        TEvDisconnected(TEvWriteResponse::EErrorCode errorCode)
+            : ErrorCode(errorCode) {
+        }
+
+        const TEvWriteResponse::EErrorCode ErrorCode;
     };
 
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {

@@ -627,6 +627,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     NKikimrPQ::TStatusResponse::TPartResult result;
     result.SetPartition(Partition.InternalPartitionId);
     result.SetGeneration(TabletGeneration);
+    result.SetCookie(++PQRBCookie);
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);

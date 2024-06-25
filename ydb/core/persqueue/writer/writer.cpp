@@ -219,8 +219,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Disconnected(EErrorCode errorCode) {
-        Send(Client, new TEvPartitionWriter::TEvDisconnected());
         BecomeZombie(errorCode, "Disconnected");
+        Send(Client, new TEvPartitionWriter::TEvDisconnected(errorCode));
     }
 
     /// GetWriteId

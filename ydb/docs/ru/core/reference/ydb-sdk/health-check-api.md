@@ -12,12 +12,14 @@ description: "Из статьи вы узнаете, как инициирова
 {% list tabs %}
 
 - C++
+
   Пример кода приложения для создания клиента:
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
   Вызов метода `SelfCheck`:
+
   ```
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
@@ -26,7 +28,8 @@ description: "Из статьи вы узнаете, как инициирова
 
 {% endlist %}
 
-## Response Structure {#response-structure}
+## Структура ответа {#response-structure}
+
 Полную структуру ответа можно посмотреть в файле [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) в {{ ydb-short-name }} Git репозитории.
 В результате вызова этого метода будет возвращена следующая структура:
 
@@ -59,6 +62,8 @@ message IssueLog {
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
+Описание всех полей в ответе представлено ниже:
+
 | Поле | Описание |
 |:----|:----|
 | `self_check_result` | содержит результат проверки БД:<ul><li>`GOOD`: Проблем не обнаружено.</li><li>`DEGRADED`: Обнаружена деградация одной из систем базы данных, но база данных все еще функционирует (например, допустимая потеря диска).</li><li>`MAINTENANCE_REQUIRED`: Обнаружена значительная деградация, есть риск потери доступности, требуется обслуживание.</li><li>`EMERGENCY`: Обнаружена серьезная проблема в базе данных с полной или частичной потерей доступности.</li></ul> |
@@ -74,12 +79,14 @@ message IssueLog {
 | `location` | Содержит информацию о хосте, на котором был вызван сервис `HealthCheck`. |
 
 
-## Call parameters {#call-parameters}
+## Параметры вызова {#call-parameters}
+
 Полный список дополнительных параметров представлен ниже:
 
 {% list tabs %}
 
 - C++
+
   ```c++
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
@@ -91,7 +98,7 @@ message IssueLog {
 {% endlist %}
 
 | Параметр | Тип | Описание |
-|:----|:----|
+|:----|:----|:----|
 | `ReturnVerboseStatus` | 'bool'        | Как было сказано ранее, этот параметр влияет на заполнение поля `database_status`. По-умолчанию `false`. |
 | `MinimumStatus`       | 'EStatusFlag' | Минимальный статус опасности, который будет появляться в ответе. Менее важные проблемы будут отброшены. По-умолчанию все проблемы будут перечислены. |
 | `MaximumLevel`        | 'int32'       | Максимальная глубина проблем в ответе. Проблемы более глубокого уровня будут отброшены. По-умолчанию все проблемы будут перечислены. |

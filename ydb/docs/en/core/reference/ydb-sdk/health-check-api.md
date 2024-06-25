@@ -12,13 +12,15 @@ To initiate the check, call the `SelfCheck` method from SDK `Ydb.Monitoring`. Yo
 {% list tabs %}
 
 - C++
+
   App code snippet for creating a client:
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
-  Calling `SelfCheck` method:
-  ```
 
+  Calling `SelfCheck` method:
+
+  ```
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
@@ -27,6 +29,7 @@ To initiate the check, call the `SelfCheck` method from SDK `Ydb.Monitoring`. Yo
 {% endlist %}
 
 ## Response Structure {#response-structure}
+
 For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
 Calling the `SelfCheck` method will return the following message:
 
@@ -57,6 +60,8 @@ Each issue has a nesting `level` - the higher the `level`, the deeper the ish is
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
+Description of all fields in the response is provided below:
+
 | Field | Description |
 |:----|:----|
 | `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No problems were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious problem was detected in the database, with complete or partial loss of availability.</li></ul> |
@@ -73,13 +78,14 @@ Each issue has a nesting `level` - the higher the `level`, the deeper the ish is
 | `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious problems at a high level. [Example](#example-verbose). |
 | `location` | Contains information about host, where `HealthCheck` service was called |
 
-
 ## Call parameters {#call-parameters}
+
 The whole list of extra parameters presented below:
 
 {% list tabs %}
 
 - C++
+
   ```c++
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
@@ -91,7 +97,7 @@ The whole list of extra parameters presented below:
 {% endlist %}
 
 | Parameter | Type | Description |
-|:----|:----|
+|:----|:----|:----|
 | `ReturnVerboseStatus` | `bool`         | As mentioned earlier, this parameter affects the filling of the `database_status` field. Default is false. |
 | `MinimumStatus`       | `EStatusFlag`  | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
 | `MaximumLevel`        | `int32`        | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |

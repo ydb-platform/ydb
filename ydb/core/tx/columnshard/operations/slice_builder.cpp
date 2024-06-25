@@ -12,11 +12,6 @@
 namespace NKikimr::NOlap {
 
 std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlices() {
-    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
-    if (!OriginalBatch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
-        return {};
-    }
     if (!OriginalBatch->num_rows()) {
         return std::vector<NKikimr::NArrow::TSerializedBatch>();
     }
@@ -36,19 +31,48 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
     return result;
 }
 
+void TBuildSlicesTask::ReplyError(const TString& message) {
+    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+    auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
+        NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
+    TActorContext::AsActorContext().Send(ParentActorId, result.release());
+}
+
 bool TBuildSlicesTask::DoExecute() {
+    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+    if (!OriginalBatch) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
+        ReplyError("no data in batch");
+        return true;
+    }
+    const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
+    {
+        const auto batchSchema = OriginalBatch->schema();
+        OriginalBatch = NArrow::ExtractColumns(OriginalBatch, indexSchema);
+        if (!OriginalBatch) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "incompatible schemas")("batch", batchSchema->ToString())
+                ("index", indexSchema->ToString());
+            ReplyError("incompatible schemas");
+            return true;
+        }
+    }
+    if (!OriginalBatch->schema()->Equals(indexSchema)) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())
+            ("index", indexSchema->ToString());
+        ReplyError("unequal schemas");
+        return true;
+    }
+
     WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
     auto batches = BuildSlices();
     WriteData.MutableWriteMeta().SetWriteMiddle3StartInstant(TMonotonic::Now());
-    auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     if (batches) {
+        auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
         auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches));
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), {std::make_shared<TWriteAggregation>(writeDataPtr)});
-        auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
-            NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), "Cannot slice input to batches");
-        TActorContext::AsActorContext().Send(ParentActorId, result.release());
+        ReplyError("Cannot slice input to batches");
     }
 
     return true;
@@ -269,7 +293,7 @@ private:
 
         auto batchResult = Merger->BuildResultBatch();
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
-            TabletId, ParentActorId, BufferActorId, std::move(WriteData), batchResult);
+            TabletId, ParentActorId, BufferActorId, std::move(WriteData), batchResult, ActualSchema);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
         return TConclusionStatus::Success();
     }
@@ -306,6 +330,13 @@ bool TBuildBatchesTask::DoExecute() {
         ReplyError("cannot extract incoming batch");
         return true;
     }
+    {
+        auto validationResult = batch->ValidateFull();
+        if (!validationResult.ok()) {
+            ReplyError("incorrect incoming batch: " + validationResult.ToString());
+            return true;
+        }
+    }
     const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
     for (auto&& i : batch->schema()->fields()) {
         if (i->nullable() && !ActualSchema->GetIndexInfo().IsNullableVerified(i->name())) {
@@ -323,14 +354,16 @@ bool TBuildBatchesTask::DoExecute() {
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Replace: {
             batch = ActualSchema->AddDefault(batch);
-            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
+                TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
             NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
             return true;
         }
 
         case NEvWrite::EModificationType::Upsert: {
             if (defaultFields.empty()) {
-                std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+                std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
+                    TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
                 NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
                 return true;
             } else {
@@ -350,7 +383,8 @@ bool TBuildBatchesTask::DoExecute() {
         }
         case NEvWrite::EModificationType::Delete: {
             batch = ActualSchema->AddDefault(batch);
-            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch);
+            std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(
+                TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
             NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
             return true;
         }

@@ -230,10 +230,11 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
 void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     if (!GetStageData().GetTable()) {
-        Y_ABORT_UNLESS(GetStageData().GetBlobs().size() == 1);
+        AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
-        auto batch = NArrow::DeserializeBatch(bData, GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion()));
-        Y_ABORT_UNLESS(batch);
+        auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
+        auto batch = NArrow::DeserializeBatch(bData, schema);
+        AFL_VERIFY(batch)("schema", schema->ToString());
         batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(batch, CommittedBlob.GetSnapshot());
         batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);

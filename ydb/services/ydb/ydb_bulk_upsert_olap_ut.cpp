@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
         { // Read all
             auto rows = ScanQuerySelect(client, tablePath, schema);
-            UNIT_ASSERT_GT(rows.size(), 0);
+            UNIT_ASSERT_EQUAL(rows.size(), 100);
         }
     }
 

@@ -15,6 +15,8 @@ private:
     const NActors::TActorId BufferActorId;
     std::shared_ptr<arrow::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
+    const std::shared_ptr<ISnapshotSchema> ActualSchema;
+    void ReplyError(const TString& message);
 protected:
     virtual bool DoExecute() override;
 public:
@@ -23,12 +25,14 @@ public:
     }
 
     TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId,
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch)
+        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<ISnapshotSchema>& actualSchema)
         : WriteData(std::move(writeData))
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
         , BufferActorId(bufferActorId)
         , OriginalBatch(batch)
+        , ActualSchema(actualSchema)
     {
     }
 };

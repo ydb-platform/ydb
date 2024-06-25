@@ -55,8 +55,9 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
 }
 
 std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema, const NEvWrite::EModificationType modificationType) const {
+    AFL_VERIFY(dataSchema);
     std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
-    auto batch = NArrow::DeserializeBatch(data, (dataSchema ? dataSchema : dstSchema));
+    auto batch = NArrow::DeserializeBatch(data, dataSchema);
     if (!batch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
         return nullptr;
@@ -68,7 +69,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
 
     // Correct schema
     if (TEnumOperator<NEvWrite::EModificationType>::NeedSchemaRestore(modificationType)) {
-        if (dataSchema) {
+        {
             batch = NArrow::ExtractColumns(batch, dstSchema, true);
             if (!batch) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot correct schema");

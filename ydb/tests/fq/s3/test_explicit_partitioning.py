@@ -13,7 +13,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
-class TestS3(TestYdsBase):
+class TestS3Chunk1(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
@@ -866,6 +866,8 @@ Banana,3,100'''
                 describe_result.query.issue
             )
 
+
+class TestS3Chunk2(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize(
         "client, column_type, is_correct",

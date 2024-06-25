@@ -13,7 +13,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_v2, yq_all
 
 
-class TestS3(TestYdsBase):
+class TestS3Chunk1(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
@@ -455,6 +455,8 @@ Pear,15,33,2024-05-06'''
         client.abort_query(query_id)
         client.wait_query(query_id)
 
+
+class TestS3Chunk2(TestYdsBase):
     @yq_v1  # v2 compute with multiple nodes is not supported yet
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr_params", [{"compute": 3}], indirect=True)

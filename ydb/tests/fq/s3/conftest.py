@@ -27,6 +27,19 @@ MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
 S3_PID_FILE = "s3.pid"
 
 
+class TestCounter:
+    def __init__(self, tests_count_limit, error_string):
+        self.tests_count_limit = tests_count_limit
+        self.error_string = error_string
+        self.number_tests = 0
+
+    def on_test_start(self):
+        self.number_tests += 1
+        assert self.number_tests <= self.tests_count_limit, \
+            f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, " \
+            "this may lead timeouts on CI, please split this class"
+
+
 @pytest.fixture(scope="module")
 def mvp_external_ydb_endpoint(request) -> str:
     return request.param["endpoint"] if request is not None and hasattr(request, 'param') else None
@@ -61,12 +74,12 @@ def s3(request) -> S3:
         recipes_common.stop_daemon(pid)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def kikimr_settings(request: pytest.FixtureRequest):
     return getattr(request, "param", dict())
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def kikimr_params(request: pytest.FixtureRequest):
     return request
 
@@ -85,15 +98,22 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
     ]
 
 
-@pytest.fixture(scope="module")
-def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint):
+@pytest.fixture(scope="class")
+def kikimr_starts_counter():
+    return TestCounter(25, "Number kikimr restarts in one class")
+
+
+@pytest.fixture(scope="class")
+def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+    # kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
         yield kikimr
 
 
-@pytest.fixture(scope="module")
-def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint):
+@pytest.fixture(scope="class")
+def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+    # kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
         yield kikimr
@@ -115,8 +135,14 @@ def kikimr(yq_version: str, kikimr_yqv1, kikimr_yqv2):
     return kikimr
 
 
+@pytest.fixture(scope="class")
+def tests_counter():
+    return TestCounter(200, "Number tests in one class")
+
+
 @pytest.fixture
-def client(kikimr, request=None):
+def client(kikimr, tests_counter, request=None):
+    # tests_counter.on_test_start()
     client = FederatedQueryClient(
         request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
     )
@@ -128,8 +154,5 @@ def client(kikimr, request=None):
 
 @pytest.fixture
 def unique_prefix(request: pytest.FixtureRequest):
-    name_hash = hash(request.node.name)
-    if name_hash >= 0:
-        return f"p{name_hash}_"
-    else:
-        return f"n{-name_hash}_"
+    name_hash = abs(hash(request.node.name))
+    return f"h{name_hash}_{request.function.__name__}"

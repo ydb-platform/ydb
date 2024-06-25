@@ -17,7 +17,7 @@ ValueByTypeExtractors = {
 }
 
 
-class TestBindings:
+class TestBindingsChunk1:
     @staticmethod
     def _preprocess_query(sql: str, yq_version: str) -> str:
         if yq_version == 'v1':
@@ -40,7 +40,7 @@ class TestBindings:
     @staticmethod
     def _assert_query_results(client: FederatedQueryClient, sql: str, yq_version: str, expected_result_set):
         query_id = client.create_query(
-            "simple", TestBindings._preprocess_query(sql, yq_version), type=fq.QueryContent.QueryType.ANALYTICS
+            "simple", TestBindingsChunk1._preprocess_query(sql, yq_version), type=fq.QueryContent.QueryType.ANALYTICS
         ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
@@ -347,6 +347,8 @@ class TestBindings:
         )
         assert modify_binding_result.issues[0].severity == 1
 
+
+class TestBindingsChunk2:
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr_settings", [{"bindings_mode": "BM_DROP_WITH_WARNING"}], indirect=True)

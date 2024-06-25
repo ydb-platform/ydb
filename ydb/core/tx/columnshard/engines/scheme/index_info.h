@@ -58,10 +58,13 @@ public:
         return !it->second.NotNull;
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const {
-        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
-        return features.GetDefaultWriteValue();
+    bool IsNullableVerified(const ui32 colId) const {
+        auto it = Columns.find(colId);
+        AFL_VERIFY(it != Columns.end());
+        return !it->second.NotNull;
     }
+
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const;
 
     std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const std::string& colName) const {
         auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));

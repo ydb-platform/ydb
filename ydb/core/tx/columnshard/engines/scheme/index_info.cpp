@@ -400,4 +400,14 @@ std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::Get
     return CompactionPlannerConstructor;
 }
 
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultWriteValueVerified(const std::string& colName) const {
+    const ui32 columnId = GetColumnIdVerified(colName);
+    auto& features = GetColumnFeaturesVerified(columnId);
+    if (!features.GetDefaultWriteValue() && !IsNullableVerified(columnId)) {
+        return NArrow::DefaultScalar(GetColumnFieldVerified(columnId)->type());
+    } else {
+        return features.GetDefaultWriteValue();
+    }
+}
+
 } // namespace NKikimr::NOlap

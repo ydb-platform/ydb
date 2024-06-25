@@ -7,9 +7,9 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan] " << stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan] " << stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
+#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
+#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
 
 namespace NKikimr::NDataShard {
 
@@ -201,6 +201,10 @@ class TDataShard::TTxCdcStreamScanProgress
         }
 
         return row;
+    }
+
+    ui64 TabletID() const {
+        return Self->TabletID();
     }
 
 public:
@@ -576,6 +580,10 @@ class TDataShard::TTxCdcStreamScanRun: public TTransactionBase<TDataShard> {
         ));
     }
 
+    ui64 TabletID() const {
+        return Self->TabletID();
+    }
+
 public:
     explicit TTxCdcStreamScanRun(TDataShard* self, TEvDataShard::TEvCdcStreamScanRequest::TPtr ev)
         : TBase(self)
@@ -714,8 +722,7 @@ void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const T
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!CdcStreamScanManager.Has(ev->Get()->TxId)) {
-        LOG_W("Unknown cdc stream scan actor registered"
-            << ": at: " << TabletID());
+        LOG_W("Unknown cdc stream scan actor registered");
         return;
     }
 

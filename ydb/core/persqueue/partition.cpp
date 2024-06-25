@@ -2170,6 +2170,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
             }, std::nullopt};
+            msg.Internal = true;
 
             ExecRequest(msg, *Parameters, PersistRequest.Get());
 

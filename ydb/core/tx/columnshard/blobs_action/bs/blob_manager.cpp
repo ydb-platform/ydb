@@ -345,12 +345,8 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             CollectGenStepInFlight = LastCollectedGenStep;
         } else {
             AFL_VERIFY(GCBarrierPreparation.Generation() != CurrentGen);
-            if (GCBarrierPreparation < LastCollectedGenStep) {
-                CollectGenStepInFlight = LastCollectedGenStep;
-            } else {
-                AFL_VERIFY(LastCollectedGenStep < GCBarrierPreparation)("last", LastCollectedGenStep)("prepared", GCBarrierPreparation);
-                CollectGenStepInFlight = GCBarrierPreparation;
-            }
+            AFL_VERIFY(LastCollectedGenStep < GCBarrierPreparation)("last", LastCollectedGenStep)("prepared", GCBarrierPreparation);
+            CollectGenStepInFlight = GCBarrierPreparation;
         }
         DrainKeepTo(*CollectGenStepInFlight, gcContext);
         DrainDeleteTo(*CollectGenStepInFlight, gcContext);

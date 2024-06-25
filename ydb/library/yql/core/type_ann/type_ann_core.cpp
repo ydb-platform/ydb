@@ -2749,7 +2749,7 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals:" << *dataTypeOne << " != " << *dataTypeTwo
+                        TStringBuilder() << "Cannot calculate with different decimals."
                     ));
 
                     return IGraphTransformer::TStatus::Error;

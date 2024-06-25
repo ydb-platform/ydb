@@ -1758,7 +1758,8 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 || TCoForwardList::Match(node.Get())
                 || TCoApply::Match(node.Get())
                 || TCoSwitch::Match(node.Get())
-                || node->IsCallable("DqReplicate");
+                || node->IsCallable("DqReplicate")
+                || TCoPartitionsByKeys::Match(node.Get());
         }
     );
 
@@ -1795,6 +1796,11 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 if (auto node = FindNonYieldTransparentNodeImpl(candidate->Child(i)->TailPtr(), udfSupportsYield, TNodeSet{&candidate->Child(i)->Head().Head()})) {
                     return node;
                 }
+            }
+        } else if (TCoPartitionsByKeys::Match(candidate.Get())) {
+            auto *handlerChild = candidate->Child(TCoPartitionsByKeys::idx_ListHandlerLambda);
+            if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Head()})) {
+                return node;
             }
         }
     }

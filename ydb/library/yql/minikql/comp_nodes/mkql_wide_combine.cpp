@@ -342,13 +342,12 @@ public:
         ProcessSpilled
     };
     TSpillingSupportState(
-        TMemoryUsageInfo* memInfo, const TCombinerNodes& nodes, size_t wideFieldsIndex,
+        TMemoryUsageInfo* memInfo, size_t wideFieldsIndex,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
-        , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
@@ -486,7 +485,7 @@ public:
             std::cerr << "MISHA\n";
         }
         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-        for (size_t i = 0; i < Nodes.ItemNodes.size(); ++i) {
+        for (size_t i = 0; i < ItemNodesSize; ++i) {
             if (fields[i]) {
                 UsedNodes.insert(i);
                 BufferForUsedInputItems.push_back(*fields[i]);
@@ -711,7 +710,7 @@ private:
             }
             auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
             for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
-                if (Nodes.IsInputItemNodeUsed(i)) {
+                if (UsedNodes.contains(i)) {
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 } else {
                     fields[i] = nullptr;
@@ -779,7 +778,6 @@ public:
 
 private:
     ui64 NextBucketToSpill = 0;
-    const TCombinerNodes& Nodes;
     // TState InMemoryProcessingState;
     const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
@@ -1585,7 +1583,7 @@ private:
     }
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, bool allowSpilling) const {
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(Nodes, WideFieldsIndex,
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(WideFieldsIndex,
             UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),

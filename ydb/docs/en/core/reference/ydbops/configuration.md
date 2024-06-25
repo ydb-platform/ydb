@@ -12,6 +12,11 @@
 
 The configuration file for `ydbops` is a YAML-formatted file containing multiple profiles. Profiles for `ydbops` work in the same way as profiles in [{{ ydb-short-name }} CLI](../ydb-cli/profile/index.md) do.
 
+Default configuration file location follows the same convention as {{ ydb-short-name }} CLI does, it is located in the same folder in `ydbops` subdirectory. For comparison:
+
+- default configuration file for {{ ydb-short-name }} CLI: `$HOME/ydb/config/config.yaml`
+- default configuration file for `ydbops` CLI is in same folder, `ydbops` subdirectory: `$HOME/ydb/ydbops/config/config.yaml`
+
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 
 ### Examples
@@ -89,9 +94,3 @@ For an explanation of which options take precedence, please invoke `ydbops --hel
 - `YDB_TOKEN` can be passed instead of the `--token-file` flag or `token-file` profile option.
 - `YDB_PASSWORD` can be passed instead of the `--password-file` flag or `password-file` profile option.
 - `YDB_USER` can be passed instead of the `--user` flag or `user` profile option.
-
-## See also
-
-- [{#T}](index.md)
-- [{#T}](install.md)
-- [{#T}](rolling-restart-scenario.md)

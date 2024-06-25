@@ -1,4 +1,6 @@
-# Performing {{ ydb-short-name }} cluster restart using ydbops
+# Scenarios 
+
+## Performing {{ ydb-short-name }} cluster restart using ydbops
 
 {% include [warning.md](_includes/warning.md) %}
 

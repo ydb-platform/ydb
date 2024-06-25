@@ -7,13 +7,13 @@
 ## See also
 
 * To install the utility, follow the [instructions](install.md).
-* see [configuration reference](configuration.md) for available configuration options.
+* See [configuration reference](configuration.md) for available configuration options.
 * The source code of `ydbops` can be found [on GitHub](https://github.com/ydb-platform/ydbops).
 
 ## Currently supported scenarios
 
-- Performing a [rolling restart of the cluster](rolling-restart-scenario.md).
+See the list of currently supported scenarios [here](scenarios.md).
 
 ## Scenarios in development
 
-- Requesting permission to take out a set of {{ ydb-short-name }} nodes for maintenance without breaking {{ ydb-short-name } fault model invariants.
+- Requesting permission to take out a set of {{ ydb-short-name }} nodes for maintenance without breaking {{ ydb-short-name }} fault model invariants.

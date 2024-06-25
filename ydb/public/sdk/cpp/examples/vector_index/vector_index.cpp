@@ -400,6 +400,8 @@ struct TBulkSender {
     }
 
     void CreateLevel(ui8 level) {
+        Count = 0;
+        Cout << "Start create level: " << (int)level << Endl;
         if (level >= Options.Levels) {
             return;
         }
@@ -411,6 +413,7 @@ struct TBulkSender {
     }
 
     void DropLevel(ui8 level) {
+        Cout << "Finish create level: " << (int)level << Endl;
         auto indexTable = FullIndexName(Options);
         if (level % 2 == 0) {
             DropTable(Client, indexTable + "_0");
@@ -443,10 +446,14 @@ struct TBulkSender {
 
 private:
     void WaitImpl() {
-        for (auto& f : ToWait) {
-            ThrowOnError(f.ExtractValueSync());
+        if (!ToWait.empty()) {
+            Count += ToWait.size();
+            // Cout << "Wait for insertions " << Count << " / " << Options.Rows / kBulkSize << Endl;
+            for (auto& f : ToWait) {
+                ThrowOnError(f.ExtractValueSync());
+            }
+            ToWait.clear();
         }
-        ToWait.clear();
         ToWait.swap(ToSend);
     }
 
@@ -454,6 +461,7 @@ private:
     TTableClient& Client;
     std::vector<TAsyncStatus> ToSend;
     std::vector<TAsyncStatus> ToWait;
+    ui64 Count = 0;
 };
 
 struct TBulkWriter {
@@ -526,8 +534,23 @@ private:
     bool Embeddings = true;
 };
 
+template <typename TFunc>
+struct [[nodiscard]] Finally {
+    Finally(TFunc&& func)
+        : Func{std::move(func)}
+    {
+    }
+
+    ~Finally() noexcept {
+        Func();
+    }
+
+private:
+    [[no_unique_address]] TFunc Func;
+};
+
 static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
-    auto cores = std::thread::hardware_concurrency() / 2;
+    const auto cores = std::thread::hardware_concurrency() / 2;
     NVectorIndex::TThreadPool tpCompute{cores};
     NVectorIndex::TThreadPool tpIO{cores};
 
@@ -546,6 +569,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             }
             ++i;
         }
+        writer.Send();
         if (level >= options.Levels) {
             return TClusterizer::TClusters{};
         }
@@ -569,10 +593,15 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
 
     NVectorIndex::TWaitGroup wg;
     std::deque<TClusterizer::TClusters> clusters;
-    auto processClusters = [&](ui32 count) {
+    ui64 countDoneClusters = 0;
+    ui64 countAllClusters = 0;
+
+    auto processClusters = [&](ui8 level, ui32 count) {
         if (clusters.size() < count) {
             return;
         }
+        countDoneClusters += clusters.size();
+        Cout << "Wait for " << countDoneClusters << " / " << countAllClusters << " clusters on " << (int)level << " level" << Endl;
         wg.Wait();
         for (auto& cluster : clusters) {
             processCluster(cluster);
@@ -595,10 +624,13 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             processCluster(clusters);
             return;
         }
-        processClusters(cores);
+        processClusters(level, cores);
         auto& p = clusters.emplace_back();
         wg.Add();
         tpCompute.Submit([&, level, parentId, count]() mutable {
+            Finally done = [&] {
+                wg.Done();
+            };
             TTableIterator reader{options, client, tpIO};
             TBulkWriter writer{sender};
             TClusterizer clusterizer{reader, CosineDistance,
@@ -606,24 +638,39 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
                                          writer.WritePosting(parentId, id, std::move(embedding));
                                      }};
             p = makeClustersImpl(reader, writer, clusterizer, level, parentId, count);
-            wg.Done();
         });
+    };
+    Finally join = [&] {
+        Cout << "Start join pools" << Endl;
+        tpCompute.Join();
+        tpIO.Join();
+        Cout << "Finish UpdateKMeans " << Endl;
     };
     // TODO(mbkkt) start as bfs but continue as dfs?
     next.push_back({0, options.Rows});
     for (ui8 level = 1; !next.empty(); ++level) {
-        sender.CreateLevel(level);
-        auto curr = std::move(next);
-        if (level < options.Levels) {
-            next.reserve(curr.size() * options.Clusters);
+        try {
+            sender.CreateLevel(level);
+            auto curr = std::move(next);
+            countDoneClusters = 0;
+            countAllClusters = curr.size();
+            if (level < options.Levels) {
+                next.reserve(countAllClusters * options.Clusters);
+            }
+            for (auto& meta : curr) {
+                makeClusters(level, meta.ParentId, meta.Count);
+            }
+            curr = {};
+            processClusters(level, 1);
+            sender.DropLevel(level);
+            sender.Wait();
+        } catch (const TVectorException& e) {
+            Cerr << "Failed: " << e << Endl;
+            throw;
+        } catch (const std::exception& e) {
+            Cerr << "Failed: " << e.what() << Endl;
+            throw;
         }
-        for (auto& meta : curr) {
-            makeClusters(level, meta.ParentId, meta.Count);
-        }
-        curr = {};
-        processClusters(0);
-        sender.DropLevel(level);
-        sender.Wait();
     }
 }
 

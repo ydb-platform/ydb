@@ -35,6 +35,9 @@ struct TOptions {
     ui16 Levels = 2;
     ui16 Clusters = 80;
     ui16 Iterations = 10;
+    // ui16 Levels = 3;
+    // ui16 Clusters = 120;
+    // ui16 Iterations = 3;
     bool LastLevelEmbeddings = false;
 };
 

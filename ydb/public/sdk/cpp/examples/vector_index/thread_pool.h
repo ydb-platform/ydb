@@ -55,14 +55,24 @@ public:
     template <typename TFunc>
     void Submit(TFunc&& func) noexcept {
         auto task = std::make_unique<TTaskImpl<std::decay_t<TFunc>>>(std::forward<TFunc>(func));
-        {
-            std::lock_guard lock{M};
-            Tasks.emplace(task.release());
+        std::unique_lock lock{M};
+        while (true) {
+            auto tasks = Tasks.size();
+            auto threads =  Threads.size();
+            if (Y_LIKELY(tasks < threads * 2)) {
+                break;
+            }
+            lock.unlock();
+            Cout << "ThreadPool overloaded " <<  tasks << " / " << threads << Endl;
+            std::this_thread::sleep_for(std::chrono::seconds{1});
+            lock.lock();
         }
+        Tasks.emplace(task.release());
+        lock.unlock();
         CV.notify_one();
     }
 
-    ~TThreadPool() noexcept {
+    void Join() noexcept {
         {
             std::lock_guard lock{M};
             Tasks.emplace(nullptr);
@@ -71,6 +81,7 @@ public:
         for (auto& thread : Threads) {
             thread.join();
         }
+        Threads.clear();
     }
 
 private:

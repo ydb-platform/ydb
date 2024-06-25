@@ -810,7 +810,19 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     }
 
     BLOG_D("THive::Handle::TEvKickTablet TabletId=" << tabletId);
-    Execute(CreateRestartTablet(tabletId));
+    TBestNodeResult result = FindBestNode(*tablet);
+    if (std::holds_alternative<TTooManyTabletsStarting>(result)) {
+        if (tablet->Node == nullptr || !tablet->Node->IsAllowedToRunTablet(*tablet)) {
+            Execute(CreateRestartTablet(tabletId));
+        }
+    } else if (std::holds_alternative<TNodeInfo*>(result)) {
+        TNodeInfo* node = std::get<TNodeInfo*>(result);
+        if (node != tablet->Node && IsTabletMoveExpedient(*tablet, *node)) {
+            Execute(CreateRestartTablet(tabletId));
+        }
+    } else {
+        Execute(CreateRestartTablet(tabletId));
+    }
 }
 
 void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {

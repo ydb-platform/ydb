@@ -3957,7 +3957,7 @@ private:
             const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
 
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, intermediateSchema.IsUndefined() ? 0ul : nativeTypeCompat, true)); // Explicitly disable native types for intermediate data because of YT limitations
+            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, !useIntermediateStreams));
             reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));

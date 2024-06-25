@@ -33,6 +33,7 @@ def main():
     parser.add_argument('--pragma', default=[], action='append', help='custom pragmas')
     parser.add_argument('--table-path-prefix', default=None, help='table path prefix')
     parser.add_argument('--cluster-name', default='hahn', help='YtSaurus cluster name')
+    parser.add_argument('--decimal', default=False)
     args = parser.parse_args()
     profile = None
     for p in profiles:
@@ -72,6 +73,11 @@ def main():
         b.add_link("pragmas.sql", p.pragmas)
     else:
         b.add("pragmas.sql", "")
+    if args.syntax == "yql":
+        if args.decimal:
+            b.add_link("consts.jinja", "consts_decimal.yql")
+        else:
+            b.add_link("consts.jinja", "consts.yql")
     b.add_link("tables.jinja", p.tables)
     queries = None
     if args.variant == "h":

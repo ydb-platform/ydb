@@ -15,7 +15,7 @@ group by a.sr_customer_sk
 ,a.sr_store_sk);
 
 $avg_total_returns = (
-    select ctr_store_sk, avg(ctr_total_return)*1.2 as ctr_avg
+    select ctr_store_sk, avg(ctr_total_return)*$z1_2_35 as ctr_avg
     from $customer_total_return
     group by ctr_store_sk
 );

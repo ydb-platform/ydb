@@ -73,9 +73,9 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 
 | Parameter | Description |
 |:----|:----|
-| `ReturnVerboseStatus` | as was said earlier this parameter affects the filling of `database_status` field. |
-| `MinimumStatus` | the minimum status that will be given in the response. Issues with a better status will be discarded. |
-| `MaximumLevel` | maximum depth of issues in response. Deeper levels will be discarded |
+| `ReturnVerboseStatus` | This parameter determins whether the `database_status` response field is filled. |
+| `MinimumStatus` | The minimum status that will be included in the response. Issues with a lower status will be discarded. |
+| `MaximumLevel` | The maximum depth of issues to include in the response. Deeper levels will be discarded. |
 
 ## Possible problems {#problems}
 

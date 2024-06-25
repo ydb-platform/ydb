@@ -364,6 +364,11 @@ public:
             return false;
         }
 
+        // Inconsistent writes (CTAS) don't require locks.
+        if (IsSplitted() && !HasTxSink()) {
+            return false;
+        }
+
         if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
             return true;  // Continue to acquire locks
         }
@@ -418,16 +423,35 @@ public:
         return tx;
     }
 
+    bool HasTxSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                if (!settings.GetInconsistentTx()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool HasTxSink() const {
+        const auto& query = PreparedQuery->GetPhysicalQuery();
+        for (auto& tx : query.GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                if (HasTxSinkInStage(stage)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool HasTxSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
         for (const auto& stage : tx->GetStages()) {
-            for (const auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    if (!settings.GetInconsistentTx()) {
-                        return true;
-                    }
-                }
+            if (HasTxSinkInStage(stage)) {
+                return true;
             }
         }
         return false;

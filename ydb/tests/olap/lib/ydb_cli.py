@@ -24,10 +24,16 @@ class YdbCliHelper:
         else:
             return [cli]
 
+    class QueuePlan:
+        def __init__(self, plan: dict | None = None, table: str | None = None, ast: str  | None = None) -> None:
+            self.plan = plan
+            self.table = table
+            self.ast = ast
+
     class WorkloadRunResult:
         def __init__(
             self, stats: dict[str, dict[str, any]] = {}, query_out: str = None, stdout: str = None, stderr: str = None,
-            error_message: str | None = None
+            error_message: str | None = None, plan: YdbCliHelper.QueuePlan | None = None
         ) -> None:
             self.stats = stats
             self.query_out = query_out if str != '' else None
@@ -35,6 +41,7 @@ class YdbCliHelper:
             self.stderr = stderr if stderr != '' else None
             self.success = error_message is None
             self.error_message = '' if self.success else error_message
+            self.plan = plan
 
     @staticmethod
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
@@ -42,6 +49,7 @@ class YdbCliHelper:
         try:
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
+            plan_path = yatest.common.work_path(f'q{query_num}.plan')
             cmd = YdbCliHelper.get_cli_command() + [
                 '-e', YdbCluster.ydb_endpoint,
                 '-d', f'/{YdbCluster.ydb_database}',
@@ -52,6 +60,7 @@ class YdbCliHelper:
                 '--include', str(query_num),
                 '--iterations', str(iterations),
                 '--query-settings', "PRAGMA ydb.HashJoinMode='grace';",
+                '--plan', plan_path
             ]
             err = None
             try:
@@ -73,9 +82,21 @@ class YdbCliHelper:
             if (os.path.exists(qout_path)):
                 with open(qout_path, 'r') as r:
                     qout = r.read()
+            plan = YdbCliHelper.QueuePlan()
+            if (os.path.exists(plan_path + '.json')):
+                with open(plan_path + '.json') as f:
+                    plan.plan = json.load(f)
+            if (os.path.exists(plan_path + '.table')):
+                with open(plan_path + '.table') as f:
+                    plan.table = f.read()
+            if (os.path.exists(plan_path + '.ast')):
+                with open(plan_path + '.ast') as f:
+                    plan.ast = f.read()
+
             return YdbCliHelper.WorkloadRunResult(
                 stats=stats,
                 query_out=qout,
+                plan=plan,
                 stdout=exec.stdout,
                 stderr=exec.stderr,
                 error_message=err

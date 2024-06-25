@@ -139,6 +139,8 @@ class IQueryResultScanner {
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
     YDB_READONLY_DEF(TDuration, ServerTiming);
+    YDB_READONLY_DEF(TString, QueryPlan);
+    YDB_READONLY_DEF(TString, PlanAst);
 
 public:
     virtual ~IQueryResultScanner() = default;
@@ -166,11 +168,15 @@ public:
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
                     ServerTiming += streamPart.GetQueryStats().GetTotalDuration();
+                    QueryPlan = streamPart.GetQueryStats().GetPlan().GetOrElse("");
+                    PlanAst = streamPart.GetQueryStats().GetAst().GetOrElse("");
                 }
             } else {
                 const auto& stats = streamPart.GetStats();
                 if (stats) {
                     ServerTiming += stats->GetTotalDuration();
+                    QueryPlan = stats->GetPlan().GetOrElse("");
+                    PlanAst = stats->GetAst().GetOrElse("");
                 }
             }
 
@@ -281,7 +287,7 @@ public:
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 
@@ -293,13 +299,19 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+        return TQueryBenchmarkResult::Result(
+            scannerYson->GetResult(),
+            *scannerCSV,
+            composite.GetServerTiming(),
+            composite.GetQueryPlan(),
+            composite.GetPlanAst()
+            );
     }
 }
 
 TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
     NQuery::TExecuteQuerySettings settings;
-    settings.StatsMode(NQuery::EStatsMode::Basic);
+    settings.StatsMode(NQuery::EStatsMode::Full);
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
@@ -314,7 +326,13 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+        return TQueryBenchmarkResult::Result(
+            scannerYson->GetResult(),
+            *scannerCSV,
+            composite.GetServerTiming(),
+            composite.GetQueryPlan(),
+            composite.GetPlanAst()
+            );
     }
 }
 

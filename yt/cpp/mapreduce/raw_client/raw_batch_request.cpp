@@ -202,7 +202,7 @@ class TTableColumnarStatisticsParser
 public:
     void SetResponse(TMaybe<TNode> node) override
     {
-        EnsureType(node, TNode::Map);
+        EnsureType(node, TNode::List);
         TVector<TTableColumnarStatistics> statistics;
         Deserialize(statistics, *node);
         Result_.SetValue(std::move(statistics));

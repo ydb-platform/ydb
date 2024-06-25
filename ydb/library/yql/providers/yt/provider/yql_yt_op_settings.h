@@ -142,6 +142,7 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
 bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
 TString NormalizeColumnGroupSpec(const TStringBuf spec);
+const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
 

@@ -523,6 +523,28 @@
         }
     ],
     "test.test[bigdate-common_type-default.txt-Results]": [],
+    "test.test[bigdate-tzcasts-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1809005/f38e3f8d804c3c736510cb1eca690761b713a4b0/resource.tar.gz#test.test_bigdate-tzcasts-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-tzcasts-default.txt-Debug]": [
+        {
+            "checksum": "e165ddb215f7427d80ce814013b9a40d",
+            "size": 1457,
+            "uri": "https://{canondata_backend}/1809005/f38e3f8d804c3c736510cb1eca690761b713a4b0/resource.tar.gz#test.test_bigdate-tzcasts-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-tzcasts-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1809005/f38e3f8d804c3c736510cb1eca690761b713a4b0/resource.tar.gz#test.test_bigdate-tzcasts-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-tzcasts-default.txt-Results]": [],
     "test.test[bitcast_implicit-sub_bitcast-default.txt-Analyze]": [
         {
             "checksum": "b2a2eb5d6b0a138ee924c128fc7738ef",
@@ -649,9 +671,9 @@
     ],
     "test.test[blocks-interval_add_interval_scalar--Debug]": [
         {
-            "checksum": "1ac38f3dc8ffa6d142d22a7ffcabb960",
-            "size": 2630,
-            "uri": "https://{canondata_backend}/1946324/13c1a0d2daa9a7a739bdd11a1f09b07e46eb8f38/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql_patched"
+            "checksum": "14a02351bdf9a8bb6c00e8ab8307f8fe",
+            "size": 2735,
+            "uri": "https://{canondata_backend}/1597364/1370803313e5d0237dc90749ce72827c7dd82536/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-interval_add_interval_scalar--Plan]": [

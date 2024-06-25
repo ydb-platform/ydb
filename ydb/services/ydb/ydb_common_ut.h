@@ -357,4 +357,11 @@ using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<T
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
 
+Ydb::StatusIds::StatusCode WaitForStatus(
+    std::shared_ptr<grpc::Channel> channel, const TString& opId,
+    TString* error = nullptr,
+    int retries = 10,
+    TDuration sleepDuration = NYdb::ITERATION_DURATION
+);
+
 }

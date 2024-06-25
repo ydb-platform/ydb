@@ -25,6 +25,7 @@ struct IThreadPool
 
     //! Enables changing thread pool configuration at runtime.
     virtual void Configure(int threadCount) = 0;
+    virtual void Configure(TDuration pollingPeriod) = 0;
 
     //! Returns the invoker for enqueuing callbacks into the thread pool.
     virtual const IInvokerPtr& GetInvoker() = 0;

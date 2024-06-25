@@ -33,13 +33,13 @@ $wswscs =
 select d_week_seq1
 -- NB: Use Math::Round
 -- NB: Negate second argument!!!
-       ,Math::Round(sun_sales1/sun_sales2,-2)
-       ,Math::Round(mon_sales1/mon_sales2,-2)
-       ,Math::Round(tue_sales1/tue_sales2,-2)
-       ,Math::Round(wed_sales1/wed_sales2,-2)
-       ,Math::Round(thu_sales1/thu_sales2,-2)
-       ,Math::Round(fri_sales1/fri_sales2,-2)
-       ,Math::Round(sat_sales1/sat_sales2,-2)
+       ,$round(sun_sales1/sun_sales2,-2)
+       ,$round(mon_sales1/mon_sales2,-2)
+       ,$round(tue_sales1/tue_sales2,-2)
+       ,$round(wed_sales1/wed_sales2,-2)
+       ,$round(thu_sales1/thu_sales2,-2)
+       ,$round(fri_sales1/fri_sales2,-2)
+       ,$round(sat_sales1/sat_sales2,-2)
  from
  (select wswscs.d_week_seq d_week_seq1
         ,sun_sales sun_sales1

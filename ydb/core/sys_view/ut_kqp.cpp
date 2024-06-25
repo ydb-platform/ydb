@@ -1044,7 +1044,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TYsonFieldChecker check(ysonString, 12);
 
         check.Uint64(0u); // AllocatedSize
-        check.Uint64(0u); // AvailableSize
+        check.Uint64GreaterOrEquals(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies

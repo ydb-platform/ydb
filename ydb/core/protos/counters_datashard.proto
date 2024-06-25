@@ -31,6 +31,7 @@ enum ESimpleCounters {
     COUNTER_PROPOSE_QUEUE_SIZE = 21                                [(CounterOpts) = {Name: "ProposeQueueSize"}];
     COUNTER_DELAYED_PROPOSE_QUEUE_SIZE = 22                        [(CounterOpts) = {Name: "DelayedProposeQueueSize"}];
     COUNTER_WAITING_TX_QUEUE_SIZE = 23                             [(CounterOpts) = {Name: "WaitingTxQueueSize"}];
+    COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY = 24                    [(CounterOpts) = {Name: "ChangeQueueReservedCapacity"}];
 }
 
 enum ECumulativeCounters {

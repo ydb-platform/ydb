@@ -280,7 +280,7 @@ message TTableServiceConfig {
     optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
-    optional bool OldLookupJoinBehaviour = 59 [default = true]; 
+    optional bool OldLookupJoinBehaviour = 59 [default = true];
 
     optional bool EnableOltpSink = 60 [default = false];
 
@@ -290,6 +290,8 @@ message TTableServiceConfig {
         BLOCK_CHANNELS_FORCE = 2;
     }
     optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_SCALAR];
-    
+
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
+
+    optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 };

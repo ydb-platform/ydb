@@ -19,7 +19,7 @@ where i_category in ('Children'))
  and     d_year                  = 1998
  and     d_moy                   = 10
  and     ss_addr_sk              = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id),
  cs as (
  select
@@ -40,7 +40,7 @@ where i_category in ('Children'))
  and     d_year                  = 1998
  and     d_moy                   = 10
  and     cs_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id),
  ws as (
  select
@@ -61,7 +61,7 @@ where i_category in ('Children'))
  and     d_year                  = 1998
  and     d_moy                   = 10
  and     ws_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id)
   select
   i_item_id

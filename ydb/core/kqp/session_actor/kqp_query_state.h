@@ -103,6 +103,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
+    TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
@@ -186,6 +187,10 @@ public:
 
     std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
         return QueryParameterTypes;
+    }
+
+    TVector<NKikimrKqp::TParameterDescription> GetResultParams() const {
+        return ResultParams;
     }
 
     void EnsureAction() {

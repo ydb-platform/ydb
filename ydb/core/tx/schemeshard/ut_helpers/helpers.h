@@ -235,8 +235,6 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup);
     GENERIC_HELPERS(DropPQGroup);
     DROP_BY_PATH_ID_HELPERS(DropPQGroup);
-    GENERIC_HELPERS(AllocatePQ);
-    GENERIC_HELPERS(DeallocatePQ);
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume);
@@ -272,6 +270,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(CreateView);
     GENERIC_HELPERS(DropView);
     DROP_BY_PATH_ID_HELPERS(DropView);
+
+    // resource pool
+    GENERIC_HELPERS(CreateResourcePool);
+    GENERIC_HELPERS(AlterResourcePool);
+    GENERIC_HELPERS(DropResourcePool);
+    DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

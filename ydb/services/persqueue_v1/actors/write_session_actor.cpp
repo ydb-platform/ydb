@@ -280,8 +280,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWrit
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
-    if (State == ES_DYING)
+    if (State == ES_DYING) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " is already DEAD");
         return;
+    }
 
     if (SessionsActive) {
         SessionsActive.Dec();
@@ -1045,7 +1047,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 
     if (State != ES_INITED) {
-        return CloseSession(TStringBuilder() << "got write response but not wait for it (" << static_cast<int>(State) << ")", PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        return CloseSession(TStringBuilder() << "got write response but not wait for it (" << static_cast<int>(State) << ")", PersQueue::ErrorCode::ERROR, ctx);
     }
 
     if (AcceptedRequests.empty()) {

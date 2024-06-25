@@ -1,6 +1,6 @@
 # Adding storage groups
 
-As the amount of stored data grows, you may need to add disks to your {{ ydb-short-name }} cluster. You can add disks either to existing nodes or along with new nodes. To make the resources of new disks available to the database, add [storage groups](../../concepts/databases.md#storage-groups).
+As the amount of stored data grows, you may need to add disks to your {{ ydb-short-name }} cluster. You can add disks either to existing nodes or along with new nodes. To make the resources of new disks available to the database, add [storage groups](../../concepts/glossary.md#storage-groups).
 
 To add new storage groups, use [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md).
 

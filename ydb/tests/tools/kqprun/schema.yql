@@ -1,0 +1,13 @@
+
+CREATE OBJECT local_password (TYPE SECRET) WITH (value = "password");
+
+CREATE EXTERNAL DATA SOURCE mr_nvme_testing_08_greenplum_native WITH (
+    SOURCE_TYPE="MySQL",
+    MDB_CLUSTER_ID="c9qtch667svt05lt3taa",
+    AUTH_METHOD="MDB_BASIC",
+    SERVICE_ACCOUNT_ID="my_sa",
+    SERVICE_ACCOUNT_SECRET_NAME="local_password",
+    LOGIN="user",
+    DATABASE_NAME="mysql1",
+    PASSWORD_SECRET_NAME="local_password"
+);

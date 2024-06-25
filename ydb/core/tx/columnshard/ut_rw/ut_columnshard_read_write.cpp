@@ -2625,7 +2625,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) {
-                Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl;
+                Cerr << (TStringBuilder() << "EvReadFinished " << msg->RequestCookie << Endl);
                 inFlightReads.insert(msg->RequestCookie);
                 if (blockReadFinished) {
                     return true;
@@ -2635,45 +2635,52 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(append->AppendedPortions.size());
-                    Cerr << "Added portions:";
+                    TStringBuilder sb;
+                    sb << "Added portions:";
                     for (const auto& portion : append->AppendedPortions) {
                         Y_UNUSED(portion);
                         ++addedPortions;
-                        Cerr << " " << addedPortions;
+                        sb << " " << addedPortions;
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(compact->SwitchedPortions.size());
                     ++compactionsHappened;
-                    Cerr << "Compaction old portions:";
+                    TStringBuilder sb;
+                    sb << "Compaction old portions:";
                     ui64 srcPathId{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
                         const ui64 pathId = portionInfo.GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
                         oldPortions.insert(portionInfo.GetPortion());
+                        sb << portionInfo.GetPortion() << ",";
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
                 if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
-                    Cerr << "Cleanup old portions:";
+                    TStringBuilder sb;
+                    sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        Cerr << " " << portion.GetPortion();
+                        sb << " " << portion.GetPortion();
                         deletedPortions.insert(portion.GetPortion());
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
             } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) {
                 {
-                    TString prefixes[2] = {"Delay Delete Blob "};
+                    const std::vector<TString> prefixes = {"Delay Delete Blob "};
                     for (TString prefix : prefixes) {
                         size_t pos = msg->Line.find(prefix);
                         if (pos != TString::npos) {
                             TString blobId = msg->Line.substr(pos + prefix.size());
-                            Cerr << "Delayed delete: " << blobId << Endl;
+                            Cerr << (TStringBuilder() << "Delayed delete: " << blobId << Endl);
                             delayedBlobs.insert(blobId);
                             break;
                         }
@@ -2681,15 +2688,17 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) {
                 // Extract and save all DoNotKeep blobIds
-                Cerr << "GC for channel " << msg->Channel;
+                TStringBuilder sb;
+                sb << "GC for channel " << msg->Channel;
                 if (msg->DoNotKeep) {
-                    Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
+                    sb << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
                         delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
-                Cerr << Endl;
+                sb << Endl;
+                Cerr << sb;
             }
             return false;
         };

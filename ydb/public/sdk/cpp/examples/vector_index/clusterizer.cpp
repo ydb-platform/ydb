@@ -143,7 +143,7 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     const ui64 clusters = std::min<ui64>(options.maxK, 1000);
     if (Init(clusters)) {
         for (ui32 i = 1; i <= options.maxIterations; ++i) {
-            if (!Step(i, options.maxIterations, 1.25)) {
+            if (!Step(i, options.maxIterations, 1.1)) {
                 break;
             }
         }
@@ -277,6 +277,8 @@ bool TClusterizer::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
 
     for (size_t pos = 0; auto& cluster : NewClusters) {
         cluster.Coords.swap(Clusters.Coords[pos++]);
+        std::fill(cluster.Coords.begin(), cluster.Coords.end(), 0);
+        cluster.Count = 0;
     }
     bool stop = newMean * neededDiff >= OldMean;
     OldMean = newMean;

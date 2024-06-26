@@ -245,7 +245,6 @@ private:
     template <bool WithPK>
     void IterateImpl(TClusterizer& clusterizer, auto&& cb) {
         TReadTableSettings settings;
-        // TODO(mbkkt) doesn't work settings.ReturnNotNullAsOptional(false);
         if constexpr (WithPK) {
             settings.AppendColumns(Options.PrimaryKey);
         }
@@ -348,7 +347,7 @@ private:
             auto& embedding = batch.ColumnParser(embeddingIdx);
             do {
                 TId pk = 0;
-                if (ParentId == 0) {
+                if (ParentId == 0 && Table == "wikipedia") {
                     pk = *primaryKey.GetOptionalUint64();
                 } else {
                     pk = *primaryKey.GetOptionalUint32();
@@ -395,6 +394,12 @@ struct TBulkSender {
         : Options{options}
         , Client{client}
     {
+        RetrySettings
+            .MaxRetries(60)
+            .GetSessionClientTimeout(TDuration::Seconds(60))
+            .Idempotent(true)
+            .RetryUndefined(true);
+
         ToSend.reserve(std::max<ui32>(cores, 2));
         ToWait.reserve(std::max<ui32>(cores, 2));
     }
@@ -432,7 +437,7 @@ struct TBulkSender {
             return client.BulkUpsert(table, std::move(r)).Apply([](TAsyncBulkUpsertResult result) -> TStatus {
                 return result.ExtractValueSync();
             });
-        });
+        }, RetrySettings);
         ToSend.emplace_back(std::move(f));
     }
 
@@ -457,6 +462,7 @@ private:
         ToWait.swap(ToSend);
     }
 
+    TRetryOperationSettings RetrySettings;
     std::mutex M;
     TTableClient& Client;
     std::vector<TAsyncStatus> ToSend;

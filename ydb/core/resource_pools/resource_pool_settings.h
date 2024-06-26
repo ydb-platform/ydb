@@ -55,6 +55,6 @@ struct TSettingsExtractor {
 };
 
 using TProperty = std::variant<i32*, TDuration*, TPercent*>;
-std::unordered_map<TString, TProperty> GetPropertiesMap(TPoolSettings& settings);
+std::unordered_map<TString, TProperty> GetPropertiesMap(TPoolSettings& settings, bool restricted = false);
 
 }  // namespace NKikimr::NResourcePool

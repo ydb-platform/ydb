@@ -90,12 +90,15 @@ TResourcePoolManager::TAsyncStatus SendSchemeRequest(const NKikimrSchemeOp::TMod
     context.GetActorSystem()->Register(new TSchemeOpRequestHandler(request.release(), promise, true));
 
     return promise.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
-        if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
-            return TResourcePoolManager::TYqlConclusionStatus::Success();
-        } else if (f.HasValue()) {
-            return TResourcePoolManager::TYqlConclusionStatus::Fail(f.GetValue().Status(), f.GetValue().Issues().ToString());
+        try {
+            auto response = f.GetValue();
+            if (response.Success()) {
+                return TResourcePoolManager::TYqlConclusionStatus::Success();
+            }
+            return TResourcePoolManager::TYqlConclusionStatus::Fail(response.Status(), response.Issues().ToString());
+        } catch (...) {
+            return TResourcePoolManager::TYqlConclusionStatus::Fail(TStringBuilder() << "Scheme error: " << CurrentExceptionMessage());
         }
-        return TResourcePoolManager::TYqlConclusionStatus::Fail("no value in result");
     });
 }
 
@@ -114,7 +117,8 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
     featuresExtractor.ValidateResetFeatures();
 
     TPoolSettings resourcePoolSettings;
-    for (const auto& [property, setting] : GetPropertiesMap(resourcePoolSettings)) {
+    auto& properties = *resourcePoolDescription.MutableProperties()->MutableProperties();
+    for (const auto& [property, setting] : GetPropertiesMap(resourcePoolSettings, true)) {
         if (std::optional<TString> value = featuresExtractor.Extract(property)) {
             try {
                 std::visit(TSettingsParser{*value}, setting);
@@ -126,7 +130,7 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
         }
 
         TString value = std::visit(TSettingsExtractor(), setting);
-        resourcePoolDescription.MutableProperties()->MutableProperties()->insert({property, value});
+        properties.insert({property, value});
     }
 
     if (!featuresExtractor.IsFinished()) {

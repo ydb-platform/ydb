@@ -6040,7 +6040,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkDisabled(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
-                QUERY_CANCEL_AFTER_SECONDS=86400,
                 QUEUE_SIZE=1000
             );)");
 
@@ -6049,7 +6048,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30),
                 SET QUEUE_SIZE 100,
-                RESET (QUERY_CANCEL_AFTER_SECONDS);
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
             )");
 
         // DROP RESOURCE POOL
@@ -6111,7 +6110,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
-                QUERY_CANCEL_AFTER_SECONDS=86400,
                 QUEUE_SIZE=1000,
                 QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
             );)";
@@ -6125,9 +6123,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(resourcePool.ResourcePoolInfo);
         UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetName(), "MyResourcePool");
         const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
-        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
     }
@@ -6159,7 +6156,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
-                    QUERY_CANCEL_AFTER_SECONDS=86400
+                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE="0.5"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -6182,7 +6179,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
                     CONCURRENT_QUERY_LIMIT=20,
-                    QUERY_CANCEL_AFTER_SECONDS=86400,
                     QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -6191,9 +6187,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
             auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
-            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "86400");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
         }
 
@@ -6202,7 +6197,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER RESOURCE POOL MyResourcePool
                     SET (CONCURRENT_QUERY_LIMIT = 30),
                     SET QUEUE_SIZE 100,
-                    RESET (QUERY_CANCEL_AFTER_SECONDS);
+                    RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -6210,11 +6205,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
             auto resourcePoolDesc = Navigate(runtime, runtime.AllocateEdgeActor(), "Root/.resource_pools/MyResourcePool", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
-            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_cancel_after_seconds"), "0");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "-1");
         }
     }
 
@@ -6233,7 +6227,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30),
                 SET QUEUE_SIZE 100,
-                RESET (QUERY_CANCEL_AFTER_SECONDS);
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());

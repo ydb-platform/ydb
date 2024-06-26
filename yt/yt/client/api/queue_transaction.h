@@ -2,6 +2,8 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/queue_client/public.h>
+
 #include <yt/yt/core/ypath/public.h>
 
 namespace NYT::NApi {
@@ -20,7 +22,7 @@ struct TPushQueueProducerOptions
      * Rows in the batch will have such sequence numbers: SequenceNumber, SequenceNumber+1, SequenceNumber+2, ...
      * If the option is not set the $sequence_number column must be present in each row.
      */
-    std::optional<i64> SequenceNumber;
+    std::optional<NQueueClient::TQueueProducerSequenceNumber> SequenceNumber;
 
     //! Any yson data which will be saved for the session
     /*!
@@ -36,7 +38,7 @@ struct TPushQueueProducerResult
     /*!
      * All rows with greater sequence number will be ignored in future calls of PushQueueProducer.
      */
-    i64 LastSequenceNumber = -1;
+    NQueueClient::TQueueProducerSequenceNumber LastSequenceNumber{-1};
     //! Count of rows which were skipped because of their sequence number.
     /*!
      * Skipped rows were written before.
@@ -87,8 +89,8 @@ struct IQueueTransaction
     virtual TFuture<TPushQueueProducerResult> PushQueueProducer(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        i64 epoch,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
         const TPushQueueProducerOptions& options = {}) = 0;

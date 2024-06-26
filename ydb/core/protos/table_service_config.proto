@@ -306,5 +306,5 @@ message TTableServiceConfig {
             TSubPoolsConfiguration SubPoolsConfiguration = 3;
         }
     };
-    repeated TComputePoolConfiguration PoolsConfiguration = 64;
+    optional TComputePoolConfiguration PoolsConfiguration = 64;
 };

@@ -115,13 +115,11 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
         // Therefore, we temporarily release the lock here,
         // which allows the handler to finish and release its shared lock,
         // after which the TWriteSession destructor can also complete its work.
-        std::shared_ptr<NTopic::IWriteSession> old;
+        auto old = std::exchange(OldSubsession, Subsession);
         {
-            old = std::exchange(OldSubsession, {});
             auto unguard = Unguard(Lock);
-            old = std::move(Subsession);
+            old = nullptr;  // old subsession dtor is called here
         }
-        OldSubsession = old;
         OldSubsession->Close(TDuration::Zero());
     }
 

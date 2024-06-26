@@ -156,8 +156,8 @@ private:
     TDeque<TAllocatedGenStepConstPtr> AllocatedGenSteps;
 
     // The Gen:Step that has been acknowledged by the Distributed Storage
-    TGenStep LastCollectedGenStep = {0, 0};
-    TGenStep GCBarrierPreparation = { 0, 0 };
+    TGenStep LastCollectedGenStep;
+    TGenStep GCBarrierPreparation;
 
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;

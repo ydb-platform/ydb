@@ -58,12 +58,12 @@ public:
         std::unique_lock lock{M};
         while (true) {
             auto tasks = Tasks.size();
-            auto threads =  Threads.size();
+            auto threads = Threads.size();
             if (Y_LIKELY(tasks < threads * 2)) {
                 break;
             }
             lock.unlock();
-            Cout << "ThreadPool overloaded " <<  tasks << " / " << threads << Endl;
+            Cout << "ThreadPool overloaded " << tasks << " / " << threads << Endl;
             std::this_thread::sleep_for(std::chrono::seconds{1});
             lock.lock();
         }

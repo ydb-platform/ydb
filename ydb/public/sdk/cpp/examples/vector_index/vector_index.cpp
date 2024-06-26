@@ -28,7 +28,7 @@ static constexpr std::string_view KMeansIndex = "kmeans";
 
 namespace NQuantizer {
     static constexpr std::string_view None = "none";
-    // static constexpr std::string_view Int8 = "int8";
+    static constexpr std::string_view Int8 = "int8";
     // static constexpr std::string_view Uint8 = "uint8";
     static constexpr std::string_view Bit = "bit";
 }
@@ -218,32 +218,32 @@ public:
         }));
     }
 
-    void IterateEmbedding(TClusterizer& clusterizer) final {
+    void IterateEmbedding(TReadCallback& read) final {
         if (Rows() > kSmallClusterSize) {
-            IterateImpl<false>(clusterizer, [&](TRawEmbedding rawEmbedding) {
-                clusterizer.Handle(std::move(rawEmbedding));
+            IterateImpl<false>(read, [&](TRawEmbedding rawEmbedding) {
+                read.Handle(std::move(rawEmbedding));
             });
             return;
         }
         if (Embeddings.empty()) {
-            Embeddings.reserve(kSmallClusterSize);
-            IterateImpl<false>(clusterizer, [&](TRawEmbedding embedding) {
+            Embeddings.reserve(Rows());
+            IterateImpl<false>(read, [&](TRawEmbedding embedding) {
                 Embeddings.push_back(std::move(embedding));
             });
         }
-        clusterizer.Handle(Embeddings);
+        read.Handle(Embeddings);
     }
 
-    void IterateId(TClusterizer& clusterizer) final {
+    void IterateId(TReadCallback& read) final {
         Embeddings.clear();
-        IterateImpl<true>(clusterizer, [&](TId id, TRawEmbedding rawEmbedding) {
-            clusterizer.Handle(id, std::move(rawEmbedding));
+        IterateImpl<true>(read, [&](TId id, TRawEmbedding rawEmbedding) {
+            read.Handle(id, std::move(rawEmbedding));
         });
     }
 
 private:
     template <bool WithPK>
-    void IterateImpl(TClusterizer& clusterizer, auto&& cb) {
+    void IterateImpl(TReadCallback& read, auto&& cb) {
         TReadTableSettings settings;
         if constexpr (WithPK) {
             settings.AppendColumns(Options.PrimaryKey);
@@ -267,13 +267,13 @@ private:
 
         ThrowOnError(Client.RetryOperationSync([&](TSession session) {
             auto fit = session.ReadTable(FullName(Options, Table), settings);
-            ReadImpl<WithPK>(clusterizer, fit.ExtractValueSync(), cb);
+            ReadImpl<WithPK>(read, fit.ExtractValueSync(), cb);
             return TStatus{EStatus::SUCCESS, {}};
         }));
     }
 
     template <bool WithPK>
-    void ReadImpl(TClusterizer& clusterizer, TTablePartIterator it, auto&& cb) {
+    void ReadImpl(TReadCallback& read, TTablePartIterator it, auto&& cb) {
         if (!it.IsSuccess()) {
             ythrow TVectorException{std::move(it)};
         }
@@ -305,9 +305,9 @@ private:
             if (Queue.empty()) {
                 lock.unlock();
                 if constexpr (WithPK) {
-                    clusterizer.IdsTrigger();
+                    read.TriggerIds();
                 } else {
-                    clusterizer.EmbeddingsTrigger();
+                    read.TriggerEmbeddings();
                 }
                 lock.lock();
             }
@@ -347,7 +347,7 @@ private:
             auto& embedding = batch.ColumnParser(embeddingIdx);
             do {
                 TId pk = 0;
-                if (ParentId == 0 && Table == "wikipedia") {
+                if (ParentId == 0 && Table.front() == 'w') {
                     pk = *primaryKey.GetOptionalUint64();
                 } else {
                     pk = *primaryKey.GetOptionalUint32();
@@ -380,13 +380,22 @@ private:
     std::vector<TString> Embeddings;
 };
 
-static float CosineDistance(TEmbedding lhs, TEmbedding rhs) {
+template <typename T>
+static float CosineDistance(std::span<const T> lhs, std::span<const T> rhs) {
     Y_ASSERT(lhs.size() == rhs.size());
     auto* l = lhs.data();
     auto* r = rhs.data();
-    auto res = TriWayDotProduct(l, r, lhs.size());
-    auto norm = std::sqrt(res.LL * res.RR);
-    return norm != 0 ? 1 - (res.LR / norm) : 1;
+    if constexpr (std::is_same_v<T, float>) {
+        auto res = TriWayDotProduct(l, r, lhs.size());
+        float norm = std::sqrt(res.LL * res.RR);
+        return norm != 0 ? 1 - (res.LR / norm) : 1;
+    } else {
+        float ll = DotProduct(l, l, lhs.size());
+        float rr = DotProduct(r, r, lhs.size());
+        float lr = DotProduct(l, r, lhs.size());
+        float norm = std::sqrt(ll * rr);
+        return norm != 0 ? 1 - (lr / norm) : 1;
+    }
 }
 
 struct TBulkSender {
@@ -470,6 +479,29 @@ private:
     ui64 Count = 0;
 };
 
+enum EFormat: ui8 {
+    FloatVector = 1, // 4-byte per element
+    Uint8Vector = 2, // 1-byte per element, better than Int8 for positive-only Float
+    Int8Vector = 3,  // 1-byte per element
+    BitVector = 10,  // 1-bit  per element
+};
+
+template <typename T>
+struct TTypeToFormat;
+
+template <>
+struct TTypeToFormat<float> {
+    static constexpr auto Format = EFormat::FloatVector;
+};
+
+template <>
+struct TTypeToFormat<i8> {
+    static constexpr auto Format = EFormat::Int8Vector;
+};
+
+template <typename T>
+inline constexpr auto Format = TTypeToFormat<T>::Format;
+
 struct TBulkWriter {
     TBulkWriter(TBulkSender& sender)
         : Sender{sender}
@@ -509,14 +541,13 @@ struct TBulkWriter {
         }
     }
 
-    void WriteCluster(TId parentId, TId id, TEmbedding embedding) {
-        TString rawEmbedding(embedding.size() * sizeof(float) + 1, 0);
+    template <typename T>
+    void WriteCluster(TId parentId, TId id, const std::vector<T>& embedding) {
+        auto byteSize = embedding.size() * sizeof(T);
+        TString rawEmbedding(byteSize + 1, 0);
         auto* data = const_cast<char*>(rawEmbedding.data());
-        for (auto v : embedding) {
-            std::memcpy(data, &v, sizeof(float));
-            data += sizeof(float);
-        }
-        *data = 1;
+        std::memcpy(data, embedding.data(), byteSize);
+        data[byteSize] = Format<T>;
         bool embeddings = std::exchange(Embeddings, true);
         WritePosting(parentId, id, std::move(rawEmbedding));
         Embeddings = embeddings;
@@ -555,7 +586,10 @@ private:
     [[no_unique_address]] TFunc Func;
 };
 
-static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
+template <typename T>
+static void UpdateKMeans(TTableClient& client, const TOptions& options) {
+    using TClusterizer = TClusterizer<T>;
+    using TClusters = typename TClusterizer::TClusters;
     const auto cores = std::thread::hardware_concurrency() / 2;
     NVectorIndex::TThreadPool tpCompute{cores};
     NVectorIndex::TThreadPool tpIO{cores};
@@ -577,7 +611,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         }
         writer.Send();
         if (level >= options.Levels) {
-            return TClusterizer::TClusters{};
+            return TClusters{};
         }
         return clusters;
     };
@@ -587,7 +621,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
         ui64 Count = 0;
     };
     std::vector<TMeta> next;
-    auto processCluster = [&](const TClusterizer::TClusters& clusters) {
+    auto processCluster = [&](const TClusters& clusters) {
         for (size_t i = 0; auto id : clusters.Ids) {
             auto count = clusters.Count[i];
             if (count != 0) {
@@ -598,7 +632,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     };
 
     NVectorIndex::TWaitGroup wg;
-    std::deque<TClusterizer::TClusters> clusters;
+    std::deque<TClusters> clusters;
     ui64 countDoneClusters = 0;
     ui64 countAllClusters = 0;
 
@@ -617,7 +651,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
     TTableIterator reader{options, client, tpIO};
     TBulkSender sender{options, client, cores};
     TBulkWriter writer{sender};
-    TClusterizer clusterizer{reader, CosineDistance,
+    TClusterizer clusterizer{reader, CosineDistance<T>,
                              [&](TId parentId, TId id, TRawEmbedding embedding) {
                                  writer.WritePosting(parentId, id, std::move(embedding));
                              },
@@ -639,7 +673,7 @@ static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
             };
             TTableIterator reader{options, client, tpIO};
             TBulkWriter writer{sender};
-            TClusterizer clusterizer{reader, CosineDistance,
+            TClusterizer clusterizer{reader, CosineDistance<T>,
                                      [&](TId parentId, TId id, TRawEmbedding embedding) {
                                          writer.WritePosting(parentId, id, std::move(embedding));
                                      }};
@@ -809,7 +843,10 @@ int UpdateIndex(NYdb::TDriver& driver, const TOptions& options) {
         }
     } else if (options.IndexType == KMeansIndex) {
         if (options.IndexQuantizer == NQuantizer::None) {
-            UpdateKMeansNone(client, options);
+            UpdateKMeans<float>(client, options);
+            return 0;
+        } else if (options.IndexQuantizer == NQuantizer::Int8) {
+            UpdateKMeans<i8>(client, options);
             return 0;
         }
     }

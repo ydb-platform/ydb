@@ -11,25 +11,35 @@
 
 inline constexpr ui64 kMinClusterSize = 8;
 
-using TId = uint64_t;
+using TId = ui32;
 using TRawEmbedding = TString&&;
-using TEmbedding = std::span<const float>;
 
-class TClusterizer;
+class TReadCallback {
+public:
+    virtual void Handle(std::span<const TString> embeddings) = 0;
+    virtual void Handle(TRawEmbedding embedding) = 0;
+    virtual void Handle(TId id, TRawEmbedding embedding) = 0;
+
+    virtual void TriggerEmbeddings() = 0;
+    virtual void TriggerIds() = 0;
+};
 
 class TDatasetIterator {
 public:
     virtual ui64 Rows() const = 0;
-    virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)>) = 0;
-    virtual void IterateEmbedding(TClusterizer& clusterizer) = 0;
-    virtual void IterateId(TClusterizer& clusterizer) = 0;
+    virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) = 0;
+    virtual void IterateEmbedding(TReadCallback& cb) = 0;
+    virtual void IterateId(TReadCallback& cb) = 0;
 };
 
-using TDistance = std::function<float(TEmbedding, TEmbedding)>;
 using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
 
-class TClusterizer {
+template <typename T>
+class TClusterizer final: TReadCallback {
 public:
+    using TEmbedding = std::span<const T>;
+    using TDistance = std::function<float(TEmbedding, TEmbedding)>;
+
     TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp = nullptr);
 
     struct TOptions {
@@ -39,21 +49,21 @@ public:
     };
 
     struct TClusters {
-        std::vector<TId> Ids;
         std::vector<ui64> Count;
-        std::vector<std::vector<float>> Coords;
+        std::vector<TId> Ids;
+        std::vector<std::vector<T>> Coords;
     };
 
     TClusters Run(const TOptions& options);
 
-    void Handle(std::span<const TString> embeddings);
-    void Handle(TRawEmbedding embedding);
-    void Handle(TId id, TRawEmbedding embedding);
-
-    void EmbeddingsTrigger();
-    void IdsTrigger();
-
 private:
+    void Handle(std::span<const TString> embeddings) final;
+    void Handle(TRawEmbedding embedding) final;
+    void Handle(TId id, TRawEmbedding embedding) final;
+
+    void TriggerEmbeddings() final;
+    void TriggerIds() final;
+
     bool Init(ui64 k);
     void StepUpdate();
     bool Step(ui32 iteration, ui32 maxIterations, float neededDiff);
@@ -78,13 +88,14 @@ private:
     TDistance Distance;
     TCreateParentChild Create;
 
+    using TSum = std::conditional_t<std::is_integral_v<T>, int64_t, T>;
     struct TAggregatedCluster {
-        std::vector<float> Coords;
         float Distance = 0;
-        ui64 Count = 0;
+        std::vector<TSum> Coords;
+        i64 Count = 0;
     };
 
-    std::vector<TAggregatedCluster> NewClusters;
+    std::vector<TAggregatedCluster> AggregatedClusters;
     float OldMean = std::numeric_limits<float>::max();
 
     struct TProgress {

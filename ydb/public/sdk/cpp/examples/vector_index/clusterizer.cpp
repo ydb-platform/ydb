@@ -6,30 +6,7 @@
 #include <format>
 
 static constexpr ui64 kMinClusters = 4;
-static ui64 gId = 1;
-
-void TClusterizer::TProgress::Reset(std::string_view operation, ui64 rows) {
-    // Y_UNUSED(rows, Rows, Curr, Last);
-    Cout << "Start " << operation << ": " << rows << Endl;
-    Curr = 0;
-    Rows = rows;
-    Last = std::chrono::steady_clock::now();
-}
-
-void TClusterizer::TProgress::ForceReport() {
-    auto now = std::chrono::steady_clock::now();
-    Cout << "Already read\t" << static_cast<ui64>(Curr / Rows * 100.0)
-         << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count()
-         << " sec, " << Curr << " / " << Rows << " rows" << Endl;
-    Last = now;
-}
-
-void TClusterizer::TProgress::Report(ui64 read) {
-    if (auto now = std::chrono::steady_clock::now(); (now - Last) >= std::chrono::seconds{1}) {
-        ForceReport();
-    }
-    Curr += read;
-}
+static TId gId = 1;
 
 template <typename T>
 static std::span<const T> GetArray(std::string_view str) {
@@ -42,23 +19,55 @@ static std::span<const T> GetArray(std::string_view str) {
     return {reinterpret_cast<const T*>(buf), count};
 }
 
-void TClusterizer::TBatch::Swap(TBatch& other) {
+template <typename T>
+void TClusterizer<T>::TProgress::Reset(std::string_view operation, ui64 rows) {
+    // Y_UNUSED(rows, Rows, Curr, Last);
+    Cout << "Start " << operation << ": " << rows << Endl;
+    Curr = 0;
+    Rows = rows;
+    Last = std::chrono::steady_clock::now();
+}
+
+template <typename T>
+void TClusterizer<T>::TProgress::ForceReport() {
+    auto now = std::chrono::steady_clock::now();
+    Cout << "Already read\t" << static_cast<ui64>(Curr / Rows * 100.0)
+         << "% rows, time spent:\t" << std::chrono::duration<double>{now - Last}.count()
+         << " sec, " << Curr << " / " << Rows << " rows" << Endl;
+    Last = now;
+}
+
+template <typename T>
+void TClusterizer<T>::TProgress::Report(ui64 read) {
+    if (auto now = std::chrono::steady_clock::now(); (now - Last) >= std::chrono::seconds{1}) {
+        ForceReport();
+    }
+    Curr += read;
+}
+
+template <typename T>
+void TClusterizer<T>::TBatch::Swap(TBatch& other) {
     std::swap(RawData, other.RawData);
     IdData.swap(other.IdData);
     RawDataStorage.swap(other.RawDataStorage);
     Min.swap(other.Min);
 }
-void TClusterizer::TBatch::Clear() {
+
+template <typename T>
+void TClusterizer<T>::TBatch::Clear() {
     RawData = {};
     IdData.clear();
     RawDataStorage.clear();
     Min.clear();
 }
-bool TClusterizer::TBatch::Empty() const {
+
+template <typename T>
+bool TClusterizer<T>::TBatch::Empty() const {
     return RawData.empty();
 }
 
-TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp)
+template <typename T>
+TClusterizer<T>::TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp)
     : It{it}
     , Distance{std::move(distance)}
     , Create{std::move(create)}
@@ -66,7 +75,8 @@ TClusterizer::TClusterizer(TDatasetIterator& it, TDistance distance, TCreatePare
 {
 }
 
-TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
+template <typename T>
+auto TClusterizer<T>::Compute(TEmbedding embedding) -> TMin {
     float minDistance = std::numeric_limits<float>::max();
     ui32 minPos = 0;
     Y_ASSERT(!Clusters.Coords.empty());
@@ -81,8 +91,9 @@ TClusterizer::TMin TClusterizer::Compute(TEmbedding embedding) {
     return {minDistance, minPos};
 }
 
+template <typename T>
 template <typename Func>
-void TClusterizer::ComputeBatch(Func&& func) {
+void TClusterizer<T>::ComputeBatch(Func&& func) {
     if (ThreadPool) {
         auto threads = ThreadPool->Size();
         std::unique_lock lock{M};
@@ -101,7 +112,7 @@ void TClusterizer::ComputeBatch(Func&& func) {
                     auto len = start < size ? std::min<ui32>(size - start, batchSize) : 0;
                     auto batch = ToCompute.RawData.subspan(start, len);
                     for (const auto& rawEmbedding : batch) {
-                        auto embedding = GetArray<float>(rawEmbedding);
+                        auto embedding = GetArray<T>(rawEmbedding);
                         auto min = Compute(embedding);
                         ToCompute.Min[start++] = min;
                     }
@@ -115,7 +126,7 @@ void TClusterizer::ComputeBatch(Func&& func) {
         Progress.Report(0);
     } else {
         for (size_t start = 0; const auto& rawEmbedding : ToFill.RawData) {
-            auto embedding = GetArray<float>(rawEmbedding);
+            auto embedding = GetArray<T>(rawEmbedding);
             auto min = Compute(embedding);
             ToFill.Min[start++] = min;
         }
@@ -129,16 +140,19 @@ void TClusterizer::ComputeBatch(Func&& func) {
     }
 }
 
-void TClusterizer::Update(TMin min, TEmbedding embedding) {
-    Y_ASSERT(Clusters.Coords.size() == NewClusters.size());
-    NewClusters[min.Pos].Distance += min.Distance;
-    for (size_t pos = 0; auto& coord : NewClusters[min.Pos].Coords) {
+template <typename T>
+void TClusterizer<T>::Update(TMin min, TEmbedding embedding) {
+    Y_ASSERT(Clusters.Coords.size() == AggregatedClusters.size());
+    auto& cluster = AggregatedClusters[min.Pos];
+    cluster.Distance += min.Distance;
+    for (size_t pos = 0; auto& coord : cluster.Coords) {
         coord += embedding[pos++];
     }
-    NewClusters[min.Pos].Count++;
+    cluster.Count++;
 }
 
-TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
+template <typename T>
+auto TClusterizer<T>::Run(const TOptions& options) -> TClusters {
     Y_ASSERT(!options.normalize); // normalize not supported
     const ui64 clusters = std::min<ui64>(options.maxK, 1000);
     if (Init(clusters)) {
@@ -167,7 +181,8 @@ TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
     return std::move(Clusters);
 }
 
-bool TClusterizer::Init(ui64 k) {
+template <typename T>
+bool TClusterizer<T>::Init(ui64 k) {
     // Cout << "Start init" << Endl;
     // TODO kmeans++, kmeans||?
     if (k < kMinClusters || k * kMinClusterSize >= It.Rows()) {
@@ -186,30 +201,33 @@ bool TClusterizer::Init(ui64 k) {
         return false;
     }
     // TODO check distance between vectors in initial set
-    auto dims = Clusters.Coords.front().size();
-    NewClusters.resize(k);
-    for (auto& cluster : NewClusters) {
-        cluster.Coords.resize(dims, 0.f);
+    auto d = Clusters.Coords.front().size();
+    AggregatedClusters.resize(k);
+    for (auto& cluster : AggregatedClusters) {
+        cluster.Coords.resize(d, 0);
     }
     OldMean = std::numeric_limits<float>::max();
     BatchSize = (ui64{900'000} * ui64{ThreadPool ? ThreadPool->Size() : 1}) / (ui64{Clusters.Coords.size()} * ui64{Clusters.Coords.front().size()});
     return true;
 }
 
-void TClusterizer::StepUpdate() {
+template <typename T>
+void TClusterizer<T>::StepUpdate() {
     for (size_t i = 0; i != ToFill.RawData.size(); ++i) {
-        auto embedding = GetArray<float>(ToFill.RawData[i]);
+        auto embedding = GetArray<T>(ToFill.RawData[i]);
         Update(ToFill.Min[i], embedding);
     }
 }
 
-void TClusterizer::EmbeddingsTrigger() {
+template <typename T>
+void TClusterizer<T>::TriggerEmbeddings() {
     ToFill.RawData = ToFill.RawDataStorage;
     ComputeBatch([this] { StepUpdate(); }); // wait last and compute tail
     ComputeBatch([this] { StepUpdate(); }); // wait tail
 }
 
-void TClusterizer::Handle(std::span<const TString> embeddings) {
+template <typename T>
+void TClusterizer<T>::Handle(std::span<const TString> embeddings) {
     if (ThreadPool) {
         Progress.Report(embeddings.size());
     }
@@ -218,7 +236,8 @@ void TClusterizer::Handle(std::span<const TString> embeddings) {
     ComputeBatch([this] { StepUpdate(); });
 }
 
-void TClusterizer::Handle(TRawEmbedding rawEmbedding) {
+template <typename T>
+void TClusterizer<T>::Handle(TRawEmbedding rawEmbedding) {
     if (ThreadPool) {
         Progress.Report(1);
     }
@@ -230,79 +249,84 @@ void TClusterizer::Handle(TRawEmbedding rawEmbedding) {
     }
 }
 
-bool TClusterizer::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
+template <typename T>
+bool TClusterizer<T>::Step(ui32 iteration, ui32 maxIterations, float neededDiff) {
     if (ThreadPool) {
         Progress.Reset(std::format("step {} / {}", iteration, maxIterations), It.Rows());
     }
 
     It.IterateEmbedding(*this);
-    EmbeddingsTrigger();
+    TriggerEmbeddings();
 
-    float newMean = 0;
     ui64 zeroCount = 0;
     float maxDistance = std::numeric_limits<float>::min();
-    for (auto& cluster : NewClusters) {
-        if (cluster.Count == 0) {
+    float newMean = 0;
+    for (auto& cluster : AggregatedClusters) {
+        if (Y_UNLIKELY(cluster.Count == 0)) {
             ++zeroCount;
             continue;
         }
-        auto count = static_cast<float>(cluster.Count);
-        for (auto& coord : cluster.Coords) {
-            coord /= count;
-        }
-        cluster.Distance /= count;
-        if (cluster.Distance > maxDistance) {
+        cluster.Distance /= cluster.Count;
+        if (maxDistance < cluster.Distance) {
             maxDistance = cluster.Distance;
         }
         newMean += cluster.Distance;
     }
-    auto it = NewClusters.begin();
+    auto it = AggregatedClusters.begin();
     It.RandomK(zeroCount, [&](TRawEmbedding rawEmbedding) {
-        for (; it != NewClusters.end(); ++it) {
+        for (; it != AggregatedClusters.end(); ++it) {
             if (it->Count == 0) {
-                auto embedding = GetArray<float>(rawEmbedding);
+                auto embedding = GetArray<T>(rawEmbedding);
                 it->Coords.assign(embedding.begin(), embedding.end());
+                it->Count = 1;
             }
         }
     });
     newMean += zeroCount * maxDistance;
     if (ThreadPool) {
         Progress.ForceReport();
-        Cout << "old mean: " << OldMean / NewClusters.size()
-             << " new mean: " << newMean / NewClusters.size() << Endl;
+        Cout << "old mean: " << OldMean / AggregatedClusters.size()
+             << " new mean: " << newMean / AggregatedClusters.size() << Endl;
     }
     if (newMean > OldMean) {
         return false;
     }
 
-    for (size_t pos = 0; auto& cluster : NewClusters) {
-        cluster.Coords.swap(Clusters.Coords[pos++]);
-        std::fill(cluster.Coords.begin(), cluster.Coords.end(), 0);
-        cluster.Count = 0;
+    for (size_t i = 0; auto& coords : Clusters.Coords) {
+        auto& aggregated = AggregatedClusters[i++];
+        auto coordsCount = static_cast<TSum>(aggregated.Count);
+        for (size_t j = 0; auto& coord : aggregated.Coords) {
+            coords[j++] = static_cast<T>(coord / coordsCount);
+            coord = 0;
+        }
+        aggregated.Count = 0;
     }
     bool stop = newMean * neededDiff >= OldMean;
     OldMean = newMean;
     return !stop;
 }
 
-void TClusterizer::FinalizeUpdate() {
+template <typename T>
+void TClusterizer<T>::FinalizeUpdate() {
     for (size_t i = 0; i != ToFill.RawDataStorage.size(); ++i) {
-        auto& parentId = Clusters.Ids[ToFill.Min[i].Pos];
-        Clusters.Count[ToFill.Min[i].Pos]++;
-        auto id = ToFill.IdData[i];
+        const auto minPos = ToFill.Min[i].Pos;
+        Clusters.Count[minPos]++;
+        auto& parentId = Clusters.Ids[minPos];
         if (Y_UNLIKELY(!parentId))
-            parentId = ++gId;
-        Create(parentId, id, std::move(ToFill.RawDataStorage[i]));
+            parentId = gId++;
+        Create(parentId, ToFill.IdData[i], std::move(ToFill.RawDataStorage[i]));
     }
 }
 
-void TClusterizer::IdsTrigger() {
+template <typename T>
+void TClusterizer<T>::TriggerIds() {
     ToFill.RawData = ToFill.RawDataStorage;
     ComputeBatch([this] { FinalizeUpdate(); }); // wait last and compute tail
     ComputeBatch([this] { FinalizeUpdate(); }); // wait tail
 }
 
-void TClusterizer::Handle(TId id, TRawEmbedding rawEmbedding) {
+template <typename T>
+void TClusterizer<T>::Handle(TId id, TRawEmbedding rawEmbedding) {
     if (ThreadPool) {
         Progress.Report(1);
     }
@@ -315,14 +339,18 @@ void TClusterizer::Handle(TId id, TRawEmbedding rawEmbedding) {
     }
 }
 
-void TClusterizer::Finalize() {
+template <typename T>
+void TClusterizer<T>::Finalize() {
     if (ThreadPool) {
         Progress.Reset("finalize", It.Rows());
     }
 
     It.IterateId(*this);
-    IdsTrigger();
+    TriggerIds();
     if (ThreadPool) {
         Progress.ForceReport();
     }
 }
+
+template class TClusterizer<float>;
+template class TClusterizer<i8>;

@@ -16,7 +16,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/count_min_sketch/count_min_sketch.h>
 #include <ydb/core/util/intrusive_heap.h>
 
 #include <util/generic/intrlist.h>

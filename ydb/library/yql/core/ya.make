@@ -80,6 +80,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/proto
+    ydb/library/count_min_sketch
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)

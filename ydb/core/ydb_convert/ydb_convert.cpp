@@ -15,7 +15,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {

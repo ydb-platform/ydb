@@ -411,12 +411,6 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
     NMonitoring::THistogramPtr SchedulerRenices;
     NMonitoring::THistogramPtr ScheduledActorsRuns;
-    NMonitoring::THistogramPtr SchedulerDelays;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ScheduledActorsActivationsCount;
-    NMonitoring::THistogramPtr SchedulerVisibleLag;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerTrackedUs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerLimitUs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerClock;
 
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;

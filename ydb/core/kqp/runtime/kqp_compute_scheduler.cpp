@@ -11,7 +11,7 @@ namespace {
 
     static constexpr double MinEntitiesWeight = 1e-8;
 
-    static constexpr TDuration AvgBatch = TDuration::MicroSeconds(700);
+    static constexpr TDuration AvgBatch = TDuration::MicroSeconds(200);
 }
 
 namespace NKikimr {
@@ -106,8 +106,8 @@ public:
         bool Disabled = false;
         double EntitiesWeight = 0;
         double MaxDeviation = 0;
+        double MaxLimitDeviation = 0;
 
-        ssize_t AllowTrackUsec = 0;
         ssize_t TrackedBefore = 0;
 
         double GroupNow(TMonotonic now) const {
@@ -119,12 +119,12 @@ public:
         }
 
         double Limit(TMonotonic now) const {
-            return AllowTrackUsec + FromDuration(now - LastNowRecalc) * Weight + TrackedBefore;
+            return FromDuration(now - LastNowRecalc) * Weight + MaxLimitDeviation + TrackedBefore;
         }
     };
 
     struct TGroupRecord {
-        TAtomic TrackedMicroSeconds;
+        TAtomic TrackedMicroSeconds = 0;
         TAtomic Delayed = 0;
 
         //TAtomic MaxDelayUsec = TDuration::MilliSeconds(100).MicroSeconds();
@@ -146,6 +146,7 @@ public:
         auto group = Group->MutableStats.Current();
         Vruntime += FromDuration(time) / Weight;
         Vcurrent = FromDuration(time) / Weight + Max(Vcurrent, group.get()->GroupNow(now) - group.get()->MaxDeviation);
+
         BatchTime = (8 * BatchTime + 2 * time) / 10;
         AtomicAdd(Group->TrackedMicroSeconds, time.MicroSeconds());
     }
@@ -157,15 +158,15 @@ public:
         if (limit > tracked) {
             return {};
         } else {
-            return BatchTime * Group->Delayed + ToDuration((tracked - limit) / Weight);
+            return TDuration::MicroSeconds(Group->Delayed) + ToDuration((tracked - limit) / group.get()->Weight);
         }
     }
 
     void SetEnabled(TMonotonic /* now */, bool enabled) {
         if (enabled) {
-            AtomicIncrement(Group->Delayed);
+            AtomicAdd(Group->Delayed, BatchTime.MicroSeconds());
         } else {
-            AtomicDecrement(Group->Delayed);
+            AtomicSub(Group->Delayed, BatchTime.MicroSeconds());
         }
     }
 
@@ -209,6 +210,10 @@ struct TComputeScheduler::TImpl {
     TVector<::NMonitoring::TDynamicCounters::TCounterPtr> LimitCounters;
     TVector<::NMonitoring::TDynamicCounters::TCounterPtr> WeightCounters;
 
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerClock;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerLimitUs;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> SchedulerTrackedUs;
+
     THashMap<TString, size_t> PoolId;
     std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> Records;
 
@@ -226,7 +231,7 @@ struct TComputeScheduler::TImpl {
     double SumCores;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    TDuration SmoothPeriod = TDuration::MilliSeconds(40);
+    TDuration SmoothPeriod = TDuration::MilliSeconds(10);
     TDuration MaxOverCommit = TDuration::MilliSeconds(5);
 
     TDuration MaxDelay = TDuration::MilliSeconds(50);
@@ -353,11 +358,19 @@ void TComputeScheduler::AdvanceTime(TMonotonic now) {
             Impl->EntitiesWeightCounters.resize(Impl->Records.size());
             Impl->LimitCounters.resize(Impl->Records.size());
             Impl->WeightCounters.resize(Impl->Records.size());
+            Impl->SchedulerClock.resize(Impl->Records.size());
+            Impl->SchedulerLimitUs.resize(Impl->Records.size());
+            Impl->SchedulerTrackedUs.resize(Impl->Records.size());
+
             for (auto& [k, i] : Impl->PoolId) {
-                Impl->VtimeCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("VTime", true);
-                Impl->EntitiesWeightCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Entities", false);
-                Impl->LimitCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Limit", true);
-                Impl->WeightCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Weight", false);
+                auto group = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k);
+                Impl->VtimeCounters[i] = group->GetCounter("VTime", true);
+                Impl->EntitiesWeightCounters[i] = group->GetCounter("Entities", false);
+                Impl->LimitCounters[i] = group->GetCounter("Limit", true);
+                Impl->WeightCounters[i] = group->GetCounter("Weight", false);
+                Impl->SchedulerClock[i] = group->GetCounter("Clock", false);
+                Impl->SchedulerTrackedUs[i] = group->GetCounter("Tracked", true);
+                Impl->SchedulerLimitUs[i] = group->GetCounter("Limit", true);
             }
         }
     }
@@ -365,25 +378,26 @@ void TComputeScheduler::AdvanceTime(TMonotonic now) {
         auto& v = Impl->Records[i]->MutableStats;
         {
             auto group = v.Current();
+            if (group.get()->LastNowRecalc > now) {
+                continue;
+            }
             double delta = 0;
+
+            v.Next()->TrackedBefore = AtomicGet(Impl->Records[i]->TrackedMicroSeconds);
+            v.Next()->MaxLimitDeviation = Impl->SmoothPeriod.MicroSeconds() * v.Next()->Weight;
+            v.Next()->LastNowRecalc = now;
+            v.Next()->TrackedBefore = Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, v.Next()->TrackedBefore);
+
             if (!group.get()->Disabled && group.get()->EntitiesWeight > MinEntitiesWeight) {
                 delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
                 v.Next()->Now += delta;
                 v.Next()->MaxDeviation = (FromDuration(Impl->SmoothPeriod) * v.Next()->Weight) / v.Next()->EntitiesWeight;
             }
-            v.Next()->LastNowRecalc = now;
-            v.Next()->TrackedBefore = AtomicGet(Impl->Records[i]->TrackedMicroSeconds);
-
-            auto limit = group.get()->Limit(now);
-            if (Impl->Counters) {
-                Impl->Counters->SchedulerLimitUs->Set(limit);
-                Impl->Counters->SchedulerTrackedUs->Set(AtomicGet(Impl->Records[i]->TrackedMicroSeconds));
-                Impl->Counters->SchedulerClock->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
-            }
-            v.Next()->AllowTrackUsec = limit - v.Next()->TrackedBefore;
-            //v.Next()->AllowTrackUsec = Min<ssize_t>(limit - v.Next()->TrackedBefore, AvgBatch.MicroSeconds() * AtomicGet(Impl->Records[i]->Delayed));
 
             if (Impl->VtimeCounters.size() > i && Impl->VtimeCounters[i]) {
+                Impl->SchedulerLimitUs[i]->Set(group.get()->Limit(now));
+                Impl->SchedulerTrackedUs[i]->Set(AtomicGet(Impl->Records[i]->TrackedMicroSeconds));
+                Impl->SchedulerClock[i]->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
                 Impl->VtimeCounters[i]->Add(delta);
                 Impl->EntitiesWeightCounters[i]->Set(v.Next()->EntitiesWeight);
                 Impl->LimitCounters[i]->Add(FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight);

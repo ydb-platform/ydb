@@ -188,18 +188,16 @@ public:
             Y_ABORT_UNLESS(SelfHandle);
             ReniceWakeupScheduled = false;
             auto now = Now();
-            //if (SelfHandle.Lag(now)) {
-                auto newWeight = SelfHandle.EstimateWeight(now, MinReserveTime);
-                Cerr << (TStringBuilder() << "running renice " << SelfHandle.DebugRepr(now) << " new weight " << newWeight) << Endl;
-                if (newWeight >= EffectiveWeight * BoostGap) {
-                    EffectiveWeight = Weight;
-                    return DoRenice(Weight);
-                } else {
-                    EffectiveWeight = Min(newWeight, Weight);
-                    newWeight = Min(Weight, newWeight * ReniceGap);
-                    return DoRenice(newWeight);
-                }
-            //}
+            auto newWeight = SelfHandle.EstimateWeight(now, MinReserveTime);
+            //Cerr << (TStringBuilder() << "running renice " << SelfHandle.DebugRepr(now) << " new weight " << newWeight) << Endl;
+            if (newWeight >= EffectiveWeight * BoostGap) {
+                EffectiveWeight = Weight;
+                return DoRenice(Weight);
+            } else {
+                EffectiveWeight = Min(newWeight, Weight);
+                newWeight = Min(Weight, newWeight * ReniceGap);
+                return DoRenice(newWeight);
+            }
             ScheduleReniceWakeup();
         } else {
             TBase::HandleExecuteBase(ev);
@@ -207,7 +205,7 @@ public:
     }
 
     void DoBootstrap() {
-        ScheduleReniceWakeup();
+        //ScheduleReniceWakeup();
     }
 
     void ScheduleReniceWakeup() {
@@ -251,11 +249,11 @@ public:
 
 private:
     void ReportThrottledTime(TMonotonic now) {
-        if (Throttled) {
-            SelfHandle.SetEnabled(now, true);
-        }
         if (Counters && Throttled) {
             Counters->SchedulerThrottled->Add((now - *Throttled).MicroSeconds());
+        }
+        if (Throttled) {
+            SelfHandle.SetEnabled(now, true);
             Throttled.Clear();
         }
     }
@@ -274,7 +272,6 @@ protected:
         TMonotonic now = *ExecuteStart;
         TMaybe<TDuration> delay = CalcDelay(*ExecuteStart);
         bool executed = false;
-        Counters->ScheduledActorsActivationsCount->Inc();
         if (NoThrottle || !delay) {
             ReportThrottledTime(now);
             executed = true;
@@ -295,7 +292,6 @@ protected:
         }
         if (delay) {
             CA_LOG_D("schedule wakeup after " << delay->MicroSeconds() << " msec ");
-            Counters->SchedulerDelays->Collect(delay->MicroSeconds());
             this->Schedule(*delay, new NActors::TEvents::TEvWakeup(ResumeWakeupTag));
         }
 
@@ -307,9 +303,9 @@ protected:
     }
 
     TMaybe<TDuration> CalcDelay(NMonotonic::TMonotonic now) {
-        //auto result = SelfHandle.GroupDelay(now);
-        auto result = SelfHandle.CalcDelay(now);
-        Counters->SchedulerVisibleLag->Collect(SelfHandle.Lag(now).GetOrElse(TDuration::Zero()).MicroSeconds());
+        auto result = SelfHandle.GroupDelay(now);
+        //auto result = SelfHandle.CalcDelay(now);
+        //Counters->SchedulerVisibleLag->Collect(SelfHandle.Lag(now).GetOrElse(TDuration::Zero()).MicroSeconds());
         if (NoThrottle || !result.Defined()) {
             return {};
         } else {
@@ -347,8 +343,6 @@ private:
 
     bool ReniceWakeupScheduled = false;
     bool RunningRenice = false;
-
-    //double Wdelta = 0;
 };
 
 } // namespace NKqp

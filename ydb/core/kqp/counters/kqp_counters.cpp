@@ -8,7 +8,6 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <ydb/library/actors/core/log.h>
-
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
@@ -831,13 +830,6 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerCapacity = KqpGroup->GetCounter("NodeScheduler/Capacity");
     SchedulerRenices = KqpGroup->GetHistogram("NodeScheduler/ReniceValue", NMonitoring::ExponentialHistogram(20, 2, 1));
     ScheduledActorsRuns = KqpGroup->GetHistogram("NodeScheduler/ActorRunsUs", NMonitoring::ExponentialHistogram(20, 2, 1));
-    SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/SchedulerDelaysUs", NMonitoring::ExponentialHistogram(20, 2, 1));
-    ScheduledActorsActivationsCount = KqpGroup->GetCounter("NodeScheduler/Activations", true);
-    SchedulerVisibleLag = KqpGroup->GetHistogram("NodeScheduler/ActorActivationVisibleLagUs", NMonitoring::ExponentialHistogram(20, 2, 1));
-
-    SchedulerTrackedUs = KqpGroup->GetCounter("NodeScheduler/TrackedUs", false);
-    SchedulerLimitUs = KqpGroup->GetCounter("NodeScheduler/LimitUs", false);
-    SchedulerClock = KqpGroup->GetCounter("NodeScheduler/Clock", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

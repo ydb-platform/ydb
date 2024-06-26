@@ -100,15 +100,21 @@ public:
                 TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
         }
 
-        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(WakeCleaunupTag));
+        Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(WakeAdvanceTimeTag));
         Become(&TKqpNodeService::WorkState);
     }
 
+    enum {
+        WakeCleaunupTag,
+        WakeAdvanceTimeTag
+    };
+
 private:
     STATEFN(WorkState) {
-        Y_DEFER {
-            Scheduler.AdvanceTime(TMonotonic::Now());
-        };
+        //Y_DEFER {
+        //    Scheduler.AdvanceTime(TMonotonic::Now());
+        //};
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
             hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
@@ -358,11 +364,17 @@ private:
     }
 
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
-        Schedule(TDuration::Seconds(1), ev->Release().Release());
-        for (auto& bucket : State_->Buckets) {
-            auto expiredRequests = bucket.ClearExpiredRequests();
-            for (auto& cxt : expiredRequests) {
-                TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
+        if (ev->Get()->Tag == WakeAdvanceTimeTag) {
+            Scheduler.AdvanceTime(TMonotonic::Now());
+            Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(WakeAdvanceTimeTag));
+        }
+        if (ev->Get()->Tag == WakeCleaunupTag) {
+            Schedule(TDuration::Seconds(1), ev->Release().Release());
+            for (auto& bucket : State_->Buckets) {
+                auto expiredRequests = bucket.ClearExpiredRequests();
+                for (auto& cxt : expiredRequests) {
+                    TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
+                }
             }
         }
     }

@@ -1,0 +1,4 @@
+RECURSE(
+    docker-test
+    library
+)

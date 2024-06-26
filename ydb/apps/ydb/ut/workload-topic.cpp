@@ -17,7 +17,7 @@ TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload topic ${args}
     //
-    return RunYdb({"workload", "topic"}, args, checkExitCode);
+    return RunYdb({"--user", "root", "--no-password", "workload", "topic"}, args, checkExitCode);
 }
 
 struct TTopicConfigurationMatcher {
@@ -93,6 +93,8 @@ void EnsureStatisticsColumns(const TList<TString>& args,
                              const TVector<TString>& columns1,
                              const TVector<TString>& columns2)
 {
+    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
+
     ExecYdb({"init"});
     auto output = ExecYdb(args, false);
 
@@ -124,6 +126,13 @@ Y_UNIT_TEST(ReadWrite_Statistics)
     EnsureStatisticsColumns({"run", "full", "-s", "1", "--warmup", "0"},
                             {"Window", "Write speed", "Write time", "Inflight", "Lag", "Lag time", "Read speed", "Full time"},
                             {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "percentile,msg", "percentile,ms", "msg/s", "MB/s", "percentile,ms"});
+}
+
+Y_UNIT_TEST(Write_Statistics_UseTx)
+{
+    EnsureStatisticsColumns({"run", "write", "-s", "1", "--warmup", "0", "--use-tx"},
+                            {"Window", "Write speed", "Write time", "Inflight", "Select time", "Upsert time", "Commit time"},
+                            {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "percentile,ms", "percentile,ms", "percentile,ms"});
 }
 
 }

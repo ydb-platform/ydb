@@ -75,11 +75,10 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(paths[0].PathIndex, 42);
     }
 
-    NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath* path, const TString& name = {}, ui64 size = 0, bool read = false, bool isDirectory = false) {
+    NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath* path, const TString& name = {}, ui64 size = 0, bool read = false) {
         path->SetName(name);
         path->SetSize(size);
         path->SetRead(read);
-        path->SetIsDirectory(isDirectory);
         return path;
     }
 
@@ -139,24 +138,6 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(paths[4].Size, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths[4].IsDirectory, false);
         UNIT_ASSERT_VALUES_EQUAL(paths[4].PathIndex, 46);
-    }
-
-    Y_UNIT_TEST(ReadsRootFromTreeParams) {
-        NS3::TSource src;
-
-        NS3::TRange range;
-        range.SetStartPathIndex(42);
-        SetPath(range.AddPaths(), "", 0, true, true);
-
-        TPathList paths;
-        ReadPathsList(src, MakeParams(range), {}, paths);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "");
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 0);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, true);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].PathIndex, 42);
     }
 }
 

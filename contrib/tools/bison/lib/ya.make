@@ -47,15 +47,16 @@ SRCS(
     fopen-safer.c
     fseterr.c
     get-errno.c
+    getprogname.c
     glthread/lock.c
     glthread/threadlib.c
+    hard-locale.c
     hash.c
-    isnand.c
-    isnanf.c
-    isnanl.c
     lbitset.c
     localcharset.c
+    malloca.c
     math.c
+    mbrtowc.c
     mbswidth.c
     pipe-safer.c
     pipe2-safer.c
@@ -68,6 +69,7 @@ SRCS(
     quotearg.c
     sig-handler.c
     spawn-pipe.c
+    stat-time.c
     stripslash.c
     timevar.c
     unistd.c

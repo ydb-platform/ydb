@@ -3,6 +3,8 @@
 PROGRAM(bison)
 
 LICENSE(
+    Bison-exception-2.2 AND
+    CC-BY-4.0 AND
     GPL-3.0-only AND
     GPL-3.0-or-later AND
     GPL-3.0-or-later WITH Bison-exception-2.2
@@ -10,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.0)
+VERSION(3.1)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.0.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.1.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib

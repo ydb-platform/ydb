@@ -95,7 +95,7 @@
 
 Эти механизмы позволяют {{ ydb-short-name }} обеспечивать [строгую согласованность](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-Реализация распределённых транзакций рассмотрена в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md), а ниже приведён список нескольких [связанных терминов](#distributed-transactions-implementation).
+{% if oss %}Реализация распределённых транзакций рассмотрена в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md), а ниже приведён список нескольких [связанных терминов](#distributed-transactions-implementation).{% endif %}
 
 ### Многоверсионное управление параллелизмом {#mvcc}
 
@@ -445,7 +445,7 @@ PDisk содержит планировщик, который обеспечив
 
 ### Реализация распределённых транзакций {#distributed-transaction-implementation}
 
-Ниже объяснены термины, связанные с реализацией [распределённых транзакций](#distributed-transactions). Сама реализация описана в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md).
+Ниже объяснены термины, связанные с реализацией [распределённых транзакций](#distributed-transactions).{% if oss %} Сама реализация описана в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md).{% endif %}
 
 #### Детерминированные транзакции {#deterministic-transactions}
 

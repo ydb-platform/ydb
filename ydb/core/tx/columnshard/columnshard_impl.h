@@ -223,6 +223,8 @@ class TColumnShard
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    void Handle(TEvColumnShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
@@ -376,6 +378,8 @@ protected:
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
+
+            HFunc(TEvColumnShard::TEvStatisticsScanRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

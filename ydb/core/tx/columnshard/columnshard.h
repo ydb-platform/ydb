@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "common/snapshot.h"
 
+#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -87,6 +88,9 @@ struct TEvColumnShard {
         EvApplyLinksModification,
         EvApplyLinksModificationFinished,
         EvInternalScan,
+
+        EvStatisticsScanRequest,
+        EvStatisticsScanResponse,
 
         EvEnd
     };
@@ -286,6 +290,20 @@ struct TEvColumnShard {
             const auto status = (NKikimrTxColumnShard::EResultStatus)Record.GetStatus();
             return NColumnShard::ConvertToYdbStatus(status);
         }
+    };
+
+    struct TEvStatisticsScanRequest
+        : public TEventPB<TEvStatisticsScanRequest,
+                          NKikimrStat::TEvStatisticsScanRequest,
+                          EvStatisticsScanRequest>
+    {
+    };
+
+    struct TEvStatisticsScanResponse
+        : public TEventPB<TEvStatisticsScanResponse,
+                          NKikimrStat::TEvStatisticsScanResponse,
+                          EvStatisticsScanResponse>
+    {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;

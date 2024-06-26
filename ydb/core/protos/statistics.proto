@@ -94,7 +94,10 @@ message TEvGetScanStatusResponse {
 message TEvStatisticsScanRequest {
     optional NKikimrDataEvents.TTableId TableId = 1;
     optional bytes StartKey = 2;
+    // list of columns to gather statistics from. Empty means asking for every column.
     repeated uint32 ColumnTags = 3;
+    // list of statistics types requested. Empty means asking for all available.
+    repeated uint32 Types = 4;
 }
 
 message TEvStatisticsScanResponse {

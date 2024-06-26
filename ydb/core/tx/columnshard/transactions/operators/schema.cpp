@@ -187,7 +187,6 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
-    AfterStartFlag = true;
     if (WaitPathIdsToErase.empty()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
@@ -198,10 +197,8 @@ void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(IsAsync())("error", "not implemented for non-async operator by default")("method", "DoStartProposeOnComplete");
-    if (!AfterStartFlag) {
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
-    }
+    AFL_VERIFY(WaitPathIdsToErase.size());
+    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
 }
 
 }

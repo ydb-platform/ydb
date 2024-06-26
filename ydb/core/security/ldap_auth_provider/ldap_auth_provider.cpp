@@ -202,8 +202,8 @@ private:
             }
         }
 
-        UrisList = GetUris();
         const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort(Settings.GetScheme());
+        UrisList = GetUris(port);
         result = NKikimrLdap::Init(ld, Settings.GetScheme(), UrisList, port);
         if (!NKikimrLdap::IsSuccess(result)) {
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
@@ -306,30 +306,30 @@ private:
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }
 
-    TString GetUris() const {
+    TString GetUris(ui32 port) const {
         TStringBuilder uris;
         if (Settings.HostsSize() > 0) {
             for (const auto& host : Settings.GetHosts()) {
-                uris << CreateUri(host) << " ";
+                uris << CreateUri(host, port) << " ";
             }
             uris.remove(uris.size() - 1);
         } else {
-            uris << CreateUri(Settings.GetHost());
+            uris << CreateUri(Settings.GetHost(), port);
         }
         return uris;
     }
 
-    TString CreateUri(const TString& endpoint) const {
+    TString CreateUri(const TString& endpoint, ui32 port) const {
         TStringBuilder uri;
         uri << Settings.GetScheme() << "://" << endpoint;
         if (!HasEndpointPort(endpoint)) {
-            uri << ':' << Settings.GetPort();
+            uri << ':' << port;
         }
         return uri;
     }
 
     static bool HasEndpointPort(const TString& endpoint) {
-        size_t colonPos = endpoint.find(':');
+        size_t colonPos = endpoint.rfind(':');
         if (colonPos == TString::npos) {
             return false;
         }

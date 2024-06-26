@@ -365,7 +365,7 @@ public:
         }
 
         // Inconsistent writes (CTAS) don't require locks.
-        if (!HasTxSinkInTx(tx)) {
+        if (IsSplitted() && !HasTxSinkInTx(tx)) {
             return false;
         }
 

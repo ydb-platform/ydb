@@ -50,7 +50,8 @@ public:
     {}
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_,
+        static std::atomic<uint64_t> serial;
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_ << "__" << ++serial,
             SelfId(), true);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqChannelStorageActor::WorkState);

@@ -945,12 +945,11 @@ private:
     const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
+    const bool IsSpillingAllowed;
 
     bool IsSpillingFinalized = false;
 
     ui32 NextBucketToJoin = 0;
-
-    bool IsSpillingAllowed = false;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {

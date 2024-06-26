@@ -5,7 +5,7 @@
 
 #include <util/generic/map.h>
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     bool MatchPredicate(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate& predicate);
 

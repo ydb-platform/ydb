@@ -1,6 +1,6 @@
 #include "yql_generic_match_predicate.h"
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     namespace {
 

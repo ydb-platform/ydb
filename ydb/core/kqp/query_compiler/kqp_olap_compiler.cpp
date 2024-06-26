@@ -305,9 +305,9 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
             ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
         else
             ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
-    } else if (value.Maybe<TCoInt32>()) {
+    } else if (value.Maybe<TCoInt32>() || value.Maybe<TCoDate32>()) {
         ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
-    } else if (value.Maybe<TCoInt64>()) {
+    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>()) {
         ssaValue->MutableConstant()->SetInt64(FromString<i64>(nodeValue));
     } else if (value.Maybe<TCoUint8>()) {
         if constexpr (yqlTypes)

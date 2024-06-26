@@ -214,6 +214,10 @@ void RegisterAddDateAndInterval(IBuiltinFunctionRegistry& registry) {
     using TDate2 = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>;
     using TDate3 = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>;
 
+    using TDate1Big = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>;
+    using TDate2Big = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>;
+    using TDate3Big = std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>;
+
     RegisterFunctionBinPolyOpt<TDate1, TIntervalType,
         TDate1, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
     RegisterFunctionBinPolyOpt<TDate2, TIntervalType,
@@ -228,21 +232,19 @@ void RegisterAddDateAndInterval(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionBinPolyOpt<TIntervalType, TDate3,
         TDate3, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-    if constexpr (!Tz) {
-        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDate32>, TIntervalType,
-            NUdf::TDataType<NUdf::TDate32>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TDatetime64>, TIntervalType,
-            NUdf::TDataType<NUdf::TDatetime64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-        RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, TIntervalType,
-            NUdf::TDataType<NUdf::TTimestamp64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinPolyOpt<TDate1Big, TIntervalType,
+        TDate1Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinPolyOpt<TDate2Big, TIntervalType,
+        TDate2Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinPolyOpt<TDate3Big, TIntervalType,
+        TDate3Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
 
-        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TDate32>,
-            NUdf::TDataType<NUdf::TDate32>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TDatetime64>,
-            NUdf::TDataType<NUdf::TDatetime64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-        RegisterFunctionBinPolyOpt<TIntervalType, NUdf::TDataType<NUdf::TTimestamp64>,
-            NUdf::TDataType<NUdf::TTimestamp64>, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
-    }
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate1Big,
+        TDate1Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate2Big,
+        TDate2Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
+    RegisterFunctionBinPolyOpt<TIntervalType, TDate3Big,
+        TDate3Big, TAdder, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
 template<typename TType>
@@ -274,16 +276,14 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
 
 template <bool Tz, bool BigDate, bool BigInterval>
 void RegisterDateAddInterval(TKernelFamilyBase& owner) {
-    static_assert(!(Tz && BigDate), "Expect either Tz or Big date type");
-
     using TDateLeft1 = std::conditional_t<BigDate,
-        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
         std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateLeft2 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateLeft3 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
     using TIntervalRight = std::conditional_t<BigInterval,
@@ -302,19 +302,17 @@ void RegisterDateAddInterval(TKernelFamilyBase& owner) {
 
 template <bool Tz, bool BigDate, bool BigInterval>
 void RegisterIntervalAddDate(TKernelFamilyBase& owner) {
-    static_assert(!(Tz && BigDate), "Expect either Tz or Big date type");
-
     using TIntervalLeft = std::conditional_t<BigInterval,
           NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>>;
 
     using TDateRight1 = std::conditional_t<BigDate,
-        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
         std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateRight2 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateRight3 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
     if constexpr (Tz) {
@@ -354,18 +352,22 @@ void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
     RegisterDateAddInterval<false, false, false>(*family);
     RegisterDateAddInterval<true, false, false>(*family);
     RegisterDateAddInterval<false, true, false>(*family);
+    RegisterDateAddInterval<true, true, false>(*family);
 
     RegisterDateAddInterval<false, false, true>(*family);
     RegisterDateAddInterval<true, false, true>(*family);
     RegisterDateAddInterval<false, true, true>(*family);
+    RegisterDateAddInterval<true, true, true>(*family);
 
     RegisterIntervalAddDate<false, false, false>(*family);
     RegisterIntervalAddDate<true, false, false>(*family);
     RegisterIntervalAddDate<false, true, false>(*family);
+    RegisterIntervalAddDate<true, true, false>(*family);
 
     RegisterIntervalAddDate<false, false, true>(*family);
     RegisterIntervalAddDate<true, false, true>(*family);
     RegisterIntervalAddDate<false, true, true>(*family);
+    RegisterIntervalAddDate<true, true, true>(*family);
 
     RegisterIntervalAddInterval<false, false>(*family);
     RegisterIntervalAddInterval<false, true>(*family);

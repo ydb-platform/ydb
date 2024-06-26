@@ -95,7 +95,7 @@ runs:
       uses: ./.github/actions/graph_compare
  
     - name: Change target in case of incremental (tests)
-      id: test_run_choice
+      id: target_choice
       shell: bash
       run: |
         if [ "${{ inputs.increment }}" == "true" ]; then
@@ -109,7 +109,7 @@ runs:
       id: build
       if: ${{ inputs.run_build == 'true' }}
       with:
-        build_target: ${{ inputs.build_target }}
+        build_target: ${{ steps.target_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
@@ -122,7 +122,7 @@ runs:
       uses: ./.github/actions/test_ya
       if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
       with:
-        build_target: ${{ steps.test_run_choice.outputs.target }}
+        build_target: ${{ steps.target_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}

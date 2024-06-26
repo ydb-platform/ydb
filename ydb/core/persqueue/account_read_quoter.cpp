@@ -133,9 +133,10 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
-        if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
+        const auto now = ctx.Now();
+        if (now - LastReportedErrorTime > TDuration::Minutes(1)) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got quota request error: " << ev->Get()->Result);
-            LastReportedErrorTime = ctx.Now();
+            LastReportedErrorTime = now;
         }
         return;
     }

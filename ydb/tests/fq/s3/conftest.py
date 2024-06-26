@@ -37,7 +37,7 @@ class TestCounter:
         self.number_tests += 1
         assert self.number_tests <= self.tests_count_limit, \
             f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, " \
-            "this may lead timeouts on CI, please split this class"
+            "this may lead timeouts on CI, please split this file"
 
 
 @pytest.fixture(scope="module")

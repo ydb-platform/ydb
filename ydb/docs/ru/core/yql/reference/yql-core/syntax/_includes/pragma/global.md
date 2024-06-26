@@ -6,7 +6,7 @@
 | --- | --- |
 | Флаг | false |
 
-Автоматически выполнять [COMMIT](../../commit.md) после каждого выражения.
+Автоматически выполнять [COMMIT](../../select/index.md#commit) после каждого выражения.
 
 ### TablePathPrefix {#table-path-prefix}
 

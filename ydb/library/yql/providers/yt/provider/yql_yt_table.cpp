@@ -117,16 +117,16 @@ public:
         Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval));
         });
-        Converters.emplace(TCoDate::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDate32::CallableName(), [](const TExprNode& node) {
             return NYT::TNode((i64)NYql::FromString<i32>(*node.Child(0), EDataSlot::Date32));
         });
-        Converters.emplace(TCoDatetime::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDatetime64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Datetime64));
         });
-        Converters.emplace(TCoTimestamp::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoTimestamp64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Timestamp64));
         });
-        Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoInterval64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval64));
         });
         Converters.emplace(TCoTzDate::CallableName(), [](const TExprNode& node) {

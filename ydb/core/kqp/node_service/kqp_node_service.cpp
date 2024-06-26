@@ -78,8 +78,6 @@ public:
         }
         if (config.HasComputePoolsConfiguration()) {
             SetPriorities(config.GetComputePoolsConfiguration());
-        } else {
-            SetPriorities(TComputeScheduler::TDistributionRule{.Share = 1, .Name = "olap"});
         }
         Scheduler.ReportCounters(counters);
     }

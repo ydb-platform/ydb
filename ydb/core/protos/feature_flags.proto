@@ -131,4 +131,5 @@ message TFeatureFlags {
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool EnableStableNodeNames = 122 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = false];
 }

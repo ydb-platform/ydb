@@ -4,8 +4,13 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
+<<<<<<< HEAD
                 "Node Type": "ResultSet_4",
                 "PlanNodeId": 31,
+=======
+                "Node Type": "ResultSet",
+                "PlanNodeId": 12,
+>>>>>>> feature(kqp): enable stream lookup join
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +19,30 @@
                             {
                                 "Inputs": [
                                     {
+<<<<<<< HEAD
                                         "ExternalPlanNodeId": 29
+=======
+                                        "ExternalPlanNodeId": 10
+>>>>>>> feature(kqp): enable stream lookup join
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
+<<<<<<< HEAD
                         "PlanNodeId": 30,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
                                 "PlanNodeId": 29,
+=======
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 10,
+>>>>>>> feature(kqp): enable stream lookup join
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -44,15 +61,23 @@
                                                 "Condition": "zt3.f3 = f1",
                                                 "Inputs": [
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 27
                                                     },
                                                     {
                                                         "ExternalPlanNodeId": 25
+=======
+                                                        "ExternalPlanNodeId": 8
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+>>>>>>> feature(kqp): enable stream lookup join
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
+<<<<<<< HEAD
                                         "PlanNodeId": 28,
                                         "Plans": [
                                             {
@@ -243,7 +268,42 @@
                                                                         ]
                                                                     }
                                                                 ]
+=======
+                                        "PlanNodeId": 9,
+                                        "Plans": [
+                                            {
+                                                "KeyColumns": [
+                                                    "f2"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "f2"
+                                                                ],
+                                                                "Table": "postgres_jointest/join4.test_plan/zt2"
+                                                            },
+                                                            {
+                                                                "Inputs": [],
+                                                                "Iterator": "[{f2: 53}]",
+                                                                "Name": "Iterator"
+>>>>>>> feature(kqp): enable stream lookup join
                                                             }
+                                                        ],
+                                                        "PlanNodeId": 7,
+                                                        "Tables": [
+                                                            "postgres_jointest/join4.test_plan/zt2"
                                                         ]
                                                     }
                                                 ]
@@ -273,6 +333,7 @@
                             }
                         ]
                     }
+<<<<<<< HEAD
                 ],
                 "Subplan Name": "CTE precompute_2_0"
             },
@@ -332,6 +393,9 @@
                     }
                 ],
                 "Subplan Name": "CTE precompute_0_0"
+=======
+                ]
+>>>>>>> feature(kqp): enable stream lookup join
             }
         ]
     },
@@ -345,6 +409,9 @@
             "reads": [
                 {
                     "columns": [
+                        "f1"
+                    ],
+                    "lookup_by": [
                         "f1"
                     ],
                     "type": "Lookup"

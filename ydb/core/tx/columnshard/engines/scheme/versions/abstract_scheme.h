@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -31,6 +32,16 @@ public:
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 
+    std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const;
+
+    std::shared_ptr<arrow::Scalar> GetDefaultWriteValueVerified(const std::string& columnName) const;
+
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const;
+
+
+    std::vector<std::string> GetPKColumnNames() const;
+
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
 
@@ -50,8 +61,9 @@ public:
 
     std::set<ui32> GetPkColumnsIds() const;
 
-    std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
+        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
 };
 
 } // namespace NKikimr::NOlap

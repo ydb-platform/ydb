@@ -1554,7 +1554,7 @@ public:
                 << "Iterator aborted"
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
             Result->Record.SetReadId(ReadId.ReadId);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
             
             request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
@@ -1574,7 +1574,7 @@ public:
             record.SetSeqNo(state.SeqNo + 1);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString());
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
             request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
@@ -1600,7 +1600,7 @@ public:
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
         }
     }
 
@@ -2487,7 +2487,7 @@ public:
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(ReadId.ReadId);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
@@ -2501,7 +2501,7 @@ public:
             record.SetReadId(ReadId.ReadId);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
@@ -2523,7 +2523,7 @@ public:
         bool useful = Reader->FillResult(*Result, state);
         if (useful) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
         }
 
         if (Reader->HasUnreadQueries()) {
@@ -2553,9 +2553,13 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     // Note that we mutate this request below
     auto* request = ev->Get();
     
-    if (!request->ReadSpan) {
+    if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
-        request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        if (request->ReadSpan) {
+            request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        }
+        // Reparent other event-based spans to the read span
+        ev->TraceId = request->ReadSpan.GetTraceId();
     }
 
     const auto& record = request->Record;

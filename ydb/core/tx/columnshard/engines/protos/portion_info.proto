@@ -20,6 +20,7 @@ message TIndexPortionMeta {
     optional TSnapshot RecordSnapshotMin = 7;
     optional TSnapshot RecordSnapshotMax = 8;
     optional NKikimrColumnShardStatisticsProto.TPortionStorage StatisticsStorage = 9;
+    optional uint32 DeletionsCount = 10;
 }
 
 message TIndexColumnMeta {

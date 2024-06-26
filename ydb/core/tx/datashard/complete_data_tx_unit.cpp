@@ -101,7 +101,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
             result->Orbit = std::move(op->Orbit);
-            DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+            DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
         }
     }
 

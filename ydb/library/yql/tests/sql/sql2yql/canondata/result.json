@@ -12053,13 +12053,6 @@
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-join_groups_/sql.yql"
         }
     ],
-    "test_sql2yql.test[pg-join_mixed_types]": [
-        {
-            "checksum": "b364a4a34d7f99a7ffb8ac6b4b3197f3",
-            "size": 1691,
-            "uri": "https://{canondata_backend}/1936997/14bc828ad4bae6165180fbcaed4d8486bbb77859/resource.tar.gz#test_sql2yql.test_pg-join_mixed_types_/sql.yql"
-        }
-    ],
     "test_sql2yql.test[pg-join_tree_order]": [
         {
             "checksum": "ccdf19008cb38637422026d0ea06e9b8",

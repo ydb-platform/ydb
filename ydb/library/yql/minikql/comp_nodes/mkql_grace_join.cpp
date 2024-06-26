@@ -1116,7 +1116,7 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 
     const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
     IComputationWideFlowNode* flowRight = nullptr;
-    if (isSelfJoin) {
+    if (!isSelfJoin) {
         flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));
     }
 

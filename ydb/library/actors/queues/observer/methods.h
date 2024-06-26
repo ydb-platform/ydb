@@ -25,6 +25,7 @@ namespace NActors {
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveMoveTailBecauseHeadOvertakesInSlowPop)
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveChangeReallySlowPopToSlowPop)
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessFastPop)
+    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessOvertakenPop)
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedFastPop)
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveMoveTailBecauseHeadOvertakesInFastPop)
     DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedFastPopAttempt)

@@ -6,7 +6,7 @@ void TFileTreeBuilder::AddPath(const TString& path, ui64 fileSize, bool isDirect
     const auto parts = SplitPath(path);
     TPath::TFileTreeMap* currentChildren = &Roots;
     for (size_t i = 0, size = parts.size(); i < size; ++i) {
-        bool isSubDirectory = i != size - 1; 
+        bool isSubDirectory = i != size - 1;
         if (!isSubDirectory) {
             TPath& p = (*currentChildren)[TTreeKey{path == "" ? "/" : parts[i], isDirectory}];
             Y_ABORT_UNLESS(p.FileSize == 0);

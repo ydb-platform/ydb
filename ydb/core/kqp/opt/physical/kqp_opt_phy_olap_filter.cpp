@@ -772,7 +772,6 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         predicate = simplified.Predicate();
         value = simplified.ThenValue().Cast<TCoJust>().Input();
     }
-
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
     const auto& lambdaArg = lambda.Args().Arg(0).Ref();

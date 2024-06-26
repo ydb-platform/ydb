@@ -6,6 +6,8 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
+#include <ydb/library/yql/utils/log/log.h>
+
 namespace NYql {
 
 TExprNode::TPtr WrapWithNonNegativeCheck(TPositionHandle pos, const TExprNode::TPtr& value, TExprContext& ctx, const TString& message) {
@@ -1766,6 +1768,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         }
 
                         if (left->GetTypeAnn() != right->GetTypeAnn()) {
+			    YQL_CLOG(DEBUG, Core) << "EquiJoin types mismatch: " << FormatType(left->GetTypeAnn()) << " != " << FormatType(right->GetTypeAnn()) << '\n';
+
                             bad = true;
                             break;
                         }

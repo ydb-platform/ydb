@@ -76,7 +76,6 @@ public:
     TString GetPeer() const override { return "localhost"; }
     bool SslServer() const override { return false; }
     bool IsClientLost() const override { return false; }
-    bool IsStreamCall() const override { return false; }
 
 public:
     NYql::TIssues GetIssues() {

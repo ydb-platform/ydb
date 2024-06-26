@@ -366,10 +366,6 @@ protected:
         return FinishPromise.GetFuture();
     }
 
-    bool IsStreamCall() const override {
-        return true;
-    }
-
     bool IsClientLost() const override {
         return FinishPromise.HasValue();
     }

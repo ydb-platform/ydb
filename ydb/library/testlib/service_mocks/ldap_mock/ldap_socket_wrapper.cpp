@@ -64,7 +64,7 @@ TLdapSocketWrapper::TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> liste
     , Socket()
     , Ctx(CreateSslContext())
     , Ssl(SSL_new(Ctx.Get()))
-    , IsSecurityConnection(isSecureConnection)
+    , IsSecureConnection(isSecureConnection)
 {
     SetupCerts();
     SSL_set_accept_state(Ssl.Get());
@@ -81,7 +81,7 @@ void TLdapSocketWrapper::Send(const void* msg, size_t len) {
 void TLdapSocketWrapper::OnAccept() {
     TSockAddrInet Addr;
     TBaseSocket::Check(ListenSocket->Accept(&Socket, &Addr), "accept");
-    if (IsSecurityConnection) {
+    if (IsSecureConnection) {
         EnableSecureConnection();
     } else {
         ReceiveMsg = &TLdapSocketWrapper::InsecureReceive;
@@ -96,7 +96,7 @@ void TLdapSocketWrapper::EnableSecureConnection() {
     SendMsg = &TLdapSocketWrapper::SecureSend;
 }
 bool TLdapSocketWrapper::IsSecure() const {
-    return IsSecurityConnection;
+    return IsSecureConnection;
 }
 
 void TLdapSocketWrapper::Close() {

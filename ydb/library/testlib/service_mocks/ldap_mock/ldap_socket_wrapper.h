@@ -60,7 +60,7 @@ private:
     TSslHolder<SSL> Ssl;
     TSslHolder<EVP_PKEY> Key;
     TSslHolder<X509> X509;
-    bool IsSecurityConnection = false;
+    bool IsSecureConnection = false;
 
     std::function<ssize_t(TLdapSocketWrapper&, void*, size_t)> ReceiveMsg;
     std::function<ssize_t(TLdapSocketWrapper&, const void*, size_t)> SendMsg;

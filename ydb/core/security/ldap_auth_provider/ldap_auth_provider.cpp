@@ -173,7 +173,7 @@ private:
         result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
         if (!NKikimrLdap::IsSuccess(result)) {
             TEvLdapAuthProvider::TError error {
-                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + ServerHosts + "\n"
+                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + UrisList + "\n"
                             + NKikimrLdap::ErrorToString(result),
                 .Retryable = NKikimrLdap::IsRetryableError(result)
             };
@@ -202,12 +202,12 @@ private:
             }
         }
 
-        ServerHosts = GetUris();
+        UrisList = GetUris();
         const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort(Settings.GetScheme());
-        result = NKikimrLdap::Init(ld, Settings.GetScheme(), ServerHosts, port);
+        result = NKikimrLdap::Init(ld, Settings.GetScheme(), UrisList, port);
         if (!NKikimrLdap::IsSuccess(result)) {
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                    {.Message = "Could not initialize LDAP connection for uris: " + ServerHosts + ". " + NKikimrLdap::LdapError(*ld),
+                    {.Message = "Could not initialize LDAP connection for uris: " + UrisList + ". " + NKikimrLdap::LdapError(*ld),
                     .Retryable = false}}};
         }
 
@@ -237,14 +237,14 @@ private:
         char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
         if (dn == nullptr) {
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
-                    {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + ServerHosts + "\n"
+                    {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + UrisList + "\n"
                             + NKikimrLdap::LdapError(*request.Ld),
                     .Retryable = false}}};
         }
         TEvLdapAuthProvider::TError error;
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {
-            error.Message = "LDAP login failed for user " + TString(dn) + " on server " + ServerHosts + "\n"
+            error.Message = "LDAP login failed for user " + TString(dn) + " on server " + UrisList + "\n"
                             + NKikimrLdap::ErrorToString((result));
             error.Retryable = NKikimrLdap::IsRetryableError(result);
         }
@@ -266,7 +266,7 @@ private:
         TSearchUserResponse response;
         if (!NKikimrLdap::IsSuccess(result)) {
             response.Status = NKikimrLdap::ErrorToStatus(result);
-            response.Error = {.Message = "Could not search for filter " + searchFilter + " on server " + ServerHosts + "\n"
+            response.Error = {.Message = "Could not search for filter " + searchFilter + " on server " + UrisList + "\n"
                                          + NKikimrLdap::ErrorToString(result),
                               .Retryable = NKikimrLdap::IsRetryableError(result)};
             return response;
@@ -275,11 +275,11 @@ private:
         if (countEntries != 1) {
             if (countEntries == 0) {
                 response.Error  = {.Message = "LDAP user " + request.User + " does not exist. "
-                                              "LDAP search for filter " + searchFilter + " on server " + ServerHosts + " return no entries",
+                                              "LDAP search for filter " + searchFilter + " on server " + UrisList + " return no entries",
                                    .Retryable = false};
             } else {
                 response.Error = {.Message = "LDAP user " + request.User + " is not unique. "
-                                             "LDAP search for filter " + searchFilter + " on server " + ServerHosts + " return " + countEntries + " entries",
+                                             "LDAP search for filter " + searchFilter + " on server " + UrisList + " return " + countEntries + " entries",
                                   .Retryable = false};
             }
             response.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
@@ -328,10 +328,6 @@ private:
         return uri;
     }
 
-    TString GetServerHosts() const {
-        return ServerHosts;
-    }
-
     static bool HasEndpointPort(const TString& endpoint) {
         size_t colonPos = endpoint.find(':');
         if (colonPos == TString::npos) {
@@ -345,7 +341,7 @@ private:
     const NKikimrProto::TLdapAuthentication Settings;
     const TSearchFilterCreator FilterCreator;
     char* RequestedAttributes[2];
-    TString ServerHosts;
+    TString UrisList;
 };
 
 IActor* CreateLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings) {

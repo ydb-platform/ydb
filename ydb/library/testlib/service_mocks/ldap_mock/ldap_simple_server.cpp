@@ -11,11 +11,11 @@
 
 namespace LdapMock {
 
-TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses, bool isSecurityConnection)
-    : TLdapSimpleServer(port, {responses, {}}, isSecurityConnection)
+TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses, bool isSecureConnection)
+    : TLdapSimpleServer(port, {responses, {}}, isSecureConnection)
 {}
 
-TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses, bool isSecurityConnection)
+TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses, bool isSecureConnection)
     : Port(port)
     , Responses(responses)
 {
@@ -38,7 +38,7 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockRespons
     ThreadPool->Start(1);
 
     auto receiveFinish = MakeAtomicShared<TInetStreamSocket>(socketPair[0]);
-    ListenerThread = ThreadPool->Run([listenSocket, receiveFinish, &useFirstSetResponses = this->UseFirstSetResponses, &responses = this->Responses, isSecurityConnection] {
+    ListenerThread = ThreadPool->Run([listenSocket, receiveFinish, &useFirstSetResponses = this->UseFirstSetResponses, &responses = this->Responses, isSecureConnection] {
         TSocketPoller socketPoller;
         socketPoller.WaitRead(*receiveFinish, nullptr);
         socketPoller.WaitRead(*listenSocket, (void*)1);
@@ -51,7 +51,7 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockRespons
                 if (!cookies[i]) {
                     running = false;
                 } else {
-                    TAtomicSharedPtr<TLdapSocketWrapper> socket = MakeAtomicShared<TLdapSocketWrapper>(listenSocket, isSecurityConnection);
+                    TAtomicSharedPtr<TLdapSocketWrapper> socket = MakeAtomicShared<TLdapSocketWrapper>(listenSocket, isSecureConnection);
                     socket->OnAccept();
 
                     SystemThreadFactory()->Run(

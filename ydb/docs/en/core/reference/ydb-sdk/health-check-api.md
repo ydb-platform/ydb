@@ -5,7 +5,7 @@ description: "The article will tell you how to initiate the check using the Heal
 
 # Health Check API
 
-{{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing problems.
+{{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing issues.
 
 To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` namespace in the SDK. You must also pass the name of the checked DB as usual.
 
@@ -40,7 +40,7 @@ message SelfCheckResult {
 }
 ```
 
-If any issues are detected, the `issue_log` field will contain descriptions of the problems with the following structure:
+If any issues are detected, the `issue_log` field will contain descriptions of the issues with the following structure:
 ```protobuf
 message IssueLog {
     string id = 1;
@@ -52,7 +52,7 @@ message IssueLog {
     uint32 level = 7;
 }
 ```
-These issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how problems in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
+These issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
 
 ![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
 
@@ -64,16 +64,16 @@ Description of all fields in the response is provided below:
 
 | Field | Description |
 |:----|:----|
-| `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No problems were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious problem was detected in the database, with complete or partial loss of availability.</li></ul> |
-| `issue_log` | This is a set of elements, each of which describes a problem in the system at a certain level. |
-| `issue_log.id` | A unique problem ID within this response. |
-| `issue_log.status` | Status (severity) of the current problem. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious problem, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor problem, no risks to availability. We recommend you continue monitoring the problem.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No problems were detected.</li><li>`GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).</li></ul> |
-| `issue_log.message` | Text that describes the problem. |
-| `issue_log.location` | Location of the problem. This can be a physical location or an execution context. |
-| `issue_log.reason` | This is a set of elements, each of which describes a problem in the system at a certain level. |
-| `issue_log.type` | Problem category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
-| `issue_log.level` | The depth of problem nesting. |
-| `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious problems at a high level. [Example](#example-verbose). |
+| `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No issues were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious issue was detected in the database, with complete or partial loss of availability.</li></ul> |
+| `issue_log` | This is a set of elements, each of which describes a issue in the system at a certain level. |
+| `issue_log.id` | A unique issue ID within this response. |
+| `issue_log.status` | Status (severity) of the current issue. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious issue, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor issue, no risks to availability. We recommend you continue monitoring the issue.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No issues were detected.</li><li>`GREY`: Failed to determine the status (a issue with the self-diagnostic mechanism).</li></ul> |
+| `issue_log.message` | Text that describes the issue. |
+| `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
+| `issue_log.reason` | This is a set of elements, each of which describes a issue in the system at a certain level. |
+| `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
+| `issue_log.level` | The depth of issue nesting. |
+| `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious issues at a high level. [Example](#example-verbose). |
 | `location` | Contains information about host, where `HealthCheck` service was called |
 
 ## Call parameters {#call-parameters}
@@ -100,7 +100,7 @@ The whole list of extra parameters presented below:
 | `MinimumStatus`       | `EStatusFlag`  | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
 | `MaximumLevel`        | `int32`        | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |
 
-## Possible problems {#problems}
+## Possible issues {#issues}
 
 | Message | Description |
 |:----|:----|
@@ -114,13 +114,13 @@ The whole list of extra parameters presented below:
 | **STORAGE_POOL** ||
 | `Pool degraded` <br>`Pool has no redundancy` <br>`Pool failed` | These issues depend solely on the underlying `STORAGE_GROUP` layer. |
 | **STORAGE_GROUP** ||
-| `Group has no vslots` | This case is not expected, it inner problem. |
+| `Group has no vslots` | This case is not expected; it is an internal issue. |
 | `Group degraded` | A number of disks allowed in the group are not available. |
 | `Group has no redundancy` | A storage group lost its redundancy. Аnother failure of vdisk may lead to the loss of the group. |
 | `Group failed` | A storage group lost its integrity. Data is not available |
 ||`HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and, depending on them, sets the appropriate status and displays a message. |
 | **VDISK** ||
-| `System tablet BSC didn't provide known status` | This case is not expected, it inner problem. |
+| `System tablet BSC didn't provide known status` | This case is not expected; it is an internal issue. |
 | `VDisk is not available` | the disk is not operational at all. |
 | `VDisk is being initialized` | initialization in process. |
 | `Replication in progress` | the disk accepts queries, but not all the data was replicated. |

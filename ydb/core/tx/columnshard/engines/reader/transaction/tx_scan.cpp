@@ -179,22 +179,6 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     return true;
 }
 
-template <typename T>
-struct TContainerPrinter {
-    const T& Ref;
-
-    TContainerPrinter(const T& ref)
-        : Ref(ref) {
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TContainerPrinter& cont) {
-        for (auto& ptr : cont.Ref) {
-            out << *ptr << " ";
-        }
-        return out;
-    }
-};
-
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;

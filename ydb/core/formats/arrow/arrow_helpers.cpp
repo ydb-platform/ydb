@@ -199,7 +199,7 @@ std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>
 namespace {
 template <class TDataContainer>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TString>& columnNames) {
+    const std::vector<TString>& columnNames, const bool necessaryColumns) {
     if (!srcBatch) {
         return srcBatch;
     }
@@ -214,7 +214,11 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        if (necessaryColumns) {
+            AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        } else if (pos == -1) {
+            continue;
+        }
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
     }
@@ -225,12 +229,22 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
@@ -645,6 +659,54 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
     return out;
 }
 
+namespace {
+
+template <class T>
+class TDefaultScalarValue {
+public:
+    static constexpr T Value = 0;
+};
+
+template <>
+class TDefaultScalarValue<bool> {
+public:
+    static constexpr bool Value = false;
+};
+
+}
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type) {
+    std::shared_ptr<arrow::Scalar> out;
+    SwitchType(type->id(), [&](const auto& t) {
+        using TWrap = std::decay_t<decltype(t)>;
+        using T = typename TWrap::T;
+        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+        if constexpr (std::is_same_v<T, arrow::StringType> ||
+            std::is_same_v<T, arrow::BinaryType> ||
+            std::is_same_v<T, arrow::LargeStringType> ||
+            std::is_same_v<T, arrow::LargeBinaryType>) {
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
+        } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
+            std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(s), type);
+        } else if constexpr (std::is_same_v<T, arrow::HalfFloatType>) {
+            return false;
+        } else if constexpr (arrow::is_temporal_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value, type);
+        } else if constexpr (arrow::has_c_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value);
+        } else {
+            return false;
+        }
+        return true;
+    });
+    Y_ABORT_UNLESS(out);
+    return out;
+}
+
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) {
     auto res = array->GetScalar(position);
     Y_ABORT_UNLESS(res.ok());
@@ -1020,6 +1082,27 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
         return nullptr;
     }
     return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+}
+
+bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
+    AFL_VERIFY(column);
+    return column->null_bitmap_data();
+}
+
+std::vector<TString> ConvertStrings(const std::vector<std::string>& input) {
+    std::vector<TString> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
+}
+
+std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
+    std::vector<std::string> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
 }
 
 }

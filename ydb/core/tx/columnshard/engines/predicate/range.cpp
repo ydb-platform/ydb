@@ -7,11 +7,11 @@ std::set<ui32> TPKRangeFilter::GetColumnIds(const TIndexInfo& indexInfo) const {
     std::set<ui32> result;
     for (auto&& i : PredicateFrom.GetColumnNames()) {
         result.emplace(indexInfo.GetColumnId(i));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     for (auto&& i : PredicateTo.GetColumnNames()) {
         result.emplace(indexInfo.GetColumnId(i));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     return result;
 }

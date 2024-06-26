@@ -1054,6 +1054,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(WriteSessionSwitchDatabases) {
+        // Test that the federated write session doesn't deadlock when reconnecting to another database,
+        // if the updated state of the federation is different from the previous one.
+
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
             TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
 
@@ -1082,11 +1085,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         writeSettings
             .EventHandlers_.SessionClosedHandler([&](const NTopic::TSessionClosedEvent &ev) {
-                if (ev.IsSuccess()) {
-                    ++successfulSessionClosedEvents;
-                } else {
-                    ++otherSessionClosedEvents;
-                }
+                ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
             });
 
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
@@ -1104,6 +1103,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
             UNIT_ASSERT(acksEvent);
         }
+
+        // Wait for two requests to the federation discovery service.
+        // This way we ensure the federated write session has had enough time to request
+        // the updated state of the federation from its federation observer.
 
         fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultWithUnavailableDatabase(1));
@@ -1127,6 +1130,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        {
+            UNIT_ASSERT(token.Defined());
+            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
+
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
 
         setup->ShutdownGRpc();
 

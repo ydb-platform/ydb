@@ -510,12 +510,13 @@ public:
             TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-            bool enableRequestMod3x3ForMinLatecy)
+            bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
                 ev->RestartCounter, std::move(traceId), "DSProxy.Put", ev, nullptr,
                 NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR)
-        , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId())
+        , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId(),
+                slowDiskThreshold)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , HandleClass(ev->HandleClass)
         , ReportedBytes(0)
@@ -550,12 +551,12 @@ public:
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy)
+            bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold)
         : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
                 MaxRestartCounter(events), {}, nullptr, static_cast<TEvBlobStorage::TEvPut*>(nullptr), nullptr,
                 NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR)
-        , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy)
+        , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy, slowDiskThreshold)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)
         , HandleClass(handleClass)
@@ -763,9 +764,10 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-        bool enableRequestMod3x3ForMinLatecy) {
+        bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold) {
     return new TBlobStorageGroupPutRequest(info, state, source, mon, ev, cookie, std::move(traceId), timeStatsEnabled,
-            std::move(stats), latencyQueueKind, now, storagePoolCounters, enableRequestMod3x3ForMinLatecy);
+            std::move(stats), latencyQueueKind, now, storagePoolCounters, enableRequestMod3x3ForMinLatecy,
+            slowDiskThreshold);
 }
 
 IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
@@ -776,10 +778,10 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-        bool enableRequestMod3x3ForMinLatecy) {
+        bool enableRequestMod3x3ForMinLatecy, float slowDiskThreshold) {
     return new TBlobStorageGroupPutRequest(info, state, mon, ev, timeStatsEnabled,
             std::move(stats), latencyQueueKind, now, storagePoolCounters, handleClass, tactic,
-            enableRequestMod3x3ForMinLatecy);
+            enableRequestMod3x3ForMinLatecy, slowDiskThreshold);
 }
 
 }//NKikimr

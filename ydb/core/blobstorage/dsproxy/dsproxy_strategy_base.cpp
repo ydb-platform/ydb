@@ -405,7 +405,7 @@ ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStora
 
             // Check if the slowest disk exceptionally slow, or just not very fast
             ui32 slowDiskSubgroupMask = 0;
-            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+            if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * slowDiskThreshold) {
                 slowDiskSubgroupMask = 1 << worstDisks[0].DiskIdx;
             }
 

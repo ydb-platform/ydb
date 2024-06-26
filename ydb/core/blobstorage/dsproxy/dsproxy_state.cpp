@@ -322,4 +322,8 @@ namespace NKikimr {
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 
+    float TBlobStorageGroupProxy::GetSlowDiskThreshold() {
+        return 0.001f * SlowDiskThreshold.Update(TActivationContext::Now());
+    }
+
 } // NKikimr

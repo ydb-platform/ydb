@@ -193,6 +193,8 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
+
+        icb->RegisterLocalControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
     }
 
     // start replication broker

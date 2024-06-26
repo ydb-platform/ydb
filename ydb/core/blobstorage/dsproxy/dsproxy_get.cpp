@@ -399,12 +399,12 @@ public:
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
             NWilson::TTraceId&& traceId, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
-            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, float slowDiskThreshold)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
                 latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(traceId), "DSProxy.Get", ev,
                 std::move(ev->ExecutionRelay), NKikimrServices::TActivity::BS_PROXY_GET_ACTOR)
-        , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
+        , GetImpl(info, state, ev, std::move(nodeLayout), slowDiskThreshold, LogCtx.RequestPrefix)
         , Orbit(std::move(ev->Orbit))
         , Deadline(ev->Deadline)
         , StartTime(now)
@@ -473,9 +473,10 @@ IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupIn
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
         ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
+        float slowDiskThreshold) {
     return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
-            std::move(nodeLayout), latencyQueueKind, now, storagePoolCounters);
+            std::move(nodeLayout), latencyQueueKind, now, storagePoolCounters, slowDiskThreshold);
 }
 
 }//NKikimr

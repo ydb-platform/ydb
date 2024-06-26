@@ -80,7 +80,7 @@ namespace NKikimr {
                 Mon->EventGet->Inc();
                 PushRequest(CreateBlobStorageGroupGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                     ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
-                    kind, TActivationContext::Now(), StoragePoolCounters), ev->Get()->Deadline);
+                    kind, TActivationContext::Now(), StoragePoolCounters, GetSlowDiskThreshold()), ev->Get()->Deadline);
             } else {
                 Mon->EventMultiGet->Inc();
                 PushRequest(CreateBlobStorageGroupMultiGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
@@ -157,8 +157,8 @@ namespace NKikimr {
             // TODO(alexvru): MinLatency support
             PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                 ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
-                PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters,
-                enableRequestMod3x3ForMinLatency), ev->Get()->Deadline);
+                PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency,
+                GetSlowDiskThreshold()), ev->Get()->Deadline);
         }
     }
 
@@ -287,12 +287,13 @@ namespace NKikimr {
                     auto& ev = batchedPuts.Queue.front();
                     PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender,
                         Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats,
-                        kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency),
-                        ev->Get()->Deadline);
+                        kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency,
+                        GetSlowDiskThreshold()), ev->Get()->Deadline);
                 } else {
                     PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
                         Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
-                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency), TInstant::Max());
+                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency,
+                        GetSlowDiskThreshold()), TInstant::Max());
                 }
             } else {
                 for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {

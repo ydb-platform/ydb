@@ -878,6 +878,7 @@ struct TEvBlobStorage {
         EvRunActor = EvPut + 15 * 512,
         EvVMockCtlRequest,
         EvVMockCtlResponse,
+        EvDelayedMessageWrapper,
 
         // incremental huge blob keeper
         EvIncrHugeInit = EvPut + 17 * 512,

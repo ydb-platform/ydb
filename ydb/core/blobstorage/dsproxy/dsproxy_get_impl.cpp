@@ -328,13 +328,13 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, SlowDiskThreshold);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
     return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy())
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck));
+        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), SlowDiskThreshold)
+        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), SlowDiskThreshold);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
@@ -345,7 +345,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
-    return Blackboard.RunStrategies(logCtx, strategies);
+    return Blackboard.RunStrategies(logCtx, strategies, SlowDiskThreshold);
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
@@ -356,9 +356,9 @@ EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     } else if (MustRestoreFirst || PhantomCheck) {
         return RunBoldStrategy(logCtx);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsBlockStrategy(), SlowDiskThreshold);
     } else if (Info->Type.ErasureFamily() == TErasureType::ErasureMirror) {
-        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy());
+        return Blackboard.RunStrategy(logCtx, TMinIopsMirrorStrategy(), SlowDiskThreshold);
     } else {
         return RunBoldStrategy(logCtx);
     }

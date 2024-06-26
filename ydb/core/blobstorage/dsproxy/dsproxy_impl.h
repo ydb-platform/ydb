@@ -118,6 +118,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool HasInvalidGroupId() const { return GroupId.GetRawId() == Max<ui32>(); }
     void ProcessInitQueue();
 
+    TMemorizableControlWrapper SlowDiskThreshold;
+    float GetSlowDiskThreshold();
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Enable monitoring
 
@@ -313,10 +316,12 @@ public:
 
     TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch,
+            const TControlWrapper &slowDiskThreshold);
 
     TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch,
+            const TControlWrapper &slowDiskThreshold);
 
     void Bootstrap();
 

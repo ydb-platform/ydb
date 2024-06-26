@@ -37,7 +37,7 @@ void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutR
         const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     Y_VERIFY_S(Blackboard.BlobStates.size(), "State# " << DumpFullState());
     TBatchedVec<TBlackboard::TFinishedBlob> finished;
-    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished, &expired);
+    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, SlowDiskThreshold, &finished, &expired);
     for (const TBlackboard::TFinishedBlob& item : finished) {
         Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
         Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);

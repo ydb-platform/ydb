@@ -36,8 +36,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon,
-                        getCounters(info), EnablePutBatching, EnableVPatch), TMailboxType::ReadAsFilled,
-                        AppData()->SystemPoolId);
+                        getCounters(info), EnablePutBatching, EnableVPatch, SlowDiskThreshold),
+                        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
@@ -51,11 +51,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
-                EnablePutBatching, EnableVPatch));
+                EnablePutBatching, EnableVPatch, SlowDiskThreshold));
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, EnablePutBatching, EnableVPatch));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, EnablePutBatching, EnableVPatch,
+                SlowDiskThreshold));
     }
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);

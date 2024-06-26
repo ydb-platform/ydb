@@ -158,7 +158,7 @@ class IStrategy {
 public:
     virtual ~IStrategy() = default;
     virtual EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) = 0;
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) = 0;
 };
 
 struct TBlackboard {
@@ -201,9 +201,10 @@ struct TBlackboard {
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
 
     EStrategyOutcome RunStrategies(TLogContext& logCtx, const TStackVec<IStrategy*, 1>& strategies,
-        TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
-    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TFinishedBlob> *finished = nullptr,
+            float slowDiskThreshold = 2, TBatchedVec<TFinishedBlob> *finished = nullptr,
             const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
+    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, float slowDiskThreshold = 2,
+            TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
     TBlobState& GetState(const TLogoBlobID &id);
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);

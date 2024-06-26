@@ -30,7 +30,8 @@ public:
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests) override {
+            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests, float slowDiskThreshold) override {
+        Y_UNUSED(slowDiskThreshold);
         // Find the unput part and disk
         i32 badDiskIdx = -1;
         for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {

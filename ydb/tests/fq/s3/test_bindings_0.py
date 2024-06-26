@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-import logging
 import pytest
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb

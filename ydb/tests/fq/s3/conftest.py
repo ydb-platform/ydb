@@ -105,7 +105,7 @@ def kikimr_starts_counter():
 
 @pytest.fixture(scope="module")
 def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
-    # kikimr_starts_counter.on_test_start()
+    kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
         yield kikimr
@@ -113,7 +113,7 @@ def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, m
 
 @pytest.fixture(scope="module")
 def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
-    # kikimr_starts_counter.on_test_start()
+    kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
         yield kikimr
@@ -142,7 +142,7 @@ def tests_counter():
 
 @pytest.fixture
 def client(kikimr, tests_counter, request=None):
-    # tests_counter.on_test_start()
+    tests_counter.on_test_start()
     client = FederatedQueryClient(
         request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
     )

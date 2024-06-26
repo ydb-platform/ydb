@@ -89,8 +89,8 @@ struct TEvColumnShard {
         EvApplyLinksModificationFinished,
         EvInternalScan,
 
-        EvStatisticsScanRequest,
-        EvStatisticsScanResponse,
+        EvStatisticsRequest,
+        EvStatisticsResponse,
 
         EvEnd
     };
@@ -292,17 +292,17 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvStatisticsScanRequest
-        : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrStat::TEvStatisticsScanRequest,
-                          EvStatisticsScanRequest>
+    struct TEvStatisticsRequest
+        : public TEventPB<TEvStatisticsRequest,
+                          NKikimrStat::TEvStatisticsRequest,
+                          EvStatisticsRequest>
     {
     };
 
-    struct TEvStatisticsScanResponse
-        : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrStat::TEvStatisticsScanResponse,
-                          EvStatisticsScanResponse>
+    struct TEvStatisticsResponse
+        : public TEventPB<TEvStatisticsResponse,
+                          NKikimrStat::TEvStatisticsResponse,
+                          EvStatisticsResponse>
     {
     };
 

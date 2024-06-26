@@ -63,13 +63,13 @@ public:
         record.SetShardTabletId(ShardTabletId);
 
         if (abort != EAbort::None) {
-            record.SetStatus(NKikimrStat::TEvStatisticsScanResponse::ABORTED);
+            record.SetStatus(NKikimrStat::TEvStatisticsResponse::ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             delete this;
             return nullptr;
         }
 
-        record.SetStatus(NKikimrStat::TEvStatisticsScanResponse::SUCCESS);
+        record.SetStatus(NKikimrStat::TEvStatisticsResponse::SUCCESS);
         auto tags = Scheme->Tags();
         for (size_t t = 0; t < tags.size(); ++t) {
             auto* column = record.AddColumns();
@@ -134,14 +134,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, co
 
     const auto& tableId = record.GetTableId();
     if (PathOwnerId != tableId.GetOwnerId()) {
-        response->Record.SetStatus(NKikimrStat::TEvStatisticsScanResponse::ERROR);
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
 
     auto infoIt = TableInfos.find(tableId.GetTableId());
     if (infoIt == TableInfos.end()) {
-        response->Record.SetStatus(NKikimrStat::TEvStatisticsScanResponse::ERROR);
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }

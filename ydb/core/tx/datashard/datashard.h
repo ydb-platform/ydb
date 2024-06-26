@@ -1708,14 +1708,14 @@ struct TEvDataShard {
 
     struct TEvStatisticsScanRequest
         : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrStat::TEvStatisticsScanRequest,
+                          NKikimrStat::TEvStatisticsRequest,
                           EvStatisticsScanRequest>
     {
     };
 
     struct TEvStatisticsScanResponse
         : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrStat::TEvStatisticsScanResponse,
+                          NKikimrStat::TEvStatisticsResponse,
                           EvStatisticsScanResponse>
     {
     };

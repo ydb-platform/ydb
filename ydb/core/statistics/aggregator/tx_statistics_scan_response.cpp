@@ -5,10 +5,10 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
-    NKikimrStat::TEvStatisticsScanResponse Record;
+    NKikimrStat::TEvStatisticsResponse Record;
     bool IsCorrectShardId = false;
 
-    TTxStatisticsScanResponse(TSelf* self, NKikimrStat::TEvStatisticsScanResponse&& record)
+    TTxStatisticsScanResponse(TSelf* self, NKikimrStat::TEvStatisticsResponse&& record)
         : TTxBase(self)
         , Record(std::move(record))
     {}

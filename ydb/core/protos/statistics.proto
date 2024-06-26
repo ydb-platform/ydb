@@ -91,7 +91,7 @@ message TEvGetScanStatusResponse {
     optional EStatus Status = 1;
 }
 
-message TEvStatisticsScanRequest {
+message TEvStatisticsRequest {
     optional NKikimrDataEvents.TTableId TableId = 1;
     optional bytes StartKey = 2;
     // list of columns to gather statistics from. Empty means asking for every column.
@@ -100,7 +100,7 @@ message TEvStatisticsScanRequest {
     repeated uint32 Types = 4;
 }
 
-message TEvStatisticsScanResponse {
+message TEvStatisticsResponse {
     message TStatistic {
         optional uint32 Type = 1;
         optional bytes Data = 2;

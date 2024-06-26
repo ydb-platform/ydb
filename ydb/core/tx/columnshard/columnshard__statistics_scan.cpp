@@ -5,14 +5,14 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(TEvColumnShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+void TColumnShard::Handle(TEvColumnShard::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = std::make_unique<TEvDataShard::TEvStatisticsResponse>();
     auto& record = response->Record;
     record.SetShardTabletId(TabletID());
 
-    record.SetStatus(NKikimrStat::TEvStatisticsScanResponse::SUCCESS);
+    record.SetStatus(NKikimrStat::TEvStatisticsResponse::SUCCESS);
 
-    ctx.Send(new IEventHandle(ev->Sender, TActorId(), response.release(), 0, ev->Cookie));
+    Send(new IEventHandle(ev->Sender, response.release(), 0, ev->Cookie));
 }
 
 }

@@ -345,7 +345,7 @@ private:
             errorBuilder << "Error while sending request to monitoring api: " << error;
             const auto& response = res->HttpIncomingResponse->Get()->Response;
             if (response) {
-                errorBuilder << ", response: " << response->Body;
+                errorBuilder << ", response: " << response->Body.Head(10000);
             }
 
             TIssues issues { TIssue(errorBuilder) };
@@ -363,7 +363,7 @@ private:
         try {
             NJson::ReadJsonTree(response.Response->Body, &json, /*throwOnError*/ true);
         } catch (const std::exception& e) {
-            SINK_LOG_E("Invalid JSON reponse from monitoring: " << e.what() << ", body: " << response.Response->Body);
+            SINK_LOG_E("Invalid JSON reponse from monitoring: " << e.what() << ", body: " << response.Response->Body.Head(10000));
             TIssues issues { TIssue(TStringBuilder() << "Failed to parse response from monitoring: " << e.what()) };
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;

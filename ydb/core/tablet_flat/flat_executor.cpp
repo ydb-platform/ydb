@@ -2947,6 +2947,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
+        GcLogic->Confirm(ctx, Launcher);
 
         if (NeedFollowerSnapshot)
             MakeLogSnapshot();

@@ -35,6 +35,52 @@ struct TGCLogEntry {
     TGCLogEntry(const TGCTime& time, const TGCBlobDelta& delta) : Time(time), Delta(delta) {}
 };
 
+class THistoryCutter {
+public:
+    explicit THistoryCutter(const TIntrusiveConstPtr<TTabletStorageInfo> info) 
+        : Info(info)
+        , ChannelStats(info->Channels.size())
+    {}
+
+    THistoryCutter(THistoryCutter&&) = default;
+
+    void SeenBlob(const TLogoBlobID& blob) {
+        if (blob.TabletID() != Info->TabletID) {
+            return;
+        }
+        ui32 channel = blob.Channel();
+        Y_ABORT_UNLESS(channel < ChannelStats.size());
+        ui32& earliestGen = ChannelStats[channel].EarliestGeneration;
+        earliestGen = std::min(earliestGen, blob.Generation());
+    }
+
+    TArrayRef<const TTabletChannelInfo::THistoryEntry> GetHistoryToCut(ui32 channel) const {
+        if (!ChannelStats[channel].Certain) {
+            return {};
+        }
+        const auto& history = Info->Channels[channel].History;
+        ui32 cutoffGen = ChannelStats[channel].EarliestGeneration;
+        auto cutoffIt = std::upper_bound(history.begin(), history.end(), cutoffGen, TTabletChannelInfo::THistoryEntry::TCmp());
+        if (cutoffIt == history.begin()) {
+            return {};
+        }
+        --cutoffIt;
+        return {history.data(), &(*cutoffIt)};
+    }
+
+    void BecomeUncertain(ui32 channel) {
+        ChannelStats[channel].Certain = false;
+    }
+private:
+    struct TChannelStat {
+        ui32 EarliestGeneration = Max<ui32>();
+        bool Certain = true;
+    };
+
+    const TIntrusiveConstPtr<TTabletStorageInfo> Info;
+    TVector<TChannelStat> ChannelStats;
+};
+
 class TExecutorGCLogic {
 public:
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
@@ -49,6 +95,10 @@ public:
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
+    void Confirm(const TActorContext &ctx, TActorId launcher);
+
+    THistoryCutter HistoryCutter;
+
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -86,6 +136,7 @@ protected:
         TGCTime CommitedGcBarrier;
         ui32 GcCounter;
         ui32 GcWaitFor;
+        bool CutHistory = false;
 
         inline TChannelInfo();
         void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
@@ -103,6 +154,8 @@ protected:
     TSet<TGCTime> HoldBarriersSet;
 
     bool AllowGarbageCollection;
+
+    TVector<ui32> ChannelsToCutHistory;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
     void SendCollectGarbage(const TActorContext& executor);

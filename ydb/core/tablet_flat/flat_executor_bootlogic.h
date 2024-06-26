@@ -100,6 +100,7 @@ private:
     NBoot::TSpawned LoadPages(NBoot::IStep*, TAutoPtr<NPageCollection::TFetch> req);
 
     void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
+    void SeenBlob(const TLogoBlobID& id);
 
     inline NBoot::TResult& Result() const noexcept { return *Result_; }
     inline NBoot::TBack& State() const noexcept { return *State_; }

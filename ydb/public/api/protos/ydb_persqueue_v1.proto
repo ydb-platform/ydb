@@ -1204,10 +1204,10 @@ message AutoPartitioningSettings {
 
 message AutoPartitioningWriteSpeedStrategy {
     //Partition will be auto partitioning up (divided into 2 partitions)
-    //after write speed to the partition exceeds up_utilization_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+    //after write speed to the partition exceeds up_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
 
     //Partition will become a candidate to the auto partitioning down
-    //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+    //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
     //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
 
     // Zero value means default - 300.

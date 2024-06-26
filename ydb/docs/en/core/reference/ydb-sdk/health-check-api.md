@@ -7,7 +7,7 @@ description: "The article will tell you how to initiate the check using the Heal
 
 {{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing problems.
 
-To initiate the check, call the `SelfCheck` method from SDK `Ydb.Monitoring`. You must also pass the name of the checked DB as usual.
+To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` namespace in the SDK. You must also pass the name of the checked DB as usual.
 
 {% list tabs %}
 
@@ -28,7 +28,7 @@ To initiate the check, call the `SelfCheck` method from SDK `Ydb.Monitoring`. Yo
 
 {% endlist %}
 
-## Response Structure {#response-structure}
+## Response structure {#response-structure}
 
 For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
 Calling the `SelfCheck` method will return the following message:
@@ -66,8 +66,6 @@ Description of all fields in the response is provided below:
 |:----|:----|
 | `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No problems were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious problem was detected in the database, with complete or partial loss of availability.</li></ul> |
 | `issue_log` | This is a set of elements, each of which describes a problem in the system at a certain level. |
-| `issue_log.id` | A unique problem ID within this response. |
-| `issue_log.id` | A unique problem ID within this response. |
 | `issue_log.id` | A unique problem ID within this response. |
 | `issue_log.status` | Status (severity) of the current problem. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious problem, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor problem, no risks to availability. We recommend you continue monitoring the problem.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No problems were detected.</li><li>`GREY`: Failed to determine the status (a problem with the self-diagnostic mechanism).</li></ul> |
 | `issue_log.message` | Text that describes the problem. |

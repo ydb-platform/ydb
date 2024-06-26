@@ -54,6 +54,7 @@ const ui32 MaskSizeBits = 32;
 
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
+constexpr float DefaultSlowDiskThreshold = 2000;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -501,9 +502,10 @@ IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyN
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
     TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TControlWrapper &enablePutBatching,
-    const TControlWrapper &enableVPatch);
+    const TControlWrapper &enableVPatch, const TControlWrapper &slowDiskThreshold);
 
 IActor* CreateBlobStorageGroupProxyUnconfigured(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-    const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+    const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch,
+    const TControlWrapper &slowDiskThreshold);
 
 }//NKikimr

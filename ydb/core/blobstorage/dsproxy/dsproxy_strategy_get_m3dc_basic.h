@@ -55,7 +55,7 @@ namespace NKikimr {
         }
 
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests) override {
+                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests, float slowDiskThreshold) override {
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -81,7 +81,8 @@ namespace NKikimr {
 
                         // Check if the slowest disk exceptionally slow, or just not very fast
                         i32 slowDiskSubgroupIdx = -1;
-                        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+                        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs >
+                                worstDisks[1].PredictedNs * slowDiskThreshold) {
                             slowDiskSubgroupIdx = worstDisks[1].DiskIdx;
                         }
 

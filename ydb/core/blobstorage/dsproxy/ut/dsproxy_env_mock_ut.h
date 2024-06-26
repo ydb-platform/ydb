@@ -81,8 +81,9 @@ struct TDSProxyEnv {
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(1000, 1, 1000000);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), true, nodeMon,
-            std::move(storagePoolCounters), enablePutBatching, enableVPatch);
+            std::move(storagePoolCounters), enablePutBatching, enableVPatch, slowDiskThreshold);
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 

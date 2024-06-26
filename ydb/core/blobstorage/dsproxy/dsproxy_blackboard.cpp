@@ -361,7 +361,8 @@ void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {
 }
 
 EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec<IStrategy*, 1>& s,
-        TBatchedVec<TFinishedBlob> *finished, const TBlobStorageGroupInfo::TGroupVDisks *expired) {
+        float slowDiskThreshold, TBatchedVec<TFinishedBlob> *finished,
+        const TBlobStorageGroupInfo::TGroupVDisks *expired) {
     for (auto it = BlobStates.begin(); it != BlobStates.end(); ) {
         auto& blob = it->second;
         if (!std::exchange(blob.IsChanged, false)) {
@@ -373,7 +374,7 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
         for (IStrategy *strategy : s) {
-            switch (auto res = strategy->Process(logCtx, blob, *Info, *this, GroupDiskRequests)) {
+            switch (auto res = strategy->Process(logCtx, blob, *Info, *this, GroupDiskRequests, slowDiskThreshold)) {
                 case EStrategyOutcome::IN_PROGRESS:
                     status = NKikimrProto::UNKNOWN;
                     break;
@@ -414,9 +415,9 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
     return BlobStates.empty() ? EStrategyOutcome::DONE : EStrategyOutcome::IN_PROGRESS;
 }
 
-EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& s,
+EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& s, float slowDiskThreshold,
         TBatchedVec<TFinishedBlob> *finished, const TBlobStorageGroupInfo::TGroupVDisks *expired) {
-    return RunStrategies(logCtx, {const_cast<IStrategy*>(&s)}, finished, expired);
+    return RunStrategies(logCtx, {const_cast<IStrategy*>(&s)}, slowDiskThreshold, finished, expired);
 }
 
 TBlobState& TBlackboard::GetState(const TLogoBlobID &id) {

@@ -49,9 +49,12 @@ class TGetImpl {
 
     std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> BlobFlags; // keep, doNotKeep per blob
 
+    const float SlowDiskThreshold = 2;
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
-            TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, const TString& requestPrefix = {})
+            TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, float slowDiskThreshold,
+            const TString& requestPrefix = {})
         : Deadline(ev->Deadline)
         , Info(info)
         , Queries(ev->Queries.Release())
@@ -68,6 +71,7 @@ public:
         , PhantomCheck(ev->PhantomCheck)
         , Decommission(ev->Decommission)
         , ReaderTabletData(ev->ReaderTabletData)
+        , SlowDiskThreshold(slowDiskThreshold)
     {
         Y_ABORT_UNLESS(QuerySize > 0);
     }

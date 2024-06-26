@@ -1310,6 +1310,14 @@ message TImmediateControlsConfig {
             DefaultValue: 256 }];
     }
 
+    message TDSProxyControls {
+        optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1318,6 +1326,7 @@ message TImmediateControlsConfig {
     reserved 6;
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
+    optional TDSProxyControls DSProxyControls = 9;
 };
 
 message TMeteringConfig {

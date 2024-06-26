@@ -365,9 +365,7 @@ void TTxController::StartOperators() {
     AFL_VERIFY(!StartedFlag);
     StartedFlag = true;
     for (auto&& i : Operators) {
-        if (!i.second->OnStartAsync(Owner)) {
-            Owner.Execute(new TTxFinishAsyncTransaction(Owner, i.second->GetTxId()));
-        }
+        Y_UNUSED(i.second->OnStartAsync(Owner));
     }
 }
 

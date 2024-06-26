@@ -193,6 +193,7 @@ bool TSchemaTransactionOperator::DoOnStartAsync(TColumnShard& owner) {
         return true;
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
+        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
         return false;
     }
 }

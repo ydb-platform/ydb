@@ -108,8 +108,23 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (Subsession) {
         PendingToken.Clear();
-        Subsession->Close(TDuration::Zero());
+        // Here, the TWriteSession destructor can get blocked
+        // if the SessionClosedHandler is called at the same time,
+        // because when it is called, it acquires a shared lock on the context of the subsession,
+        // whereas the destructor needs an exclusive lock on the same mutex.
+        // Therefore, we temporarily release the lock here,
+        // which allows the handler to finish and release its shared lock,
+        // after which the TWriteSession destructor can also complete its work.
+        std::shared_ptr<NTopic::IWriteSession> old;
+        {
+            old = std::exchange(OldSubsession, {});
+            auto unguard = Unguard(Lock);
+            old = std::move(Subsession);
+        }
+        OldSubsession = old;
+        OldSubsession->Close(TDuration::Zero());
     }
+
     auto clientSettings = SubclientSettings;
     clientSettings
         .Database(db->path())

@@ -1077,6 +1077,18 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
+        size_t successfulSessionClosedEvents = 0;
+        size_t otherSessionClosedEvents = 0;
+
+        writeSettings
+            .EventHandlers_.SessionClosedHandler([&](const NTopic::TSessionClosedEvent &ev) {
+                if (ev.IsSuccess()) {
+                    ++successfulSessionClosedEvents;
+                } else {
+                    ++otherSessionClosedEvents;
+                }
+            });
+
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
 
         TMaybe<NTopic::TContinuationToken> token;
@@ -1116,18 +1128,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
-        {
-            UNIT_ASSERT(token.Defined());
-            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
+        setup->ShutdownGRpc();
 
-            token = GetToken(WriteSession);
+        WriteSession->Close(TDuration::Seconds(5));
 
-            auto e = WriteSession->GetEvent(true);
-            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
-            UNIT_ASSERT(acksEvent);
-        }
-
-        WriteSession->Close();
+        UNIT_ASSERT_VALUES_EQUAL(otherSessionClosedEvents, 1);
+        UNIT_ASSERT_VALUES_EQUAL(successfulSessionClosedEvents, 0);
     }
 
     Y_UNIT_TEST(WriteSessionWriteInHandlers) {

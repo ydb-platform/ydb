@@ -1044,6 +1044,92 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->Close();
     }
 
+    NTopic::TContinuationToken GetToken(std::shared_ptr<NTopic::IWriteSession> writer) {
+        auto e = writer->GetEvent(true);
+        UNIT_ASSERT(e.Defined());
+        Cerr << ">>> Got event: " << DebugString(*e) << Endl;
+        auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*e);
+        UNIT_ASSERT(readyToAcceptEvent);
+        return std::move(readyToAcceptEvent->ContinuationToken);
+    }
+
+    Y_UNIT_TEST(WriteSessionSwitchDatabases) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << newServicePort)
+            .SetDatabase("/Root")
+            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = NYdb::TDriver(driverConfig);
+        auto topicClient = NYdb::NFederatedTopic::TFederatedTopicClient(driver);
+
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+
+        TMaybe<NTopic::TContinuationToken> token;
+
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        {
+            WriteSession->Write(GetToken(WriteSession), NTopic::TWriteMessage("hello 1"));
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultWithUnavailableDatabase(1));
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultWithUnavailableDatabase(1));
+
+        {
+            UNIT_ASSERT(token.Defined());
+            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 2"));
+
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        {
+            UNIT_ASSERT(token.Defined());
+            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
+
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        WriteSession->Close();
+    }
+
     Y_UNIT_TEST(WriteSessionWriteInHandlers) {
         // Write messages from all event handlers. It shouldn't deadlock.
 

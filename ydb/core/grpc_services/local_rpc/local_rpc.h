@@ -26,7 +26,7 @@ private:
     NThreading::TPromise<TResponse> Promise;
 };
 
-template<typename TRpc, typename TCbWrapper>
+template<typename TRpc, typename TCbWrapper, bool IsOperation = TRpc::IsOp>
 class TLocalRpcCtx : public NGRpcService::IRequestOpCtx {
 public:
     using TResp = typename TRpc::TResponse;
@@ -82,7 +82,7 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResp resp;
-        NGRpcService::TCommonResponseFiller<TResp, true>::Fill(resp, IssueManager.GetIssues(), CostInfo.get(), status);
+        NGRpcService::TCommonResponseFiller<TResp, IsOperation>::Fill(resp, IssueManager.GetIssues(), CostInfo.get(), status);
         CbWrapper(resp);
     }
 

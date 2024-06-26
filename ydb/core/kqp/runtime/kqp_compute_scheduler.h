@@ -76,6 +76,8 @@ public:
 
     void Deregister(TSchedulerEntity& self, TMonotonic now);
 
+    bool Disabled(TString group);
+
 private:
     struct TImpl;
     std::unique_ptr<TImpl> Impl;

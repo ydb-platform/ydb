@@ -112,9 +112,6 @@ public:
 
 private:
     STATEFN(WorkState) {
-        //Y_DEFER {
-        //    Scheduler.AdvanceTime(TMonotonic::Now());
-        //};
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
             hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
@@ -128,7 +125,6 @@ private:
             hFunc(NMon::TEvHttpInfo, HandleWork);
             // sheduling
             hFunc(TEvSchedulerDeregister, HandleWork);
-            hFunc(TEvSchedulerRenice, HandleWork);
             default: {
                 Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
             }
@@ -141,14 +137,6 @@ private:
         if (ev->Get()->SchedulerEntity) {
             Scheduler.Deregister(*ev->Get()->SchedulerEntity, TMonotonic::Now());
         }
-    }
-
-    void HandleWork(TEvSchedulerRenice::TPtr& ev) {
-        auto now = TMonotonic::Now();
-        TSchedulerEntityHandle handle = std::move(ev->Get()->SchedulerEntity);
-        Scheduler.Renice(*handle, now, ev->Get()->DesiredWeight);
-        auto reniceConfirm = MakeHolder<TEvSchedulerReniceConfirm>(std::move(handle));
-        this->Send(ev->Sender, reniceConfirm.Release());
     }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
@@ -279,7 +267,7 @@ private:
                 .Counters = Counters
             };
 
-            if (msg.GetSchedulerGroup().empty()) {
+            if (Scheduler.Disabled(msg.GetSchedulerGroup())) {
                 schedulingOptions.NoThrottle = true;
             } else {
                 schedulingOptions.Handle = Scheduler.Enroll(schedulingOptions.Group, schedulingOptions.Weight, schedulingOptions.Now);

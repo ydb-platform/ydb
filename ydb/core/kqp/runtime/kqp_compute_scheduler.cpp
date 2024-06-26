@@ -398,6 +398,10 @@ void TComputeScheduler::SetMaxDeviation(TDuration period) {
     Impl->SmoothPeriod = period;
 }
 
+bool TComputeScheduler::Disabled(TString group) {
+    auto ptr = Impl->PoolId.FindPtr(group);
+    return !ptr || Impl->Records[*ptr]->MutableStats.Current().get()->Disabled;
+}
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -30,25 +30,10 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-TableFullScan-ConstantExpr",
+                                        "Node Type": "Limit-Filter-CrossJoin-TableFullScan-ConstantExpr-ConstantExpr-InnerJoin (JoinDict)-ConstantExpr-ConstantExpr-InnerJoin (JoinDict)-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     },
@@ -69,38 +54,24 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 6
-                                                    }
-                                                ],
-                                                "Name": "CrossJoin"
-                                            },
-                                            {
-                                                "Condition": "thousand = Sum0",
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 4
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    }
-                                                ],
-                                                "Name": "InnerJoin (MapJoin)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Exist(item.thousand)"
+                                                "Predicate": "item.b.Sum0 == item.t.thousand And item.a.f1 + item.b.Sum0 + 999 == item.t.tenthous"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 3
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 9
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 9
+                                                    }
+                                                ],
+                                                "Name": "CrossJoin"
                                             },
                                             {
                                                 "Inputs": [],
@@ -115,6 +86,52 @@
                                                 ],
                                                 "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 5
+                                                    }
+                                                ],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Member": "precompute_0_0",
+                                                "Name": "Member"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 8
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 10
+                                                    }
+                                                ],
+                                                "Name": "InnerJoin (JoinDict)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 8
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 10
+                                                    }
+                                                ],
+                                                "Name": "InnerJoin (JoinDict)"
                                             },
                                             {
                                                 "Inputs": [],

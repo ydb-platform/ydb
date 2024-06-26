@@ -1765,6 +1765,11 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                             break;
                         }
 
+                        if (left->GetTypeAnn() != right->GetTypeAnn()) {
+                            bad = true;
+                            break;
+                        }
+
                         bool leftOnLeft;
                         if (left->IsCallable("Member") && &left->Head() == &predicate->Head().Head()) {
                             auto inputPtr = memberToInput.FindPtr(left->Child(1)->Content());

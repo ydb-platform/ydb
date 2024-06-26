@@ -855,6 +855,10 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
         return equiJoin;
     }
 
+    if (left->GetTypeAnn() != right->GetTypeAnn()) {
+        return equiJoin;
+    }
+
     TSet<ui32> leftInputs, rightInputs;
     TSet<TStringBuf> usedFields;
     GatherJoinInputs(left, row, parentsMap, backRenameMap, labels, leftInputs, usedFields);

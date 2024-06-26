@@ -855,7 +855,11 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
         return equiJoin;
     }
 
-    if (left->GetTypeAnn() != right->GetTypeAnn()) {
+    const auto* lType = left->GetTypeAnn();
+    const auto* rType = right->GetTypeAnn();
+    if (lType->GetKind() == ETypeAnnotationKind::Pg && rType->GetKind() == ETypeAnnotationKind::Pg && lType != rType) {
+        YQL_CLOG(DEBUG, Core) << "EquiJoin types mismatch: " << FormatType(lType) << " != " << FormatType(rType) << '\n';
+
         return equiJoin;
     }
 

@@ -5,8 +5,8 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(TEvColumnShard::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = std::make_unique<TEvDataShard::TEvStatisticsResponse>();
+void TColumnShard::Handle(TEvColumnShard::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
+    auto response = std::make_unique<TEvColumnShard::TEvStatisticsResponse>();
     auto& record = response->Record;
     record.SetShardTabletId(TabletID());
 

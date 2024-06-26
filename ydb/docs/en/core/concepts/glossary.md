@@ -442,7 +442,7 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below.{% if oss %} The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).{% endif %}
 
 #### Deterministic transactions {#deterministic-transactions}
 

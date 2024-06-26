@@ -126,6 +126,12 @@ def _dict_to_labels(body):
 @routes.post("/api/v2/projects/{project}/sensors/data")
 async def sensors_data(request):
     project = request.match_info["project"]
+    if project == "invalid":
+        return web.HTTPNotFound(text=f"Project {project} does not exist")
+
+    if project == "broken_json":
+        return web.Response(text="{ broken json", content_type="application/json")
+
     labels = _dict_to_labels(await request.json())
     labels["project"] = project
     return web.json_response({"vector": [

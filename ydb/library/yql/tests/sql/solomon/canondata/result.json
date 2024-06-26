@@ -30,6 +30,11 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/plan.txt"
         }
     ],
+    "test.test[solomon-BrokenJsonResponse-]": [
+        {
+            "uri": "file://test.test_solomon-BrokenJsonResponse-_/extracted"
+        }
+    ],
     "test.test[solomon-Downsampling-default.txt]": [
         {
             "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"
@@ -50,6 +55,11 @@
         },
         {
             "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-InvalidProject-]": [
+        {
+            "uri": "file://test.test_solomon-InvalidProject-_/extracted"
         }
     ],
     "test.test[solomon-LabelColumns-default.txt]": [

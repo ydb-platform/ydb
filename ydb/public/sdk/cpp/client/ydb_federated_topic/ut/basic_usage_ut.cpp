@@ -1074,7 +1074,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto driver = NYdb::TDriver(driverConfig);
         auto topicClient = NYdb::NFederatedTopic::TFederatedTopicClient(driver);
 
-        auto writeSettings = NTopic::TWriteSessionSettings()
+        auto writeSettings = NTopic::TFederatedWriteSessionSettings()
+            .PreferredDatabase("dc1")
+            .AllowFallback(true)
             .DirectWriteToPartition(false)
             .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
             .Path(setup->GetTestTopic())

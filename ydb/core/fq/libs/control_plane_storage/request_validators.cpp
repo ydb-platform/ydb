@@ -67,6 +67,11 @@ NYql::TIssues ValidateConnectionSetting(
     }
     case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
         ValidateGenericConnectionSetting(setting.postgresql_cluster(), "postgresql", disableCurrentIam, passwordRequired, issues);
+
+        const FederatedQuery::PostgreSQLCluster database = setting.postgresql_cluster(); 
+        if (!database.database_name()) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.postgres_database.{database_name} field is not specified"));
+        }
         break;
     }
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {

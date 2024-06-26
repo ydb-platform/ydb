@@ -36,6 +36,14 @@ struct TExternalDataSource : public IExternalSource {
         ythrow TExternalSourceException() << "Only external table supports parameters";
     }
 
+    bool CheckDataSourceKind(const TProtoStringType& sourceType) const {
+        if (sourceType == "Greenplum" || sourceType == "PostgreSQL") {
+            return true;
+        }
+
+        return false;
+    }
+
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
         if (!proto.ParseFromString(externalDataSourceDescription)) {
@@ -47,6 +55,10 @@ struct TExternalDataSource : public IExternalSource {
                 continue;
             }
             ythrow TExternalSourceException() << "Unsupported property: " << key;
+        }
+
+        if (CheckDataSourceKind(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")){
+            ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide database_name";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

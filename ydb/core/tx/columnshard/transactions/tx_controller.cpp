@@ -1,4 +1,5 @@
 #include "tx_controller.h"
+#include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -358,6 +359,16 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
     AFL_VERIFY(!txOperator->IsFail());
     txOperator->FinishProposeOnComplete(Owner, ctx);
     txOperator->SendReply(Owner, ctx);
+}
+
+void TTxController::StartOperators() {
+    AFL_VERIFY(!StartedFlag);
+    StartedFlag = true;
+    for (auto&& i : Operators) {
+        if (!i.second->OnStartAsync(Owner)) {
+            Owner.Execute(new TTxFinishAsyncTransaction(Owner, i.second->GetTxId()));
+        }
+    }
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {

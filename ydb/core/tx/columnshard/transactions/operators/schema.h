@@ -18,7 +18,7 @@ private:
     THashSet<TActorId> NotifySubscribers;
     THashSet<ui64> WaitPathIdsToErase;
 
-    virtual void DoOnStart(TColumnShard& owner) override;
+    virtual bool DoOnStartAsync(TColumnShard& owner) override;
 
     template <class TInfoProto>
     THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {

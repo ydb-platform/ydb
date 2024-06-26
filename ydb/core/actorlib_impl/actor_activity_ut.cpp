@@ -24,10 +24,13 @@ public:
 
 } // namespace NActors
 
+int foo_bar();
+
 Y_UNIT_TEST_SUITE(TActorActivity) {
     using namespace NActors;
 
     Y_UNIT_TEST(Basic) {
+        foo_bar();
         TAutoPtr<IActor> actor = new TTestActor();
         const ui32 activityIndex = actor->GetActivityType();
 

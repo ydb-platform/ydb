@@ -128,11 +128,11 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
+            userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , EnableOlapSink(enableOlapSink)
         , UseEvWrite(useEvWrite)
@@ -1908,7 +1908,8 @@ private:
                     YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ false);
+                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
             }
 
             ResponseEv->InitTxResult(tx.Body);
@@ -1916,7 +1917,7 @@ private:
         }
 
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Data, /* enableSpilling */ false, validateIssue)) {
+        if (!ValidateTasks(TasksGraph, EExecType::Data, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
         }
@@ -2474,7 +2475,7 @@ private:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithSpilling = false,
+            .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
             .RlPath = Nothing(),
             .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourceSnapshot),
@@ -2737,12 +2738,12 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext,
+        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, userRequestContext,
         enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
 }
 

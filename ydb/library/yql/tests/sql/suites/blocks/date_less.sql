@@ -1,4 +1,5 @@
 USE plato;
+pragma yt.DisableOptimizers="OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
     a.na < b.na,
@@ -10,7 +11,10 @@ SELECT
     a.na < b.wa,
     a.na < b.wd,
     a.na < b.wt,
-    
+    a.na < b.waz,
+    a.na < b.wdz,
+    a.na < b.wtz,
+
     a.naz < b.na,
     a.naz < b.naz,
     a.naz < b.nd,
@@ -20,6 +24,9 @@ SELECT
     a.naz < b.wa,
     a.naz < b.wd,
     a.naz < b.wt,
+    a.naz < b.waz,
+    a.naz < b.wdz,
+    a.naz < b.wtz,
 
     a.nd < b.na,
     a.nd < b.naz,
@@ -30,6 +37,9 @@ SELECT
     a.nd < b.wa,
     a.nd < b.wd,
     a.nd < b.wt,
+    a.nd < b.waz,
+    a.nd < b.wdz,
+    a.nd < b.wtz,
 
     a.ndz < b.na,
     a.ndz < b.naz,
@@ -40,6 +50,9 @@ SELECT
     a.ndz < b.wa,
     a.ndz < b.wd,
     a.ndz < b.wt,
+    a.ndz < b.waz,
+    a.ndz < b.wdz,
+    a.ndz < b.wtz,
 
     a.nt < b.na,
     a.nt < b.naz,
@@ -50,6 +63,9 @@ SELECT
     a.nt < b.wa,
     a.nt < b.wd,
     a.nt < b.wt,
+    a.nt < b.waz,
+    a.nt < b.wdz,
+    a.nt < b.wtz,
 
     a.ntz < b.na,
     a.ntz < b.naz,
@@ -60,7 +76,18 @@ SELECT
     a.ntz < b.wa,
     a.ntz < b.wd,
     a.ntz < b.wt,
-    
+    a.ntz < b.waz,
+    a.ntz < b.wdz,
+    a.ntz < b.wtz,
+
+    a.ni < b.ni,
+    a.ni < b.wi,
+    a.wi < b.ni,
+    a.wi < b.wi
+
+FROM Dates as a CROSS JOIN Dates as b;
+
+SELECT
     a.wa < b.na,
     a.wa < b.naz,
     a.wa < b.nd,
@@ -70,6 +97,9 @@ SELECT
     a.wa < b.wa,
     a.wa < b.wd,
     a.wa < b.wt,
+    a.wa < b.waz,
+    a.wa < b.wdz,
+    a.wa < b.wtz,
 
     a.wd < b.na,
     a.wd < b.naz,
@@ -80,7 +110,10 @@ SELECT
     a.wd < b.wa,
     a.wd < b.wd,
     a.wd < b.wt,
-    
+    a.wd < b.waz,
+    a.wd < b.wdz,
+    a.wd < b.wtz,
+
     a.wt < b.na,
     a.wt < b.naz,
     a.wt < b.nd,
@@ -90,12 +123,47 @@ SELECT
     a.wt < b.wa,
     a.wt < b.wd,
     a.wt < b.wt,
-    
-    a.ni < b.ni,
-    a.ni < b.wi,
-    a.wi < b.ni,
-    a.wi < b.wi
-    
+    a.wt < b.waz,
+    a.wt < b.wdz,
+    a.wt < b.wtz,
+
+    a.waz < b.na,
+    a.waz < b.naz,
+    a.waz < b.nd,
+    a.waz < b.ndz,
+    a.waz < b.nt,
+    a.waz < b.ntz,
+    a.waz < b.wa,
+    a.waz < b.wd,
+    a.waz < b.wt,
+    a.waz < b.waz,
+    a.waz < b.wdz,
+    a.waz < b.wtz,
+
+    a.wdz < b.na,
+    a.wdz < b.naz,
+    a.wdz < b.nd,
+    a.wdz < b.ndz,
+    a.wdz < b.nt,
+    a.wdz < b.ntz,
+    a.wdz < b.wa,
+    a.wdz < b.wd,
+    a.wdz < b.wt,
+    a.wdz < b.waz,
+    a.wdz < b.wdz,
+    a.wdz < b.wtz,
+
+    a.wtz < b.na,
+    a.wtz < b.naz,
+    a.wtz < b.nd,
+    a.wtz < b.ndz,
+    a.wtz < b.nt,
+    a.wtz < b.ntz,
+    a.wtz < b.wa,
+    a.wtz < b.wd,
+    a.wtz < b.wt,
+    a.wtz < b.waz,
+    a.wtz < b.wdz,
+    a.wtz < b.wtz
+
 FROM Dates as a CROSS JOIN Dates as b;
-
-

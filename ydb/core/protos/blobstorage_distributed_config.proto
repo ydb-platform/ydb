@@ -107,6 +107,8 @@ message TEvNodeConfigGather {
         repeated TNode Nodes = 1;
         repeated TPersistentConfig CommittedConfigs = 2;
         repeated TPersistentConfig ProposedConfigs = 3;
+        repeated TDiskIdentifier NoMetadata = 4;
+        repeated TDiskIdentifier Errors = 5;
     }
 
     message TProposeStorageConfig {
@@ -239,4 +241,5 @@ message TEvNodeConfigInvokeOnRootResult {
 
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
+    bool NoQuorum = 2;
 }

@@ -15,6 +15,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {
@@ -307,6 +308,14 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
         case NUdf::TDataType<NUdf::TInterval>::Id:
             res.set_int64_value(value.GetInt64());
             break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            res.set_int32_value(value.GetInt32());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            res.set_int64_value(value.GetInt64());
+            break;
         case NUdf::TDataType<NUdf::TDecimal>::Id:
         case NUdf::TDataType<NUdf::TUuid>::Id: {
             res.set_low_128(value.GetLow128());
@@ -443,6 +452,34 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
             if ((ui64)std::abs(value.int64_value()) >= NUdf::MAX_TIMESTAMP) {
                 throw yexception() << "Invalid Interval value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date");
+            if (value.int32_value() >= NUdf::MAX_DATE32) {
+                throw yexception() << "Invalid Date32 value";
+            }
+            res.SetInt32(value.int32_value());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime");
+            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+                throw yexception() << "Invalid Datetime64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp");
+            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+                throw yexception() << "Invalid Timestamp64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
+            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+                throw yexception() << "Invalid Interval64 value";
             }
             res.SetInt64(value.int64_value());
             break;
@@ -1075,6 +1112,22 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
         break;
 
+    case NScheme::NTypeIds::Date32:
+        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        break;
+
+    case NScheme::NTypeIds::Datetime64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        break;
+
+    case NScheme::NTypeIds::Timestamp64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        break;
+
+    case NScheme::NTypeIds::Interval64:
+        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        break;        
+
     case NScheme::NTypeIds::Utf8:
         ok = NYql::IsUtf8(cell.AsBuf());
         break;
@@ -1115,7 +1168,141 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
+bool CellFromLiteralExprNode(NYql::NNodes::TExprBase maybeLiteral, TCell& cell, TMemoryPool& valueDataPool) {
+    if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
 
+    if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
+        auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
+
+        auto type = literal.Ref().GetTypeAnn();
+        auto slot = type->Cast<NYql::TDataExprType>()->GetSlot();
+        auto value = literal.Literal().Value();
+
+        switch (slot) {
+            case NYql::NUdf::EDataSlot::Bool: {
+                ui8 v = FromString<bool>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Uint8: {
+                ui8 v = FromString<ui8>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Int8: {
+                i8 v = FromString<i8>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Uint32: {
+                ui32 v = FromString<ui32>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Int32: {
+                i32 v = FromString<i32>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Uint64: {
+                ui64 v = FromString<ui64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Int64: {
+                i64 v = FromString<i64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Float: {
+                float v = FromString<float>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Double: {
+                double v = FromString<double>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break; 
+            }
+            case NYql::NUdf::EDataSlot::Date: {
+                ui16 v = FromString<ui32>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Datetime: {
+                ui32 v = FromString<ui32>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Utf8:
+            case NYql::NUdf::EDataSlot::String:
+            case NYql::NUdf::EDataSlot::Yson:
+            case NYql::NUdf::EDataSlot::Json: {
+                cell = TCell(value.Data(), value.Size());
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Interval: {
+                i64 v = FromString<i64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Interval64: {
+                i64 v = FromString<i64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;
+            }
+            case NYql::NUdf::EDataSlot::Timestamp: {
+                ui64 v = FromString<ui64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break; 
+            }
+            case NYql::NUdf::EDataSlot::Timestamp64: {
+                i64 v = FromString<i64>(value);
+                cell = TCell((const char*)&v, sizeof(v));
+                break;  
+            }
+            case NYql::NUdf::EDataSlot::DyNumber: {
+                const auto dyNumber = NDyNumber::ParseDyNumberString(value);
+                if (!dyNumber.Defined()) {
+                    return false;
+                }
+                const auto dyNumberInPool = valueDataPool.AppendString(TStringBuf(*dyNumber));
+                cell = TCell(dyNumberInPool.data(), dyNumberInPool.size());
+            }
+            case NYql::NUdf::EDataSlot::Decimal: {
+                const auto paramsDataType = type->Cast<NYql::TDataExprParamsType>();
+                auto precision = FromString<ui8>(paramsDataType->GetParamOne());
+                auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
+
+                auto v = NYql::NDecimal::FromString(literal.Cast<NYql::NNodes::TCoDecimal>().Literal().Value(), precision, scale);
+                const auto p = reinterpret_cast<ui8*>(&v);
+
+                std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64>>();
+                valInPool.first = *reinterpret_cast<ui64*>(p);
+                valInPool.second = *reinterpret_cast<ui64*>(p + 8);
+                cell = TCell((const char*)&valInPool, sizeof(valInPool));
+            }
+            case NYql::NUdf::EDataSlot::Uuid: {
+                const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+
+                std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64>>();
+                valInPool.first = uuidData[0]; // low128
+                valInPool.second = uuidData[1]; // high128
+                cell = TCell((const char*)&valInPool, sizeof(valInPool));
+                break;
+            }
+            default:
+                YQL_ENSURE(false, "Unexpected type slot " << slot);
+        }   
+
+
+        return true;
+    }
+
+    return false;
+}
 
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
@@ -1308,6 +1495,18 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Interval:
         vb.Interval(cell.AsValue<i64>());
         break;
+    case EPrimitiveType::Date32:
+        vb.Date32(cell.AsValue<i32>());
+        break;
+    case EPrimitiveType::Datetime64:
+        vb.Datetime64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Timestamp64:
+        vb.Timestamp64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Interval64:
+        vb.Interval64(cell.AsValue<i64>());
+        break;        
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());
         break;

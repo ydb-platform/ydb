@@ -18,15 +18,12 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
-        // report initial node listing for static node
-        if (IsSelfStatic) {
-            auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-            auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
-            for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-                ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
-            }
-            Send(SelfId(), ev.release());
+        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        for (const auto& [nodeId, item] : ns->StaticNodeTable) {
+            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
+        Send(SelfId(), ev.release());
 
         // and subscribe for the node list too
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
@@ -73,7 +70,7 @@ namespace NKikimr::NStorage {
                 ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
             if (IsSelfStatic) {
                 PersistConfig({});
-                ApplyConfigUpdateToDynamicNodes();
+                ApplyConfigUpdateToDynamicNodes(false);
             }
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -198,7 +195,7 @@ namespace NKikimr::NStorage {
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::TEvNodesInfo::EventType:
                 Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
-                NodeListObtained = change = true;
+                change = !std::exchange(NodeListObtained, true);
                 break;
 
             case TEvPrivate::EvStorageConfigLoaded:
@@ -222,8 +219,6 @@ namespace NKikimr::NStorage {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
                 IssueNextBindRequest();
-            } else {
-
             }
             processPendingEvents();
         }

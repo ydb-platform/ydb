@@ -85,7 +85,7 @@ const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColu
 
 void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
     Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
-    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch),
+    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
         NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 

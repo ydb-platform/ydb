@@ -15,6 +15,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -431,14 +432,14 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 

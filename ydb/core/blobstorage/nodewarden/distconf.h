@@ -78,6 +78,8 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
                 std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord, std::optional<ui64>>> MetadataPerPath;
+                std::vector<std::tuple<TString, std::optional<ui64>>> NoMetadata;
+                std::vector<TString> Errors;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
@@ -295,6 +297,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -305,6 +308,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigUnbind::TPtr ev);
         void UnbindNode(ui32 nodeId, const char *reason);
         ui32 GetRootNodeId() const;
+        bool PartOfNodeQuorum() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Root node operation
@@ -381,7 +385,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes
-        void ApplyConfigUpdateToDynamicNodes();
+        void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
         void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
@@ -605,7 +609,7 @@ namespace NKikimr::NStorage {
                 continue;
             }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            const auto it = groups.find(vdiskId.GroupID);
+            const auto it = groups.find(vdiskId.GroupID.GetRawId());
             if (it == groups.end()) {
                 return makeError(TStringBuilder() << "VDisk " << vdiskId << " does not match any static group");
             }
@@ -631,7 +635,7 @@ namespace NKikimr::NStorage {
             const auto [begin, end] = confirm.equal_range(key);
             for (auto it = begin; it != end; ++it) {
                 const TVDiskID& vdiskId = it->second;
-                TGroupRecord& group = groups.at(vdiskId.GroupID);
+                TGroupRecord& group = groups.at(vdiskId.GroupID.GetRawId());
                 group.Confirmed |= {&group.Info->GetTopology(), vdiskId};
             }
         });
@@ -649,9 +653,9 @@ namespace NKikimr::NStorage {
     // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
     template<typename T>
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig) {
+            const TNodeWardenConfig& nwConfig, bool mindPrev = true) {
         return HasDiskQuorum(config, generateSuccessful) &&
-            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!config.HasPrevConfig() || (
+            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!mindPrev || !config.HasPrevConfig() || (
             HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
             HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
     }

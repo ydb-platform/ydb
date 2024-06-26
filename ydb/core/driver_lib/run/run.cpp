@@ -1722,8 +1722,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         }
 
         auto stillOnline = drainProgress->GetOnlineTabletsEstimate();
-        if (stillOnline) {
-            Cerr << "Drain completed, but " << stillOnline << " tablet(s) are online." << Endl;
+        if (stillOnline > 0) {
+            Cerr << "Drain completed, but " << *stillOnline << " tablet(s) are online." << Endl;
         }
     }
 

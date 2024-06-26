@@ -95,6 +95,7 @@ struct TGraphMeta {
     TActorId ExecuterId;
     bool UseFollowers = false;
     bool AllowInconsistentReads = false;
+    bool AllowWithSpilling = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;

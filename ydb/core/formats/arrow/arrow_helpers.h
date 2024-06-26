@@ -68,6 +68,14 @@ std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow
     const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames);
+
+std::vector<TString> ConvertStrings(const std::vector<std::string>& input);
+std::vector<std::string> ConvertStrings(const std::vector<TString>& input);
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames);
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema,
                                                    bool addNotExisted = false);
@@ -113,6 +121,8 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
 bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema);
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
@@ -123,9 +133,7 @@ bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<a
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 
-inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
-    return column->null_bitmap_data();
-}
+bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t);
 

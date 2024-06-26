@@ -808,7 +808,7 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr
 void TPropose::PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context)
 {
     txState.UpdateShardsInProgress();
- 
+
     for (const auto& shard : txState.Shards) {
         const TShardIdx idx = shard.Idx;
         //
@@ -869,7 +869,7 @@ void TPropose::PersistState(const TTxState& txState,
 {
     NIceDb::TNiceDb db(context.GetDB());
 
-    if (txState.TxType == TTxState::TxCreatePQGroup  || txState.TxType == TTxState::TxAllocatePQ) {
+    if (txState.TxType == TTxState::TxCreatePQGroup) {
         auto parentDir = context.SS->PathsById.at(Path->ParentPathId);
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
@@ -881,6 +881,10 @@ void TPropose::PersistState(const TTxState& txState,
     context.OnComplete.PublishToSchemeBoard(OperationId, PathId);
 
     TTopicInfo::TPtr pqGroup = context.SS->Topics[PathId];
+
+    NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
+    NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+
     pqGroup->FinishAlter();
 
     context.SS->PersistPersQueueGroup(db, PathId, pqGroup);

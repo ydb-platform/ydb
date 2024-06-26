@@ -552,6 +552,10 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.ErrorSleepRetryMultiplier = config.GetErrorSleepRetryMultiplier();
     }
 
+    if (config.HasEventDelayMicrosec()) {
+        result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
+    }
+
     return result;
 }
 
@@ -2158,7 +2162,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
-            Config.GetQueryServiceConfig(),  Config.GetMetadataProviderConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
+            Config.GetQueryServiceConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
             federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
@@ -2167,7 +2171,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         // Create finalize script service
         auto finalize = NKqp::CreateKqpFinalizeScriptService(
-            Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory, s3ActorsFactory
+            Config.GetQueryServiceConfig(), federatedQuerySetupFactory, s3ActorsFactory
         );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),

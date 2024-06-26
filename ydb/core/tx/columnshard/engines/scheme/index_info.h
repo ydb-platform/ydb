@@ -48,11 +48,28 @@ private:
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
-    void BuildSchemaWithSpecials();
-    void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+
+    bool IsNullableVerified(const std::string& fName) const {
+        auto it = Columns.find(GetColumnIdVerified(fName));
+        AFL_VERIFY(it != Columns.end());
+        return !it->second.NotNull;
+    }
+
+    bool IsNullableVerified(const ui32 colId) const {
+        auto it = Columns.find(colId);
+        AFL_VERIFY(it != Columns.end());
+        return !it->second.NotNull;
+    }
+
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const;
+
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const std::string& colName) const {
+        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
+        return features.GetDefaultReadValue();
+    }
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
@@ -137,33 +154,6 @@ public:
         return sb;
     }
 
-    /// Appends the special columns to the batch.
-    static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(
-        const std::shared_ptr<arrow::RecordBatch>& batch,
-        const TSnapshot& snapshot);
-
-    /// Makes schema as set of the special columns.
-    static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
-    static ui64 GetSpecialColumnsRecordSize();
-
-    /// Matches name of the filed with names of the special columns.
-    static bool IsSpecialColumn(const arrow::Field& field);
-    static bool IsSpecialColumn(const ui32 field);
-    static ui32 GetSpecialColumnByteWidth(const ui32 field) {
-        Y_ABORT_UNLESS(IsSpecialColumn(field));
-        return 8;
-    }
-    static bool IsSpecialColumn(const std::string& fieldName);
-    template <class TContainer>
-    static bool IsSpecialColumns(const TContainer& c) {
-        for (auto&& i : c) {
-            if (!IsSpecialColumn(i)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 public:
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy");
@@ -180,13 +170,12 @@ public:
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
 
-    static const std::vector<std::string>& SnapshotColumnNames() {
-        static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
-        return result;
-    }
-
     bool HasColumnId(const ui32 columnId) const {
         return ColumnFeatures.contains(columnId);
+    }
+
+    bool HasColumnName(const std::string& columnName) const {
+        return !!GetColumnIdOptional(columnName);
     }
 
     bool HasIndexId(const ui32 indexId) const {
@@ -256,7 +245,8 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
-    std::vector<ui32> GetColumnIds() const;
+    std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
+    std::vector<ui32> GetColumnIds(const bool withSpecial = true) const;
     std::vector<ui32> GetEntityIds() const {
         auto result = GetColumnIds();
         for (auto&& i : Indexes) {
@@ -279,9 +269,6 @@ public:
         return KeyColumns[0];
     }
 
-    // Sorting key: could be less or greater then traditional PK
-    // It could be empty for append-only tables. It could be greater then PK for better columns compression.
-    // If sorting key includes uniqueness key as a prefix we are able to use MergeSort for REPLACE.
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return PrimaryKey; }
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
@@ -300,11 +287,8 @@ public:
     std::shared_ptr<arrow::Schema> AddColumns(const std::shared_ptr<arrow::Schema>& schema,
                                               const std::vector<TString>& columns) const;
 
-    std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials = false) const;
-    std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<TString>& columnNames) const;
     std::shared_ptr<arrow::Field> ArrowColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> ArrowColumnFieldVerified(const ui32 columnId) const;
-    std::shared_ptr<arrow::Field> SpecialColumnField(const ui32 columnId) const;
 
     const THashSet<TString>& GetRequiredColumns() const {
         return RequiredColumns;
@@ -319,11 +303,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    static const std::set<ui32>& GetSpecialColumnIdsSet() {
-        static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());
-        return result;
-    }
 
     ui64 GetVersion() const {
         return Version;
@@ -340,13 +319,12 @@ private:
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
-    std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const bool withSpecials = false);
 
 /// Extracts columns with the specific ids from the schema.
 std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids);

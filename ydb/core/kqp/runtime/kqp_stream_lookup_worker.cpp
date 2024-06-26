@@ -493,11 +493,14 @@ public:
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(0);
         std::vector<TCell> joinKeyCells(LookupKeyColumns.size());
-        for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
-            const auto* joinKeyColumn = LookupKeyColumns[colId];
-            YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
-            joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
-                joinKey.GetElement(colId), TypeEnv, true);
+
+        if (joinKey.HasValue()) {
+            for (size_t colId = 0; colId < LookupKeyColumns.size(); ++colId) {
+                const auto* joinKeyColumn = LookupKeyColumns[colId];
+                YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+                joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
+                    joinKey.GetElement(colId), TypeEnv, true);
+            }
         }
 
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));

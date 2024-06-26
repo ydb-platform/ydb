@@ -727,6 +727,32 @@ Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcu
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TTraceContextHandler::TTraceContextHandler()
+    : TraceContext_(NTracing::TryGetCurrentTraceContext())
+{ }
+
+NTracing::TCurrentTraceContextGuard TTraceContextHandler::MakeTraceContextGuard() const
+{
+    return NTracing::TCurrentTraceContextGuard(TraceContext_);
+}
+
+void TTraceContextHandler::UpdateTraceContext()
+{
+    TraceContext_ = NTracing::TryGetCurrentTraceContext();
+}
+
+std::optional<TTracingAttributes> TTraceContextHandler::GetTracingAttributes() const
+{
+    return TraceContext_
+        ? std::make_optional<TTracingAttributes>({
+            .TraceId = TraceContext_->GetTraceId(),
+            .SpanId = TraceContext_->GetSpanId()
+        })
+        : std::nullopt;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTracing
 
 namespace NYT::NYTProf {

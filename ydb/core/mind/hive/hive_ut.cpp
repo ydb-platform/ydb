@@ -905,17 +905,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestDrain) {
-        const int NUM_NODES = 3;
+    void TestDrain(TTestBasicRuntime& runtime) {
+        const int numNodes = runtime.GetNodeCount();
         const int NUM_TABLETS = 100;
-        TTestBasicRuntime runtime(NUM_NODES, false);
-        Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, numNodes);
             runtime.DispatchEvents(options);
         }
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -970,6 +968,20 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(tabletStates.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tabletStates[NKikimrWhiteboard::TTabletStateInfo::Dead], drainMovements);
+    }
+
+    Y_UNIT_TEST(TestDrain) {
+        TTestBasicRuntime runtime(3, false);
+        Setup(runtime, true);
+        TestDrain(runtime);
+    }
+
+    Y_UNIT_TEST(TestDrainWithMaxTabletsScheduled) {
+        TTestBasicRuntime runtime(3, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetMaxTabletsScheduled(1);
+        });
+        TestDrain(runtime);
     }
 
     Y_UNIT_TEST(TestDownAfterDrain) {

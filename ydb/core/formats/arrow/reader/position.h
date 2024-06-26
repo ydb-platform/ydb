@@ -87,6 +87,17 @@ public:
         BuildPosition(position);
     }
 
+    const NAccessor::IChunkedArray::TCurrentChunkAddress& GetPositionAddress(const ui32 colIdx) const {
+        AFL_VERIFY(colIdx < PositionAddress.size());
+        return PositionAddress[colIdx];
+    }
+
+    ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
+        AFL_VERIFY(colIdx < PositionAddress.size());
+        AFL_VERIFY(pos >= PositionAddress[colIdx].GetStartPosition());
+        return pos - PositionAddress[colIdx].GetStartPosition();
+    }
+
     std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
         return std::make_shared<TSortableScanData>(position, RecordsCount, Columns, Fields);
     }

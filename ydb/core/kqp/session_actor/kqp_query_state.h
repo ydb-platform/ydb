@@ -85,6 +85,7 @@ public:
         } else {
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
+        UserRequestContext->PoolId = RequestEv->GetPoolId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -102,6 +103,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
+    TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
@@ -136,6 +138,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    bool PlacedInWorkloadPool = false;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
@@ -184,6 +187,10 @@ public:
 
     std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
         return QueryParameterTypes;
+    }
+
+    TVector<NKikimrKqp::TParameterDescription> GetResultParams() const {
+        return ResultParams;
     }
 
     void EnsureAction() {

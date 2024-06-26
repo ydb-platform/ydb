@@ -100,9 +100,6 @@ struct TEvBusProxy {
         EvFlatTxRequest,
         EvFlatDescribeRequest,
         EvPersQueue,
-        EvDbSchema,
-        EvDbOperation,
-        EvDbBatch,
         EvInitRoot,
         EvChooseProxy,
 
@@ -127,9 +124,6 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
     typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;
     typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy;
-    typedef TEvMsgBusRequest<EvDbSchema> TEvDbSchema;
-    typedef TEvMsgBusRequest<EvDbOperation> TEvDbOperation;
-    typedef TEvMsgBusRequest<EvDbBatch> TEvDbBatch;
     typedef TEvMsgBusRequest<EvInitRoot> TEvInitRoot;
 };
 

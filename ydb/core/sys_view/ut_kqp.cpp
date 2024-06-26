@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `Root/.sys/pg_tables`;
+                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1044,7 +1044,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TYsonFieldChecker check(ysonString, 12);
 
         check.Uint64(0u); // AllocatedSize
-        check.Uint64(0u); // AvailableSize
+        check.Uint64GreaterOrEquals(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies

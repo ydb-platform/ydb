@@ -26,6 +26,10 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         Self->BaseStats[schemeShardId] = stats;
 
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 

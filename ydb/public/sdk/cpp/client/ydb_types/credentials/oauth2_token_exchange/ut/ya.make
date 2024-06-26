@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     contrib/libs/jwt-cpp
     library/cpp/http/server
+    library/cpp/json
 )
 
 END()

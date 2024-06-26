@@ -671,6 +671,20 @@
             "uri": "https://{canondata_backend}/1899731/8371f5cbc66c5d22b5e30e94f49d4c3423336bd2/resource.tar.gz#test.test_bigdate-input_timestamp64-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[bigdate-tzcasts-default.txt-Debug]": [
+        {
+            "checksum": "6f244769c38313f49762a6f56d225ad3",
+            "size": 1456,
+            "uri": "https://{canondata_backend}/1809005/b9b47ee4a9e9f1d94a493c099f72559fa9f3f498/resource.tar.gz#test.test_bigdate-tzcasts-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-tzcasts-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1809005/b9b47ee4a9e9f1d94a493c099f72559fa9f3f498/resource.tar.gz#test.test_bigdate-tzcasts-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[binding-named_expr_input-default.txt-Debug]": [
         {
             "checksum": "5c52a7bd7feede675117ac3a3f7012ff",
@@ -743,16 +757,16 @@
     ],
     "test.test[blocks-date_top_sort--Debug]": [
         {
-            "checksum": "162c32ae7b9fe47fc1aaf12b0dd22fc6",
-            "size": 6807,
-            "uri": "https://{canondata_backend}/1903280/edb59b851420424be2e8ccb2192f1e9677b3bc54/resource.tar.gz#test.test_blocks-date_top_sort--Debug_/opt.yql_patched"
+            "checksum": "81b8f150d5f3c618aeb40706da1b5aa5",
+            "size": 7539,
+            "uri": "https://{canondata_backend}/1937027/1fa3c45f23533a1bb342d776d47ad0cab615b010/resource.tar.gz#test.test_blocks-date_top_sort--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-date_top_sort--Plan]": [
         {
-            "checksum": "7717892430a15f4ee8545e5c59489df7",
-            "size": 6941,
-            "uri": "https://{canondata_backend}/1903280/edb59b851420424be2e8ccb2192f1e9677b3bc54/resource.tar.gz#test.test_blocks-date_top_sort--Plan_/plan.txt"
+            "checksum": "d3e735ed81932f570200d742ea9f0238",
+            "size": 7022,
+            "uri": "https://{canondata_backend}/1937027/1fa3c45f23533a1bb342d776d47ad0cab615b010/resource.tar.gz#test.test_blocks-date_top_sort--Plan_/plan.txt"
         }
     ],
     "test.test[blocks-distinct_opt_state_keys--Debug]": [

@@ -250,6 +250,34 @@ TWriteValue& TWriteValue::Interval(i64 value) {
     return *this;
 }
 
+TWriteValue& TWriteValue::Date32(i32 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Date32);
+    Value.SetInt32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Datetime64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Datetime64);
+    Value.SetInt64(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Timestamp64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Timestamp64);
+    Value.SetInt64(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Interval64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Interval);
+    Value.SetInt64(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::operator =(bool value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Bool);

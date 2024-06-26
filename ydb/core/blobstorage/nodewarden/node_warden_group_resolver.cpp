@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
             if (auto *result = GetResultingGroupInfo()) {
                 STLOG(PRI_INFO, BS_NODE, NW86, "TGroupResolverActor::ProcessResultAndFinish", (GroupId, GroupId),
                     (Result, *result));
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvUpdateGroupInfo(GroupId,
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvUpdateGroupInfo(TGroupId::FromValue(GroupId),
                     result->GetGroupGeneration(), *result));
                 PassAway();
             } else { // restart from the beginning
@@ -338,7 +338,7 @@ namespace NKikimr::NStorage {
         }
         for (const auto& [key, value] : LocalVDisks) {
             if (const auto& r = value.RuntimeData; r && !r->DonorMode) {
-                record.AddStartedGroupIds(r->GroupInfo->GroupID);
+                record.AddStartedGroupIds(r->GroupInfo->GroupID.GetRawId());
             }
         }
         Send(ev->Sender, res.release(), 0, ev->Cookie);

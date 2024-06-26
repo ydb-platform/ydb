@@ -5,19 +5,21 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/change_exchange/change_sender_resolver.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 
 #include <library/cpp/json/json_reader.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
 #include <util/string/join.h>
+
+namespace NKikimrTxDataShard {
+    class TEvApplyReplicationChanges_TChange;
+}
 
 namespace NKikimr::NReplication::NService {
 
@@ -25,8 +27,11 @@ class TChangeRecordBuilder;
 
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
+    using TSerializationContext = TChangeRecordBuilderContextTrait<TChangeRecord>;
 
 public:
+    using TPtr = TIntrusivePtr<TChangeRecord>;
+
     const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatJson;
 
     ui64 GetGroup() const override;
@@ -35,10 +40,8 @@ public:
     EKind GetKind() const override;
     TString GetSourceId() const;
 
-    void Serialize(
-        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record,
-        TChangeRecordBuilderContextTrait<NReplication::NService::TChangeRecord>& ctx) const;
-    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TSerializationContext& ctx) const;
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
     TConstArrayRef<TCell> GetKey() const;
@@ -71,7 +74,6 @@ public:
         return it->ShardId;
     }
 
-    using TPtr = TIntrusivePtr<TChangeRecord>;
 private:
     TString SourceId;
     NJson::TJsonValue JsonBody;
@@ -117,7 +119,6 @@ struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
     explicit TChangeRecordContainer(TVector<NReplication::NService::TChangeRecord::TPtr>&& records)
         : Records(std::move(records))
     {}
-
 
     TVector<NReplication::NService::TChangeRecord::TPtr> Records;
 

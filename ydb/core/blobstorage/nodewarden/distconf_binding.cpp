@@ -194,11 +194,11 @@ namespace NKikimr::NStorage {
 
             AbortAllScatterTasks(binding);
 
+            ApplyConfigUpdateToDynamicNodes(true);
+
             IssueNextBindRequest();
 
-            for (const auto& [nodeId, info] : DirectBoundNodes) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr));
-            }
+            FanOutReversePush(nullptr);
 
             UnsubscribeInterconnect(binding.NodeId);
         }
@@ -235,10 +235,7 @@ namespace NKikimr::NStorage {
             } else if (prevRootNodeId != GetRootNodeId() || configUpdate) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
-                for (const auto& [nodeId, info] : DirectBoundNodes) {
-                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                        configUpdate ? &StorageConfig.value() : nullptr));
-                }
+                FanOutReversePush(configUpdate ? &StorageConfig.value() : nullptr);
             }
         }
     }
@@ -441,6 +438,10 @@ namespace NKikimr::NStorage {
 
     ui32 TDistributedConfigKeeper::GetRootNodeId() const {
         return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
+    }
+
+    bool TDistributedConfigKeeper::PartOfNodeQuorum() const {
+        return Scepter || GetRootNodeId() != SelfId().NodeId();
     }
 
 } // NKikimr::NStorage

@@ -17,6 +17,7 @@ private:
     NArrow::TFirstLastSpecialKeys ReplaceKeyEdges; // first and last PK rows
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY_DEF(NStatistics::TPortionStorage, StatisticsStorage);
+    YDB_READONLY(ui32, DeletionsCount, 0);
     friend class TPortionMetaConstructor;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
         : ReplaceKeyEdges(pk)

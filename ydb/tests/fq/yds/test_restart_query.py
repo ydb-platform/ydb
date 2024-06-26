@@ -17,7 +17,7 @@ class TestRestartQuery(TestYdsBase):
     @pytest.mark.parametrize(
         "query_type",
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"]
+        ids=["analytics", "streaming"],
     )
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_restart_runtime_errors(self, kikimr_many_retries, client_many_retries, query_type):
@@ -54,7 +54,9 @@ class TestRestartQuery(TestYdsBase):
             for issue in describe_result.query.transient_issue:
                 if text in issue.message:
                     return True
-            assert deadline and deadline > time.time(), f'Text "{text}" is expected to be found in transient issues, but was not found. Describe query result:\n{describe_result}'
+            assert (
+                deadline and deadline > time.time()
+            ), f'Text "{text}" is expected to be found in transient issues, but was not found. Describe query result:\n{describe_result}'
             return False
 
         deadline = time.time() + yatest_common.plain_or_under_sanitizer(60, 300)

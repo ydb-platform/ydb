@@ -15,3 +15,4 @@ You can learn about the internals of the federated query processing system in th
 - [PostgreSQL](postgresql.md)
 - [{{ ydb-short-name }}](ydb.md)
 - [S3](s3/external_table.md)
+- [Greenplum](greenplum.md)

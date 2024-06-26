@@ -84,6 +84,14 @@ namespace NBalancing {
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         void ContinueBalancing() {
+            if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
+                // no more parts to send or delete
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
+                Send(Ctx->SkeletonId, new TEvStartBalancing());
+                PassAway();
+                return;
+            }
+
             // ask for repl token to continue balancing
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"));
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
@@ -158,14 +166,6 @@ namespace NBalancing {
             BatchManager.Handle(ev);
             if (BatchManager.IsBatchCompleted()) {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
-
-                if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
-                    // no more parts to send or delete
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                    Send(Ctx->SkeletonId, new TEvStartBalancing());
-                    PassAway();
-                    return;
-                }
 
                 ContinueBalancing();
             }

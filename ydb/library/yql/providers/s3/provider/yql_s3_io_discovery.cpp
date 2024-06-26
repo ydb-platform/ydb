@@ -852,6 +852,10 @@ private:
                         entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
+                        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+                        if (useRuntimeListing && !req.Options.IsPartitionedDataset) {
+                            req.Options.MaxResultSet = 1;
+                        }
                         future = ListingStrategy_->List(req.S3Request, req.Options);
                     }
                     PendingRequests_[req] = future;

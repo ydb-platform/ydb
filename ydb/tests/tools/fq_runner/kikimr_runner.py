@@ -52,7 +52,7 @@ class BaseTenant(abc.ABC):
 
     def stop(self):
         if self.kikimr_cluster:
-            self.kikimr_cluster.stop(kill=False)
+            self.kikimr_cluster.stop(kill=True)
 
     def endpoint(self, node_index=None):
         return "localhost:{}".format(

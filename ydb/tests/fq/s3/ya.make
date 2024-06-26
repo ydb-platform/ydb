@@ -1,7 +1,7 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-FORK_TESTS()
+# FORK_TESTS()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
@@ -53,7 +53,6 @@ IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

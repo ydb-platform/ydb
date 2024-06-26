@@ -2468,6 +2468,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );
             auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            
+            // It was discovered that TModifyACL scheme operation returns successfully without waiting for
+            // SchemeBoard replicas to acknowledge the path updates. This can cause the SchemeCache to reply
+            // with outdated entries, even if the SyncVersion flag is enabled.
+            // For more details, please refer to the PR description of this change.
+            Sleep(TDuration::MilliSeconds(300));
         };
 
         // a user which does not have any implicit permissions

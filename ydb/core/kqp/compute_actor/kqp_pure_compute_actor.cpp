@@ -121,8 +121,6 @@ void TKqpComputeActor::DoBootstrap() {
 
     ContinueExecute();
     Become(&TKqpComputeActor::StateFunc);
-
-    TBase::DoBootstrap();
 }
 
 STFUNC(TKqpComputeActor::StateFunc) {

@@ -35,21 +35,14 @@ public:
         return *Ptr;
     }
 
-    double VRuntime();
-
     void TrackTime(TDuration time, TMonotonic now);
-    TMaybe<TDuration> CalcDelay(TMonotonic now);
 
-    TMaybe<TDuration> GroupDelay(TMonotonic now);
-    void SetEnabled(TMonotonic now, bool enabled);
+    TMaybe<TDuration> Delay(TMonotonic now);
 
-    TMaybe<TDuration> Lag(TMonotonic now);
-    //double LagVTime(TMonotonic now);
-    double GroupNow(TMonotonic now);
+    void MarkThrottled();
+    void MarkResumed();
 
     double EstimateWeight(TMonotonic now, TDuration minTime);
-
-    TString DebugRepr(TMonotonic now);
 
     void Clear();
 
@@ -82,7 +75,6 @@ public:
     void AdvanceTime(TMonotonic now);
 
     void Deregister(TSchedulerEntity& self, TMonotonic now);
-    void Renice(TSchedulerEntity& self, TMonotonic now, double newWeight);
 
 private:
     struct TImpl;
@@ -103,9 +95,6 @@ struct TComputeActorSchedulingOptions {
 struct TKqpComputeSchedulerEvents {
     enum EKqpComputeSchedulerEvents {
         EvDeregister = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
-        EvRenice,
-        EvReniceConfirm,
-        EvRedistribute
     };
 };
 
@@ -118,35 +107,11 @@ struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpC
     }
 };
 
-struct TEvSchedulerRenice : public TEventLocal<TEvSchedulerRenice, TKqpComputeSchedulerEvents::EvRenice> {
-    TSchedulerEntityHandle SchedulerEntity;
-    double DesiredWeight;
-
-    TEvSchedulerRenice(TSchedulerEntityHandle handle, double weight)
-        : SchedulerEntity(std::move(handle))
-        , DesiredWeight(weight)
-    {
-    }
-};
-
-struct TEvSchedulerReniceConfirm : public TEventLocal<TEvSchedulerReniceConfirm, TKqpComputeSchedulerEvents::EvReniceConfirm> {
-    TSchedulerEntityHandle SchedulerEntity;
-
-    TEvSchedulerReniceConfirm(TSchedulerEntityHandle entity)
-        : SchedulerEntity(std::move(entity))
-    {
-    }
-};
-
 template<typename TDerived>
 class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived> {
 private:
     using TBase = NYql::NDq::TDqSyncComputeActorBase<TDerived>;
 
-    static constexpr TDuration ReniceTimeout = TDuration::Seconds(1);
-    static constexpr double ReniceGap = 1.05;
-    static constexpr double BoostGap = 1.04;
-    static constexpr TDuration MinReserveTime = TDuration::MicroSeconds(1);
     static constexpr double SecToUsec = 1e6;
 
 public:
@@ -159,10 +124,8 @@ public:
         , Counters(options.Counters)
         , Group(options.Group)
         , Weight(options.Weight)
-        , EffectiveWeight(options.Weight)
     {
         if (!NoThrottle) {
-            //SelfHandle.TrackTime(Lag);
             if (Counters) {
                 GroupUsage = Counters->GetKqpCounters()
                     ->GetSubgroup("NodeScheduler/Group", options.Group)
@@ -172,7 +135,6 @@ public:
     }
 
     static constexpr ui64 ResumeWakeupTag = 201;
-    static constexpr ui64 ReniceWakeupTag = 202;
 
     TMonotonic Now() {
         return TMonotonic::Now();
@@ -184,21 +146,6 @@ public:
         CA_LOG_D("wakeup with tag " << tag);
         if (tag == ResumeWakeupTag) {
             TBase::DoExecute();
-        } else if (tag == ReniceWakeupTag) {
-            Y_ABORT_UNLESS(SelfHandle);
-            ReniceWakeupScheduled = false;
-            auto now = Now();
-            auto newWeight = SelfHandle.EstimateWeight(now, MinReserveTime);
-            //Cerr << (TStringBuilder() << "running renice " << SelfHandle.DebugRepr(now) << " new weight " << newWeight) << Endl;
-            if (newWeight >= EffectiveWeight * BoostGap) {
-                EffectiveWeight = Weight;
-                return DoRenice(Weight);
-            } else {
-                EffectiveWeight = Min(newWeight, Weight);
-                newWeight = Min(Weight, newWeight * ReniceGap);
-                return DoRenice(newWeight);
-            }
-            ScheduleReniceWakeup();
         } else {
             TBase::HandleExecuteBase(ev);
         }
@@ -208,36 +155,10 @@ public:
         //ScheduleReniceWakeup();
     }
 
-    void ScheduleReniceWakeup() {
-        if (ReniceWakeupScheduled) {
-            return;
-        }
-        this->Schedule(ReniceTimeout, new NActors::TEvents::TEvWakeup(ReniceWakeupTag));
-        ReniceWakeupScheduled = true;
-    }
-
-    void DoRenice(double newWeight) {
-        if (RunningRenice) {
-            return;
-        }
-        Counters->SchedulerRenices->Collect(newWeight * 100000);
-        RunningRenice = true;
-        auto renice = MakeHolder<TEvSchedulerRenice>(std::move(SelfHandle), newWeight/*, Group*/);
-        this->Send(NodeService, renice.Release());
-    }
-
-    void HandleWork(TEvSchedulerReniceConfirm::TPtr& ev) {
-        RunningRenice = false;
-        SelfHandle = std::move(ev->Get()->SchedulerEntity);
-        ScheduleReniceWakeup();
-        TBase::DoExecute();
-    }
-
     STFUNC(BaseStateFuncBody) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NActors::TEvents::TEvWakeup, TSchedulableComputeActorBase<TDerived>::HandleWakeup);
-                hFunc(TEvSchedulerReniceConfirm, HandleWork);
                 default:
                     TBase::BaseStateFuncBody(ev);
             }
@@ -253,14 +174,14 @@ private:
             Counters->SchedulerThrottled->Add((now - *Throttled).MicroSeconds());
         }
         if (Throttled) {
-            SelfHandle.SetEnabled(now, true);
+            SelfHandle.MarkResumed();
             Throttled.Clear();
         }
     }
 
 protected:
     void DoExecuteImpl() override {
-        if (!SelfHandle) {// && Lag == TDuration::Zero()) {
+        if (!SelfHandle) {
             if (NoThrottle) {
                 return TBase::DoExecuteImpl();
             } else {
@@ -285,7 +206,7 @@ protected:
                 return;
             }
             SelfHandle.TrackTime(TDuration::MicroSeconds(passed), now);
-            Counters->ScheduledActorsRuns->Collect(passed);
+            Counters->ComputeActorExecutions->Collect(passed);
             if (GroupUsage) {
                 GroupUsage->Add(passed);
             }
@@ -296,16 +217,14 @@ protected:
         }
 
         if (!executed && !Throttled) {
-            SelfHandle.SetEnabled(now, false);
+            SelfHandle.MarkThrottled();
             Throttled = now;
         }
         ExecuteStart.Clear();
     }
 
     TMaybe<TDuration> CalcDelay(NMonotonic::TMonotonic now) {
-        auto result = SelfHandle.GroupDelay(now);
-        //auto result = SelfHandle.CalcDelay(now);
-        //Counters->SchedulerVisibleLag->Collect(SelfHandle.Lag(now).GetOrElse(TDuration::Zero()).MicroSeconds());
+        auto result = SelfHandle.Delay(now);
         if (NoThrottle || !result.Defined()) {
             return {};
         } else {
@@ -339,10 +258,6 @@ private:
 
     TString Group;
     double Weight;
-    double EffectiveWeight;
-
-    bool ReniceWakeupScheduled = false;
-    bool RunningRenice = false;
 };
 
 } // namespace NKqp

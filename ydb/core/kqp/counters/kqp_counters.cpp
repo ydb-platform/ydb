@@ -828,8 +828,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     SchedulerThrottled = KqpGroup->GetCounter("NodeScheduler/ThrottledUs", true);
     SchedulerCapacity = KqpGroup->GetCounter("NodeScheduler/Capacity");
-    SchedulerRenices = KqpGroup->GetHistogram("NodeScheduler/ReniceValue", NMonitoring::ExponentialHistogram(20, 2, 1));
-    ScheduledActorsRuns = KqpGroup->GetHistogram("NodeScheduler/ActorRunsUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ComputeActorExecutions = KqpGroup->GetHistogram("NodeScheduler/BatchUs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

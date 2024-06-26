@@ -377,7 +377,7 @@ protected:
     }
 
     NProtoBuf::Message* GetRequestMut() override {
-        return GetBaseRequestMut().GetRequestMut();
+        return GetBaseRequest().GetRequestMut();
     }
 
     TAsyncFinishResult GetFinishFuture() override {

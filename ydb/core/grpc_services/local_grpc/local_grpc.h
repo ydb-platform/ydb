@@ -88,7 +88,7 @@ protected:
         return *BaseRequest_;
     }
 
-    IRequestCtx& GetBaseRequestMut() noexcept {
+    IRequestCtx& GetBaseRequest() noexcept {
         return *BaseRequest_;
     }
 

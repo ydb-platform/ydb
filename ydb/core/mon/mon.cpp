@@ -16,22 +16,6 @@ using namespace NKikimr;
 
 namespace {
 
-/*
-const std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries(const TString& ticket) {
-    if (ticket.StartsWith("Bearer")) {
-        if (AppData()->AuthConfig.GetUseAccessService()
-            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
-            static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-            };
-            return entries;
-        }
-    }
-    static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
-    return emptyEntries;
-}
-*/
-
 TString GetDatabase(NMonitoring::IMonHttpRequest& request) {
     if (const auto dbIt = request.GetParams().Find("database"); dbIt != request.GetParams().end()) {
         return dbIt->second;
@@ -52,7 +36,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
         owner,
         new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
             database,
-            ticket ? TMaybe<TString>(ticket) : Nothing()),
+            ticket ? TMaybe<TString>(ticket) : Nothing(),
+            owner),
         IEventHandle::FlagTrackDelivery
     );
 }

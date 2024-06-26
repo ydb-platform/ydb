@@ -74,12 +74,12 @@ def s3(request) -> S3:
         recipes_common.stop_daemon(pid)
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def kikimr_settings(request: pytest.FixtureRequest):
     return getattr(request, "param", dict())
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def kikimr_params(request: pytest.FixtureRequest):
     return request
 
@@ -98,12 +98,12 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
     ]
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def kikimr_starts_counter():
-    return TestCounter(25, "Number kikimr restarts in one class")
+    return TestCounter(10, "Number kikimr restarts in one module")
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
     # kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
@@ -111,7 +111,7 @@ def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, m
         yield kikimr
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
     # kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
@@ -135,9 +135,9 @@ def kikimr(yq_version: str, kikimr_yqv1, kikimr_yqv2):
     return kikimr
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def tests_counter():
-    return TestCounter(200, "Number tests in one class")
+    return TestCounter(200, "Number tests in one module")
 
 
 @pytest.fixture

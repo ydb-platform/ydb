@@ -342,13 +342,20 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
     if (GCBarrierPreparation != LastCollectedGenStep) {
         if (!GCBarrierPreparation.Generation()) {
-            CollectGenStepInFlight = LastCollectedGenStep;
+            for (auto&& newCollectGenStep : newCollectGenSteps) {
+                DrainKeepTo(newCollectGenStep, gcContext);
+                CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+                if (gcContext.IsFull()) {
+                    break;
+                }
+            }
+            AFL_VERIFY(LastCollectedGenStep <= CollectGenStepInFlight)("last", LastCollectedGenStep)("collect", CollectGenStepInFlight);
         } else {
             AFL_VERIFY(GCBarrierPreparation.Generation() != CurrentGen);
-            AFL_VERIFY(LastCollectedGenStep < GCBarrierPreparation)("last", LastCollectedGenStep)("prepared", GCBarrierPreparation);
+            AFL_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
             CollectGenStepInFlight = GCBarrierPreparation;
+            DrainKeepTo(*CollectGenStepInFlight, gcContext);
         }
-        DrainKeepTo(*CollectGenStepInFlight, gcContext);
         DrainDeleteTo(*CollectGenStepInFlight, gcContext);
     }
     if (!gcContext.IsFull()) {
@@ -364,6 +371,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
     AFL_VERIFY(CollectGenStepInFlight);
     PopGCBarriers(*CollectGenStepInFlight);
+    AFL_VERIFY(LastCollectedGenStep <= *CollectGenStepInFlight)
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
 
     const bool isFull = gcContext.IsFull();

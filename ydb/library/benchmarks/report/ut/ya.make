@@ -5,7 +5,7 @@ SUBSCRIBER(g:yql)
 TEST_SRCS(test.py)
 
 PEERDIR(
-    yql/library/benchmarks/report
+    ydb/library/benchmarks/report
 )
 
 END()

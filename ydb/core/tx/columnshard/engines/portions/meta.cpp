@@ -14,6 +14,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     if (!StatisticsStorage.IsEmpty()) {
         *portionMeta.MutableStatisticsStorage() = StatisticsStorage.SerializeToProto();
     }
+    portionMeta.SetDeletionsCount(DeletionsCount);
     switch (Produced) {
         case TPortionMeta::EProduced::UNSPECIFIED:
             Y_ABORT_UNLESS(false);

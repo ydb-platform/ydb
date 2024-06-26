@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     credentials.cpp
+    from_file.cpp
     jwt_token_source.cpp
 )
 

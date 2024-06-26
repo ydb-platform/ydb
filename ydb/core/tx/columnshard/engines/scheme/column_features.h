@@ -41,6 +41,15 @@ public:
         AFL_VERIFY(Operator);
 
     }
+
+    std::shared_ptr<arrow::Scalar> GetDefaultWriteValue() const {
+        return nullptr;
+    }
+
+    std::shared_ptr<arrow::Scalar> GetDefaultReadValue() const {
+        return nullptr;
+    }
+
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const std::shared_ptr<IStoragesManager>& storagesManager) {
         auto parsed = TBase::DeserializeFromProto(columnInfo);
         if (!parsed) {

@@ -2219,46 +2219,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(falsePositive.empty() && falseNegative.empty(), b);
     }
 
-    Y_UNIT_TEST(Olap_InsertFailsOnDataQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-
-        auto tableClient = kikimr.GetTableClient();
-
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            INSERT INTO `/Root/tableWithNulls`(id, resource_id, level) VALUES(1, "1", 1);
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT(!result.IsSuccess());
-        std::string errorMsg = result.GetIssues().ToString();
-        UNIT_ASSERT_C(errorMsg.find("Write mode 'insert_abort' is not supported for olap tables.") != std::string::npos, errorMsg);
-    }
-
-    Y_UNIT_TEST(Olap_InsertFailsOnGenericQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-
-        auto db = kikimr.GetQueryClient();
-
-        auto result = db.ExecuteQuery(R"(
-            INSERT INTO `/Root/tableWithNulls`(id, resource_id, level) VALUES(1, "1", 1);
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-        UNIT_ASSERT(!result.IsSuccess());
-        std::string errorMsg = result.GetIssues().ToString();
-        UNIT_ASSERT_C(errorMsg.find("Write mode 'insert_abort' is not supported for olap tables.") != std::string::npos, errorMsg);
-    }
-
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

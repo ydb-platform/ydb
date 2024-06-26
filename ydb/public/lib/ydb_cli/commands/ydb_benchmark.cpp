@@ -1,8 +1,10 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
+#include <util/folder/path.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -31,6 +33,9 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("ministat", "Ministat report file name")
         .DefaultValue("")
         .StoreResult(&MiniStatFileName);
+    config.Opts->AddLongOption("plan", "Query plans report file name")
+        .DefaultValue("")
+        .StoreResult(&PlanFileName);
     config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that will be added to the beginning of each query. For multiple settings lines use this option several times.")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
@@ -322,6 +327,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
+        bool planSaved = false;
         for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined");
@@ -360,6 +366,24 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;
                 Sleep(TDuration::Seconds(1));
+            }
+            if (!planSaved && PlanFileName) {
+                TFsPath(PlanFileName).Parent().MkDirs();
+                {
+                    TFileOutput out(PlanFileName + ".table");
+                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::PrettyTable, true, out, 120);
+                    queryPlanPrinter.Print(res.GetQueryPlan());
+                }
+                {
+                    TFileOutput out(PlanFileName + ".json");
+                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::JsonBase64, true, out, 120);
+                    queryPlanPrinter.Print(res.GetQueryPlan());
+                }
+                {
+                    TFileOutput out(PlanFileName + ".ast");
+                    out << res.GetPlanAst();
+                }
+                planSaved = true;
             }
         }
 

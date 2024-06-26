@@ -17,6 +17,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
     const auto& writeMeta = batch.GetAggregation().GetWriteData()->GetWriteMeta();
+    meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
     auto schemeVersion = batch.GetAggregation().GetWriteData()->GetData()->GetSchemaVersion();
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
@@ -40,7 +41,11 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         txc.DB.NoMoreReadsForTx();
         TWriteOperation::TPtr operation;
         if (writeMeta.HasLongTxId()) {
-            AFL_VERIFY(aggr->GetSplittedBlobs().size() == 1)("count", aggr->GetSplittedBlobs().size());
+            if (writeMeta.IsGuaranteeWriter()) {
+                AFL_VERIFY(aggr->GetSplittedBlobs().size() == 1)("count", aggr->GetSplittedBlobs().size());
+            } else {
+                AFL_VERIFY(aggr->GetSplittedBlobs().size() <= 1)("count", aggr->GetSplittedBlobs().size());
+            }
         } else {
             operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation);

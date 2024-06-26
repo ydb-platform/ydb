@@ -141,7 +141,16 @@ struct TEvPrivate {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;
+        YDB_READONLY_DEF(TString, ErrorMessage);
     public:
+        
+        static std::unique_ptr<TEvWriteBlobsResult> Error(const NKikimrProto::EReplyStatus status, NOlap::TWritingBuffer&& writesBuffer, const TString& error) {
+            std::unique_ptr<TEvWriteBlobsResult> result = std::make_unique<TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(status), 
+                std::move(writesBuffer));
+            result->ErrorMessage = error;
+            return result;
+        }
+
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, NOlap::TWritingBuffer&& writesBuffer)
             : PutResult(putResult)
             , WritesBuffer(std::move(writesBuffer))

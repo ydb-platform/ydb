@@ -24,7 +24,7 @@ using TStatus = IGraphTransformer::TStatus;
 namespace {
 
 bool RightJoinSideAllowed(const TStringBuf& joinType) {
-    return joinType != "LeftOnly";
+    return joinType != "LeftOnly" && joinType != "LeftSemi";
 }
 
 bool RightJoinSideOptional(const TStringBuf& joinType) {

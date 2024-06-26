@@ -37,6 +37,7 @@ private:
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
+    YDB_READONLY(bool, HasDeletions, false);
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -185,7 +186,7 @@ public:
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
-                const ui32 recordsCount, const std::optional<ui64> shardingVersion)
+                const ui32 recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
@@ -196,6 +197,7 @@ public:
         , RecordSnapshotMax(recordSnapshotMax)
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
+        , HasDeletions(hasDeletions)
     {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
@@ -309,7 +311,8 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(), portion->GetShardingVersionOptional())
+        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
+            portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion))
     {
@@ -381,7 +384,8 @@ public:
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetSnapshot(), committed.GetRecordsCount(), {})
+        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetSnapshot(), committed.GetRecordsCount(), {},
+            committed.GetIsDelete())
         , CommittedBlob(committed) {
 
     }

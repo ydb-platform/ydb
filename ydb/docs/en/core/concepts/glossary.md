@@ -95,7 +95,7 @@ Technically, tablets are [actors](#actors) with a persistent state reliably save
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).
+{% if oss %}The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).{% endif %}
 
 ### Multi-version concurrency control {#mvcc}
 

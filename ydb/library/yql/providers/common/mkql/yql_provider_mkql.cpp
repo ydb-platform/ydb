@@ -1655,7 +1655,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
-    AddCallable({"GraceJoinCore", "GraceSelfJoinCore", "GraceJoinCoreWithSpilling", "GraceSelfJoinCoreWithSpilling"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         bool selfJoin = node.Content() == "GraceSelfJoinCore";
         int shift = selfJoin ? 0 : 1;
         const auto flowLeft = MkqlBuildExpr(*node.Child(0), ctx);
@@ -1706,7 +1706,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         // TODO: use PRAGMA
         bool IsSpillingAllowed = false;
-        if (IsSpillingAllowed) {
+        if (RuntimeVersion >= 50U && IsSpillingAllowed) {
             return selfJoin
                 ? ctx.ProgramBuilder.GraceSelfJoinWithSpilling(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
                 : ctx.ProgramBuilder.GraceJoinWithSpilling(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);

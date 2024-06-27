@@ -598,6 +598,12 @@ namespace NTabletPipe {
         void Push(const TActorContext& ctx, TAutoPtr<IEventHandle>& ev) {
             BLOG_D("push event to server");
 
+            if (Config.SendForLocalOnly && !IsLocalNode(ctx)) {
+                auto nodeId = GetTabletLeader().NodeId();
+                ctx.Send(Owner, new TEvTabletPipe::TEvNonLocalTablet(nodeId, TabletId, ctx.SelfID));
+                return;
+            }
+
             if (!InterconnectSessionId) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvTabletPipe::EvMessage: {

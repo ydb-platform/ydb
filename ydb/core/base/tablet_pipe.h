@@ -32,6 +32,7 @@ namespace NKikimr {
             EvClientCheckDelay,
             EvClientShuttingDown,
             EvMessage, // replacement for EvSend
+            EvNonLocalTablet,
 
             EvEnd
         };
@@ -287,6 +288,18 @@ namespace NKikimr {
             TIntrusivePtr<TEventSerializedData> Buffer;
             ui64 SeqNo = 0;
         };
+
+        struct TEvNonLocalTablet : public TEventLocal<TEvNonLocalTablet, EvNonLocalTablet> {
+            TEvNonLocalTablet(ui32 nodeId, ui64 tabletId, const TActorId& clientId)
+                : NodeId(nodeId)
+                , TabletId(tabletId)
+                , ClientId(clientId)
+            {}
+
+            const ui32 NodeId;
+            const ui64 TabletId;
+            const TActorId ClientId;
+        };
     };
 
     namespace NTabletPipe {
@@ -365,6 +378,7 @@ namespace NKikimr {
             bool PreferLocal = false;
             bool CheckAliveness = false;
             bool ExpectShutdown = false;
+            bool SendForLocalOnly = false;
             TClientRetryPolicy RetryPolicy;
 
             TClientConfig()

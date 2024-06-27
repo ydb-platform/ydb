@@ -393,6 +393,8 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+
+    DATA_INTEGRITY = 3000;
 };
 
 message TActivity {

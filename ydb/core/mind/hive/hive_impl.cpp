@@ -226,7 +226,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
             continue;
         }
         if (tablet->IsReadyToStart(now)) {
-            TBestNodeResult bestNodeResult = FindBestNode(*tablet, record);
+            TBestNodeResult bestNodeResult = FindBestNode(*tablet);
             if (std::holds_alternative<TNodeInfo*>(bestNodeResult)) {
                 if (tablet->InitiateStart(std::get<TNodeInfo*>(bestNodeResult))) {
                     ++tabletsStarted;

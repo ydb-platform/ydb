@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const int numNodes = runtime.GetNodeCount();
         const int NUM_TABLETS = 100;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeTabletID(1);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         {
             TDispatchOptions options;

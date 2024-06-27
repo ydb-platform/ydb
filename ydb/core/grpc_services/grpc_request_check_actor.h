@@ -87,6 +87,7 @@ public:
     }
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
         static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
@@ -96,16 +97,16 @@ public:
             }
         }
         if (!attributes.empty()) {
-            SetEntries({{GetPermissions(), attributes}});
-        } else {
-            if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
-                if (!Request_->Get()->GetDatabaseName()) {
-                    const auto& entries = GetEntriesForAuthAndCheckRequest(Request_);
-                    if (!entries.empty()) {
-                        SetEntries(entries);
-                    }
-                }
-            }
+            entries.emplace_back(GetPermissions(), attributes);
+        }
+
+        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+            const auto& e = GetEntriesForAuthAndCheckRequest(Request_);
+            entries.insert(entries.end(), e.begin(), e.end());
+        }
+
+        if (!entries.empty()) {
+            SetEntries(entries);
         }
     }
 

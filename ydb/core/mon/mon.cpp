@@ -9,6 +9,8 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/string/ascii.h>
+
 namespace NActors {
 
 using namespace NMonitoring;
@@ -16,15 +18,20 @@ using namespace NKikimr;
 
 namespace {
 
+bool HasJsonContent(NMonitoring::IMonHttpRequest& request) {
+    const TStringBuf header = request.GetHeader("Content-Type");
+    return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
+}
+
 TString GetDatabase(NMonitoring::IMonHttpRequest& request) {
     if (const auto dbIt = request.GetParams().Find("database"); dbIt != request.GetParams().end()) {
         return dbIt->second;
     }
-    if (request.GetMethod() == HTTP_METHOD_POST) {
+    if (request.GetMethod() == HTTP_METHOD_POST && HasJsonContent(request)) {
         static NJson::TJsonReaderConfig JsonConfig;
         NJson::TJsonValue requestData;
         if (NJson::ReadJsonTree(request.GetPostContent(), &JsonConfig, &requestData)) {
-            return requestData["database"].GetString();
+            return requestData["database"].GetString(); // empty if not string or no such key
         }
     }
     return {};

@@ -18,6 +18,11 @@ using TCellsIter = TBtreeIndexNode::TCellsIter;
 
 const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
 
+const ui8 INITIAL_STATE = 0;
+const ui8 OPENED_STATE = 1;
+const ui8 CLOSED_STATE = 2;
+const ui8 IGNORED_STATE = 3;
+
 class TTableHistogramBuilderBtreeIndex {
     struct TNodeState : public TIntrusiveListItem<TNodeState> {
         const TPart* Part;
@@ -26,6 +31,7 @@ class TTableHistogramBuilderBtreeIndex {
         TRowId BeginRowId, EndRowId;
         ui64 BeginDataSize, EndDataSize;
         TCellsIterable BeginKey, EndKey;
+        ui8 State = 0;
 
         TNodeState(const TPart* part, TPageId pageId, ui32 level, TRowId beginRowId, TRowId endRowId, TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
             : Part(part)
@@ -47,6 +53,34 @@ class TTableHistogramBuilderBtreeIndex {
         TRowId GetRowCount() const noexcept {
             return EndRowId - BeginRowId;
         }
+
+        void Open(ui64& openedDataSize) noexcept {
+            Y_ABORT_UNLESS(State == INITIAL_STATE);
+            
+            State = OPENED_STATE;
+            openedDataSize += GetDataSize();
+        }
+
+        void Close(ui64& openedDataSize, ui64& closedDataSize) noexcept {
+            Y_ABORT_UNLESS(State == OPENED_STATE || State == IGNORED_STATE);
+
+            if (State == OPENED_STATE) {
+                State = CLOSED_STATE;
+                ui64 dataSize = GetDataSize();
+                Y_ABORT_UNLESS(openedDataSize >= dataSize);
+                openedDataSize -= dataSize;
+                closedDataSize += dataSize;
+            }
+        }
+
+        void Ignore(ui64& openedDataSize) noexcept {
+            Y_ABORT_UNLESS(State == OPENED_STATE);
+            
+            State = IGNORED_STATE;
+            ui64 dataSize = GetDataSize();
+            Y_ABORT_UNLESS(openedDataSize >= dataSize);
+            openedDataSize -= dataSize;
+        }
     };
 
     struct TNodeEvent {
@@ -55,9 +89,11 @@ class TTableHistogramBuilderBtreeIndex {
         TNodeState* Node;
     };
 
+    // TODO: test this hell
     struct TNodeEventKeyGreater {
         const TKeyCellDefaults& KeyDefaults;
 
+        // returns that a > b
         bool operator ()(const TNodeEvent& a, const TNodeEvent& b) const noexcept {
             if (a.Key && b.Key) {
                 auto cmp = CompareKeys(a.Key, b.Key, KeyDefaults);
@@ -70,16 +106,22 @@ class TTableHistogramBuilderBtreeIndex {
             return GetCategory(a) > GetCategory(b);
         }
 
-        ui8 GetKind(const TNodeEvent& a) const noexcept {
-            // end first
-            return a.IsBegin ? 1 : -1;
+        i8 GetKind(const TNodeEvent& a) const noexcept {
+            Y_ABORT_UNLESS(a.Key);
+            return a.IsBegin ? 1 : -1; // end first
         }
 
-        ui8 GetCategory(const TNodeEvent& a) const noexcept {
+        i8 GetCategory(const TNodeEvent& a) const noexcept {
             if (a.Key) {
                 return 0;
             }
             return a.IsBegin ? -1 : 1;
+        }
+    };
+
+    struct TNodeDataSizeLess {
+        bool operator ()(const TNodeState* a, const TNodeState* b) const noexcept {
+            return a->GetDataSize() < b->GetDataSize();
         }
     };
 
@@ -91,7 +133,8 @@ public:
         , DataSizeResolution(dataSizeResolution)
         , Env(env)
         , YieldHandler(yieldHandler)
-        , NodeEvents(TNodeEventKeyGreater{KeyDefaults})
+        , NodeEventKeyGreater(KeyDefaults)
+        , NodeEvents(NodeEventKeyGreater)
     {
     }
 
@@ -157,20 +200,81 @@ private:
     }
 
     bool BuildIterate(TStats& stats) {
-        Y_UNUSED(stats);
         Y_UNUSED(RowCountResolution, DataSizeResolution);
 
-        // ui64 nextBucket = RowCountResolution;
-        THashSet<TNodeState*> currentNodes;
+        // The idea is the following:
+        // - we move some key pointer through all parts simultaneously
+        //   keeping all nodes that have current key pointer in opened heap (sorted by size)
+        //   all nodes before current key pointer are considered as closed
+        // - we keep invariant that size of closed and opened nodes <= next requested histogram bucket value
+        //   if it false we load opened nodes and split them using current key pointer
 
+        ui64 nextDataSize = DataSizeResolution;
+        ui64 closedDataSize = 0, openedDataSize = 0;
+
+        TPriorityQueue<TNodeState*, TVector<TNodeState*>, TNodeDataSizeLess> openedSortedByDataSize;
+        
         while (NodeEvents) {
+            YieldHandler();
+
             auto event = NodeEvents.top();
-            NodeEvents.pop();
 
-            if (event.IsBegin) {
+            Y_ABORT_UNLESS(NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event), "Should pop top");
+            while (NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event)) {
+                auto& newEvent = NodeEvents.top();
+                if (newEvent.IsBegin) {
+                    newEvent.Node->Open(openedDataSize);
+                    openedSortedByDataSize.push(newEvent.Node);
+                } else {
+                    newEvent.Node->Close(openedDataSize, closedDataSize);
+                }
+            
+                NodeEvents.pop();
+            }
 
-            } else {
+            const auto addEvent = [&](TNodeEvent newEvent) {
+                if (NodeEventKeyGreater(newEvent, event)) {
+                    NodeEvents.push(newEvent);
+                } else {
+                    if (newEvent.IsBegin) {
+                        newEvent.Node->Open(openedDataSize);
+                        openedSortedByDataSize.push(newEvent.Node);
+                    } else {
+                        newEvent.Node->Close(openedDataSize, closedDataSize);
+                    }
+                }
+            };
 
+            const auto addNode = [&](TNodeState& child) {
+                TNodeEvent childBegin{child.BeginKey, true, &child};
+                TNodeEvent childEnd{child.EndKey, false, &child};
+
+                addEvent(childBegin);
+                addEvent(childEnd);
+            };
+
+            while (closedDataSize + openedDataSize > nextDataSize && openedSortedByDataSize) {
+                auto node = openedSortedByDataSize.top();
+                openedSortedByDataSize.pop();
+
+                if (node->State != OPENED_STATE) {
+                    Y_ABORT_UNLESS(node->State == CLOSED_STATE);
+                    continue;
+                }
+
+                if (node->Level) {
+                    node->Ignore(openedDataSize);
+                    if (!TryLoadNode(*node, addNode)) {
+                        return false;
+                    }
+                } // else: leaf nodes will be closed later
+            }
+
+            if (closedDataSize + openedDataSize > nextDataSize && event.Key) {
+                ui64 dataSize = closedDataSize + openedDataSize / 2;
+                
+                AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
+                nextDataSize += DataSizeResolution;
             }
         }
 
@@ -231,12 +335,12 @@ private:
     
 private:
     static int CompareKeys(const TCellsIterable& left_, const TCellsIterable& right_, const TKeyCellDefaults& keyDefaults) {
-        Y_DEBUG_ABORT_UNLESS(left_);
-        Y_DEBUG_ABORT_UNLESS(right_);
+        Y_ABORT_UNLESS(left_);
+        Y_ABORT_UNLESS(right_);
 
         auto left = left_.Iter(), right = right_.Iter();
         size_t end = Max(left.Count(), right.Count());
-        Y_DEBUG_ABORT_UNLESS(end <= keyDefaults.Size(), "Key schema is smaller than compared keys");
+        Y_ABORT_UNLESS(end <= keyDefaults.Size(), "Key schema is smaller than compared keys");
         
         for (size_t pos = 0; pos < end; ++pos) {
             const auto& leftCell = pos < left.Count() ? left.Next() : keyDefaults.Defs[pos];
@@ -257,6 +361,7 @@ private:
     TBuildStatsYieldHandler YieldHandler;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
     TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
+    TNodeEventKeyGreater NodeEventKeyGreater;
     TPriorityQueue<TNodeEvent, TVector<TNodeEvent>, TNodeEventKeyGreater> NodeEvents;
 };
 

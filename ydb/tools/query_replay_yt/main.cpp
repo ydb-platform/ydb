@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -64,6 +66,7 @@ public:
         FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
         NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
         AppData.Reset(new NKikimr::TAppData(0, 0, 0, 0, {}, TypeRegistry.Get(), FunctionRegistry.Get(), nullptr, nullptr));
+        AppData->Counters = MakeIntrusive<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
         auto setup = BuildActorSystemSetup(Config.ActorSystemThreadsCount);
         ActorSystem.Reset(new TActorSystem(setup, AppData.Get()));
         ActorSystem->Start();

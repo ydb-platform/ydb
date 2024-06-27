@@ -28,7 +28,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
 
     auto setup = MakeHolder<TActorSystemSetup>();
 
-    setup->NodeId = pools;
+    setup->NodeId = 1;
 
     setup->ExecutorsCount = pools;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[pools]);

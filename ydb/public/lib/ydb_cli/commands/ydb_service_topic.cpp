@@ -199,7 +199,7 @@ namespace {
         if (isAlter) {
             config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
                 .Optional()
-                .StoreResult(&AutoPartitioningStrategy_);
+                .StoreResult(&AutoPartitioningStrategyStr_);
             config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
                 .Optional()
                 .StoreResult(&ScaleThresholdTime_);
@@ -213,7 +213,7 @@ namespace {
             config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
                 .Optional()
                 .DefaultValue("disabled")
-                .StoreResult(&AutoPartitioningStrategy_);
+                .StoreResult(&AutoPartitioningStrategyStr_);
             config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
                 .Optional()
                 .DefaultValue(300)
@@ -379,6 +379,7 @@ namespace {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
+        ParseAutoPartitioningStrategy();
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(

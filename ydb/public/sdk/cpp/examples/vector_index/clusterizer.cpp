@@ -194,6 +194,10 @@ bool TClusterizer<T>::Init(ui64 k) {
     Clusters.Count.resize(k, 0);
     Clusters.Coords.reserve(k);
     It.RandomK(k, [&](TRawEmbedding rawEmbedding) {
+        if (rawEmbedding.empty()) {
+            Clusters.Coords.clear();
+            return;
+        }
         auto embedding = GetArray<float>(rawEmbedding);
         Clusters.Coords.emplace_back(embedding.begin(), embedding.end());
     });
@@ -274,6 +278,10 @@ bool TClusterizer<T>::Step(ui32 iteration, ui32 maxIterations, float neededDiff)
     }
     auto it = AggregatedClusters.begin();
     It.RandomK(zeroCount, [&](TRawEmbedding rawEmbedding) {
+        if (rawEmbedding.empty()) {
+            it = AggregatedClusters.begin();
+            return;
+        }
         for (; it != AggregatedClusters.end(); ++it) {
             if (it->Count == 0) {
                 auto embedding = GetArray<T>(rawEmbedding);

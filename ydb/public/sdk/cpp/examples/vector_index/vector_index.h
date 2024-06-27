@@ -50,20 +50,7 @@ int TopK(NYdb::TDriver& driver, const TOptions& options);
 
 class TVectorException: public yexception {
 public:
-    TVectorException(NYdb::TStatus status)
-        : Status(std::move(status))
-    {
+    TVectorException(const NYdb::TStatus& status) {
+        *this << "Status:" << status;
     }
-
-    friend IOutputStream& operator<<(IOutputStream& out, const TVectorException& e) {
-        out << "Status:" << e.Status.GetStatus();
-        if (e.Status.GetIssues()) {
-            out << Endl;
-            e.Status.GetIssues().PrintTo(out);
-        }
-        return out;
-    }
-
-private:
-    NYdb::TStatus Status;
 };

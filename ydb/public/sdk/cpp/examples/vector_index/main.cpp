@@ -64,8 +64,6 @@ int main(int argc, char** argv) {
             default:
                 break;
         }
-    } catch (const TVectorException& e) {
-        Cerr << "Execution failed: " << e << Endl;
     } catch (const std::exception& e) {
         Cerr << "Execution failed: " << e.what() << Endl;
     }

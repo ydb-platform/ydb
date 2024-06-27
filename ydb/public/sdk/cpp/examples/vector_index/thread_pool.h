@@ -31,8 +31,6 @@ public:
         void Call() noexcept final {
             try {
                 (*this)();
-            } catch (const TVectorException& e) {
-                Cerr << "Call failed: " << e << Endl;
             } catch (const std::exception& e) {
                 Cerr << "Call failed: " << e.what() << Endl;
             }

@@ -112,6 +112,11 @@ namespace NKikimr::NStorage {
                     invoke(disk);
                 }
             }
+            for (const auto& item : res->GetProposedConfigs()) {
+                for (const auto& disk : item.GetDisks()) {
+                    invoke(disk);
+                }
+            }
             for (const auto& disk : res->GetNoMetadata()) {
                 invoke(disk);
             }

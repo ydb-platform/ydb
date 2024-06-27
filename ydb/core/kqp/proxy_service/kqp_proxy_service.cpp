@@ -269,9 +269,9 @@ public:
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
-        auto kqpWorkloadService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
+        KqpWorkloadService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
-            MakeKqpWorkloadServiceId(SelfId().NodeId()), kqpWorkloadService);
+            MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -459,6 +459,8 @@ public:
         if (BoardPublishActor) {
             Send(BoardPublishActor, new TEvents::TEvPoison);
         }
+
+        Send(KqpWorkloadService, new TEvents::TEvPoison());
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -1777,6 +1779,7 @@ private:
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;
+    TActorId KqpWorkloadService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 

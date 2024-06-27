@@ -6,6 +6,8 @@
 
 namespace NKikimr::NResourcePool {
 
+inline constexpr char DEFAULT_POOL_ID[] = "default";
+
 typedef double TPercent;
 
 struct TPoolSettings {

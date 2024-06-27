@@ -1,12 +1,8 @@
 #pragma once
 
+#include <ydb/core/kqp/common/events/workload_service.h>
+
 #include <ydb/core/protos/kqp.pb.h>
-
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -15,17 +11,17 @@ struct TPoolStateDescription {
     ui64 DelayedRequests = 0;
     ui64 RunningRequests = 0;
 
-    ui64 AmountRequests() const {
-        return DelayedRequests + RunningRequests;
-    }
+    ui64 AmountRequests() const;
 };
 
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvCancelRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvUpdatePoolsLeases,
-        EvRefreshPoolState,
+        EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvFetchPoolResponse,
+        EvCreatePoolResponse,
+        EvPrepareTablesRequest,
+        EvCancelRequest,
 
         EvTablesCreationFinished,
         EvCleanupTableResponse,
@@ -40,24 +36,53 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
-    // Events
-    struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
-        TEvCancelRequest(const TString& poolId, const TString& sessionId)
-            : PoolId(poolId)
-            , SessionId(sessionId)
-        {}
-
-        const TString PoolId;
-        const TString SessionId;
-    };
-
-    struct TEvUpdatePoolsLeases : public NActors::TEventLocal<TEvUpdatePoolsLeases, EvUpdatePoolsLeases> {
-    };
-
+    // Workload manager events
     struct TEvRefreshPoolState : public NActors::TEventPB<TEvRefreshPoolState, NKikimrKqp::TEvRefreshPoolState, EvRefreshPoolState> {
     };
 
+    struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TEvPlaceRequestIntoPool::TPtr event, NYql::TIssues issues)
+            : Status(status)
+            , PoolConfig(poolConfig)
+            , Event(std::move(event))
+            , Issues(std::move(issues))
+        {}
 
+        const Ydb::StatusIds::StatusCode Status;
+        const NResourcePool::TPoolSettings PoolConfig;
+        TEvPlaceRequestIntoPool::TPtr Event;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvCreatePoolResponse : public NActors::TEventLocal<TEvCreatePoolResponse, EvCreatePoolResponse> {
+        TEvCreatePoolResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvPrepareTablesRequest : public NActors::TEventLocal<TEvPrepareTablesRequest, EvPrepareTablesRequest> {
+        TEvPrepareTablesRequest(const TString& database, const TString& poolId)
+            : Database(database)
+            , PoolId(poolId)
+        {}
+
+        const TString Database;
+        const TString PoolId;
+    };
+
+    struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
+        explicit TEvCancelRequest(const TString& sessionId)
+            : SessionId(sessionId)
+        {}
+
+        const TString SessionId;
+    };
+
+    // Tables queries events
     struct TEvTablesCreationFinished : public NActors::TEventLocal<TEvTablesCreationFinished, EvTablesCreationFinished> {
         TEvTablesCreationFinished(bool success, NYql::TIssues issues)
             : Success(success)
@@ -93,59 +118,51 @@ struct TEvPrivate {
     };
 
     struct TEvRefreshPoolStateResponse : public NActors::TEventLocal<TEvRefreshPoolStateResponse, EvRefreshPoolStateResponse> {
-        TEvRefreshPoolStateResponse(Ydb::StatusIds::StatusCode status, const TString& poolId, const TPoolStateDescription& poolState, NYql::TIssues issues)
+        TEvRefreshPoolStateResponse(Ydb::StatusIds::StatusCode status, const TPoolStateDescription& poolState, NYql::TIssues issues)
             : Status(status)
-            , PoolId(poolId)
             , PoolState(poolState)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
-        const TString PoolId;
         const TPoolStateDescription PoolState;
         const NYql::TIssues Issues;
     };
 
     struct TEvDelayRequestResponse : public NActors::TEventLocal<TEvDelayRequestResponse, EvDelayRequestResponse> {
-        TEvDelayRequestResponse(Ydb::StatusIds::StatusCode status, const TString& poolId, const TString& sessionId, NYql::TIssues issues)
+        TEvDelayRequestResponse(Ydb::StatusIds::StatusCode status, const TString& sessionId, NYql::TIssues issues)
             : Status(status)
-            , PoolId(poolId)
             , SessionId(sessionId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
-        const TString PoolId;
         const TString SessionId;
         const NYql::TIssues Issues;
     };
 
     struct TEvStartRequestResponse : public NActors::TEventLocal<TEvStartRequestResponse, EvStartRequestResponse> {
-        TEvStartRequestResponse(Ydb::StatusIds::StatusCode status, const TString& poolId, ui32 nodeId, const TString& sessionId, NYql::TIssues issues)
+        TEvStartRequestResponse(Ydb::StatusIds::StatusCode status, ui32 nodeId, const TString& sessionId, NYql::TIssues issues)
             : Status(status)
-            , PoolId(poolId)
             , NodeId(nodeId)
             , SessionId(sessionId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
-        const TString PoolId;
         const ui32 NodeId;
         const TString SessionId;
         const NYql::TIssues Issues;
     };
 
     struct TEvCleanupRequestsResponse : public NActors::TEventLocal<TEvCleanupRequestsResponse, EvCleanupRequestsResponse> {
-        TEvCleanupRequestsResponse(Ydb::StatusIds::StatusCode status, const TString& poolId, const std::vector<TString>& sesssionIds, NYql::TIssues issues)
+        TEvCleanupRequestsResponse(Ydb::StatusIds::StatusCode status, const std::vector<TString>& sesssionIds, NYql::TIssues issues)
             : Status(status)
-            , PoolId(poolId)
             , SesssionIds(sesssionIds)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
-        const TString PoolId;
         const std::vector<TString> SesssionIds;
         const NYql::TIssues Issues;
     };

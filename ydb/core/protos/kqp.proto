@@ -800,4 +800,5 @@ message TScriptExecutionOperationMeta {
 /// KQP workload manager Events
 message TEvRefreshPoolState {
     optional string PoolId = 1;
+    optional string Database = 2;
 }

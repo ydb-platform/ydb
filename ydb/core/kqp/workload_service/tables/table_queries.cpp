@@ -1,25 +1,19 @@
-#include "kqp_workload_service_tables.h"
-#include "kqp_workload_service_tables_impl.h"
+#include "table_queries.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/common/simple/services.h>
 
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
+#include <ydb/core/kqp/workload_service/common/helpers.h>
+
 #include <ydb/library/query_actor/query_actor.h>
+
 #include <ydb/library/table_creator/table_creator.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
 
 namespace {
-
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadServiceTables] " << LogPrefix() << stream)
 
 using namespace NActors;
 
@@ -34,17 +28,17 @@ public:
         SetOperationInfo(operationName, traceId, counters);
     }
 
-    TQueryBase(const TString& operationName, const TString& traceId, const TString& sessionId, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(operationName, ComposeTraceId(traceId, sessionId), counters)
+    TQueryBase(const TString& operationName, const TString& traceId, const TString& database, const TString& sessionId, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(operationName, ComposeTraceId(traceId, database, sessionId), counters)
     {}
 
-    void UpdateLogInfo(const TString& traceId, const TString& sessionId) {
-        SetOperationInfo(OperationName, ComposeTraceId(traceId, sessionId), nullptr);
+    void UpdateLogInfo(const TString& traceId, const TString& database, const TString& sessionId) {
+        SetOperationInfo(OperationName, ComposeTraceId(traceId, database, sessionId), nullptr);
     }
 
 private:
-    TString ComposeTraceId(const TString& traceId, const TString& sessionId) {
-        return TStringBuilder() << traceId << ", RequestSessionId: " << sessionId;
+    static TString ComposeTraceId(const TString& traceId, const TString& database, const TString& sessionId) {
+        return TStringBuilder() << traceId << ", RequestDatabase: " << database << ", RequestSessionId: " << sessionId;
     }
 };
 
@@ -163,10 +157,7 @@ private:
     const TString Path;
 };
 
-class TCleanupTablesActor : public TActorBootstrapped<TCleanupTablesActor> {
-    using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
-
-    using TRetryPolicy = IRetryPolicy<>;
+class TCleanupTablesActor : public TSchemeActorBase<TCleanupTablesActor> {
     using TCleanupTablesRetryQuery = TQueryRetryActor<TCleanupTablesQuery, TEvPrivate::TEvCleanupTableResponse, TString>;
 
 public:
@@ -174,35 +165,21 @@ public:
         : TablePathsToCheck(TTablesCreator::GetTablePahs())
     {}
 
-    void Bootstrap() {
-        CheckTablesExistance();
+    void DoBootstrap() {
         Become(&TCleanupTablesActor::StateFunc);
     }
 
-    void CheckTablesExistance() const {
-        LOG_D("Start check tables existence, number paths: " << TablePathsToCheck.size());
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
-            TablePathsToCheck
-        ).Release()), IEventHandle::FlagTrackDelivery);
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown && ScheduleRetry("Scheme cache service not found")) {
-            LOG_D("Scheduled retry for TEvNavigateKeySet to scheme cache");
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& results = ev->Get()->Request->ResultSet;
+        if (results.size() != TablePathsToCheck.size()) {
+            OnFatalError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssue("Unexpected scheme cache response"));
             return;
         }
 
-        TablesExists = false;
-        AddError("Scheme cache is unavailable");
         TablePathsToCheck.clear();
-        TryFinish();
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        TablePathsToCheck.clear();
-        for (const auto& result : ev->Get()->Request->ResultSet) {
+        for (const auto& result : results) {
             const TString& path = JoinPath(result.Path);
-            LOG_D("Describe table '" << path << "' status " << result.Status);
+            LOG_D("Describe table " << path << " status " << result.Status);
 
             switch (result.Status) {
                 case EStatus::Unknown:
@@ -211,7 +188,7 @@ public:
                 case EStatus::AccessDenied:
                 case EStatus::RedirectLookupError:
                     TablesExists = false;
-                    AddError(TStringBuilder() << "Failed to describe table path '" << path << "', " << result.Status);
+                    AddError(TStringBuilder() << "Failed to describe table path " << path << ", " << result.Status);
                     break;
                 case EStatus::LookupError:
                     RetryPathCheck(result.Path, result.Status);
@@ -222,7 +199,7 @@ public:
                     TablesExists = false;
                     break;
                 case EStatus::Ok:
-                    LOG_D("Start cleanup for table '" << path << "'");
+                    LOG_D("Start cleanup for table " << path);
                     CleanupQueriesInFlight++;
                     Register(new TCleanupTablesRetryQuery(SelfId(), path));
                     break;
@@ -235,45 +212,49 @@ public:
         Y_ABORT_UNLESS(CleanupQueriesInFlight);
         CleanupQueriesInFlight--;
 
-        LOG_D("Cleanup finished for table '" << ev->Get()->Path << "' " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_D("Cleanup finished for table " << ev->Get()->Path << ", " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssue rootIssue(TStringBuilder() << "Cleanup table '" << ev->Get()->Path << "' failed, " << ev->Get()->Status);
-            for (const NYql::TIssue& issue : ev->Get()->Issues) {
-                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-            }
-            AddError(rootIssue);
+            AddError(GroupIssues(ev->Get()->Issues, TStringBuilder() << "Cleanup table " << ev->Get()->Path << " failed, " << ev->Get()->Status));
         }
-
         TryFinish();
     }
 
-    STRICT_STFUNC(StateFunc,
-        sFunc(TEvents::TEvWakeup, CheckTablesExistance);
-        hFunc(TEvents::TEvUndelivered, Handle)
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        hFunc(TEvPrivate::TEvCleanupTableResponse, Handle);
-    )
-
-private:
-    bool ScheduleRetry(const TString& message) {
-        if (!RetryState) {
-            RetryState = CreateRetryState();
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvPrivate::TEvCleanupTableResponse, Handle);
+            default:
+                StateFuncBase(ev);
         }
-
-        if (const auto delay = RetryState->GetNextRetryDelay()) {
-            Issues.AddIssue(message);
-            Schedule(*delay, new TEvents::TEvWakeup());
-            return true;
-        }
-
-        return false;
     }
 
+protected:
+    void StartRequest() override {
+        LOG_D("Start check tables existence, number paths: " << TablePathsToCheck.size());
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
+            TablePathsToCheck
+        ).Release()), IEventHandle::FlagTrackDelivery);
+    }
+
+    void OnFatalError(Ydb::StatusIds::StatusCode status, NYql::TIssue issue) override {
+        Y_UNUSED(status);
+
+        TablesExists = false;
+        AddError(issue);
+        TablePathsToCheck.clear();
+        TryFinish();
+    }
+
+    TString LogPrefix() const override {
+        return TStringBuilder() << "[TCleanupTablesActor] ActorId: " << SelfId() << ", ";
+    }
+
+private:
     void RetryPathCheck(const TVector<TString>& path, EStatus status) {
-        if (TablePathsToCheck.empty() && !ScheduleRetry(TStringBuilder() << "Retry " << status << " for table '" << CanonizePath(path) << "'")) {
+        if (TablePathsToCheck.empty() && !ScheduleRetry(TStringBuilder() << "Retry " << status << " for table " << CanonizePath(path))) {
             TablesExists = false;
-            AddError(TStringBuilder() << "Retry limit exceeded for table '" << CanonizePath(path) << "', " << status);
+            AddError(TStringBuilder() << "Retry limit exceeded for table " << CanonizePath(path) << ", " << status);
             return;
         }
 
@@ -286,13 +267,17 @@ private:
         Issues.AddIssue(message);
     }
 
-    void TryFinish() {
-        if (TablePathsToCheck.empty() && !CleanupQueriesInFlight) {
-            Reply();
-        }
+    template <>
+    void AddError(const NYql::TIssues& issues) {
+        Success = false;
+        Issues.AddIssues(issues);
     }
 
-    void Reply() {
+    void TryFinish() {
+        if (!TablePathsToCheck.empty() || CleanupQueriesInFlight) {
+            return;
+        }
+
         if (Success) {
             LOG_D("Successfully finished");
         } else {
@@ -304,35 +289,19 @@ private:
     }
 
 private:
-    static TRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TRetryPolicy::GetFixedIntervalPolicy(
-                  [](){ return ERetryErrorClass::ShortRetry; }
-                , TDuration::MilliSeconds(100)
-                , TDuration::MilliSeconds(300)
-                , 100
-            )->CreateRetryState();
-    }
-
-    TString LogPrefix() const {
-        return TStringBuilder() << "[TCleanupTablesActor] ActorId: " << SelfId() << ", ";
-    }
-
-private:
     TVector<TVector<TString>> TablePathsToCheck;
-
     size_t CleanupQueriesInFlight = 0;
-    TRetryPolicy::IRetryState::TPtr RetryState;
 
     bool Success = true;
     bool TablesExists = true;
-    NYql::TIssues Issues;
 };
 
 
 class TRefreshPoolStateQuery : public TQueryBase {
 public:
-    TRefreshPoolStateQuery(const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(__func__, poolId, counters)
+    TRefreshPoolStateQuery(const TString& database, const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(__func__, poolId, database, "", counters)
+        , Database(database)
         , PoolId(poolId)
         , LeaseDuration(leaseDuration)
     {}
@@ -364,7 +333,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -403,7 +372,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -443,10 +412,11 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvRefreshPoolStateResponse(status, PoolId, PoolState, std::move(issues)));
+        Send(Owner, new TEvPrivate::TEvRefreshPoolStateResponse(status, PoolState, std::move(issues)));
     }
 
 private:
+    const TString Database;
     const TString PoolId;
     const TDuration LeaseDuration;
 
@@ -456,8 +426,9 @@ private:
 
 class TDelayRequestQuery : public TQueryBase {
 public:
-    TDelayRequestQuery(const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(__func__, poolId, sessionId, counters)
+    TDelayRequestQuery(const TString& database, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(__func__, poolId, database, sessionId, counters)
+        , Database(database)
         , PoolId(poolId)
         , SessionId(sessionId)
         , StartTime(startTime)
@@ -487,7 +458,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -516,10 +487,11 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvDelayRequestResponse(status, PoolId, SessionId, std::move(issues)));
+        Send(Owner, new TEvPrivate::TEvDelayRequestResponse(status, SessionId, std::move(issues)));
     }
 
 private:
+    const TString Database;
     const TString PoolId;
     const TString SessionId;
     const TInstant StartTime;
@@ -530,8 +502,9 @@ private:
 
 class TStartFirstDelayedRequestQuery : public TQueryBase {
 public:
-    TStartFirstDelayedRequestQuery(const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(__func__, poolId, counters)
+    TStartFirstDelayedRequestQuery(const TString& database, const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(__func__, poolId, database, "", counters)
+        , Database(database)
         , PoolId(poolId)
         , LeaseDuration(leaseDuration)
     {}
@@ -555,7 +528,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -596,7 +569,7 @@ public:
         }
 
         RequestSessionId = *sessionId;
-        UpdateLogInfo(PoolId, RequestSessionId);
+        UpdateLogInfo(PoolId, Database, RequestSessionId);
 
         TMaybe<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
         if (!startTime) {
@@ -635,7 +608,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -662,10 +635,11 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvStartRequestResponse(status, PoolId, RequestNodeId, RequestSessionId, std::move(issues)));
+        Send(Owner, new TEvPrivate::TEvStartRequestResponse(status, RequestNodeId, RequestSessionId, std::move(issues)));
     }
 
 private:
+    const TString Database;
     const TString PoolId;
     const TDuration LeaseDuration;
 
@@ -676,8 +650,9 @@ private:
 
 class TStartRequestQuery : public TQueryBase {
 public:
-    TStartRequestQuery(const TString& poolId, const TString& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(__func__, poolId, sessionId, counters)
+    TStartRequestQuery(const TString& database, const TString& poolId, const TString& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(__func__, poolId, database, sessionId, counters)
+        , Database(database)
         , PoolId(poolId)
         , SessionId(sessionId)
         , LeaseDuration(leaseDuration)
@@ -703,7 +678,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -726,22 +701,25 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvStartRequestResponse(status, PoolId, SelfId().NodeId(), SessionId, std::move(issues)));
+        Send(Owner, new TEvPrivate::TEvStartRequestResponse(status, SelfId().NodeId(), SessionId, std::move(issues)));
     }
 
 private:
+    const TString Database;
     const TString PoolId;
     const TString SessionId;
     const TDuration LeaseDuration;
 };
 
 class TStartRequestActor : public TActorBootstrapped<TStartRequestActor> {
-    using TStartFirstDelayedRequestRetryQuery = TQueryRetryActor<TStartFirstDelayedRequestQuery, TEvPrivate::TEvStartRequestResponse, TString, TDuration, NMonitoring::TDynamicCounterPtr>;
-    using TStartRequestRetryQuery = TQueryRetryActor<TStartRequestQuery, TEvPrivate::TEvStartRequestResponse, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>;
+    using TStartFirstDelayedRequestRetryQuery = TQueryRetryActor<TStartFirstDelayedRequestQuery, TEvPrivate::TEvStartRequestResponse, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>;
+    using TStartRequestRetryQuery = TQueryRetryActor<TStartRequestQuery, TEvPrivate::TEvStartRequestResponse, TString, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>;
 
 public:
-    TStartRequestActor(const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
-        : PoolId(poolId)
+    TStartRequestActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+        : ReplyActorId(replyActorId)
+        , Database(database)
+        , PoolId(poolId)
         , SessionId(sessionId)
         , LeaseDuration(leaseDuration)
         , Counters(counters)
@@ -751,14 +729,14 @@ public:
         Become(&TStartRequestActor::StateFunc);
 
         if (!SessionId) {
-            Register(new TStartFirstDelayedRequestRetryQuery(SelfId(), PoolId, LeaseDuration, Counters));
+            Register(new TStartFirstDelayedRequestRetryQuery(SelfId(), Database, PoolId, LeaseDuration, Counters));
         } else {
-            Register(new TStartRequestRetryQuery(SelfId(), PoolId, *SessionId, LeaseDuration, Counters));
+            Register(new TStartRequestRetryQuery(SelfId(), Database, PoolId, *SessionId, LeaseDuration, Counters));
         }
     }
 
     void Handle(TEvPrivate::TEvStartRequestResponse::TPtr& ev) {
-        Send(ev->Forward(MakeKqpWorkloadServiceId(SelfId().NodeId())));
+        Send(ev->Forward(ReplyActorId));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -766,6 +744,8 @@ public:
     )
 
 private:
+    const TActorId ReplyActorId;
+    const TString Database;
     const TString PoolId;
     const std::optional<TString> SessionId;
     const TDuration LeaseDuration;
@@ -775,8 +755,9 @@ private:
 
 class TCleanupRequestsQuery : public TQueryBase {
 public:
-    TCleanupRequestsQuery(const TString& poolId, const std::vector<TString>& sessionIds, NMonitoring::TDynamicCounterPtr counters)
-        : TQueryBase(__func__, poolId, counters)
+    TCleanupRequestsQuery(const TString& database, const TString& poolId, const std::vector<TString>& sessionIds, NMonitoring::TDynamicCounterPtr counters)
+        : TQueryBase(__func__, poolId, database, "", counters)
+        , Database(database)
         , PoolId(poolId)
         , SessionIds(sessionIds)
     {}
@@ -806,7 +787,7 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(GetDefaultDatabase())
+                .Utf8(Database)
                 .Build()
             .AddParam("$pool_id")
                 .Utf8(PoolId)
@@ -817,7 +798,7 @@ public:
 
         auto& param = params.AddParam("$session_ids").BeginList();
         for (const TString& sessionId : SessionIds) {
-            LOG_T("cleanup request with session id: " << sessionId);
+            LOG_T("Cleanup request with session id: " << sessionId);
             param.AddListItem().Utf8(sessionId);
         }
         param.EndList().Build();
@@ -830,15 +811,16 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvCleanupRequestsResponse(status, PoolId, SessionIds, std::move(issues)));
+        Send(Owner, new TEvPrivate::TEvCleanupRequestsResponse(status, SessionIds, std::move(issues)));
     }
 
 private:
     TString LogPrefix() const {
-        return TStringBuilder() << "[TCleanupRequestsQuery] ActorId: " << SelfId() << ", PoolId: " << PoolId << ", ";
+        return TStringBuilder() << "[TCleanupRequestsQuery] ActorId: " << SelfId() << ", Database: " << Database << ", PoolId: " << PoolId << ", ";
     }
 
 private:
+    const TString Database;
     const TString PoolId;
     const std::vector<TString> SessionIds;
 };
@@ -853,20 +835,20 @@ IActor* CreateCleanupTablesActor() {
     return new TCleanupTablesActor();
 }
 
-IActor* CreateRefreshPoolStateActor(const TActorId& replyActorId, const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TRefreshPoolStateQuery, TEvPrivate::TEvRefreshPoolStateResponse, TString, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, leaseDuration, counters);
+IActor* CreateRefreshPoolStateActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TRefreshPoolStateQuery, TEvPrivate::TEvRefreshPoolStateResponse, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, database, poolId, leaseDuration, counters);
 }
 
-IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TInstant, TMaybe<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
+IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TString, TInstant, TMaybe<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, database, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
 }
 
-IActor* CreateStartRequestActor(const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
-    return new TStartRequestActor(poolId, sessionId, leaseDuration, counters);
+IActor* CreateStartRequestActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TStartRequestActor(replyActorId, database, poolId, sessionId, leaseDuration, counters);
 }
 
-IActor* CreateCleanupRequestsActor(const TActorId& replyActorId, const TString& poolId, const std::vector<TString>& sessionIds, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TCleanupRequestsQuery, TEvPrivate::TEvCleanupRequestsResponse, TString, std::vector<TString>, NMonitoring::TDynamicCounterPtr>(replyActorId, poolId, sessionIds, counters);
+IActor* CreateCleanupRequestsActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const std::vector<TString>& sessionIds, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TCleanupRequestsQuery, TEvPrivate::TEvCleanupRequestsResponse, TString, TString, std::vector<TString>, NMonitoring::TDynamicCounterPtr>(replyActorId, database, poolId, sessionIds, counters);
 }
 
 }  // NKikimr::NKqp::NWorkload

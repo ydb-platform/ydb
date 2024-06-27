@@ -238,7 +238,10 @@ public:
 
     void PassRequestToWorkloadPool() {
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
-            SessionId, QueryState->UserRequestContext->PoolId, QueryState->UserToken
+            QueryState->Database,
+            SessionId,
+            QueryState->UserRequestContext->PoolId,
+            QueryState->UserToken
         ));
         QueryState->PlacedInWorkloadPool = true;
 
@@ -464,14 +467,14 @@ public:
         YQL_ENSURE(QueryState);
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
-            LOG_N("Failed to place request in resource pool, feature flag is disabled");
+            LOG_T("Failed to place request in resource pool, feature flag is disabled");
             QueryState->UserRequestContext->PoolId.clear();
             QueryState->PlacedInWorkloadPool = false;
             CompileQuery();
             return;
         }
 
-        const TString& poolId = QueryState->UserRequestContext->PoolId;
+        const TString& poolId = ev->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
@@ -480,6 +483,7 @@ public:
         }
 
         LOG_D("continue request, pool id: " << poolId);
+        QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
         CompileQuery();
     }
@@ -2056,7 +2060,7 @@ public:
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
             QueryState->PlacedInWorkloadPool = false;
-            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvCleanupRequest(SessionId, QueryState->UserRequestContext->PoolId));
+            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId));
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
@@ -2113,7 +2117,7 @@ public:
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
 
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
             LOG_E("Failed to cleanup workload service " << ev->Get()->Status << ": " << ev->Get()->Issues.ToOneLineString());
         }
 

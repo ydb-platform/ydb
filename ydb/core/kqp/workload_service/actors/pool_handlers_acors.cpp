@@ -1,28 +1,25 @@
-#include "kqp_workload_service_impl.h"
-#include "kqp_workload_service_tables.h"
+#include "actors.h"
 
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
+#include <ydb/core/kqp/workload_service/common/helpers.h>
+#include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
-#include <ydb/library/actors/core/log.h>
 
-
-namespace NKikimr::NKqp::NWorkload::NQueue {
+namespace NKikimr::NKqp::NWorkload {
 
 namespace {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadPool] " << LogPrefix() << stream)
-
 using namespace NActors;
 
+constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
 
-class TStateBase : public IState {
+
+template <typename TDerived>
+class TPoolHandlerActorBase : public TActor<TDerived> {
+    using TBase = TActor<TDerived>;
+
 protected:
     struct TRequest {
         enum class EState {
@@ -46,9 +43,10 @@ protected:
     };
 
 public:
-    TStateBase(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
-        : Counters(counters)
-        , ActorContext(actorContext)
+    TPoolHandlerActorBase(void (TDerived::* requestFunc)(TAutoPtr<IEventHandle>& ev), const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+        : TBase(requestFunc)
+        , Counters(counters)
+        , Database(database)
         , PoolId(poolId)
         , QueueSizeLimit(GetMaxQueueSize(poolConfig))
         , InFlightLimit(GetMaxInFlight(poolConfig))
@@ -58,31 +56,53 @@ public:
         RegisterCounters();
     }
 
-    ui64 GetLocalPoolSize() const final {
-        return LocalSessions.size();
+    STRICT_STFUNC(StateFuncBase,
+        sFunc(TEvents::TEvPoison, HandlePoison);
+
+        hFunc(TEvPlaceRequestIntoPool, Handle);
+        hFunc(TEvCleanupRequest, Handle);
+        hFunc(TEvPrivate::TEvCancelRequest, Handle);
+
+        IgnoreFunc(TEvKqp::TEvCancelQueryResponse);
+    )
+
+private:
+    void HandlePoison() {
+        LOG_W("Got poison, stop pool handler");
+        this->PassAway();
     }
 
-    bool PlaceRequest(const TActorId& workerActorId, const TString& sessionId) final {
-        if (LocalSessions.contains(sessionId)) {
-            ActorContext.Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
-            return false;
+    void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
+        const TActorId& workerActorId = ev->Sender;
+        if (!InFlightLimit) {
+            this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::PRECONDITION_FAILED, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Resource pool " << PoolId << " was disabled due to zero concurrent query limit")}));
+            return;
         }
 
-        LOG_D("received new request, worker id: " << workerActorId << ", session id: " << sessionId);
+        const TString& sessionId = ev->Get()->SessionId;
+        if (LocalSessions.contains(sessionId)) {
+            this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
+            return;
+        }
+
+        LOG_D("Received new request, worker id: " << workerActorId << ", session id: " << sessionId);
         if (CancelAfter) {
-            ActorContext.Schedule(CancelAfter, new TEvPrivate::TEvCancelRequest(PoolId, sessionId));
+            this->Schedule(CancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
 
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId)}).first->second;
         LocalDelayedRequests->Inc();
 
-        return OnScheduleRequest(request);
+        OnScheduleRequest(request);
     }
 
-    void CleanupRequest(const TActorId& workerActorId, const TString& sessionId) final {
+    void Handle(TEvCleanupRequest::TPtr& ev) {
+        const TString& sessionId = ev->Get()->SessionId;
+        const TActorId& workerActorId = ev->Sender;
+
         TRequest* request = GetRequestSafe(sessionId);
         if (!request || request->State == TRequest::EState::Canceling) {
-            ActorContext.Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
+            this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
             return;
         }
 
@@ -91,11 +111,11 @@ public:
         }
         request->State = TRequest::EState::Finishing;
 
-        LOG_D("received cleanup request, worker id: " << workerActorId << ", session id: " << sessionId);
+        LOG_D("Received cleanup request, worker id: " << workerActorId << ", session id: " << sessionId);
         OnCleanupRequest(request);
     }
 
-    virtual void Handle(TEvPrivate::TEvCancelRequest::TPtr ev) override {
+    void Handle(TEvPrivate::TEvCancelRequest::TPtr& ev) {
         TRequest* request = GetRequestSafe(ev->Get()->SessionId);
         if (!request || request->State == TRequest::EState::Finishing || request->State == TRequest::EState::Canceling) {
             return;
@@ -103,7 +123,7 @@ public:
 
         request->State = TRequest::EState::Canceling;
 
-        LOG_D("cancel request by deadline, worker id: " << request->WorkerActorId << ", session id: " << request->SessionId);
+        LOG_D("Cancel request by deadline, worker id: " << request->WorkerActorId << ", session id: " << request->SessionId);
         OnCleanupRequest(request);
     }
 
@@ -113,7 +133,7 @@ public:
     }
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, NYql::TIssues issues = {}) {
-        ActorContext.Send(request->WorkerActorId, new TEvContinueRequest(status, PoolConfig, std::move(issues)));
+        this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, std::move(issues)));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
@@ -170,7 +190,7 @@ public:
     }
 
 protected:
-    virtual bool OnScheduleRequest(TRequest* request) = 0;
+    virtual void OnScheduleRequest(TRequest* request) = 0;
     virtual void OnCleanupRequest(TRequest* request) = 0;
 
 protected:
@@ -192,28 +212,20 @@ protected:
         return LocalInFlight;
     }
 
-    TMaybe<TInstant> GetWaitDeadline(TInstant startTime) {
+    TMaybe<TInstant> GetWaitDeadline(TInstant startTime) const {
         if (!CancelAfter) {
             return Nothing();
         }
         return startTime + CancelAfter;
     }
 
-    NYql::TIssue GroupIssues(const TString& message, NYql::TIssues issues) {
-        NYql::TIssue rootIssue(message);
-        for (const NYql::TIssue& issue : issues) {
-            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-        }
-        return rootIssue;
-    }
-
     TString LogPrefix() const {
-        return TStringBuilder() << "PoolId: " << PoolId << ", ";
+        return TStringBuilder() << "[TPoolHandlerActorBase] ActorId: " << this->SelfId() << ", Database: " << Database << ", PoolId: " << PoolId << ", ";
     }
 
 private:
     void ReplyCleanup(const TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, NYql::TIssues issues = {}) {
-        ActorContext.Send(request->WorkerActorId, new TEvCleanupResponse(status, std::move(issues)));
+        this->Send(request->WorkerActorId, new TEvCleanupResponse(status, std::move(issues)));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             CleanupOk->Inc();
@@ -228,7 +240,7 @@ private:
     void ReplyCancel(const TRequest* request) {
         auto ev = std::make_unique<TEvKqp::TEvCancelQueryRequest>();
         ev->Record.MutableRequest()->SetSessionId(request->SessionId);
-        ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), ev.release());
+        this->Send(MakeKqpProxyID(this->SelfId().NodeId()), ev.release());
 
         Cancelled->Inc();
         RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
@@ -261,7 +273,7 @@ private:
 protected:
     NMonitoring::TDynamicCounterPtr Counters;
 
-    const TActorContext ActorContext;
+    const TString Database;
     const TString PoolId;
     const ui64 QueueSizeLimit;
     const ui64 InFlightLimit;
@@ -286,31 +298,19 @@ private:
 };
 
 
-class TUnlimitedState : public TStateBase {
-    using TBase = TStateBase;
+class TUnlimitedPoolHandlerActor : public TPoolHandlerActorBase<TUnlimitedPoolHandlerActor> {
+    using TBase = TPoolHandlerActorBase<TUnlimitedPoolHandlerActor>;
 
 public:
-    TUnlimitedState(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
-        : TBase(actorContext, poolId, poolConfig, counters)
+    TUnlimitedPoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+        : TBase(&TBase::StateFuncBase, database, poolId, poolConfig, counters)
     {
-        Y_ENSURE(InFlightLimit == std::numeric_limits<ui64>::max());
+        Y_ENSURE(InFlightLimit == std::numeric_limits<ui64>::max() || !InFlightLimit);
     }
 
-    bool TablesRequired() const override {
-        return false;
-    }
-
-    void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) override {
-        Y_UNUSED(status, issues);
-    }
-
-    void RefreshState(bool refreshRequired = false) override {
-        Y_UNUSED(refreshRequired);
-    }
-
-    bool OnScheduleRequest(TRequest* request) override {
+protected:
+    void OnScheduleRequest(TRequest* request) override {
         ReplyContinue(request);
-        return true;
     }
 
     void OnCleanupRequest(TRequest* request) override {
@@ -319,39 +319,61 @@ public:
 };
 
 
-class TFifoState : public TStateBase {
-    using TBase = TStateBase;
+class TFifoPoolHandlerActor : public TPoolHandlerActorBase<TFifoPoolHandlerActor> {
+    using TBase = TPoolHandlerActorBase<TFifoPoolHandlerActor>;
 
     static constexpr ui64 MAX_PENDING_REQUESTS = 1000;
 
 public:
-    TFifoState(TActorContext actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
-        : TBase(actorContext, poolId, poolConfig, counters)
+    TFifoPoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
+        : TBase(&TFifoPoolHandlerActor::StateFunc, database, poolId, poolConfig, counters)
     {
         Y_ENSURE(InFlightLimit < std::numeric_limits<ui64>::max());
         RegisterCounters();
     }
 
-    bool TablesRequired() const override {
-        return true;
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, HandleRefreshState);
+            sFunc(TEvPrivate::TEvRefreshPoolState, HandleExternalRefreshState);
+
+            hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
+            hFunc(TEvPrivate::TEvRefreshPoolStateResponse, Handle);
+            hFunc(TEvPrivate::TEvDelayRequestResponse, Handle);
+            hFunc(TEvPrivate::TEvStartRequestResponse, Handle);
+            hFunc(TEvPrivate::TEvCleanupRequestsResponse, Handle);
+            default:
+                StateFuncBase(ev);
+        }
     }
 
-    void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) override {
-        if (status == Ydb::StatusIds::SUCCESS) {
-            PreparingFinished = true;
-            RefreshState();
+protected:
+    void OnScheduleRequest(TRequest* request) override {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || PendingRequests.size() + DelayedRequests.size() > QueueSizeLimit) {
+            ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return;
         }
 
-        ForEachUnfinished(PendingRequests.begin(), PendingRequests.end(), [this, status, issues](TRequest* request) {
-            ReplyContinue(request, status, issues);
-        });
+        PendingRequests.emplace_back(request->SessionId);
+        PendingRequestsCount->Inc();
 
-        PendingRequests.clear();
-        PendingRequestsCount->Set(0);
+        if (!PreparingFinished) {
+            this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPrepareTablesRequest(Database, PoolId));
+        }
+
+        RefreshState();
     }
 
-    void RefreshState(bool refreshRequired = false) override {
+    void OnCleanupRequest(TRequest* request) override {
+        if (!request->CleanupRequired) {
+            FinalReply(request);
+        } else {
+            AddFinishedRequest(request->SessionId);
+        }
+        RefreshState();
+    }
+
+    void RefreshState(bool refreshRequired = false) {
         RefreshRequired |= refreshRequired;
         if (!PreparingFinished) {
             return;
@@ -367,37 +389,43 @@ public:
         if (RefreshRequired) {
             RefreshRequired = false;
             RunningOperation = true;
-            ActorContext.Register(CreateRefreshPoolStateActor(ActorContext.SelfID, PoolId, LEASE_DURATION, Counters));
+            this->Register(CreateRefreshPoolStateActor(this->SelfId(), Database, PoolId, LEASE_DURATION, Counters));
         }
     }
 
-    bool OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || PendingRequests.size() + DelayedRequests.size() > QueueSizeLimit) {
-            ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
-            return false;
-        }
-
-        PendingRequests.emplace_back(request->SessionId);
-        PendingRequestsCount->Inc();
+private:
+    void HandleRefreshState() {
+        RefreshScheduled = false;
+        LOG_T("Try to start scheduled refresh");
 
         RefreshState();
-        return true;
-    }
-
-    void OnCleanupRequest(TRequest* request) override {
-        if (!request->CleanupRequired) {
-            FinalReply(request);
-        } else {
-            AddFinishedRequest(request->SessionId);
+        if (GetLocalInFlight() + DelayedRequests.size() > 0) {
+            ScheduleRefresh();
         }
-        RefreshState();
     }
 
-    void Handle(TEvPrivate::TEvCancelRequest::TPtr ev) override {
-        TBase::Handle(std::move(ev));
-    };
+    void HandleExternalRefreshState() {
+        LOG_D("Got remote refresh request");
+        RefreshState(true);
+    }
 
-    void Handle(TEvPrivate::TEvRefreshPoolStateResponse::TPtr ev) override {
+    void Handle(TEvPrivate::TEvTablesCreationFinished::TPtr& ev) {
+        if (ev->Get()->Success) {
+            PreparingFinished = true;
+            RefreshState();
+            return;
+        }
+
+        NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to create workload service tables");
+        ForEachUnfinished(PendingRequests.begin(), PendingRequests.end(), [this, issues](TRequest* request) {
+            ReplyContinue(request, Ydb::StatusIds::INTERNAL_ERROR, issues);
+        });
+
+        PendingRequests.clear();
+        PendingRequestsCount->Set(0);
+    }
+
+    void Handle(TEvPrivate::TEvRefreshPoolStateResponse::TPtr& ev) {
         RunningOperation = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
@@ -433,14 +461,14 @@ public:
         DoStartDelayedRequest();
     };
 
-    void Handle(TEvPrivate::TEvDelayRequestResponse::TPtr ev) override {
+    void Handle(TEvPrivate::TEvDelayRequestResponse::TPtr& ev) {
         RunningOperation = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed to delay request " << ev->Get()->Status << ", session id: " << ev->Get()->SessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            NYql::TIssue issue = GroupIssues("Failed to put request in queue", ev->Get()->Issues);
-            ForUnfinished(ev->Get()->SessionId, [this, ev, issue](TRequest* request) {
-                ReplyContinue(request, ev->Get()->Status, {issue});
+            NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to put request in queue");
+            ForUnfinished(ev->Get()->SessionId, [this, ev, issues](TRequest* request) {
+                ReplyContinue(request, ev->Get()->Status, issues);
             });
             RefreshRequired = true;
             return;
@@ -450,20 +478,21 @@ public:
         GlobalDelayedRequests->Inc();
         LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
 
+        ScheduleRefresh();
         DoStartDelayedRequest();
         RefreshState();
     };
 
-    void Handle(TEvPrivate::TEvStartRequestResponse::TPtr ev) override {
+    void Handle(TEvPrivate::TEvStartRequestResponse::TPtr& ev) {
         RunningOperation = false;
 
         const TString& sessionId = ev->Get()->SessionId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed start request " << ev->Get()->Status << ", session id: " << sessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            NYql::TIssue issue = GroupIssues("Failed to start request", ev->Get()->Issues);
-            ForUnfinished(sessionId, [this, ev, issue](TRequest* request) {
+            NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to start request");
+            ForUnfinished(sessionId, [this, ev, issues](TRequest* request) {
                 AddFinishedRequest(request->SessionId);
-                ReplyContinue(request, ev->Get()->Status, {issue});
+                ReplyContinue(request, ev->Get()->Status, issues);
             });
             RefreshState();
             return;
@@ -473,7 +502,8 @@ public:
             LOG_D("first request in queue is remote, send notification to node " << ev->Get()->NodeId);
             auto event = std::make_unique<TEvPrivate::TEvRefreshPoolState>();
             event->Record.SetPoolId(PoolId);
-            ActorContext.Send(MakeKqpWorkloadServiceId(ev->Get()->NodeId), std::move(event));
+            event->Record.SetDatabase(Database);
+            this->Send(MakeKqpWorkloadServiceId(ev->Get()->NodeId), std::move(event));
             RefreshState();
             return;
         }
@@ -498,10 +528,12 @@ public:
         if (!requestFound) {
             AddFinishedRequest(sessionId);
         }
+
+        ScheduleRefresh();
         RefreshState(!DelayedRequests.empty() && GlobalState.RunningRequests < InFlightLimit);
     };
 
-    void Handle(TEvPrivate::TEvCleanupRequestsResponse::TPtr ev) override {
+    void Handle(TEvPrivate::TEvCleanupRequestsResponse::TPtr& ev) {
         RunningOperation = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
@@ -528,7 +560,7 @@ private:
         if (!PendingRequests.empty() && DelayedRequests.empty() && GlobalState.DelayedRequests == 0 && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
-            ActorContext.Register(CreateStartRequestActor(PoolId, sessionId, LEASE_DURATION, Counters));
+            this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, Counters));
             DelayedRequests.emplace_front(sessionId);
             GetRequest(sessionId)->CleanupRequired = true;
         }
@@ -542,7 +574,7 @@ private:
 
         if ((!DelayedRequests.empty() || GlobalState.DelayedRequests) && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
-            ActorContext.Register(CreateStartRequestActor(PoolId, std::nullopt, LEASE_DURATION, Counters));
+            this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, std::nullopt, LEASE_DURATION, Counters));
         }
     }
 
@@ -556,7 +588,7 @@ private:
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
             TRequest* request = GetRequest(sessionId);
-            ActorContext.Register(CreateDelayRequestActor(ActorContext.SelfID, PoolId, sessionId, request->StartTime, GetWaitDeadline(request->StartTime), LEASE_DURATION, Counters));
+            this->Register(CreateDelayRequestActor(this->SelfId(), Database, PoolId, sessionId, request->StartTime, GetWaitDeadline(request->StartTime), LEASE_DURATION, Counters));
             DelayedRequests.emplace_back(sessionId);
             request->CleanupRequired = true;
         }
@@ -569,10 +601,18 @@ private:
 
         if (!FinishedRequests.empty()) {
             RunningOperation = true;
-            ActorContext.Register(CreateCleanupRequestsActor(ActorContext.SelfID, PoolId, FinishedRequests, Counters));
+            this->Register(CreateCleanupRequestsActor(this->SelfId(), Database, PoolId, FinishedRequests, Counters));
             FinishedRequests.clear();
             FinishingRequestsCount->Set(0);
         }
+    }
+
+    void ScheduleRefresh() {
+        if (RefreshScheduled) {
+            return;
+        }
+        RefreshScheduled = true;
+        this->Schedule(LEASE_DURATION / 2, new TEvents::TEvWakeup());
     }
 
 private:
@@ -639,6 +679,7 @@ private:
     bool PreparingFinished = false;
     bool RefreshRequired = false;
     bool RunningOperation = false;
+    bool RefreshScheduled = false;
 
     std::deque<TString> PendingRequests;
     std::deque<TString> DelayedRequests;
@@ -656,11 +697,11 @@ private:
 
 }  // anonymous namespace
 
-TStatePtr CreateState(const TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
-    if (poolConfig.ConcurrentQueryLimit == -1) {
-        return MakeIntrusive<TUnlimitedState>(actorContext, poolId, poolConfig, counters);
+IActor* CreatePoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
+    if (poolConfig.ConcurrentQueryLimit <= 0) {
+        return new TUnlimitedPoolHandlerActor(database, poolId, poolConfig, counters);
     }
-    return MakeIntrusive<TFifoState>(actorContext, poolId, poolConfig, counters);
+    return new TFifoPoolHandlerActor(database, poolId, poolConfig, counters);
 }
 
-}  // NKikimr::NKqp::NWorkload::NQueue
+}  // NKikimr::NKqp::NWorkload

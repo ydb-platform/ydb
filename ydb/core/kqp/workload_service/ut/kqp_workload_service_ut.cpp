@@ -1,0 +1,370 @@
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
+
+namespace NKikimr::NKqp {
+
+using namespace NWorkload;
+using namespace NYdb;
+
+
+Y_UNIT_TEST_SUITE(KqpWorkloadService) {
+    Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
+        auto ydb = TYdbSetupSettings()
+            .EnableResourcePools(false)
+            .Create();
+
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, "another_pool_id"));
+    }
+
+    TQueryRunnerResultAsync StartQueueSizeCheckRequests(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
+        // One of these requests should be rejected by QueueSize
+        auto firstRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
+        auto secondRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
+        WaitAny(firstRequest.GetFuture(), secondRequest.GetFuture()).GetValue(FUTURE_WAIT_TIMEOUT);
+
+        if (secondRequest.HasValue()) {
+            std::swap(firstRequest, secondRequest);
+        }
+        UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests shoud be rejected");
+        UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests shoud be placed in pool");
+        TSampleQueries::CheckOverloaded(firstRequest.GetResult(), ydb->GetSettings().PoolId_);
+
+        return secondRequest;
+    }
+
+    Y_UNIT_TEST(TestQueueSizeSimple) {
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(1)
+            .QueueSize(1)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
+
+        auto delayedRequest = StartQueueSizeCheckRequests(ydb, TQueryRunnerSettings().ExecutionExpected(false));
+
+        ydb->ContinueQueryExecution(delayedRequest);
+        ydb->ContinueQueryExecution(hangingRequest);
+        TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
+        TSampleQueries::TSelect42::CheckResult(delayedRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestQueueSizeManyQueries) {
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(1)
+            .QueueSize(1)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
+
+        const ui64 numberRuns = 5;
+        for (size_t i = 0; i < numberRuns; ++i) {
+            auto delayedRequest = StartQueueSizeCheckRequests(ydb, TQueryRunnerSettings().HangUpDuringExecution(true));
+
+            ydb->ContinueQueryExecution(hangingRequest);
+            TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
+
+            hangingRequest = delayedRequest;
+        }
+    }
+
+    Y_UNIT_TEST(TestZeroQueueSize) {
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(1)
+            .QueueSize(0)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
+
+        TSampleQueries::CheckOverloaded(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false)),
+            ydb->GetSettings().PoolId_
+        );
+
+        ydb->ContinueQueryExecution(hangingRequest);
+        TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestQueryCancelAfterUnlimitedPool) {
+        auto ydb = TYdbSetupSettings()
+            .QueryCancelAfter(TDuration::Seconds(10))
+            .Create();
+
+        TSampleQueries::CheckCancelled(ydb->ExecuteQueryAsync(
+            TSampleQueries::TSelect42::Query,
+            TQueryRunnerSettings().HangUpDuringExecution(true)
+        ).GetResult());
+    }
+
+    Y_UNIT_TEST(TestQueryCancelAfterPoolWithLimits) {
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(1)
+            .QueueSize(1)
+            .QueryCancelAfter(TDuration::Seconds(10))
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
+        TSampleQueries::CheckCancelled(hangingRequest.GetResult());
+        TSampleQueries::CheckCancelled(delayedRequest.GetResult());
+
+        // Check that queue is free
+        auto firstRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
+        auto secondRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
+        TSampleQueries::TSelect42::CheckResult(firstRequest.GetResult());
+        TSampleQueries::TSelect42::CheckResult(secondRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestStartQueryAfterCancel) {
+        const TDuration cancelAfter = TDuration::Seconds(10);
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(1)
+            .QueryCancelAfter(cancelAfter)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
+
+        Sleep(cancelAfter / 2);
+
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
+        TSampleQueries::CheckCancelled(hangingRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestConcurrentQueryLimit) {
+        const ui64 activeCountLimit = 5;
+        const ui64 queueSize = 10;
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(activeCountLimit)
+            .QueueSize(queueSize)
+            .Create();
+
+        const ui64 numberRequests = activeCountLimit * 6;
+        const auto& inFlightCoordinator = ydb->CreateInFlightCoordinator(numberRequests, activeCountLimit);
+
+        // Initialize queue
+        std::queue<TQueryRunnerResultAsync> asyncResults;
+        for (size_t i = 0; i < queueSize + activeCountLimit; ++i) {
+            asyncResults.emplace(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query,
+                TQueryRunnerSettings()
+                    .HangUpDuringExecution(true)
+                    .InFlightCoordinatorActorId(inFlightCoordinator)
+            ));
+        }
+
+        // Load queue
+        for (size_t i = queueSize + activeCountLimit; i < numberRequests; ++i) {
+            TSampleQueries::TSelect42::CheckResult(asyncResults.front().GetResult());
+            asyncResults.pop();
+            asyncResults.emplace(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query,
+                TQueryRunnerSettings()
+                    .HangUpDuringExecution(true)
+                    .InFlightCoordinatorActorId(inFlightCoordinator)
+            ));
+        }
+    }
+
+    Y_UNIT_TEST(TestZeroConcurrentQueryLimit) {
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(0)
+            .Create();
+
+        auto result = ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << ydb->GetSettings().PoolId_ << " was disabled due to zero concurrent query limit");
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpWorkloadServiceDistributed) {
+    Y_UNIT_TEST(TestDistributedQueue) {
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(2)
+            .ConcurrentQueryLimit(1)
+            .QueueSize(1)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .HangUpDuringExecution(true)
+            .NodeIndex(0)
+        );
+        ydb->WaitQueryExecution(hangingRequest);
+
+        auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .ExecutionExpected(false)
+            .NodeIndex(1)
+        );
+        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
+
+        // Check distributed queue size
+        TSampleQueries::CheckOverloaded(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().NodeIndex(0)), ydb->GetSettings().PoolId_);
+
+        ydb->ContinueQueryExecution(delayedRequest);
+        ydb->ContinueQueryExecution(hangingRequest);
+        TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
+
+        // Query should start faster than lease update time
+        ydb->WaitQueryExecution(delayedRequest, TDuration::Seconds(5));
+        TSampleQueries::TSelect42::CheckResult(delayedRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestNodeDisconnect) {
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(2)
+            .ConcurrentQueryLimit(1)
+            .Create();
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .HangUpDuringExecution(true)
+            .NodeIndex(0)
+        );
+        ydb->WaitQueryExecution(hangingRequest);
+
+        auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .ExecutionExpected(false)
+            .NodeIndex(0)
+        );
+        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
+
+        auto request = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .ExecutionExpected(false)
+            .NodeIndex(1)
+        );
+        ydb->WaitPoolState({.DelayedRequests = 2, .RunningRequests = 1});
+
+        ydb->ContinueQueryExecution(request);
+        ydb->StopWorkloadService(0);
+
+        // Query should start after lease expiration
+        TSampleQueries::TSelect42::CheckResult(request.GetResult(TDuration::Seconds(50)));
+    }
+
+    Y_UNIT_TEST(TestDistributedConcurrentQueryLimit) {
+        const ui64 nodeCount = 3;
+        const ui64 activeCountLimit = 5;
+        const ui64 queueSize = 10;
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(nodeCount)
+            .ConcurrentQueryLimit(activeCountLimit)
+            .QueueSize(queueSize)
+            .Create();
+
+        const ui64 numberRequests = activeCountLimit * 6;
+        const auto& inFlightCoordinator = ydb->CreateInFlightCoordinator(numberRequests, activeCountLimit);
+
+        // Initialize queue
+        std::queue<TQueryRunnerResultAsync> asyncResults;
+        for (size_t i = 0; i < queueSize + activeCountLimit; ++i) {
+            asyncResults.emplace(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query,
+                TQueryRunnerSettings()
+                    .HangUpDuringExecution(true)
+                    .InFlightCoordinatorActorId(inFlightCoordinator)
+                    .NodeIndex(i % nodeCount)
+            ));
+        }
+
+        // Load queue
+        for (size_t i = queueSize + activeCountLimit; i < numberRequests; ++i) {
+            TSampleQueries::TSelect42::CheckResult(asyncResults.front().GetResult());
+            asyncResults.pop();
+            asyncResults.emplace(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query,
+                TQueryRunnerSettings()
+                    .HangUpDuringExecution(true)
+                    .InFlightCoordinatorActorId(inFlightCoordinator)
+                    .NodeIndex(i % nodeCount)
+            ));
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
+    Y_UNIT_TEST(TestCreateResourcePool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "my_pool";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+        )");
+
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .HangUpDuringExecution(true)
+            .PoolId(poolId)
+        );
+        ydb->WaitQueryExecution(hangingRequest);
+
+        TSampleQueries::CheckOverloaded(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, poolId), poolId);
+
+        ydb->ContinueQueryExecution(hangingRequest);
+        TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
+    }
+
+    Y_UNIT_TEST(TestDefaultPoolRestrictions) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = NResourcePool::DEFAULT_POOL_ID;
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+        )", EStatus::BAD_REQUEST, "Cannot create default pool manually, pool will be created automatically during first request execution");
+
+        // Create default pool
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, poolId));
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            ALTER RESOURCE POOL )" << poolId << R"( SET (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+        )", EStatus::BAD_REQUEST, "Can not change property concurrent_query_limit for default pool");
+    }
+
+    Y_UNIT_TEST(TestDropResourcePool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "my_pool";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1
+            );
+        )");
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, poolId));
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            DROP RESOURCE POOL )" << poolId << ";"
+        );
+        TSampleQueries::CheckNotFound(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, poolId), poolId);
+    }
+
+    Y_UNIT_TEST(TestResourcePoolAcl) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "my_pool";
+        const TString& userSID = "user@test";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=1
+            );
+            GRANT DESCRIBE SCHEMA ON `.resource_pools/)" << poolId << "` TO " << userSID << ";"
+        );
+        TSampleQueries::CheckNotFound(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .PoolId(poolId)
+            .UserSID(userSID)
+        ), poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            GRANT SELECT ROW ON `.resource_pools/)" << poolId << "` TO " << userSID << ";"
+        );
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
+            .PoolId(poolId)
+            .UserSID(userSID)
+        ));
+    }
+}
+
+}  // namespace NKikimr::NKqp

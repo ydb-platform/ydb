@@ -75,7 +75,7 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
     }
 };
 
-void TStatisticsAggregator::Handle(TEvDataShard::TEvStatisticsScanResponse::TPtr& ev) {
+void TStatisticsAggregator::Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
     Execute(new TTxStatisticsScanResponse(this, std::move(record)),
         TActivationContext::AsActorContext());

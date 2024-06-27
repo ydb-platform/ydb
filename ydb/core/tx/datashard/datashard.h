@@ -11,7 +11,6 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -329,9 +328,6 @@ struct TEvDataShard {
 
         EvOverloadReady,
         EvOverloadUnsubscribe,
-
-        EvStatisticsScanRequest,
-        EvStatisticsScanResponse,
 
         EvEnd
     };
@@ -1704,20 +1700,6 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
-    };
-
-    struct TEvStatisticsScanRequest
-        : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrStat::TEvStatisticsRequest,
-                          EvStatisticsScanRequest>
-    {
-    };
-
-    struct TEvStatisticsScanResponse
-        : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrStat::TEvStatisticsResponse,
-                          EvStatisticsScanResponse>
-    {
     };
 };
 

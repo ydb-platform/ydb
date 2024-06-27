@@ -292,22 +292,7 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvStatisticsRequest
-        : public TEventPB<TEvStatisticsRequest,
-                          NKikimrStat::TEvStatisticsRequest,
-                          EvStatisticsRequest>
-    {
-    };
-
-    struct TEvStatisticsResponse
-        : public TEventPB<TEvStatisticsResponse,
-                          NKikimrStat::TEvStatisticsResponse,
-                          EvStatisticsResponse>
-    {
-    };
-
     using TEvScan = TEvDataShard::TEvKqpScan;
-
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

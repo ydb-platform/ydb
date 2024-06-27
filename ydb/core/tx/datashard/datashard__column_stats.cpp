@@ -58,7 +58,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+        auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);
 
@@ -100,7 +100,7 @@ private:
 
 class TDataShard::TTxHandleSafeStatisticsScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeStatisticsScan(TDataShard* self, TEvDataShard::TEvStatisticsScanRequest::TPtr&& ev)
+    TTxHandleSafeStatisticsScan(TDataShard* self, NStat::TEvStatistics::TEvStatisticsRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -114,10 +114,10 @@ public:
     }
 
 private:
-    TEvDataShard::TEvStatisticsScanRequest::TPtr Ev;
+    NStat::TEvStatistics::TEvStatisticsRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeStatisticsScan(this, std::move(ev)));
 }
 
@@ -126,10 +126,10 @@ void TDataShard::Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr&, const TAct
     StatisticsScanId = 0;
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
 
-    auto response = std::make_unique<TEvDataShard::TEvStatisticsScanResponse>();
+    auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
     response->Record.SetShardTabletId(TabletID());
 
     const auto& tableId = record.GetTableId();

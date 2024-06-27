@@ -38,13 +38,13 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         ui64 shardId = shards.at(0);
-        auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
+        auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
         auto* reqTableId = request->Record.MutableTableId();
         reqTableId->SetOwnerId(tableId.PathId.OwnerId);
         reqTableId->SetTableId(tableId.PathId.LocalPathId);
         runtime.SendToPipe(shardId, sender, request.release());
 
-        auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvStatisticsScanResponse>(sender);
+        auto response = runtime.GrabEdgeEventRethrow<NStat::TEvStatistics::TEvStatisticsResponse>(sender);
         auto& record = response->Get()->Record;
         UNIT_ASSERT(record.GetStatus() == NKikimrStat::TEvStatisticsResponse::SUCCESS);
         UNIT_ASSERT(record.ColumnsSize() == 2);

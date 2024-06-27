@@ -235,7 +235,6 @@ public:
     //! If |true| reader will retain a set of peers that will be banned for every session.
     bool BanPeersPermanently;
 
-    //! For testing purposes.
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
 
@@ -365,6 +364,9 @@ public:
     int AllocateWriteTargetsRetryCount;
 
     std::optional<TDuration> TestingDelay;
+
+    //! If |true| network throttlers will be applied even in case of requests to local host.
+    bool EnableLocalThrottling;
 
     int GetDirectUploadNodeCount();
 

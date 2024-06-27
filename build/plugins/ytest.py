@@ -431,10 +431,15 @@ def get_tidy_config_map(unit, map_path):
     return config_map
 
 
+def prepare_config_map(config_map):
+    return list(reversed(sorted(config_map.items())))
+
+
 def get_default_tidy_config(unit):
     unit_path = _common.get_norm_unit_path(unit)
-    tidy_default_config_map = get_tidy_config_map(unit, DEFAULT_TIDY_CONFIG_MAP_PATH)
-    for project_prefix, config_path in tidy_default_config_map.items():
+    tidy_default_config_map = prepare_config_map(get_tidy_config_map(unit, DEFAULT_TIDY_CONFIG_MAP_PATH))
+
+    for project_prefix, config_path in tidy_default_config_map:
         if unit_path.startswith(project_prefix):
             return config_path
     return DEFAULT_TIDY_CONFIG
@@ -446,7 +451,7 @@ ordered_tidy_map = None
 def get_project_tidy_config(unit):
     global ordered_tidy_map
     if ordered_tidy_map is None:
-        ordered_tidy_map = list(reversed(sorted(get_tidy_config_map(unit, PROJECT_TIDY_CONFIG_MAP_PATH).items())))
+        ordered_tidy_map = prepare_config_map(get_tidy_config_map(unit, PROJECT_TIDY_CONFIG_MAP_PATH))
     unit_path = _common.get_norm_unit_path(unit)
 
     for project_prefix, config_path in ordered_tidy_map:

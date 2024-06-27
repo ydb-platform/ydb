@@ -289,6 +289,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("testing_delay", &TThis::TestingDelay)
         .Default();
 
+    registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
+
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);
         config->NodeChannel->RetryAttempts = 100;

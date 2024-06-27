@@ -27,6 +27,7 @@ namespace NKikimr {
         using TBase::Seek;
         using TBase::SeekToFirst;
         using TBase::DumpAll;
+        using TBase::PutToHeap;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -48,6 +49,7 @@ namespace NKikimr {
         using TBase::Valid;
         using TBase::GetCurKey;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -102,6 +104,11 @@ namespace NKikimr {
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
         }
+
+        template <typename THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -150,6 +157,11 @@ namespace NKikimr {
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
+        }
+
+        template <typename THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
         }
     };
 } // NKikimr

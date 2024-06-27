@@ -2080,9 +2080,9 @@
     ],
     "test.test[pg-order_by_agg_input_columns_aggr-default.txt-Debug]": [
         {
-            "checksum": "56bd4f49b82e08fdb1fe2af3c509fc9c",
-            "size": 1523,
-            "uri": "https://{canondata_backend}/1130705/2c54111b512b354592ae02009bd206b6b4bc7a92/resource.tar.gz#test.test_pg-order_by_agg_input_columns_aggr-default.txt-Debug_/opt.yql_patched"
+            "checksum": "54e993388583172be19fef042f0b2a2e",
+            "size": 1526,
+            "uri": "https://{canondata_backend}/1942278/423e9b8a01d3f9d43497e4cb2ee7041e47daf356/resource.tar.gz#test.test_pg-order_by_agg_input_columns_aggr-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-order_by_agg_input_columns_aggr-default.txt-Plan]": [

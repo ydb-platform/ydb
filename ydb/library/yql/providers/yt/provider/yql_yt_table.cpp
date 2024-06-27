@@ -1599,11 +1599,6 @@ void ScaleDate(ui64& val, bool& includeBound, EDataSlot srcDataSlot, EDataSlot t
             break;
         }
         break;
-    case EDataSlot::Date32:
-    case EDataSlot::Datetime64:
-    case EDataSlot::Timestamp64:
-        // TODO
-        break;
     default:
         break;
     }
@@ -1730,22 +1725,6 @@ bool AdjustLowerValue(TString& lowerValue, bool& lowerInclude, EDataSlot lowerDa
             case EDataSlot::Interval:
                 valMin = static_cast<i64>(std::numeric_limits<i64>::min());
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
-                break;
-            case EDataSlot::Date32:
-                valMin = MIN_DATE32;
-                valMax = MAX_DATE32;
-                break;
-            case EDataSlot::Datetime64:
-                valMin = MIN_DATETIME64;
-                valMax = MAX_DATETIME64;
-                break;
-            case EDataSlot::Timestamp64:
-                valMin = MIN_TIMESTAMP64;
-                valMax = MAX_TIMESTAMP64;
-                break;
-            case EDataSlot::Interval64:
-                valMin = -MAX_INTERVAL64;
-                valMax = MAX_INTERVAL64;
                 break;
             default:
                 break;
@@ -1973,19 +1952,6 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
                 valMin = static_cast<i64>(std::numeric_limits<i64>::min());
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
-            case EDataSlot::Date32:
-                valMin = MIN_DATE32;
-                valMax = MAX_DATE32;
-                break;
-            case EDataSlot::Datetime64:
-                valMin = MIN_DATETIME64;
-                valMax = MAX_DATETIME64;
-            case EDataSlot::Timestamp64:
-                valMin = MIN_TIMESTAMP64;
-                valMax = MAX_TIMESTAMP64;
-            case EDataSlot::Interval64:
-                valMin = -MAX_INTERVAL64;
-                valMax = MAX_INTERVAL64;
             default:
                 break;
             }

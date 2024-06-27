@@ -172,13 +172,8 @@ auto ValueToDouble(const T& value) {
 }
 
 template<>
-auto ValueToDouble<double>(const double& value) {
-    return  0.001 * value;
-}
-
-template<>
 auto ValueToDouble<TDuration>(const TDuration& value) {
-    return 0.001 *value.MilliSeconds();
+    return value.MillisecondsFloat();
 }
 
 template<class T, bool is_float = std::is_floating_point<T>::value>
@@ -193,14 +188,16 @@ struct TValueToTable {
 template<class T>
 struct TValueToTable<T, true>{
     static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
-        tableRow.Column(index, Sprintf("%7.3f", value));
+        tableRow.Column(index, Sprintf("%7.3f", 0.001 * value));
     }
 };
 
-template<class T, bool is_integer = std::is_integral<T>::value>
+template<class T, bool is_float = std::is_floating_point<T>::value>
 struct TValueToCsv {
     static void Do(IOutputStream& csv, const T& value) {
-        csv << value;
+        if (value) {
+            csv << value;
+        }
     }
 };
 
@@ -208,7 +205,7 @@ template<class T>
 struct TValueToCsv<T, true> {
     static void Do(IOutputStream& csv, const T& value) {
         if (value) {
-            csv << value;
+            csv << 0.001 * value;
         }
     }
 };

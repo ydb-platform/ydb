@@ -34,6 +34,10 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1));
 }
 
+void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
+    AFL_VERIFY(false)("error", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+}
+
 void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     auto evStart = RestoreTask->BuildRequestInitiator();
     Send(RestoreTask->GetTabletActorId(), evStart.release());

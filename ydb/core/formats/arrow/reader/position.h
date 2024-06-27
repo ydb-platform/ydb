@@ -282,6 +282,19 @@ public:
             : Position(pos) {
         }
     public:
+        TString DebugString() const {
+            TStringBuilder result;
+            result << "pos=" << Position << ";";
+            if (!GreaterIfNotEqual) {
+                result << "state=equal;";
+            } else if (*GreaterIfNotEqual) {
+                result << "state=greater;";
+            } else {
+                result << "state=less;";
+            }
+            return result;
+        }
+
         bool IsEqual() const {
             return !GreaterIfNotEqual;
         }
@@ -307,6 +320,7 @@ public:
     static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
+        AFL_VERIFY(!!Data);
         return *Data;
     }
 

@@ -204,6 +204,14 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultWriteValueVerified(con
     return GetIndexInfo().GetColumnDefaultWriteValueVerified(columnName);
 }
 
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultWriteValueVerified(const ui32 columnId) const {
+    return GetIndexInfo().GetColumnDefaultWriteValueVerified(columnId);
+}
+
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultReadValueVerified(const ui32 columnId) const {
+    return GetIndexInfo().GetColumnDefaultReadValueVerified(columnId);
+}
+
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const {
     auto result = batch;
     for (auto&& i : GetIndexInfo().ArrowSchema()->fields()) {
@@ -228,6 +236,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(con
         result = NArrow::TStatusValidator::GetValid(result->AddColumn(result->num_columns(), i->name(), column));
     }
     return result;
+}
+
+bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
+    return GetIndexInfo().IsSpecialColumn(columnId);
 }
 
 }

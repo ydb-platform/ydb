@@ -1272,6 +1272,12 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);
 
+    if (info->ScanShards) {
+        auto& scanProgress = *desc.MutableScanProgress();
+        scanProgress.SetShardsTotal(info->ScanShards.size());
+        scanProgress.SetShardsCompleted(info->DoneShards.size());
+    }
+
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);
 

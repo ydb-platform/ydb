@@ -11,7 +11,7 @@
 * [FROM](from.md)
 * [FROM AS_TABLE](from_as_table.md)
 * [FROM SELECT](from_select.md)
-* [DISTINCT](istinct.md)
+* [DISTINCT](distinct.md)
 * [UNIQUE DISTINCT](unique_distinct_hints.md)
 * [UNION](union.md)
 * [WITH](with.md)

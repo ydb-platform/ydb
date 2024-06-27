@@ -9,6 +9,11 @@
 #define ChaChaVec ChaCha
 #define Poly1305Vec Poly1305
 #define CHACHA_BPI 1
+#elif (__AVX512__ || __AVX2__)
+#include <ydb/core/blobstorage/crypto/chacha_512.h>
+#include <ydb/core/blobstorage/crypto/poly1305_vec.h>
+#define CHACHA_BPI 4
+#define ChaChaVec ChaCha512
 #else
 #include <ydb/core/blobstorage/crypto/chacha_vec.h>
 #include <ydb/core/blobstorage/crypto/poly1305_vec.h>
@@ -18,6 +23,8 @@
 #define ENABLE_ENCRYPTION 1
 
 namespace NKikimr {
+
+constexpr ui32 BLOCK_BYTES = ChaChaVec::BLOCK_SIZE * CHACHA_BPI;
 
 ////////////////////////////////////////////////////////////////////////////
 // KeyContainer
@@ -93,7 +100,7 @@ using TT1ha0Avx2Hasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 ////////////////////////////////////////////////////////////////////////////
 
 class TStreamCypher {
-    alignas(16) ui8 Leftover[64 * 4];
+    alignas(16) ui8 Leftover[BLOCK_BYTES];
     alignas(16) ui64 Key[4];
     alignas(16) i64 Nonce;
     std::unique_ptr<ChaChaVec> Cypher;

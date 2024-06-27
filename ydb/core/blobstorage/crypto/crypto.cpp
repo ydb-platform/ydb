@@ -162,7 +162,6 @@ template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 // StreamCypher
 ////////////////////////////////////////////////////////////////////////////
 #define CYPHER_ROUNDS 8
-#define BLOCK_BYTES (64 * CHACHA_BPI)
 
 TStreamCypher::TStreamCypher()
     : Nonce(0)

@@ -138,7 +138,7 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
     }
 
     if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
-        if (resourcePoolDescription.GetProperties().GetProperties().contains("concurrent_query_limit")) {
+        if (properties.contains("concurrent_query_limit")) {
             ythrow yexception() << "Can not change property concurrent_query_limit for default pool";
         }
     }

@@ -32,7 +32,6 @@ public:
 
     void Config(TConfig& config) override {
         NLastGetopt::TOpts& opts = *config.Opts;
-        MsgBusClientConfig.ConfigureLastGetopt(opts, "mb-");
         HideOptions(*config.Opts);
         opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
         opts.AddLongOption('s', "server", "server address to connect")
@@ -58,22 +57,12 @@ public:
         }
         ParseCaCerts(config);
 
-        switch (endpoint.ServerType) {
-        case TCommandConfig::EServerType::GRpc:
-            CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
-            if (config.EnableSsl) {
-                CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
-                CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
-            }
-            break;
-        case TCommandConfig::EServerType::MessageBus:
-            Y_ABORT("MessageBus is no longer supported");
-            break;
+        CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
+        if (config.EnableSsl) {
+            CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
+            CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
         }
     }
-
-private:
-    NMsgBusProxy::TMsgBusClientConfig MsgBusClientConfig;
 };
 
 int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {

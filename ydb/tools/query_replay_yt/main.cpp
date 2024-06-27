@@ -126,7 +126,6 @@ int main(int argc, const char** argv) {
 
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
-    OutputSchema();
 
     auto client = NYT::CreateClient(config.Cluster);
     NYT::SetLogger(NYT::CreateStdErrLogger(NYT::ILogger::ELevel::INFO));

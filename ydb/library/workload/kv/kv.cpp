@@ -75,7 +75,7 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
 
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
-            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
             if (optional) {
                 valueParser.OpenOptional();
             }
@@ -519,8 +519,9 @@ TVector<TRow> TKvWorkloadGenerator::GenerateSequentialRows() {
                 }
                 result[row].Strings[col - Params.IntColumnsCnt] = val;
             }
-            ++nextFirstKey;
         }
+
+        ++nextFirstKey;
     }
 
     return result;

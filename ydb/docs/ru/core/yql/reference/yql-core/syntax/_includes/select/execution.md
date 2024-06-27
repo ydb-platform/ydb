@@ -2,7 +2,7 @@
 
 Результат запроса `SELECT` вычисляется следующим образом:
 
-* определяется набор входных таблиц – вычисляются выражения после [FROM](from.md);
+* определяется набор входных таблиц – вычисляются выражения после [FROM](../../select/from.md);
 * к входным таблицам применяется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
 * выполняется [FLATTEN COLUMNS](../../flatten.md#flatten-columns) или [FLATTEN BY](../../flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
 {% if feature_join %}* выполняются все [JOIN](../../join.md);{% endif %}

@@ -349,7 +349,7 @@ TReader* CastToBlockReaderImpl(IBlockReader& reader) {
     return readerImpl;
 }
 
-template <typename TDerived, typename TArrayBuilderImpl = IArrayBuilder, typename TReader = IBlockReader, typename TScalarBuilderImpl = IScalarBuilder>
+template <typename TDerived, typename TReader = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TUnaryKernelExec {
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
@@ -392,7 +392,7 @@ struct TUnaryKernelExec {
     }
 };
 
-template <typename TDerived, typename TArrayBuilderImpl = IArrayBuilder, typename TReader1 = IBlockReader, typename TReader2 = IBlockReader, typename TScalarBuilderImpl = IScalarBuilder>
+template <typename TDerived, typename TReader1 = IBlockReader, typename TReader2 = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TBinaryKernelExec {
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());

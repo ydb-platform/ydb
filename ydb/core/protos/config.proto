@@ -279,6 +279,7 @@ message TBlobStorageConfig {
         optional string ErasureSpecies = 1;
         optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
         repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically

@@ -29,61 +29,10 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-CrossJoin-TableFullScan",
+                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TableFullScan",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -92,13 +41,16 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "unique1,stringu1 = i,j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
                                                     }
                                                 ],
-                                                "Name": "Filter",
-                                                "Predicate": "item.onek.unique1 == item.v.i And item.onek.stringu1 == item.v.j"
+                                                "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
                                                 "Inputs": [
@@ -106,7 +58,8 @@
                                                         "InternalOperatorId": 3
                                                     }
                                                 ],
-                                                "Name": "CrossJoin"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.stringu1) And Exist(item.unique1)"
                                             },
                                             {
                                                 "Inputs": [],

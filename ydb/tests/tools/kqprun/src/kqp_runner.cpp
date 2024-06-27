@@ -123,12 +123,14 @@ public:
     }
 
     void PrintScriptResults() const {
-        Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
-        for (size_t i = 0; i < ResultSets_.size(); ++i) {
-            if (ResultSets_.size() > 1) {
-                *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+        if (Options_.ResultOutput) {
+            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
+            for (size_t i = 0; i < ResultSets_.size(); ++i) {
+                if (ResultSets_.size() > 1) {
+                    *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+                }
+                PrintScriptResult(ResultSets_[i]);
             }
-            PrintScriptResult(ResultSets_[i]);
         }
     }
 

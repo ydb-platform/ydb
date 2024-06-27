@@ -67,7 +67,7 @@ public:
 
         Send(ev->Sender, response.Release());
     }
-    
+
     void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         Promise_.SetValue(std::move(ev));
         PassAway();

@@ -2,7 +2,7 @@ import unittest
 import tempfile
 import io
 
-from yql.library.benchmarks.report import Builder
+from ydb.library.benchmarks.report import Builder
 
 
 class Test(unittest.TestCase):
@@ -140,17 +140,17 @@ class Test(unittest.TestCase):
         with io.StringIO() as f:
             builder.display(f)
             f.seek(0)
-            expected = """+------+------+
-| col1 | col2 |
-+------+------+
-|  1   |  2   |
-|  1   |  2   |
-|  1   |  3   |
-|  1   | [1]  |
-|  1   |  4   |
-|  1   | [2]  |
-| 6.0  |      |
-+------+------+
+            expected = """+------+---------+
+| col1 |   col2  |
++------+---------+
+|  1   |    2    |
+|  1   |    2    |
+|  1   |    3    |
+|  1   |   [1]   |
+|  1   |    4    |
+|  1   |   [2]   |
+| 6.0  | 11.0(*) |
++------+---------+
 
 
 [1] g
@@ -217,15 +217,15 @@ class Test(unittest.TestCase):
         with io.StringIO() as f:
             builder.display(f)
             f.seek(0)
-            expected = """|                                        #                                         |  col1 |  col2 |
-| :------------------------------------------------------------------------------: | :---: | :---: |
-| [1](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q1.sql) |   1   |   2   |
-| [2](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q2.sql) |   2   |   2   |
-| [3](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q3.sql) |   3   |   3   |
-| [4](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q4.sql) | \\[1\\] | \\[2\\] |
-| [5](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q5.sql) |   4   |   4   |
-| [6](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q6.sql) | \\[1\\] | \\[1\\] |
-|                                       SUM                                        |       |       |
+            expected = """|                                        #                                         |   col1   |   col2   |
+| :------------------------------------------------------------------------------: | :------: | :------: |
+| [1](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q1.sql) |    1     |    2     |
+| [2](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q2.sql) |    2     |    2     |
+| [3](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q3.sql) |    3     |    3     |
+| [4](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q4.sql) |  \\[1\\]   |  \\[2\\]   |
+| [5](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q5.sql) |    4     |    4     |
+| [6](https://a.yandex-team.ru/arcadia/yql/queries/tpc_benchmark/queries/h/q6.sql) |  \\[1\\]   |  \\[1\\]   |
+|                                       SUM                                        | 10.00(*) | 11.00(*) |
 
 
 \\[1\\] e

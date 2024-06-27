@@ -21,7 +21,7 @@ public:
     using TGCListsByGroup = THashMap<TBlobAddress, TGCLists>;
 private:
     TGCListsByGroup ListsByGroupId;
-    TGenStep CollectGenStepInFlight;
+    const TGenStep CollectGenStepInFlight;
     const ui64 TabletId;
     const ui64 CurrentGen;
     std::deque<TUnifiedBlobId> KeepsToErase;

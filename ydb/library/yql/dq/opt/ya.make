@@ -1,7 +1,6 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/core/ydb_convert
     ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/dq/common

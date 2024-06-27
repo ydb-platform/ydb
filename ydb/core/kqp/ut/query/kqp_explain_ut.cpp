@@ -906,6 +906,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     Y_UNIT_TEST(MultiJoinCteLinks) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};

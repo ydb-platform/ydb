@@ -2,7 +2,7 @@
 
 {% if backend_name == "YDB" %}
 
-{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
+{% include [olap_warning_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
 {% endif %}
 

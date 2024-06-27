@@ -180,5 +180,68 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     return res->child_data[0];
 }
 
+TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, 
+    NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
+    TKernel::ENullMode nullMode)
+    : TKernel(family, argTypes, returnType, nullMode)
+    , ArrowKernel(std::move(arrowKernel))
+{
+}
+
+const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
+    return *ArrowKernel;
+}
+
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
+    const arrow::compute::ArrayKernelExec& exec,
+    arrow::compute::InputType&& inputType1, arrow::compute::OutputType&& outputType,
+    TKernel::ENullMode nullMode) {
+
+    std::vector<NUdf::TDataTypeId> argTypes({ type1 });
+
+    auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
+        std::move(inputType1)
+    }, std::move(outputType), exec);
+
+    switch (nullMode) {
+    case TKernel::ENullMode::Default:
+        k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+        break;
+    case TKernel::ENullMode::AlwaysNull:
+        k->null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+        break;
+    case TKernel::ENullMode::AlwaysNotNull:
+        k->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+        break;
+    }
+
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
+}
+
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2, NUdf::TDataTypeId returnType,
+    const arrow::compute::ArrayKernelExec& exec,
+    arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
+    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode) {
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
+        std::move(inputType1), std::move(inputType2)
+    }, std::move(outputType), exec);
+
+    switch (nullMode) {
+    case TKernel::ENullMode::Default:
+        k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+        break;
+    case TKernel::ENullMode::AlwaysNull:
+        k->null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+        break;
+    case TKernel::ENullMode::AlwaysNotNull:
+        k->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+        break;
+    }
+
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

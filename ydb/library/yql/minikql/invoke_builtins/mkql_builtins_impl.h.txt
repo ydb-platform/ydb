@@ -1159,18 +1159,14 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
 
 class TPlainKernel : public TKernel {
 public:
-    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, const arrow::compute::ScalarKernel& arrowKernel, TKernel::ENullMode nullMode)
-        : TKernel(family, argTypes, returnType, nullMode)
-        , ArrowKernel(arrowKernel)
-    {
-    }
+    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
+        TKernel::ENullMode nullMode);
 
-    const arrow::compute::ScalarKernel& GetArrowKernel() const final {
-        return ArrowKernel;
-    }
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
 
 private:
-    const arrow::compute::ScalarKernel ArrowKernel;
+    const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;
 };
 
 template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
@@ -1204,6 +1200,11 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
     }
 };
 
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
+    const arrow::compute::ArrayKernelExec& exec,
+    arrow::compute::InputType&& inputType1, 
+    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode);
+
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
 void AddUnaryKernel(TKernelFamilyBase& owner) {
@@ -1216,26 +1217,15 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
     using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInputLayout>(tz)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddUnaryKernelImpl(owner, TInput::Id, TOutput::Id, &TExecs::Exec, 
+        GetPrimitiveInputArrowType<TInputLayout>(tz), GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz),
+        TFuncInstance::NullMode);
 }
+
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2, NUdf::TDataTypeId returnType,
+    const arrow::compute::ArrayKernelExec& exec,
+    arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
+    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode);
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
@@ -1253,26 +1243,10 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddBinaryKernelImpl(owner, TInput1::Id, TInput2::Id, TOutput::Id, &TExecs::Exec, 
+        GetPrimitiveInputArrowType<TInput1Layout>(tz1), GetPrimitiveInputArrowType<TInput2Layout>(tz2),
+        GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None),
+        TFuncInstance::NullMode);
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
@@ -1291,26 +1265,10 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddBinaryKernelImpl(owner, TInput1::Id, TInput2::Id, TOutput::Id, &TExecs::Exec, 
+        GetPrimitiveInputArrowType<TInput1Layout>(tz1), GetPrimitiveInputArrowType<TInput2Layout>(tz2),
+        GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None),
+        TFuncInstance::NullMode);
 }
 
 template<template<typename, typename> class TFunc>

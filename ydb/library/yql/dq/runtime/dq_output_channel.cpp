@@ -364,7 +364,7 @@ private:
         TRope Buffer;
         ui64 RowCount = 0;
     };
-    std::deque<TSerializedBatch> Data;
+    std::deque<TSerializedBatch, NMiniKQL::TMKQLAllocator<TSerializedBatch>> Data;
 
     size_t SpilledRowCount = 0;
     ui64 FirstStoredId = 0;

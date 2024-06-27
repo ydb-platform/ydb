@@ -323,4 +323,4 @@ namespace NYql::NGenericPushDown {
         return MatchPredicateImpl(columns, predicate) != Triple::False;
     }
 
-} // namespace NYql
+}

@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
 
     Y_UNIT_TEST(EmptyWhere) {
         UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", NYql::NGenericPushDown::TColumnStatistics{}},
-                                                                           {"col2", NYql::NGenericPushDown::TColumnStatistics{}}}},
+                                                                                             {"col2", NYql::NGenericPushDown::TColumnStatistics{}}}},
                                    NYql::NConnector::NApi::TPredicate{}));
     }
 

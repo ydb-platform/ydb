@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/library/count_min_sketch
 )
 
 YQL_LAST_ABI_VERSION()

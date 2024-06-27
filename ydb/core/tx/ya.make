@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
+    ydb/library/count_min_sketch
 )
 
 END()

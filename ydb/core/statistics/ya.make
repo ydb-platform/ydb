@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     util
     ydb/library/actors/core
+    ydb/library/count_min_sketch
     ydb/library/query_actor
     ydb/core/protos
     ydb/core/scheme

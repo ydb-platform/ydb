@@ -167,12 +167,12 @@ struct TTestInfoProduct {
 };
 
 template<class T>
-auto DurationToDouble(const T& value) {
+double DurationToDouble(const T& value) {
     return value;
 }
 
 template<>
-auto DurationToDouble<TDuration>(const TDuration& value) {
+double DurationToDouble<TDuration>(const TDuration& value) {
     return value.MillisecondsFloat();
 }
 

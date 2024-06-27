@@ -32,20 +32,6 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-static void ModifyTopicACLAndWait(NYdb::TDriver* driver, const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
-    auto schemeClient = NYdb::NScheme::TSchemeClient(*driver);
-    auto desc = schemeClient.DescribePath(topic).ExtractValueSync();
-    auto size = desc.GetEntry().EffectivePermissions.size();
-
-    ModifyTopicACL(driver, topic, acl);
-
-    do {
-        desc = schemeClient.DescribePath(topic).ExtractValueSync();
-    } while (size == desc.GetEntry().EffectivePermissions.size());
-}
-
-
-
 #define SET_LOCALS                                              \
     auto& pqClient = server.Server->AnnoyingClient;             \
     Y_UNUSED(pqClient);                                         \
@@ -195,7 +181,16 @@ static void ModifyTopicACLAndWait(NYdb::TDriver* driver, const TString& topic, c
         }
 
         void ModifyTopicACLAndWait(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
-            ::ModifyTopicACLAndWait(YdbDriver.get(), topic, acl);
+            auto driver = YdbDriver.get();
+            auto schemeClient = NYdb::NScheme::TSchemeClient(*driver);
+            auto desc = schemeClient.DescribePath(topic).ExtractValueSync();
+            auto size = desc.GetEntry().EffectivePermissions.size();
+
+            ::ModifyTopicACL(driver, topic, acl);
+
+            do {
+                desc = schemeClient.DescribePath(topic).ExtractValueSync();
+            } while (size == desc.GetEntry().EffectivePermissions.size());
         }
 
 

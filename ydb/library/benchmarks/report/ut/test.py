@@ -231,7 +231,6 @@ class Test(unittest.TestCase):
 \\[1\\] e
 \\[2\\] g
 """
-            self.maxDiff = None
             result = f.read()
             self.assertEqual(expected, result)
 

@@ -1001,7 +1001,7 @@ struct TEvBlobStorage {
         NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
@@ -1014,7 +1014,7 @@ struct TEvBlobStorage {
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
-            , GroupId(groupId)
+            , GroupId(groupId.GetRawId())
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
             , StorageId(storageId)
         {}
@@ -1231,7 +1231,7 @@ struct TEvBlobStorage {
         // todo: replace with queue-like thing
         ui32 ResponseSz;
         TArrayHolder<TResponse> Responses;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
         TString DebugInfo;
         TString ErrorReason;
@@ -1245,7 +1245,7 @@ struct TEvBlobStorage {
             : Status(status)
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
-            , GroupId(groupId)
+            , GroupId(groupId.GetRawId())
         {}
 
         TString Print(bool isFull) const {

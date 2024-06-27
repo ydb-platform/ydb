@@ -27,14 +27,49 @@ struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft,
 #endif
 };
 
+struct TIntegralDivBase {
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* GenerateImpl(Value* lv, Value* rv, const TCodegenContext& ctx, BasicBlock*& block,
+        bool isSignedOutput, bool maySignOverflow, Value* minValue, TSetterFor outputSetter) {
+        auto& context = ctx.Codegen.GetContext();
+        const auto type = Type::getInt128Ty(context);
+        const auto zero = ConstantInt::get(type, 0);
+        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), 0), "check", block);
+
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto result = PHINode::Create(type, 2, "result", done);
+        result->addIncoming(zero, block);
+
+        if (maySignOverflow) {
+            const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv, minValue, "min", block);
+            const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), -1), "one", block);
+            const auto two = BinaryOperator::CreateAnd(min, one, "two", block);
+            const auto all = BinaryOperator::CreateOr(check, two, "all", block);
+            BranchInst::Create(done, good, all, block);
+        } else {
+            BranchInst::Create(done, good, check, block);
+        }
+
+        block = good;
+        const auto div = isSignedOutput ? BinaryOperator::CreateSDiv(lv, rv, "div", block) : BinaryOperator::CreateUDiv(lv, rv, "div", block);
+        const auto full = outputSetter(div, context, block);
+        result->addIncoming(full, block);
+        BranchInst::Create(done, block);
+
+        block = done;
+        return result;
+    }
+#endif
+};
+
 template <typename TLeft, typename TRight, typename TOutput>
-struct TIntegralDiv {
+struct TIntegralDiv : public TIntegralDivBase {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
 
     static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
 
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
-    {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
         const auto rv = static_cast<TOutput>(right.template Get<TRight>());
 
@@ -48,38 +83,15 @@ struct TIntegralDiv {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
         const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
-        const auto type = Type::getInt128Ty(context);
-        const auto zero = ConstantInt::get(type, 0);
-        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), 0), "check", block);
-
-        const auto done = BasicBlock::Create(context, "done", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto result = PHINode::Create(type, 2, "result", done);
-        result->addIncoming(zero, block);
-
-        if constexpr (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
-            const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv, ConstantInt::get(lv->getType(), Min<TOutput>()), "min", block);
-            const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), -1), "one", block);
-            const auto two = BinaryOperator::CreateAnd(min, one, "two", block);
-            const auto all = BinaryOperator::CreateOr(check, two, "all", block);
-            BranchInst::Create(done, good, all, block);
-        } else {
-            BranchInst::Create(done, good, check, block);
-        }
-
-        block = good;
-        const auto div = std::is_signed<TOutput>() ? BinaryOperator::CreateSDiv(lv, rv, "div", block) : BinaryOperator::CreateUDiv(lv, rv, "div", block);
-        const auto full = SetterFor<TOutput>(div, context, block);
-        result->addIncoming(full, block);
-        BranchInst::Create(done, block);
-
-        block = done;
-        return result;
+        return GenerateImpl(lv, rv, ctx, block,
+            std::is_signed<TOutput>(),
+            std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft),
+            ConstantInt::get(lv->getType(), Min<TOutput>()),
+            &SetterFor<TOutput>);
     }
 #endif
 };

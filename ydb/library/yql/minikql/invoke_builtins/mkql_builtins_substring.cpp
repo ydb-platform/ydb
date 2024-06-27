@@ -6,29 +6,21 @@ namespace NMiniKQL {
 
 namespace {
 
-template <bool StartOptional, bool CountOptional>
-struct TSubString {
-    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod start, NUdf::TUnboxedValuePod count)
-    {
-        return SubString(string,
-            StartOptional && !start ? std::numeric_limits<ui32>::min() : start.Get<ui32>(),
-            CountOptional && !count ? std::numeric_limits<ui32>::max() : count.Get<ui32>()
-        );
-    }
-
+struct TSubStringBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block)
+    static Value* GenerateImpl(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block,
+        bool startOptional, bool countOptional)
     {
         auto& context = ctx.Codegen.GetContext();
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(SubString));
-        const auto start = StartOptional ?
+        const auto start = startOptional ?
             SelectInst::Create(
                 IsEmpty(st, block),
                 ConstantInt::get(GetTypeFor<ui32>(context), std::numeric_limits<ui32>::min()),
                 GetterFor<ui32>(st, context, block), "start", block
             ):
             GetterFor<ui32>(st, context, block);
-        const auto count = CountOptional ?
+        const auto count = countOptional ?
             SelectInst::Create(
                 IsEmpty(cn, block),
                 ConstantInt::get(GetTypeFor<ui32>(context), std::numeric_limits<ui32>::max()),
@@ -50,6 +42,22 @@ struct TSubString {
             const auto result = new LoadInst(string->getType(), ptrResult, "substring", block);
             return result;
         }
+    }
+#endif
+};
+
+template <bool StartOptional, bool CountOptional>
+struct TSubString : public TSubStringBase {
+    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod start, NUdf::TUnboxedValuePod count) {
+        return SubString(string,
+            StartOptional && !start ? std::numeric_limits<ui32>::min() : start.Get<ui32>(),
+            CountOptional && !count ? std::numeric_limits<ui32>::max() : count.Get<ui32>()
+        );
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(string, st, cn, ctx, block, StartOptional, CountOptional);
     }
 #endif
 };

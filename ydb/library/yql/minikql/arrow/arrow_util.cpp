@@ -36,4 +36,24 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
     }
 }
 
+template <typename T>
+std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
+    static std::shared_ptr<arrow::DataType> result = std::make_shared<typename TPrimitiveDataType<T>::TResult>();
+    return result;
+}
+
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<bool>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i8>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui8>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i16>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui16>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i32>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui32>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i64>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui64>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<float>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<double>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<char*>();
+template std::shared_ptr<arrow::DataType> GetPrimitiveDataType<NYql::NUdf::TUtf8>();
+
 }

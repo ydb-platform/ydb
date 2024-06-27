@@ -7,8 +7,21 @@ namespace NMiniKQL {
 
 namespace {
 
+struct TCountBitsBase {
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, const std::string& funcName) {
+        auto& module = ctx.Codegen.GetModule();
+        const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
+        const auto& name = funcName;
+        const auto func = module.getOrInsertFunction(name, fnType).getCallee();
+        const auto result = CallInst::Create(fnType, func, {arg}, "popcount", block);
+        return result;
+    }
+#endif
+};
+
 template<typename TInput, typename TOutput>
-struct TCountBits : public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TInput, TOutput>> {
+struct TCountBits : public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TInput, TOutput>>, TCountBitsBase {
     static TOutput Do(TInput val)
     {
         return PopCount(val);
@@ -18,11 +31,7 @@ struct TCountBits : public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TI
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        auto& module = ctx.Codegen.GetModule();
-        const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
-        const auto& name = GetFuncNameForType<TInput>("llvm.ctpop");
-        const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-        const auto result = CallInst::Create(fnType, func, {arg}, "popcount", block);
+        const auto result = GenImpl(arg, ctx, block, GetFuncNameForType<TInput>("llvm.ctpop"));
         return StaticCast<TInput, TOutput>(result, context, block);
     }
 #endif

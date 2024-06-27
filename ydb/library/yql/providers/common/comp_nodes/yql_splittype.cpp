@@ -8,22 +8,23 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template <NYql::ETypeAnnotationKind Kind>
-class TSplitTypeWrapper : public TMutableComputationNode<TSplitTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TSplitTypeWrapper<Kind>> TBaseComputation;
+class TSplitTypeWrapper : public TMutableComputationNode<TSplitTypeWrapper> {
+    typedef TMutableComputationNode<TSplitTypeWrapper> TBaseComputation;
 public:
-    TSplitTypeWrapper(TComputationMutables& mutables, IComputationNode* handle, ui32 exprCtxMutableIndex, NYql::TPosition pos)
+    TSplitTypeWrapper(TComputationMutables& mutables, IComputationNode* handle, ui32 exprCtxMutableIndex,
+        NYql::TPosition pos, NYql::ETypeAnnotationKind kind)
         : TBaseComputation(mutables)
         , Handle_(handle)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
         , Pos_(pos)
+        , Kind_(kind)
     {}
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
         auto handle = Handle_->GetValue(ctx);
         auto type = GetYqlType(handle);
-        switch (Kind) {
+        switch (Kind_) {
         case NYql::ETypeAnnotationKind::Data: {
             auto castedType = type->UserCast<NYql::TDataExprType>(Pos_, *exprCtxPtr);
             if (!castedType) {
@@ -193,7 +194,7 @@ public:
         }
 
         default:
-            MKQL_ENSURE(false, "Unsupported kind:" << Kind);
+            MKQL_ENSURE(false, "Unsupported kind:" << Kind_);
         }
     }
 
@@ -203,16 +204,22 @@ public:
 
 private:
     IComputationNode* Handle_;
-    ui32 ExprCtxMutableIndex_;
-    NYql::TPosition Pos_;
+    const ui32 ExprCtxMutableIndex_;
+    const NYql::TPosition Pos_;
+    const NYql::ETypeAnnotationKind Kind_;
 };
 
-template <NYql::ETypeAnnotationKind Kind>
-IComputationNode* WrapSplitType(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
+IComputationNode* WrapSplitTypeImpl(TCallable& callable, const TComputationNodeFactoryContext& ctx,
+    ui32 exprCtxMutableIndex, NYql::ETypeAnnotationKind kind) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 arg");
     auto pos = ExtractPosition(callable);
     auto handle = LocateNode(ctx.NodeLocator, callable, 3);
-    return new TSplitTypeWrapper<Kind>(ctx.Mutables, handle, exprCtxMutableIndex, pos);
+    return new TSplitTypeWrapper(ctx.Mutables, handle, exprCtxMutableIndex, pos, kind);
+}
+
+template <NYql::ETypeAnnotationKind Kind>
+IComputationNode* WrapSplitType(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
+    return WrapSplitTypeImpl(callable, ctx, exprCtxMutableIndex, Kind);
 }
 
 template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Data>

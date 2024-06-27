@@ -111,21 +111,22 @@ namespace {
     };
 }
 
-template <NYql::ETypeAnnotationKind Kind>
-class TMakeTypeWrapper : public TMutableComputationNode<TMakeTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TMakeTypeWrapper<Kind>> TBaseComputation;
+class TMakeTypeWrapper : public TMutableComputationNode<TMakeTypeWrapper> {
+    typedef TMutableComputationNode<TMakeTypeWrapper> TBaseComputation;
 public:
-    TMakeTypeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)
+    TMakeTypeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex,
+        NYql::TPosition pos, NYql::ETypeAnnotationKind kind)
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
         , Pos_(pos)
+        , Kind_(kind)
     {}
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
         const NYql::TTypeAnnotationNode* retType = nullptr;
-        switch (Kind) {
+        switch (Kind_) {
         case NYql::ETypeAnnotationKind::Data: {
             auto iter = Args_[0]->GetValue(ctx).GetListIterator();
             NUdf::TUnboxedValue str;
@@ -323,7 +324,7 @@ public:
         }
 
         default:
-            MKQL_ENSURE(false, "Unsupported kind:" << Kind);
+            MKQL_ENSURE(false, "Unsupported kind:" << Kind_);
         }
 
         return NUdf::TUnboxedValuePod(new TYqlTypeResource(exprCtxPtr, retType));
@@ -337,9 +338,22 @@ public:
 
 private:
     TVector<IComputationNode*> Args_;
-    ui32 ExprCtxMutableIndex_;
-    NYql::TPosition Pos_;
+    const ui32 ExprCtxMutableIndex_;
+    const NYql::TPosition Pos_;
+    const NYql::ETypeAnnotationKind Kind_;
 };
+
+IComputationNode* WrapMakeTypeImpl(TCallable& callable, const TComputationNodeFactoryContext& ctx,
+    ui32 exprCtxMutableIndex, NYql::ETypeAnnotationKind kind) {
+    auto pos = ExtractPosition(callable);
+    TVector<IComputationNode*> args;
+    args.reserve(callable.GetInputsCount() - 3);
+    for (size_t i = 0; i < callable.GetInputsCount() - 3; ++i) {
+        args.push_back(LocateNode(ctx.NodeLocator, callable, i + 3));
+    }
+
+    return new TMakeTypeWrapper(ctx.Mutables, std::move(args), exprCtxMutableIndex, pos, kind);
+}
 
 template <NYql::ETypeAnnotationKind Kind>
 IComputationNode* WrapMakeType(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
@@ -348,14 +362,7 @@ IComputationNode* WrapMakeType(TCallable& callable, const TComputationNodeFactor
     MKQL_ENSURE(callable.GetInputsCount() >= expectedMinArgsCount
         && callable.GetInputsCount() <= expectedMaxArgsCount, "Expected from " << expectedMinArgsCount << " to "
         << expectedMaxArgsCount << " arg(s), but got: " << callable.GetInputsCount());
-    auto pos = ExtractPosition(callable);
-    TVector<IComputationNode*> args;
-    args.reserve(callable.GetInputsCount() - 3);
-    for (size_t i = 0; i < callable.GetInputsCount() - 3; ++i) {
-        args.push_back(LocateNode(ctx.NodeLocator, callable, i + 3));
-    }
-
-    return new TMakeTypeWrapper<Kind>(ctx.Mutables, std::move(args), exprCtxMutableIndex, pos);
+    return WrapMakeTypeImpl(callable, ctx, exprCtxMutableIndex, Kind);
 }
 
 template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::Data>

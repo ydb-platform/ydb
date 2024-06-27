@@ -18,17 +18,11 @@ NUdf::TUnboxedValuePod StringContains(const NUdf::TUnboxedValuePod full, const N
     return NUdf::TUnboxedValuePod(one.contains(two));
 }
 
-template <NUdf::TUnboxedValuePod (*StringFunc)(const NUdf::TUnboxedValuePod full, const NUdf::TUnboxedValuePod part)>
-struct TStringWith {
-    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod sub)
-    {
-        return StringFunc(string, sub);
-    }
+struct TStringWithBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* GenerateImpl(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block, uintptr_t methodPtr) {
         auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(StringFunc));
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(string->getType(), {string->getType(), sub->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
@@ -46,6 +40,18 @@ struct TStringWith {
             const auto result = new LoadInst(string->getType(), ptrResult, "has", block);
             return result;
         }
+    }
+#endif
+};
+
+template <NUdf::TUnboxedValuePod (*StringFunc)(const NUdf::TUnboxedValuePod full, const NUdf::TUnboxedValuePod part)>
+struct TStringWith : public TStringWithBase {
+    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod sub) {
+        return StringFunc(string, sub);
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(string, sub, ctx, block, GetMethodPtr(StringFunc));
     }
 #endif
 };

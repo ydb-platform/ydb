@@ -21,25 +21,18 @@ inline T Abs(T v) {
     return std::abs(v);
 }
 
-template<typename TInput, typename TOutput>
-struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput>> {
-    static constexpr auto NullMode = TKernel::ENullMode::Default;
-
-    static TOutput Do(TInput val)
-    {
-        return Abs<TInput>(val);
-    }
-
+struct TAbsBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
+    static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block,
+        bool isUnsigned, bool isFloat, const std::string& floatFunc)
     {
-        if (std::is_unsigned<TInput>())
+        if (isUnsigned)
             return arg;
 
-        if (std::is_floating_point<TInput>()) {
+        if (isFloat) {
             auto& module = ctx.Codegen.GetModule();
             const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
-            const auto& name = GetFuncNameForType<TInput>("llvm.fabs");
+            const auto& name = floatFunc;
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
             const auto res = CallInst::Create(fnType, func, {arg}, "fabs", block);
             return res;
@@ -50,6 +43,24 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
             const auto res = SelectInst::Create(check, neg, arg, "result", block);
             return res;
         }
+    }
+#endif
+};
+
+template<typename TInput, typename TOutput>
+struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput>>, public TAbsBase {
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
+
+    static TOutput Do(TInput val)
+    {
+        return Abs<TInput>(val);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        return GenImpl(arg, ctx, block, std::is_unsigned<TInput>(),
+            std::is_floating_point<TInput>(), GetFuncNameForType<TInput>("llvm.fabs"));
     }
 #endif
 };

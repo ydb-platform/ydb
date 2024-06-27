@@ -15,6 +15,12 @@ inline std::pair<ConstantInt*,  ConstantInt*> GenBounds(LLVMContext &context) {
     return std::make_pair(GenConstant(bounds.first, context), GenConstant(bounds.second, context));
 }
 
+template<bool IncLow = false, bool DecHigh = false>
+inline std::pair<ConstantInt*,  ConstantInt*> GenBounds(LLVMContext &context, ui8 precision) {
+    const auto& bounds = NYql::NDecimal::GetBounds<IncLow, DecHigh>(precision);
+    return std::make_pair(GenConstant(bounds.first, context), GenConstant(bounds.second, context));
+}
+
 template<bool IncludeBounds = false>
 Value* GenInBounds(Value* val, ConstantInt* low, ConstantInt* high, BasicBlock* block);
 

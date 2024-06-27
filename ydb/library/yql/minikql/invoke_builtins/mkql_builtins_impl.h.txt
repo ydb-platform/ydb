@@ -353,7 +353,7 @@ const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, 
 };
 
 template <typename TFunc, typename TArgs, typename TWrap>
-void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+Y_NO_INLINE void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
 #ifndef MKQL_DISABLE_CODEGEN
     const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
 #else
@@ -843,33 +843,14 @@ enum class EPropagateTz {
     FromRight
 };
 
-inline std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type) {
-    if (!addTz) {
-        return type;
-    }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields {
-        std::make_shared<arrow::Field>("datetime", type, false),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false)
-    };
-
-    return std::make_shared<arrow::StructType>(fields);
-}
-
-inline std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type) {
-    return AddTzType(propagateTz != EPropagateTz::None, type);
-}
-
+std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type);
+std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type);
 
 template <typename T>
-arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false) {
-    return arrow::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow::ValueDescr::ANY);
-}
+arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false);
 
 template <typename T>
-arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false) {
-    return arrow::compute::OutputType(AddTzType(tz, GetPrimitiveDataType<T>()));
-}
+arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false);
 
 template<typename TDerived>
 struct TUnaryKernelExecsBase {
@@ -906,126 +887,66 @@ struct TBinaryKernelExecsBase {
     }
 };
 
-inline std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value) {
-    if (!isTz) {
-        return value;
-    }
+std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value);
+std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value);
+std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
+    const std::shared_ptr<arrow::Scalar>& value);
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*value);
-    return structScalar.value[0];
-}
-
-inline std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value) {
-    if (!isTz) {
-        return value;
-    }
-
-    return value->child_data[0];
-}
-
-inline std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
-    const std::shared_ptr<arrow::Scalar>& value) {
-    if (!propagateTz) {
-        return value;
-    }
-
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input);
-    auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value, tzId}, input->type);
-}
-
-inline std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
+std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
     const std::shared_ptr<arrow::Scalar>& input1,
     const std::shared_ptr<arrow::Scalar>& input2,
-    const std::shared_ptr<arrow::Scalar>& value) {
-    if (propagateTz == EPropagateTz::None) {
-        return value;
-    }
+    const std::shared_ptr<arrow::Scalar>& value);
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(propagateTz == EPropagateTz::FromLeft ? *input1 : *input2);
-    const auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value,tzId}, propagateTz == EPropagateTz::FromLeft ? input1->type : input2->type);
-}
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool) {
-    if (!propagateTz) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    res->child_data.push_back(input->child_data[1]);
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::Scalar>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input1,
     const std::shared_ptr<arrow::Scalar>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        res->child_data.push_back(input1->child_data[1]);
-    } else {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input2);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
-        res->child_data.push_back(tzId);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::Scalar>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::Scalar>& input1,
     const std::shared_ptr<arrow::ArrayData>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input1);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
-        res->child_data.push_back(tzId);
-    } else {
-        res->child_data.push_back(input2->child_data[1]);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input1,
     const std::shared_ptr<arrow::ArrayData>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        res->child_data.push_back(input1->child_data[1]);
-    } else {
-        res->child_data.push_back(input2->child_data[1]);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
 
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
@@ -1285,7 +1206,7 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
 
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
-void AddUnaryKernel(TKernelFamilyBase& owner) {
+Y_NO_INLINE void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TInputLayout = typename TInput::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
 
@@ -1318,7 +1239,7 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
-void AddBinaryKernel(TKernelFamilyBase& owner) {
+Y_NO_INLINE void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TInput1Layout = typename TInput1::TLayout;
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
@@ -1356,7 +1277,7 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
-void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
+Y_NO_INLINE void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TInput1Layout = typename TInput1::TLayout;
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;

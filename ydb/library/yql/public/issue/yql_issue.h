@@ -118,8 +118,7 @@ public:
 
     TIssue() = default;
 
-    template <typename T>
-    explicit TIssue(const T& message)
+    explicit TIssue(const char* message)
         : Message(message)
         , Position(TPosition())
         , EndPosition(TPosition())
@@ -127,8 +126,23 @@ public:
         SanitizeNonAscii(Message);
     }
 
-    template <typename T>
-    TIssue(TPosition position, const T& message)
+    explicit TIssue(TStringBuf message)
+        : Message(message)
+        , Position(TPosition())
+        , EndPosition(TPosition())
+    {
+        SanitizeNonAscii(Message);
+    }
+
+    explicit TIssue(const TString& message)
+        : Message(message)
+        , Position(TPosition())
+        , EndPosition(TPosition())
+    {
+        SanitizeNonAscii(Message);
+    }    
+
+    TIssue(TPosition position, const char* message)
         : Message(message)
         , Position(position)
         , EndPosition(position)
@@ -136,18 +150,49 @@ public:
         SanitizeNonAscii(Message);
     }
 
+    TIssue(TPosition position, TStringBuf message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(position)
+    {
+        SanitizeNonAscii(Message);
+    }
+
+    TIssue(TPosition position, const TString& message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(position)
+    {
+        SanitizeNonAscii(Message);
+    }    
+
     inline TRange Range() const {
         return{ Position, EndPosition };
     }
 
-    template <typename T>
-    TIssue(TPosition position, TPosition endPosition, const T& message)
+    TIssue(TPosition position, TPosition endPosition, const char* message)
         : Message(message)
         , Position(position)
         , EndPosition(endPosition)
     {
         SanitizeNonAscii(Message);
     }
+
+    TIssue(TPosition position, TPosition endPosition, TStringBuf message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(endPosition)
+    {
+        SanitizeNonAscii(Message);
+    }
+
+    TIssue(TPosition position, TPosition endPosition, const TString& message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(endPosition)
+    {
+        SanitizeNonAscii(Message);
+    }    
 
     inline bool operator==(const TIssue& other) const {
         return Position == other.Position && Message == other.Message

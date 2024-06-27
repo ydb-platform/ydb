@@ -5,18 +5,10 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TRotRight : public TShiftArithmeticBinary<TInput, TOutput, TRotRight<TInput, TOutput>> {
-    static TOutput Do(TInput arg, ui8 bits)
-    {
-        bits %= (sizeof(arg) * CHAR_BIT);
-        return bits ? ((arg >> bits) | (arg << (sizeof(arg) * CHAR_BIT - bits))) : arg;
-    }
-
+struct TRotRightBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block)
-    {
-        const auto maxb = ConstantInt::get(arg->getType(), sizeof(TInput) * CHAR_BIT);
+    static Value* GenImpl(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block, size_t sizeOf) {
+        const auto maxb = ConstantInt::get(arg->getType(), sizeOf * CHAR_BIT);
         const auto zext = arg->getType() == bits->getType() ? bits : new ZExtInst(bits, arg->getType(), "zext", block);
         const auto rem = BinaryOperator::CreateURem(zext, maxb, "rem", block);
         const auto lshr = BinaryOperator::CreateLShr(arg, rem, "lshr", block);
@@ -24,6 +16,20 @@ struct TRotRight : public TShiftArithmeticBinary<TInput, TOutput, TRotRight<TInp
         const auto shl = BinaryOperator::CreateShl(arg, sub, "shl", block);
         const auto res = BinaryOperator::CreateOr(shl, lshr, "res", block);
         return res;
+    }
+#endif
+};
+
+template<typename TInput, typename TOutput>
+struct TRotRight : public TShiftArithmeticBinary<TInput, TOutput, TRotRight<TInput, TOutput>>, public TRotRightBase {
+    static TOutput Do(TInput arg, ui8 bits) {
+        bits %= (sizeof(arg) * CHAR_BIT);
+        return bits ? ((arg >> bits) | (arg << (sizeof(arg) * CHAR_BIT - bits))) : arg;
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Gen(Value* arg, Value* bits, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenImpl(arg, bits, ctx, block, sizeof(TInput));
     }
 #endif
 };

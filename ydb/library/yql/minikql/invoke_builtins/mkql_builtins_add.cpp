@@ -9,8 +9,17 @@ namespace NMiniKQL {
 
 namespace {
 
+struct TAddBase {
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* GenImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, bool isIntegral) {
+        Y_UNUSED(ctx);
+        return isIntegral ? BinaryOperator::CreateAdd(left, right, "add", block) : BinaryOperator::CreateFAdd(left, right, "add", block);
+    }
+#endif
+};
+
 template<typename TLeft, typename TRight, typename TOutput>
-struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft, TRight, TOutput>> {
+struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft, TRight, TOutput>>, public TAddBase {
     static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TOutput left, TOutput right)
@@ -19,9 +28,8 @@ struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft,
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
-    {
-        return std::is_integral<TOutput>() ? BinaryOperator::CreateAdd(left, right, "add", block) : BinaryOperator::CreateFAdd(left, right, "add", block);
+    static Value* Gen(Value* left, Value* right, const TCodegenContext& context, BasicBlock*& block) {
+        return GenImpl(left, right, context, block, std::is_integral<TOutput>());
     }
 #endif
 };
@@ -29,16 +37,15 @@ struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft,
 template<typename TType>
 using TAggrAdd = TAdd<TType, TType, TType>;
 
-template<ui8 Precision>
-struct TDecimalAdd {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+struct TDecimalAddBase {
+    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right, ui8 precision) {
         const auto l = left.GetInt128();
         const auto r = right.GetInt128();
         const auto a = l + r;
 
         using namespace NYql::NDecimal;
 
-        if (IsNormal<Precision>(l) && IsNormal<Precision>(r) && IsNormal<Precision>(a))
+        if (IsNormal(l, precision) && IsNormal(r, precision) && IsNormal(a, precision))
             return NUdf::TUnboxedValuePod(a);
         if (IsNan(l) || IsNan(r) || !a)
             return NUdf::TUnboxedValuePod(Nan());
@@ -47,10 +54,10 @@ struct TDecimalAdd {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto& bounds = NDecimal::GenBounds<Precision>(context);
+        const auto& bounds = NDecimal::GenBounds(context, precision);
 
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
@@ -93,11 +100,55 @@ struct TDecimalAdd {
         return SetterForInt128(result, block);
     }
 #endif
+};
+
+template<ui8 Precision>
+struct TDecimalAdd : public TDecimalAddBase {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return ExecuteImpl(left, right, Precision);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(left, right, ctx, block, Precision);
+    }
+#endif
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
+struct TDateTimeAddTBase {
+#ifndef MKQL_DISABLE_CODEGEN
+    template <typename T>
+    static Value* ToScaled(Value* value, LLVMContext &context, BasicBlock*& block) {
+        return GenToScaledDate<T>(GetterFor<typename T::TLayout>(value, context, block), context, block);
+    }
+
+    template <typename T>
+    static Value* FromScaled(Value* value, LLVMContext &context, BasicBlock*& block) {
+        return SetterFor<typename T::TLayout>(GenFromScaledDate<T>(value, context, block), context, block);
+    }
+
+    static Value* HandleTz(Value* wide, Value* left, Value* right, Value* bad,
+        LLVMContext &context, BasicBlock*& block, bool tz, bool isLeftInterval) {
+        const auto type = Type::getInt128Ty(context);
+        const auto zero = ConstantInt::get(type, 0);
+        if (tz) {
+            const uint64_t init[] = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
+            const auto tzid = BinaryOperator::CreateAnd(isLeftInterval ? right : left, mask, "tzid",  block);
+            const auto full = BinaryOperator::CreateOr(wide, tzid, "full",  block);
+            const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
+            return sel;
+        } else {
+            const auto sel = SelectInst::Create(bad, zero, wide, "sel", block);
+            return sel;
+        }
+    }
+#endif
+};
+
 template<typename TLeft, typename TRight, typename TOutput, bool Tz = false>
-struct TDateTimeAddT {
+struct TDateTimeAddT: public TDateTimeAddTBase {
     static_assert(std::is_integral<typename TLeft::TLayout>::value, "left must be integral");
     static_assert(std::is_integral<typename TRight::TLayout>::value, "right must be integral");
     static_assert(std::is_integral<typename TOutput::TLayout>::value, "output must be integral");
@@ -124,39 +175,20 @@ struct TDateTimeAddT {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lhs = GenToScaledDate<TLeft>(GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
-        const auto rhs = GenToScaledDate<TRight>(GetterFor<typename TRight::TLayout>(right, context, block), context, block);
+        const auto lhs = ToScaled<TLeft>(left, context, block);
+        const auto rhs = ToScaled<TRight>(left, context, block);
         const auto add = BinaryOperator::CreateAdd(lhs, rhs, "add", block);
-        const auto wide = SetterFor<typename TOutput::TLayout>(GenFromScaledDate<TOutput>(add, context, block), context, block);
+        const auto wide = FromScaled<TOutput>(add, context, block);
         const auto bad = GenIsBadScaledDate<TOutput>(add, context, block);
-        const auto type = Type::getInt128Ty(context);
-        const auto zero = ConstantInt::get(type, 0);
-
-        if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(type, APInt(128, 2, init));
-            const auto tzid = BinaryOperator::CreateAnd((std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() || std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>()) ? right : left, mask, "tzid",  block);
-            const auto full = BinaryOperator::CreateOr(wide, tzid, "full",  block);
-            const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
-            return sel;
-        } else {
-            const auto sel = SelectInst::Create(bad, zero, wide, "sel", block);
-            return sel;
-        }
-
+        return HandleTz(wide, left, right, bad, context, block, Tz,
+            std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval>>() ||
+                std::is_same<TLeft, NUdf::TDataType<NUdf::TInterval64>>());
     }
 #endif
 };
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TBigIntervalAdd {
-    static_assert(std::is_same_v<typename TLeft::TLayout, i64>, "Left must be i64");
-    static_assert(std::is_same_v<typename TRight::TLayout, i64>, "Right must be i64");
-    static_assert(std::is_same_v<typename TOutput::TLayout, i64>, "Output must be i64");
-
-    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
-
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
+struct TBigIntervalAddBase {
+    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         i64 lv = left.Get<i64>();
         i64 rv = right.Get<i64>();
@@ -173,7 +205,7 @@ struct TBigIntervalAdd {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<i64>(left, context, block);
@@ -198,6 +230,25 @@ struct TBigIntervalAdd {
         const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
         const auto sel = SelectInst::Create(bad, zero, wide, "sel", block);
         return sel;
+    }
+#endif
+};
+
+template<typename TLeft, typename TRight, typename TOutput>
+struct TBigIntervalAdd : public TBigIntervalAddBase {
+    static_assert(std::is_same_v<typename TLeft::TLayout, i64>, "Left must be i64");
+    static_assert(std::is_same_v<typename TRight::TLayout, i64>, "Right must be i64");
+    static_assert(std::is_same_v<typename TOutput::TLayout, i64>, "Output must be i64");
+
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
+
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return ExecuteImpl(left, right);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(left, right, ctx, block);
     }
 #endif
 };

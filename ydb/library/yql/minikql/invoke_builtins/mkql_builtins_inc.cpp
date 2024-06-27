@@ -5,31 +5,36 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>> {
-    static TOutput Do(TInput val)
-    {
-        return ++val;
-    }
-
+struct TIncrementBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
-    {
-        return std::is_integral<TOutput>() ?
+    static Value* GenImpl(Value* arg, const TCodegenContext&, BasicBlock*& block, bool isIntegral) {
+        return isIntegral ?
             BinaryOperator::CreateAdd(arg, ConstantInt::get(arg->getType(), 1), "inc", block):
             BinaryOperator::CreateFAdd(arg, ConstantFP::get(arg->getType(), 1.0), "inc", block);
     }
 #endif
 };
 
-template <ui8 Precision>
-struct TDecimalInc {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
+template<typename TInput, typename TOutput>
+struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>>, public TIncrementBase {
+    static TOutput Do(TInput val) {
+        return ++val;
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenImpl(arg, ctx, block, std::is_integral<TOutput>());
+    }
+#endif
+};
+
+struct TDecimalIncBase {
+    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 precision) {
         auto v = arg.GetInt128();
 
         using namespace NYql::NDecimal;
 
-        const auto& bounds = GetBounds<Precision, false, true>();
+        const auto& bounds = GetBounds<false, true>(precision);
 
         if (v > bounds.first && v < bounds.second)
             return NUdf::TUnboxedValuePod(++v);
@@ -38,10 +43,9 @@ struct TDecimalInc {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision) {
         auto& context = ctx.Codegen.GetContext();
-        const auto& bounds = NDecimal::GenBounds<Precision, false, true>(context);
+        const auto& bounds = NDecimal::GenBounds<false, true>(context, precision);
 
         const auto val = GetterForInt128(arg, block);
         const auto add = BinaryOperator::CreateAdd(val, ConstantInt::get(val->getType(), 1), "add", block);
@@ -57,6 +61,19 @@ struct TDecimalInc {
         const auto bad = SelectInst::Create(nan, GetDecimalNan(context), inf, "bad", block);
         const auto inc = SelectInst::Create(good, add, bad, "inc", block);
         return SetterForInt128(inc, block);
+    }
+#endif
+};
+
+template <ui8 Precision>
+struct TDecimalInc : public TDecimalIncBase {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
+        return ExecuteImpl(arg, Precision);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(arg, ctx, block, Precision);
     }
 #endif
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");

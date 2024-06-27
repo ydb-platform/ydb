@@ -1,5 +1,7 @@
 #include "yql_decimal.h"
 
+#include <util/generic/yexception.h>
+
 #include <cstring>
 #include <ostream>
 #include <string>
@@ -8,12 +10,48 @@ namespace NYql {
 namespace NDecimal {
 
 static const TUint128 Ten(10U);
+static const TUint128 Dividers[MaxPrecision + 1] = {
+    TDivider<0>::Value,
+    TDivider<1>::Value,
+    TDivider<2>::Value,
+    TDivider<3>::Value,
+    TDivider<4>::Value,
+    TDivider<5>::Value,
+    TDivider<6>::Value,
+    TDivider<7>::Value,
+    TDivider<8>::Value,
+    TDivider<9>::Value,
+    TDivider<10>::Value,
+    TDivider<11>::Value,
+    TDivider<12>::Value,
+    TDivider<13>::Value,
+    TDivider<14>::Value,
+    TDivider<15>::Value,
+    TDivider<16>::Value,
+    TDivider<17>::Value,
+    TDivider<18>::Value,
+    TDivider<19>::Value,
+    TDivider<20>::Value,
+    TDivider<21>::Value,
+    TDivider<22>::Value,
+    TDivider<23>::Value,
+    TDivider<24>::Value,
+    TDivider<25>::Value,
+    TDivider<26>::Value,
+    TDivider<27>::Value,
+    TDivider<28>::Value,
+    TDivider<29>::Value,
+    TDivider<30>::Value,
+    TDivider<31>::Value,
+    TDivider<32>::Value,
+    TDivider<33>::Value,
+    TDivider<34>::Value,
+    TDivider<35>::Value,
+};
 
 TUint128 GetDivider(ui8 scale) {
-    TUint128 d(1U);
-    while (scale--)
-        d *= Ten;
-    return d;
+    Y_ENSURE(scale <= MaxPrecision);
+    return Dividers[scale];
 }
 
 bool IsError(TInt128 v) {

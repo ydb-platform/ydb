@@ -8,14 +8,12 @@ namespace {
 
 template <typename TLeft, typename TRight, typename TOutput>
 struct TConcat {
-    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right)
-    {
+    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right) {
         return ConcatStrings(std::move(left), std::move(right));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         return CallBinaryUnboxedValueFunction(&ConcatStrings, Type::getInt128Ty(ctx.Codegen.GetContext()), left, right, ctx.Codegen, block);
     }
 #endif

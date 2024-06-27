@@ -60,6 +60,11 @@ inline constexpr std::pair<TInt128, TInt128> GetBounds() {
     return std::make_pair(-GetDivider<Precision>() + (IncLow ? 1 : 0), +GetDivider<Precision>() - (DecHigh ? 1 : 0));
 }
 
+template<bool IncLow = false, bool DecHigh = false>
+inline std::pair<TInt128, TInt128> GetBounds(ui8 precision) {
+    return std::make_pair(-GetDivider(precision) + (IncLow ? 1 : 0), +GetDivider(precision) - (DecHigh ? 1 : 0));
+}
+
 bool IsError(TInt128 v);
 bool IsNan(TInt128 v);
 bool IsInf(TInt128 v);
@@ -70,6 +75,11 @@ bool IsComparable(TInt128 v);
 template<ui8 Precision>
 inline bool IsNormal(TInt128 v) {
     const auto& b = GetBounds<Precision>();
+    return v > b.first && v < b.second;
+}
+
+inline bool IsNormal(TInt128 v, ui8 precision) {
+    const auto& b = GetBounds(precision);
     return v > b.first && v < b.second;
 }
 

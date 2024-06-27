@@ -18,11 +18,8 @@ const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] 
     { 0, 0 }
 };
 
-
-template <typename TInput, typename TOutput>
-struct TByteAt {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
-    {
+struct TByteAtBase {
+    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto& buffer = left.AsStringRef();
         const auto index = right.Get<ui32>();
         if (index >= buffer.Size()) {
@@ -33,8 +30,7 @@ struct TByteAt {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
         const auto type = Type::getInt8Ty(context);
         const auto embType = FixedVectorType::get(type, 16);
@@ -100,6 +96,19 @@ struct TByteAt {
 
         block = done;
         return result;
+    }
+#endif
+};
+
+template <typename TInput, typename TOutput>
+struct TByteAt : public TByteAtBase {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return ExecuteImpl(left, right);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(left, right, ctx, block);
     }
 #endif
 };

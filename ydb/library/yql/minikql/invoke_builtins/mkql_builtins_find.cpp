@@ -13,24 +13,15 @@ NUdf::TUnboxedValuePod Find(const NUdf::TUnboxedValuePod haystack, const NUdf::T
     return std::string_view::npos == f ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ui32(f));
 }
 
-template <bool PosOptional, bool Reverse>
-struct TFind {
-    static constexpr std::string_view::size_type DefaultPos = Reverse ? std::string_view::npos : 0;
-
-    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod sub, NUdf::TUnboxedValuePod pos)
-    {
-        return Find<Reverse>(string, sub, PosOptional && !pos ? DefaultPos : std::string_view::size_type(pos.Get<ui32>()));
-    }
-
+struct TFindBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* GenerateImpl(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block, bool posOptional, bool defaultPos, uintptr_t methodPtr) {
         auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(Find<Reverse>));
-        const auto pos = PosOptional ?
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
+        const auto pos = posOptional ?
             SelectInst::Create(
                 IsEmpty(p, block),
-                ConstantInt::get(GetTypeFor<std::string_view::size_type>(context), DefaultPos),
+                ConstantInt::get(GetTypeFor<std::string_view::size_type>(context), defaultPos),
                 StaticCast<ui32, std::string_view::size_type>(GetterFor<ui32>(p, context, block), context, block),
             "pos", block):
             StaticCast<ui32, std::string_view::size_type>(GetterFor<ui32>(p, context, block), context, block);
@@ -51,6 +42,21 @@ struct TFind {
             const auto result = new LoadInst(string->getType(), ptrResult, "find", block);
             return result;
         }
+    }
+#endif
+};
+
+template <bool PosOptional, bool Reverse>
+struct TFind: public TFindBase {
+    static constexpr std::string_view::size_type DefaultPos = Reverse ? std::string_view::npos : 0;
+
+    static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod sub, NUdf::TUnboxedValuePod pos) {
+        return Find<Reverse>(string, sub, PosOptional && !pos ? DefaultPos : std::string_view::size_type(pos.Get<ui32>()));
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateImpl(string, sub, p, ctx, block, PosOptional, DefaultPos, GetMethodPtr(Find<Reverse>));
     }
 #endif
 };

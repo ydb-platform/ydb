@@ -35,14 +35,12 @@ NUdf::TUnboxedValuePod Inverse(NUdf::TUnboxedValuePod arg) {
 
 template <typename TInput, typename TOutput>
 struct TInversePresortString {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
-    {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return Presort(arg);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block) {
         return CallUnaryUnboxedValueFunction(&Presort, Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
     }
 #endif
@@ -50,14 +48,12 @@ struct TInversePresortString {
 
 template <typename TInput, typename TOutput>
 struct TInverseString {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
-    {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return Inverse(arg);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block) {
         return CallUnaryUnboxedValueFunction(&Inverse, Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
     }
 #endif

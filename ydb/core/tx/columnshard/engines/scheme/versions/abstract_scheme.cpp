@@ -188,14 +188,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
         auto defaultValue = GetDefaultWriteValueVerified(i->name());
-        if (!defaultValue) {
-            if (!GetIndexInfo().IsNullableVerified(i->name())) {
-                return TConclusionStatus::Fail("not nullable field withno default: " + i->name());
-            }
-            columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetNull(i->type(), rowsCount));
-        } else {
-            columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(i->type(), defaultValue, rowsCount));
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+            return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
+        columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, rowsCount));
     }
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
 }
@@ -219,20 +215,14 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(con
             continue;
         }
         auto defaultValue = GetDefaultWriteValueVerified(i->name());
-        std::shared_ptr<arrow::Array> column;
-        if (!defaultValue) {
-            if (!GetIndexInfo().IsNullableVerified(i->name())) {
-                if (!force) {
-                    return TConclusionStatus::Fail("not nullable field withno default: " + i->name());
-                }
-                defaultValue = NArrow::DefaultScalar(i->type());
-                column = NArrow::TThreadSimpleArraysCache::GetConst(i->type(), defaultValue, batch->num_rows());
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+            if (!force) {
+                return TConclusionStatus::Fail("not nullable field withno default: " + i->name());
             } else {
-                column = NArrow::TThreadSimpleArraysCache::GetNull(i->type(), batch->num_rows());
+                defaultValue = NArrow::DefaultScalar(i->type());
             }
-        } else {
-            column = NArrow::TThreadSimpleArraysCache::GetConst(i->type(), defaultValue, batch->num_rows());
         }
+        std::shared_ptr<arrow::Array> column = NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, batch->num_rows());
         result = NArrow::TStatusValidator::GetValid(result->AddColumn(result->num_columns(), i->name(), column));
     }
     return result;

@@ -63,43 +63,43 @@ std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::Build
         filter = shardingActual->GetShardingInfo()->GetFilter(batch);
     }
     NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
-    if (auto col = batch->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG)) {
-        auto pkSchema = resultSchema->GetIndexInfo().GetReplaceKey();
+    if (pInfo.GetMeta().GetDeletionsCount()) {
+        auto col = batch->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
+        AFL_VERIFY(col);
         AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
         auto bCol = static_pointer_cast<arrow::BooleanArray>(col);
         for (ui32 i = 0; i < bCol->length(); ++i) {
             filterDeleted.Add(!bCol->GetView(i));
         }
-        if (!filterDeleted.IsTotalAllowFilter()) {
-            NArrow::TColumnFilter filterCorrection = NArrow::TColumnFilter::BuildDenyFilter();
-            NArrow::NMerger::TRWSortableBatchPosition pos(batch, 0, pkSchema->field_names(), {}, false);
-            ui32 posCurrent = 0;
-            auto excludedIntervalsInfo = GranuleMeta->GetPortionsIndex().GetIntervalFeatures(pInfo, portionsInUsage);
-            for (auto&& i : excludedIntervalsInfo.GetExcludedIntervals()) {
-                NArrow::NMerger::TSortableBatchPosition startForFound(i.GetStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
-                NArrow::NMerger::TSortableBatchPosition finishForFound(i.GetFinish().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
-                auto foundStart = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, startForFound, true);
-                AFL_VERIFY(foundStart);
-                AFL_VERIFY(!foundStart->IsLess())("pos", pos.DebugJson())("start", startForFound.DebugJson())("found", foundStart->DebugString());
-                auto foundFinish = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, finishForFound, false);
-                AFL_VERIFY(foundFinish);
-                AFL_VERIFY(foundFinish->GetPosition() >= foundStart->GetPosition());
-                if (foundFinish->GetPosition() > foundStart->GetPosition()) {
-                    AFL_VERIFY(!foundFinish->IsGreater())("pos", pos.DebugJson())("finish", finishForFound.DebugJson())("found", foundFinish->DebugString());
-                }
-                filterCorrection.Add(foundStart->GetPosition() - posCurrent, false);
-                if (foundFinish->IsGreater()) {
-                    filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition(), true);
-                    posCurrent = foundFinish->GetPosition();
-                } else {
-                    filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition() + 1, true);
-                    posCurrent = foundFinish->GetPosition() + 1;
-                }
+        NArrow::TColumnFilter filterCorrection = NArrow::TColumnFilter::BuildDenyFilter();
+        auto pkSchema = resultSchema->GetIndexInfo().GetReplaceKey();
+        NArrow::NMerger::TRWSortableBatchPosition pos(batch, 0, pkSchema->field_names(), {}, false);
+        ui32 posCurrent = 0;
+        auto excludedIntervalsInfo = GranuleMeta->GetPortionsIndex().GetIntervalFeatures(pInfo, portionsInUsage);
+        for (auto&& i : excludedIntervalsInfo.GetExcludedIntervals()) {
+            NArrow::NMerger::TSortableBatchPosition startForFound(i.GetStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition finishForFound(i.GetFinish().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            auto foundStart = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, startForFound, true);
+            AFL_VERIFY(foundStart);
+            AFL_VERIFY(!foundStart->IsLess())("pos", pos.DebugJson())("start", startForFound.DebugJson())("found", foundStart->DebugString());
+            auto foundFinish = NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, finishForFound, false);
+            AFL_VERIFY(foundFinish);
+            AFL_VERIFY(foundFinish->GetPosition() >= foundStart->GetPosition());
+            if (foundFinish->GetPosition() > foundStart->GetPosition()) {
+                AFL_VERIFY(!foundFinish->IsGreater())("pos", pos.DebugJson())("finish", finishForFound.DebugJson())("found", foundFinish->DebugString());
             }
-            AFL_VERIFY(filterCorrection.Size() <= batch->num_rows());
-            filterCorrection.Add(false, batch->num_rows() - filterCorrection.Size());
-            filterDeleted = filterDeleted.Or(filterCorrection);
+            filterCorrection.Add(foundStart->GetPosition() - posCurrent, false);
+            if (foundFinish->IsGreater()) {
+                filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition(), true);
+                posCurrent = foundFinish->GetPosition();
+            } else {
+                filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition() + 1, true);
+                posCurrent = foundFinish->GetPosition() + 1;
+            }
         }
+        AFL_VERIFY(filterCorrection.Size() <= batch->num_rows());
+        filterCorrection.Add(false, batch->num_rows() - filterCorrection.Size());
+        filterDeleted = filterDeleted.Or(filterCorrection);
     }
     if (filter) {
         *filter = filter->And(filterDeleted);
@@ -180,12 +180,11 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             if (!p.ExtractColumnChunks(columnId, records, chunks)) {
                 if (!loader) {
                     loader = resultSchema->GetColumnLoaderVerified(columnId);
-                    chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, nullptr, resultSchema->GetColumnSaver(columnId)));
                 } else {
                     AFL_VERIFY(dataSchema->IsSpecialColumnId(columnId));
-                    chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, dataSchema->GetDefaultReadValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
                 }
-                records = {nullptr};
+                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetDefaultReadValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
+                records = { nullptr };
             }
             AFL_VERIFY(!!loader);
             cursors.emplace_back(TPortionColumnCursor(chunks, records, loader, p.GetPortionInfo().GetPortionId()));

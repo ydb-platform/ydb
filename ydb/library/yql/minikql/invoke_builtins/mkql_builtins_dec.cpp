@@ -7,7 +7,7 @@ namespace {
 
 struct TDecrementBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* arg, const TCodegenContext&, BasicBlock*& block, bool isIntegral) {
+    Y_NO_INLINE static Value* GenImpl(Value* arg, const TCodegenContext&, BasicBlock*& block, bool isIntegral) {
         return isIntegral ?
             BinaryOperator::CreateSub(arg, ConstantInt::get(arg->getType(), 1), "dec", block):
             BinaryOperator::CreateFSub(arg, ConstantFP::get(arg->getType(), 1.0), "dec", block);
@@ -30,7 +30,7 @@ struct TDecrement : public TSimpleArithmeticUnary<TInput, TOutput, TDecrement<TI
 };
 
 struct TDecimalDecBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 precision) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 precision) {
         auto v = arg.GetInt128();
 
         using namespace NYql::NDecimal;
@@ -44,7 +44,7 @@ struct TDecimalDecBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision) {
         auto& context = ctx.Codegen.GetContext();
         const auto& bounds = NDecimal::GenBounds<true, false>(context, precision);
 

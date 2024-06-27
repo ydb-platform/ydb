@@ -20,7 +20,7 @@ NUdf::TUnboxedValuePod StringContains(const NUdf::TUnboxedValuePod full, const N
 
 struct TStringWithBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block, uintptr_t methodPtr) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* string, Value* sub, const TCodegenContext& ctx, BasicBlock*& block, uintptr_t methodPtr) {
         auto& context = ctx.Codegen.GetContext();
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {

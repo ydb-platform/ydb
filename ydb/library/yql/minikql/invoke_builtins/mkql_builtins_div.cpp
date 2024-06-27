@@ -29,7 +29,7 @@ struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft,
 
 struct TIntegralDivBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* lv, Value* rv, const TCodegenContext& ctx, BasicBlock*& block,
+    Y_NO_INLINE static Value* GenerateImpl(Value* lv, Value* rv, const TCodegenContext& ctx, BasicBlock*& block,
         bool isSignedOutput, bool maySignOverflow, Value* minValue, TSetterFor outputSetter) {
         auto& context = ctx.Codegen.GetContext();
         const auto type = Type::getInt128Ty(context);

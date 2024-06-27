@@ -353,7 +353,7 @@ const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, 
 };
 
 template <typename TFunc, typename TArgs, typename TWrap>
-Y_NO_INLINE void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
 #ifndef MKQL_DISABLE_CODEGEN
     const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
 #else
@@ -1206,7 +1206,7 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
 
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
-Y_NO_INLINE void AddUnaryKernel(TKernelFamilyBase& owner) {
+void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TInputLayout = typename TInput::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
 
@@ -1239,7 +1239,7 @@ Y_NO_INLINE void AddUnaryKernel(TKernelFamilyBase& owner) {
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
-Y_NO_INLINE void AddBinaryKernel(TKernelFamilyBase& owner) {
+void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TInput1Layout = typename TInput1::TLayout;
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
@@ -1277,7 +1277,7 @@ Y_NO_INLINE void AddBinaryKernel(TKernelFamilyBase& owner) {
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
-Y_NO_INLINE void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
+void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TInput1Layout = typename TInput1::TLayout;
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;

@@ -8,7 +8,7 @@ namespace {
 
 struct TSubStringBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block,
+    Y_NO_INLINE static Value* GenerateImpl(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block,
         bool startOptional, bool countOptional)
     {
         auto& context = ctx.Codegen.GetContext();

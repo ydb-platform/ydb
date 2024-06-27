@@ -19,7 +19,7 @@ const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] 
 };
 
 struct TByteAtBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto& buffer = left.AsStringRef();
         const auto index = right.Get<ui32>();
         if (index >= buffer.Size()) {
@@ -30,7 +30,7 @@ struct TByteAtBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
         const auto type = Type::getInt8Ty(context);
         const auto embType = FixedVectorType::get(type, 16);

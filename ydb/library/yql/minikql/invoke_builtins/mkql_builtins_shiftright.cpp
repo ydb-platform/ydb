@@ -7,7 +7,7 @@ namespace {
 
 struct TShiftRightBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block, size_t sizeOf) {
+    Y_NO_INLINE static Value* GenImpl(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block, size_t sizeOf) {
         const auto zero = ConstantInt::get(arg->getType(), 0);
         const auto maxb = ConstantInt::get(bits->getType(), sizeOf * CHAR_BIT);
         const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, bits, maxb, "check", block);

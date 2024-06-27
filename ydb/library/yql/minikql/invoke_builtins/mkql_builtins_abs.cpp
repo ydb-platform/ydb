@@ -23,7 +23,7 @@ inline T Abs(T v) {
 
 struct TAbsBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block,
+    Y_NO_INLINE static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block,
         bool isUnsigned, bool isFloat, const std::string& floatFunc)
     {
         if (isUnsigned)

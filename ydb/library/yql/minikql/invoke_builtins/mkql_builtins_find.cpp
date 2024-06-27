@@ -15,7 +15,7 @@ NUdf::TUnboxedValuePod Find(const NUdf::TUnboxedValuePod haystack, const NUdf::T
 
 struct TFindBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block, bool posOptional, bool defaultPos, uintptr_t methodPtr) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block, bool posOptional, bool defaultPos, uintptr_t methodPtr) {
         auto& context = ctx.Codegen.GetContext();
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
         const auto pos = posOptional ?

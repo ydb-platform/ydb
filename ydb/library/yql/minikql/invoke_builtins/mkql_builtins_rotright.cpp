@@ -7,7 +7,7 @@ namespace {
 
 struct TRotRightBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block, size_t sizeOf) {
+    Y_NO_INLINE static Value* GenImpl(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block, size_t sizeOf) {
         const auto maxb = ConstantInt::get(arg->getType(), sizeOf * CHAR_BIT);
         const auto zext = arg->getType() == bits->getType() ? bits : new ZExtInst(bits, arg->getType(), "zext", block);
         const auto rem = BinaryOperator::CreateURem(zext, maxb, "rem", block);

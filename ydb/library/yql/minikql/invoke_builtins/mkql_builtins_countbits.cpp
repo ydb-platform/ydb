@@ -9,7 +9,7 @@ namespace {
 
 struct TCountBitsBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, const std::string& funcName) {
+    Y_NO_INLINE static Value* GenImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, const std::string& funcName) {
         auto& module = ctx.Codegen.GetModule();
         const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
         const auto& name = funcName;

@@ -11,7 +11,7 @@ namespace {
 
 struct TAddBase {
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, bool isIntegral) {
+    Y_NO_INLINE static Value* GenImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, bool isIntegral) {
         Y_UNUSED(ctx);
         return isIntegral ? BinaryOperator::CreateAdd(left, right, "add", block) : BinaryOperator::CreateFAdd(left, right, "add", block);
     }
@@ -38,7 +38,7 @@ template<typename TType>
 using TAggrAdd = TAdd<TType, TType, TType>;
 
 struct TDecimalAddBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right, ui8 precision) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right, ui8 precision) {
         const auto l = left.GetInt128();
         const auto r = right.GetInt128();
         const auto a = l + r;
@@ -54,7 +54,7 @@ struct TDecimalAddBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision)
+    Y_NO_INLINE static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision)
     {
         auto& context = ctx.Codegen.GetContext();
         const auto& bounds = NDecimal::GenBounds(context, precision);
@@ -188,7 +188,7 @@ struct TDateTimeAddT: public TDateTimeAddTBase {
 };
 
 struct TBigIntervalAddBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         i64 lv = left.Get<i64>();
         i64 rv = right.Get<i64>();
@@ -205,7 +205,7 @@ struct TBigIntervalAddBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    Y_NO_INLINE static Value* GenerateImpl(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<i64>(left, context, block);

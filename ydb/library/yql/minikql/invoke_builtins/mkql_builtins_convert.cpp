@@ -715,7 +715,7 @@ void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* 
 
 template <typename TOutput>
 struct TToFPBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
         const auto v = arg.GetInt128();
         if (v == +NYql::NDecimal::Inf())
             return NUdf::TUnboxedValuePod(+std::numeric_limits<TOutput>::infinity());
@@ -730,7 +730,7 @@ struct TToFPBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
         auto& context = ctx.Codegen.GetContext();
 
         const auto outputType = GetTypeFor<TOutput>(context);
@@ -798,12 +798,12 @@ template <ui8 Scale> using TToFloat = TToFP<float, Scale>;
 template <ui8 Scale> using TToDouble = TToFP<double, Scale>;
 
 struct TScaleUpBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
         return NUdf::TUnboxedValuePod(NYql::NDecimal::Mul(arg.GetInt128(), NYql::NDecimal::GetDivider(scale)));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto mul = BinaryOperator::CreateMul(val, GenConstant(NYql::NDecimal::GetDivider(scale), context), "mul", block);
@@ -828,12 +828,12 @@ struct TScaleUp : public TScaleUpBase {
 };
 
 struct TScaleDownBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 scale) {
         return NUdf::TUnboxedValuePod(NYql::NDecimal::Div(arg.GetInt128(), NYql::NDecimal::GetDivider(scale)));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 scale) {
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto divider = GenConstant(NYql::NDecimal::GetDivider(scale) >> 1, context);
@@ -890,7 +890,7 @@ struct TScaleDown : public TScaleDownBase {
 };
 
 struct TCheckBoundsBase {
-    static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 precision) {
+    Y_NO_INLINE static NUdf::TUnboxedValuePod ExecuteImpl(const NUdf::TUnboxedValuePod& arg, ui8 precision) {
         const auto v = arg.GetInt128();
 
         using namespace NYql::NDecimal;
@@ -902,7 +902,7 @@ struct TCheckBoundsBase {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision) {
+    Y_NO_INLINE static Value* GenerateImpl(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, ui8 precision) {
         auto& context = ctx.Codegen.GetContext();
 
         const auto val = GetterForInt128(arg, block);

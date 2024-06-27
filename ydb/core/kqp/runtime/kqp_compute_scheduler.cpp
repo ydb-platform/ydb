@@ -147,7 +147,7 @@ public:
         if (limit > tracked) {
             return {};
         } else {
-            return TDuration::MicroSeconds(Group->Delayed) + ToDuration((tracked - limit) / group.get()->Weight);
+            return ToDuration((tracked - limit + Group->Delayed + group.get()->MaxLimitDeviation) / group.get()->Weight);
         }
     }
 

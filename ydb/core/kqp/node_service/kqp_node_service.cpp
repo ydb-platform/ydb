@@ -76,8 +76,8 @@ public:
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
         }
-        if (config.HasComputePoolsConfiguration()) {
-            SetPriorities(config.GetComputePoolsConfiguration());
+        if (config.HasPoolsConfiguration()) {
+            SetPriorities(config.GetPoolsConfiguration());
         }
         Scheduler.ReportCounters(counters);
     }
@@ -399,8 +399,8 @@ private:
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
         }
 
-        if (event.GetConfig().GetTableServiceConfig().HasComputePoolsConfiguration()) {
-            SetPriorities(event.GetConfig().GetTableServiceConfig().GetComputePoolsConfiguration());
+        if (event.GetConfig().GetTableServiceConfig().HasPoolsConfiguration()) {
+            SetPriorities(event.GetConfig().GetTableServiceConfig().GetPoolsConfiguration());
         }
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);

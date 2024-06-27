@@ -243,10 +243,10 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             for (TTabletInfo* tablet : nodeTablets) {
+                tablet->UpdateWeight();
                 if (tablet->IsGoodForBalancer(now) && 
                     (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
-                    tablet->HasAllowedMetric(Settings.ResourceToBalance)) {
-                    tablet->UpdateWeight();
+                    tablet->HasMetric(Settings.ResourceToBalance)) {
                     tablets.emplace_back(tablet);
                 }
             }

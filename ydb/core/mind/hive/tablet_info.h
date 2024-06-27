@@ -229,6 +229,7 @@ public:
     const TVector<i64>& GetTabletAllowedMetricIds() const;
     static bool HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource);
     bool HasAllowedMetric(EResourceToBalance resource) const;
+    bool HasMetric(EResourceToBalance resource) const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
     TResourceRawValues GetResourceCurrentValues() const;

@@ -74,11 +74,14 @@ public:
             }
         }
 
+        YQL_ENSURE(RequestEv->HasAction());
+        QueryAction = RequestEv->GetAction();
+        QueryType = RequestEv->GetType();
+
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
-        auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
+            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -107,6 +110,8 @@ public:
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
+    NKikimrKqp::EQueryAction QueryAction;
+    NKikimrKqp::EQueryType QueryType;
 
     TActorId RequestActorId;
 
@@ -159,7 +164,7 @@ public:
     TMaybe<TString> CommandTagName;
 
     NKikimrKqp::EQueryAction GetAction() const {
-        return RequestEv->GetAction();
+        return QueryAction;
     }
 
     bool GetKeepSession() const {
@@ -175,7 +180,7 @@ public:
     }
 
     NKikimrKqp::EQueryType GetType() const {
-        return RequestEv->GetType();
+        return QueryType;
     }
 
     Ydb::Query::Syntax GetSyntax() const {
@@ -192,10 +197,6 @@ public:
 
     TVector<NKikimrKqp::TParameterDescription> GetResultParams() const {
         return ResultParams;
-    }
-
-    void EnsureAction() {
-        YQL_ENSURE(RequestEv->HasAction());
     }
 
     bool GetUsePublicResponseDataFormat() const {

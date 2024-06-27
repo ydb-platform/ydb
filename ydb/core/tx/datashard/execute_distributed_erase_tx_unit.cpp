@@ -18,7 +18,7 @@ class TExecuteDistributedEraseTxUnit : public TExecutionUnit {
 
 public:
     TExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, false, self, pipeline)
+        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, true, self, pipeline)
     {
     }
 

@@ -69,7 +69,8 @@ class ResultsProcessor:
 
     @staticmethod
     def get_cluster_id():
-        return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, YdbCluster.tables_path)
+        run_id = get_external_param('run-id', YdbCluster.tables_path)
+        return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
     def upload_results(

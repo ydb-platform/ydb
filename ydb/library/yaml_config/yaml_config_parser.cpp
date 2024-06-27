@@ -946,7 +946,9 @@ namespace NKikimr::NYaml {
         }
 
         auto* bsConfig = config.MutableBlobStorageConfig();
-        Y_ENSURE_BT(bsConfig->HasServiceSet(), "service_set field in blob_storage_config must be json map.");
+        if (!bsConfig->HasServiceSet()) {
+            return;
+        }
 
         auto* serviceSet = bsConfig->MutableServiceSet();
         if (!serviceSet->AvailabilityDomainsSize()) {

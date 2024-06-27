@@ -117,6 +117,7 @@
 
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ticket_parser_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -1618,10 +1619,19 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
     }
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
+        auto grpcConfig = Config.GetGRpcConfig();
+        TTicketParserSettings settings {
+            .AuthConfig = Config.GetAuthConfig(),
+            .CertificateAuthValues = {
+                .ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
+                .ServerCertificateFilePath = grpcConfig.GetCert(),
+                .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()
+            }
+        };
         if (Factories && Factories->CreateTicketParser) {
-            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = Factories->CreateTicketParser(settings);
         } else {
-            ticketParser = CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = CreateTicketParser(settings);
         }
         if (ticketParser) {
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTicketParserID(),

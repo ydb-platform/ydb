@@ -3,8 +3,6 @@
 PROGRAM(bison)
 
 LICENSE(
-    Bison-exception-2.2 AND
-    CC-BY-4.0 AND
     GPL-3.0-only AND
     GPL-3.0-or-later AND
     GPL-3.0-or-later WITH Bison-exception-2.2

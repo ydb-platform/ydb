@@ -4,6 +4,8 @@
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
@@ -79,24 +81,28 @@ struct TYdbSetupSettings {
 
 class IYdbSetup : public TThrRefBase {
 public:
+    // Scheme queries helpers
+    virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
     virtual void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;
+    virtual THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) = 0;
+
+    // Generic query helpers
     virtual NYdb::NQuery::TExecuteQueryResult ExecuteQueryGrpc(const TString& query, const TString& poolId = "") const = 0;
     virtual TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
     virtual TQueryRunnerResultAsync ExecuteQueryAsync(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
 
-    virtual NActors::TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const = 0;
-    virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
-    virtual TTestActorRuntime* GetRuntime() const = 0;
-    virtual const TYdbSetupSettings& GetSettings() const = 0;
-
     // Async query execution actions
     virtual void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
     virtual void ContinueQueryExecution(const TQueryRunnerResultAsync& query) const = 0;
+    virtual NActors::TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const = 0;
 
     // Pools actions
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
+
+    virtual TTestActorRuntime* GetRuntime() const = 0;
+    virtual const TYdbSetupSettings& GetSettings() const = 0;
 };
 
 // Test queries
@@ -137,7 +143,6 @@ struct TSampleQueries {
     };
 
 private:
-    static TString ReformatYson(const TString& yson);
     static void CompareYson(const TString& expected, const TString& actual);
 };
 

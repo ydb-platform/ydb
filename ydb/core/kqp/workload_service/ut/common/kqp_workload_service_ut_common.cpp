@@ -8,9 +8,7 @@
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
-#include <ydb/core/testlib/test_client.h>
-
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -302,6 +300,11 @@ public:
         CreateSamplePool();
     }
 
+    // Scheme queries helpers
+    NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
+        return NYdb::NScheme::TSchemeClient(*YdbDriver_);
+    }
+
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
         TStatus status = TableClientSession_->ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToOneLineString());
@@ -310,6 +313,11 @@ public:
         }
     }
 
+    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) override {
+        return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({Settings_.DomainName_, path}), operation);
+    }
+
+    // Generic query helpers
     NQuery::TExecuteQueryResult ExecuteQueryGrpc(const TString& query, const TString& poolId = "") const override {
         NQuery::TExecuteQuerySettings settings;
         settings.PoolId(poolId ? poolId : Settings_.PoolId_);
@@ -338,22 +346,6 @@ public:
         return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
     }
 
-    TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const override {
-        return GetRuntime()->Register(new TInFlightCoordinatorActor(numberRequests, expectedInFlight, Settings_.NodeCount_));
-    }
-
-    NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
-        return NYdb::NScheme::TSchemeClient(*YdbDriver_);
-    }
-
-    TTestActorRuntime* GetRuntime() const override {
-        return Server_->GetRuntime();
-    }
-
-    const TYdbSetupSettings& GetSettings() const override {
-        return Settings_;
-    }
-
     // Async query execution actions
     void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
         auto event = GetRuntime()->GrabEdgeEvent<TEvQueryRunner::TEvExecutionStarted>(query.EdgeActor, timeout);
@@ -364,6 +356,10 @@ public:
         auto promise = NewPromise();
         GetRuntime()->Send(query.QueryRunnerActor, query.EdgeActor, new TEvQueryRunner::TEvContinueExecution(promise));
         promise.GetFuture().GetValue(FUTURE_WAIT_TIMEOUT);
+    }
+
+    TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const override {
+        return GetRuntime()->Register(new TInFlightCoordinatorActor(numberRequests, expectedInFlight, Settings_.NodeCount_));
     }
 
     // Pools actions
@@ -392,6 +388,14 @@ public:
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeKqpWorkloadServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
         Sleep(TDuration::Seconds(1));
+    }
+
+    TTestActorRuntime* GetRuntime() const override {
+        return Server_->GetRuntime();
+    }
+
+    const TYdbSetupSettings& GetSettings() const override {
+        return Settings_;
     }
 
 private:
@@ -475,15 +479,8 @@ TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
 
 //// TSampleQueriess
 
-TString TSampleQueries::ReformatYson(const TString& yson) {
-    TStringStream ysonInput(yson);
-    TStringStream output;
-    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text);
-    return output.Str();
-}
-
 void TSampleQueries::CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
+    NKqp::CompareYson(expected, actual);
 }
 
 }  // NKikimr::NKqp::NWorkload

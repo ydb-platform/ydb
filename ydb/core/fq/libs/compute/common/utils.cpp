@@ -71,6 +71,7 @@ struct TTotalStatistics {
     TAggregate ResultBytes;
     TAggregate ResultRows;
     TAggregate IngressBytes;
+    TAggregate IngressDecompressedBytes;
     TAggregate IngressRows;
     TAggregate EgressBytes;
     TAggregate EgressRows;
@@ -202,6 +203,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.ResultRows.Add(*sum);
                     } else if (name == "IngressBytes") {
                         totals.IngressBytes.Add(*sum);
+                    } else if (name == "IngressDecompressedBytes") {
+                        totals.IngressDecompressedBytes.Add(*sum);
                     } else if (name == "IngressRows") {
                         totals.IngressRows.Add(*sum);
                     } else if (name == "EgressBytes") {
@@ -371,6 +374,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                         totals.ResultBytes.Write(writer, "ResultBytes");
                         totals.ResultRows.Write(writer, "ResultRows");
                         totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.IngressDecompressedBytes.Write(writer, "IngressDecompressedBytes");
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");

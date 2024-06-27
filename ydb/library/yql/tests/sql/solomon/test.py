@@ -1,5 +1,6 @@
 import pytest
 import os
+import re
 import codecs
 import yatest.common
 
@@ -22,6 +23,17 @@ from utils import (
 ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
+
+
+def read_file(path):
+    with open(path, "r") as f:
+        return f.read()
+
+
+def normalize_timestamp_string(s):
+    # 2022-08-13T16:11:21Z -> ISOTIME
+    # 2022-08-13T16:11:21.549879Z -> ISOTIME
+    return re.sub(r"2\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?Z", "ISOTIME", s)
 
 
 def pytest_generate_tests(metafunc):
@@ -56,7 +68,8 @@ def test(suite, case, cfg, solomon):
 
     files = get_files(suite, config, DATA_PATH)
 
-    yqlrun = YQLRun(prov=prov, gateway_config=compose_gateways_config(solomon.endpoint), binary=DQRUN_PATH, extra_args=["--emulate-yt"])
+    yqlrun = YQLRun(prov=prov, gateway_config=compose_gateways_config(solomon.endpoint), binary=DQRUN_PATH,
+                    extra_args=["--emulate-yt"])
     yqlrun_res = yqlrun.yql_exec(
         program=sql_query,
         run_sql=True,
@@ -67,7 +80,7 @@ def test(suite, case, cfg, solomon):
 
     if xfail:
         assert yqlrun_res.execution_result.exit_code != 0
-        return [normalize_source_code_path(yqlrun_res.std_err)]
+        return [normalize_source_code_path(normalize_timestamp_string(yqlrun_res.std_err))]
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
             yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),

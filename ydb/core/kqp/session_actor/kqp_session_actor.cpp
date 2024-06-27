@@ -1719,7 +1719,9 @@ public:
 
         if (replyTopicOperations) {
             if (HasTopicWriteId()) {
-                response->MutableTopicOperations()->SetWriteId(GetTopicWriteId());
+                auto* w = response->MutableTopicOperations();
+                w->SetNodeId(SelfId().NodeId());
+                w->SetKeyId(GetTopicWriteId());
             }
         }
 

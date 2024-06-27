@@ -47,7 +47,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
 
     if (tx.HasWriteId()) {
-        WriteId = tx.GetWriteId();
+        WriteId = GetWriteId(tx);
     }
 }
 
@@ -139,7 +139,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     InitPartitions(txBody.GetOperations());
 
     if (txBody.HasWriteId() && HasWriteOperations) {
-        WriteId = txBody.GetWriteId();
+        WriteId = GetWriteId(txBody);
     } else {
         WriteId = Nothing();
     }
@@ -350,7 +350,7 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
     if (WriteId.Defined()) {
-        tx.SetWriteId(*WriteId);
+        SetWriteId(tx, *WriteId);
     }
 }
 

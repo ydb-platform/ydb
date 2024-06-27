@@ -79,7 +79,8 @@ message TTopicOperationsRequest {
 }
 
 message TTopicOperationsResponse {
-    optional int64 WriteId = 1;
+    optional uint64 NodeId = 1;
+    optional uint64 KeyId = 2;
 };
 
 message TQueryRequest {

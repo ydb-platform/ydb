@@ -162,15 +162,15 @@ private:
                           ui32 partition);
     TVector<TString> GetTabletKeys(const TActorId& actorId,
                                    ui64 tabletId);
-    ui64 GetTransactionWriteId(const TActorId& actorId,
-                               ui64 tabletId);
+    NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
+                                        ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
                               ui64 tabletId,
-                              ui64 writeId,
+                              const NPQ::TWriteId& writeId,
                               NKikimrLongTxService::TEvLockStatus::EStatus status);
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                               ui64 tabletId,
-                                              ui64 writeId);
+                                              const NPQ::TWriteId& writeId);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
@@ -1244,8 +1244,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 }
 
-ui64 TFixture::GetTransactionWriteId(const TActorId& actorId,
-                                     ui64 tabletId)
+NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
+                                              ui64 tabletId)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
@@ -1272,22 +1272,24 @@ ui64 TFixture::GetTransactionWriteId(const TActorId& actorId,
     auto& writeInfo = info.GetTxWrites(0);
     UNIT_ASSERT(writeInfo.HasWriteId());
 
-    return writeInfo.GetWriteId();
+    return NPQ::GetWriteId(writeInfo);
 }
 
 void TFixture::SendLongTxLockStatus(const TActorId& actorId,
                                     ui64 tabletId,
-                                    ui64 writeId,
+                                    const NPQ::TWriteId& writeId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
-    auto event = std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId, 0, status);
+    auto event =
+        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.KeyId, writeId.NodeId,
+                                                                                   status);
     auto& runtime = Setup->GetRuntime();
     runtime.SendToPipe(tabletId, actorId, event.release());
 }
 
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                                     ui64 tabletId,
-                                                    ui64 writeId)
+                                                    const NPQ::TWriteId& writeId)
 {
     while (true) {
         using TEvKeyValue = NKikimr::TEvKeyValue;
@@ -1315,7 +1317,7 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
         for (size_t i = 0; i < info.TxWritesSize(); ++i) {
             auto& writeInfo = info.GetTxWrites(i);
             UNIT_ASSERT(writeInfo.HasWriteId());
-            if (writeInfo.GetWriteId() == writeId) {
+            if (NPQ::GetWriteId(writeInfo) == writeId) {
                 found = true;
                 break;
             }
@@ -1344,7 +1346,7 @@ void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partitio
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
     ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
-    ui64 writeId = GetTransactionWriteId(edge, tabletId);
+    NPQ::TWriteId writeId = GetTransactionWriteId(edge, tabletId);
 
     SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
 

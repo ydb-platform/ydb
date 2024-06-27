@@ -43,6 +43,7 @@ SRCS(
     write_quoter.cpp
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
+    write_id.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)

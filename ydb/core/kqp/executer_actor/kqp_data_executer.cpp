@@ -2594,7 +2594,9 @@ private:
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
 
             if (writeId.Defined()) {
-                transaction.SetWriteId(*writeId);
+                auto* w = transaction.MutableWriteId();
+                w->SetNodeId(SelfId().NodeId());
+                w->SetKeyId(*writeId);
             }
             transaction.SetImmediate(ImmediateTx);
 

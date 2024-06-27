@@ -139,12 +139,17 @@ message TPersQueuePartitionRequest {
         repeated TCmdRegisterMessageGroup RegisterGroups = 2;
     }
 
+    message TWriteId {
+        optional uint64 NodeId = 1;
+        optional uint64 KeyId = 2;
+    }
+
     optional string Topic = 1; //mandatory for request for partitions
     optional int32 Partition = 2; //mandatory for request for partitions
     optional string OwnerCookie = 3; //mandatory for write
     optional int64 MessageNo = 12; //mandatory for write
     optional int64 CmdWriteOffset = 13; //optional
-    optional int64 WriteId = 23;
+    optional TWriteId WriteId = 23;
     optional bool NeedSupportivePartition = 28;
 
     repeated TCmdWrite CmdWrite = 4;

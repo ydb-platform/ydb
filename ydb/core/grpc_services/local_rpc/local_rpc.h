@@ -51,26 +51,6 @@ protected:
     TLocalRpcCtxImpl(TCb&& cb)
         : TBase(std::forward<TCb>(cb))
     {}
-
-    void SendResult(const google::protobuf::Message&, Ydb::StatusIds::StatusCode) override {
-        Y_ABORT("Unimplemented");
-    }
-
-    void SendResult(const google::protobuf::Message&,
-        Ydb::StatusIds::StatusCode,
-        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>&) override {
-        Y_ABORT("Unimplemented");
-    }
-
-    void SendResult(Ydb::StatusIds::StatusCode,
-        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>&) override
-    {
-        Y_ABORT("Unimplemented");
-    }
-
-    void SendOperation(const Ydb::Operations::Operation&) override {
-        Y_ABORT("Unimplemented");
-    }
 };
 
 template<typename TRpc, typename TCbWrapper>

@@ -97,7 +97,6 @@ class TTableHistogramBuilderBtreeIndex {
         TNodeState* Node;
     };
 
-    // TODO: test this hell
     struct TNodeEventKeyGreater {
         const TKeyCellDefaults& KeyDefaults;
 

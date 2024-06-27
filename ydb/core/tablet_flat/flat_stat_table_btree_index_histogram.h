@@ -131,6 +131,8 @@ public:
         , KeyDefaults(*Subset.Scheme->Keys)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
+        , RowCountResolutionGap(RowCountResolution / 2)
+        , DataSizeResolutionGap(DataSizeResolution / 2)
         , Env(env)
         , YieldHandler(yieldHandler)
         , NodeEventKeyGreater(KeyDefaults)
@@ -200,7 +202,7 @@ private:
     }
 
     bool BuildIterate(TStats& stats) {
-        Y_UNUSED(RowCountResolution, DataSizeResolution);
+        Y_UNUSED(RowCountResolution, RowCountResolutionGap);
 
         // The idea is the following:
         // - we move some key pointer through all parts simultaneously
@@ -218,6 +220,7 @@ private:
             YieldHandler();
 
             auto event = NodeEvents.top();
+            ui64 dataSize = closedDataSize + openedDataSize / 2; // right before new opens
 
             Y_ABORT_UNLESS(NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event), "Should pop top");
             while (NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event)) {
@@ -253,7 +256,7 @@ private:
                 addEvent(childEnd);
             };
 
-            while (closedDataSize + openedDataSize > nextDataSize && openedSortedByDataSize) {
+            while (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
 
@@ -270,11 +273,19 @@ private:
                 } // else: leaf nodes will be closed later
             }
 
-            if (closedDataSize + openedDataSize > nextDataSize && event.Key) {
-                ui64 dataSize = closedDataSize + openedDataSize / 2;
-                
-                AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
-                nextDataSize += DataSizeResolution;
+            // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
+
+            if (!event.IsBegin) { // add only newly closed nodes
+                dataSize = closedDataSize + openedDataSize / 2;
+            }
+
+            if (event.Key) {
+                if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
+                    if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
+                        AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
+                        nextDataSize = Max(dataSize + 1, nextDataSize + DataSizeResolution);
+                    }
+                }
             }
         }
 
@@ -357,6 +368,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     ui64 RowCountResolution, DataSizeResolution;
+    ui64 RowCountResolutionGap, DataSizeResolutionGap;
     IPages* const Env;
     TBuildStatsYieldHandler YieldHandler;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs

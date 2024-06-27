@@ -210,7 +210,7 @@ const TString ToHex(const TString& value) {
 }
 
 Y_UNIT_TEST(TestKeyRange) {
-    char expected_[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    char expected_[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 
                         0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18};
     TString expected(expected_, sizeof(expected_));
 
@@ -227,45 +227,6 @@ Y_UNIT_TEST(TestKeyRange) {
 
     UNIT_ASSERT_STRINGS_EQUAL(ToHex(result), ToHex(expected));
 } // Y_UNIT_TEST(TestKeyRange)
-
-Y_UNIT_TEST(TestAsInt) {
-    {
-        ui8 v = 0x73;
-        ui8 r8 = AsInt<ui8>(AsKeyBound(v));
-        UNIT_ASSERT_VALUES_EQUAL(v, r8);
-
-        ui64 r64 = AsInt<ui64>(AsKeyBound(v));
-        ui64 v64 = v;
-        v64 <<= 56;
-        UNIT_ASSERT_VALUES_EQUAL(v64, r64);
-
-        NYql::NDecimal::TUint128 r128 = AsInt<NYql::NDecimal::TUint128>(AsKeyBound(v));
-        NYql::NDecimal::TUint128 v128 = v;
-        v128 <<= 120;
-        UNIT_ASSERT_EQUAL(v128, r128);
-    }
-
-    {
-        ui16 v = 0x1234;
-
-        ui8 v8 = 0x12;
-        ui8 r8 = AsInt<ui8>(AsKeyBound(v));
-        UNIT_ASSERT_VALUES_EQUAL(v8, r8);
-
-        ui16 r16 = AsInt<ui16>(AsKeyBound(v));
-        UNIT_ASSERT_VALUES_EQUAL(v, r16);
-
-        ui64 r64 = AsInt<ui64>(AsKeyBound(v));
-        ui64 v64 = v;
-        v64 <<= 48;
-        UNIT_ASSERT_VALUES_EQUAL(v64, r64);
-
-        NYql::NDecimal::TUint128 r128 = AsInt<NYql::NDecimal::TUint128>(AsKeyBound(v));
-        NYql::NDecimal::TUint128 v128 = v;
-        v128 <<= 112;
-        UNIT_ASSERT_EQUAL(v128, r128);
-    }
-}
 
 Y_UNIT_TEST(StoreKeys) {
     TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);

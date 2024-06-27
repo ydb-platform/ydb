@@ -15,8 +15,6 @@
 
 #include <util/system/tempfile.h>
 
-#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
-
 #include <random>
 
 
@@ -41,15 +39,8 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
-    TDatastreamsTestServer(bool autopartitioningEnabled = false) {
+    TDatastreamsTestServer() {
         NKikimrConfig::TAppConfig appConfig;
-
-        if (autopartitioningEnabled) {
-            appConfig.MutableFeatureFlags()->SetEnableTopicSplitMerge(true);
-            appConfig.MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(true);
-            appConfig.MutableFeatureFlags()->SetEnableTopicServiceTx(true);
-        }
-
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         // NOTE(shmel1k@): KIKIMR-14221
@@ -2676,88 +2667,4 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
     }
-
-    Y_UNIT_TEST(Test_AutoPartitioning_Describe) {
-        TInsecureDatastreamsTestServer testServer(true);
-        SET_YDS_LOCALS;
-
-        TString streamName = "test-topic";
-
-        {
-            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .BeginConfigurePartitioningSettings()
-                    .MinActivePartitions(3)
-                    .MaxActivePartitions(7)
-                    .BeginConfigureAutoscalingSettings()
-                        .Strategy(NYdb::NTopic::EAutoscalingStrategy::ScaleUpAndDown)
-                    .EndConfigureAutoscalingSettings()
-                .EndConfigurePartitioningSettings()
-                ;
-            auto result = pqClient.CreateTopic(streamName, settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            Cerr << result.GetIssues().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            auto& description = result.GetResult().stream_description();
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_status(), YDS_V1::StreamDescription::ACTIVE);
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_name(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_arn(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(description.write_quota_kb_per_sec(), 1_KB);
-            UNIT_ASSERT_VALUES_EQUAL(description.retention_period_hours(), 24);
-
-            UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).sequence_number_range().starting_sequence_number(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).hash_key_range().starting_hash_key(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
-        }
-
-        {
-            ui64 txId = 107;
-            SplitPartition(*kikimr->GetRuntime(), txId, 1, "a");
-        }
-
-        {
-            auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            Cerr << result.GetIssues().ToString() << "\n";
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            auto& description = result.GetResult().stream_description();
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_status(), YDS_V1::StreamDescription::ACTIVE);
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_name(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(description.stream_arn(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(description.write_quota_kb_per_sec(), 1_KB);
-            UNIT_ASSERT_VALUES_EQUAL(description.retention_period_hours(), 24);
-
-            UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 5);
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).sequence_number_range().starting_sequence_number(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).hash_key_range().starting_hash_key(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
-
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(3).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(3).hash_key_range().ending_hash_key(), "128935115591136839671669284847193423872");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(3).parent_shard_id(), "shard-000001");
-
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(4).hash_key_range().starting_hash_key(), "128935115591136839671669284847193423873");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(4).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
-            UNIT_ASSERT_VALUES_EQUAL(description.shards(4).parent_shard_id(), "shard-000001");
-        }
-
-    }
-
 }

@@ -51,26 +51,7 @@ TString AsKeyBound(const NYql::TWide<Type>& value) {
     return key;
 }
 
-template <typename Type>
-    requires std::integral<Type>
-Type AsInt(const TString& bound) {
-    Type result = 0;
-#ifdef WORDS_BIGENDIAN
-    memcpy((void*)bound.begin(), &result, std::min<size_t>(sizeof(Type), bound.size()));
-#else
-    auto s = std::min(sizeof(Type), bound.size());
-    auto f = bound.begin();
-    char* t = ((char*)&result) + sizeof(Type) - 1;
-
-    for(; s--; ++f, --t) {
-        *t = *f;
-    }
-#endif
-    return result;
-}
-
 TString MiddleOf(const TString& fromBound, const TString& toBound);
-
 
 struct TPartitionKeyRange {
     TMaybe<TSerializedCellVec> FromBound; // inclusive

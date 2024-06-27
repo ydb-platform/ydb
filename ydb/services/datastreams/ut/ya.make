@@ -12,13 +12,11 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion
-    ydb/core/persqueue/ut/common
-    ydb/core/testlib/default
-    ydb/core/tx/schemeshard/ut_helpers
     ydb/library/grpc/client
-    ydb/public/sdk/cpp/client/ydb_topic
+    library/cpp/svnversion
+    ydb/core/testlib/default
     ydb/services/datastreams
+    ydb/public/sdk/cpp/client/ydb_topic
 )
 
 YQL_LAST_ABI_VERSION()

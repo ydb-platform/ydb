@@ -640,7 +640,7 @@ namespace NKikimr::NDataStreams::V1 {
             tabletIds.insert(partition.GetTabletId());
         }
         if (tabletIds.size() == 0) {
-            return ReplyAndDie(ActorContext());
+            ReplyAndDie(ActorContext());
         }
 
         RequestsInfly = tabletIds.size();
@@ -698,8 +698,7 @@ namespace NKikimr::NDataStreams::V1 {
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
         for (uint32_t i = 0; i < (uint32_t)PQGroup.GetPartitions().size(); ++i) {
-            auto partition = PQGroup.GetPartitions(i);
-            ui32 partitionId = partition.GetPartitionId();
+            ui32 partitionId = PQGroup.GetPartitions(i).GetPartitionId();
             TString shardName = GetShardName(partitionId);
             if (shardName == GetProtoRequest()->exclusive_start_shard_id()) {
                 startShardFound = true;
@@ -710,26 +709,10 @@ namespace NKikimr::NDataStreams::V1 {
                 } else {
                     auto* shard = description.add_shards();
                     shard->set_shard_id(shardName);
-
-                    const auto& parents = partition.GetParentPartitionIds();
-                    if (parents.size() > 0) {
-                        shard->set_parent_shard_id(GetShardName(parents[0]));
-                    }
-                    if (parents.size() > 1) {
-                        shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
-                    }
-
                     auto* rangeProto = shard->mutable_hash_key_range();
-                    if (NPQ::SplitMergeEnabled(pqConfig)) {
-                        NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
-                        NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
-                    } else {
-                        auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
-                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
-                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
-                    }
+                    auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
+                    rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
+                    rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
                     auto it = StartEndOffsetsPerPartition.find(partitionId);
                     if (it != StartEndOffsetsPerPartition.end()) {
                         auto* rangeProto = shard->mutable_sequence_number_range();

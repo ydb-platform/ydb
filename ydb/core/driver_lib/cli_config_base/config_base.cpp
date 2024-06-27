@@ -1,3 +1,5 @@
+#include <ydb/core/util/address_classifier.h>
+
 #include "config_base.h"
 
 namespace NKikimr {
@@ -24,7 +26,9 @@ TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString
         endpoint.Address = endpoint.Address.substr(8);
         endpoint.EnableSsl = true;
     }
-    NMsgBusProxy::TMsgBusClientConfig::CrackAddress(endpoint.Address, hostname, port);
+    TString hostname;
+    ui32 port = 2135; // default
+    NKikimr::NAddressClassifier::ParseAddress(endpoint.Address, hostname, port);
     endpoint.Address = hostname + ':' + ToString(port);
     return endpoint;
 }

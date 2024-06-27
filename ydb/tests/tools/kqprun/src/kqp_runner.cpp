@@ -131,7 +131,6 @@ public:
                 }
                 PrintScriptResult(ResultSets_[i]);
             }
-            PrintScriptResult(ResultSets_[i]);
         }
     }
 

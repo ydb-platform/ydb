@@ -22,12 +22,6 @@ bool ValidateS3PackedPaths(TPositionHandle pos, TStringBuf blob, bool isTextEnco
     try {
         TPathList paths;
         UnpackPathsList(blob, isTextEncoded, paths);
-        for (size_t i = 0; i < paths.size(); ++i) {
-            if (paths[i].Path.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected non-empty path (index " << i << ")"));
-                return false;
-            }
-        }
     } catch (const std::exception& ex) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Failed to parse packed paths: " << ex.what()));
         return false;

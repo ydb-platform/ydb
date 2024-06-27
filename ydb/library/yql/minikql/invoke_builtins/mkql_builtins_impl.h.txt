@@ -1204,8 +1204,10 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
     }
 };
 
+using TStatelessArrayKernelExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
+
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
-    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode);
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
 
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
@@ -1223,7 +1225,7 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
 }
 
 void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
-    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode);
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>

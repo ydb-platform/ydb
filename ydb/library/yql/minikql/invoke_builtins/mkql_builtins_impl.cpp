@@ -261,7 +261,7 @@ const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
 }
 
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
-    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode) {
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode) {
     auto type1 = NUdf::GetDataTypeInfo(arg1).TypeId;
     auto returnType = NUdf::GetDataTypeInfo(res).TypeId;
     std::vector<NUdf::TDataTypeId> argTypes({ type1 });
@@ -286,7 +286,7 @@ void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::ED
 }
 
 void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
-    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode) {
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode) {
     auto type1 = NUdf::GetDataTypeInfo(arg1).TypeId;
     auto type2 = NUdf::GetDataTypeInfo(arg2).TypeId;
     auto returnType = NUdf::GetDataTypeInfo(res).TypeId;

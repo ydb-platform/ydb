@@ -46,39 +46,47 @@ class TTableHistogramBuilderBtreeIndex {
         {
         }
 
-        ui64 GetDataSize() const noexcept {
-            return EndDataSize - BeginDataSize;
-        }
-
         TRowId GetRowCount() const noexcept {
             return EndRowId - BeginRowId;
         }
 
-        void Open(ui64& openedDataSize) noexcept {
+        ui64 GetDataSize() const noexcept {
+            return EndDataSize - BeginDataSize;
+        }
+
+        void Open(ui64& openedRowCount, ui64& openedDataSize) noexcept {
             Y_ABORT_UNLESS(State == INITIAL_STATE);
             
             State = OPENED_STATE;
+            openedRowCount += GetRowCount();
             openedDataSize += GetDataSize();
         }
 
-        void Close(ui64& openedDataSize, ui64& closedDataSize) noexcept {
+        void Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) noexcept {
             Y_ABORT_UNLESS(State == OPENED_STATE || State == IGNORED_STATE);
 
             if (State == OPENED_STATE) {
                 State = CLOSED_STATE;
+                ui64 rowCount = GetRowCount();
                 ui64 dataSize = GetDataSize();
+                Y_ABORT_UNLESS(openedRowCount >= rowCount);
                 Y_ABORT_UNLESS(openedDataSize >= dataSize);
+                openedRowCount -= rowCount;
                 openedDataSize -= dataSize;
+                closedRowCount += rowCount;
                 closedDataSize += dataSize;
             }
         }
 
-        void Ignore(ui64& openedDataSize) noexcept {
+        void Ignore(ui64& openedRowCount, ui64& openedDataSize) noexcept {
             Y_ABORT_UNLESS(State == OPENED_STATE);
             
             State = IGNORED_STATE;
+            ui64 rowCount = GetRowCount();
             ui64 dataSize = GetDataSize();
+            Y_ABORT_UNLESS(openedRowCount >= rowCount);
             Y_ABORT_UNLESS(openedDataSize >= dataSize);
+            openedRowCount -= rowCount;
             openedDataSize -= dataSize;
         }
     };
@@ -116,6 +124,12 @@ class TTableHistogramBuilderBtreeIndex {
                 return 0;
             }
             return a.IsBegin ? -1 : 1;
+        }
+    };
+
+    struct TNodeRowCountLess {
+        bool operator ()(const TNodeState* a, const TNodeState* b) const noexcept {
+            return a->GetRowCount() < b->GetRowCount();
         }
     };
 
@@ -203,8 +217,6 @@ private:
     }
 
     bool BuildIterate(TStats& stats) {
-        Y_UNUSED(RowCountResolution, RowCountResolutionGap);
-
         // The idea is the following:
         // - we move some key pointer through all parts simultaneously
         //   keeping all nodes that have current key pointer in opened heap (sorted by size)
@@ -212,25 +224,27 @@ private:
         // - we keep invariant that size of closed and opened nodes <= next requested histogram bucket value
         //   if it false we load opened nodes and split them using current key pointer
 
-        ui64 nextDataSize = DataSizeResolution;
-        ui64 closedDataSize = 0, openedDataSize = 0;
-
+        ui64 nextRowCount = RowCountResolution, closedRowCount = 0, openedRowCount = 0;
+        ui64 nextDataSize = DataSizeResolution, closedDataSize = 0, openedDataSize = 0;
+        TPriorityQueue<TNodeState*, TVector<TNodeState*>, TNodeRowCountLess> openedSortedByRowCount;
         TPriorityQueue<TNodeState*, TVector<TNodeState*>, TNodeDataSizeLess> openedSortedByDataSize;
         
         while (NodeEvents) {
             YieldHandler();
 
             auto event = NodeEvents.top();
+            ui64 rowCount = closedRowCount + openedRowCount / 2; // right before new opens
             ui64 dataSize = closedDataSize + openedDataSize / 2; // right before new opens
 
             Y_ABORT_UNLESS(NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event), "Should pop top");
             while (NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event)) {
                 auto& newEvent = NodeEvents.top();
                 if (newEvent.IsBegin) {
-                    newEvent.Node->Open(openedDataSize);
+                    newEvent.Node->Open(openedRowCount, openedDataSize);
+                    openedSortedByRowCount.push(newEvent.Node);
                     openedSortedByDataSize.push(newEvent.Node);
                 } else {
-                    newEvent.Node->Close(openedDataSize, closedDataSize);
+                    newEvent.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
                 }
             
                 NodeEvents.pop();
@@ -241,10 +255,11 @@ private:
                     NodeEvents.push(newEvent);
                 } else {
                     if (newEvent.IsBegin) {
-                        newEvent.Node->Open(openedDataSize);
+                        newEvent.Node->Open(openedRowCount, openedDataSize);
+                        openedSortedByRowCount.push(newEvent.Node);
                         openedSortedByDataSize.push(newEvent.Node);
                     } else {
-                        newEvent.Node->Close(openedDataSize, closedDataSize);
+                        newEvent.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
                     }
                 }
             };
@@ -257,30 +272,54 @@ private:
                 addEvent(childEnd);
             };
 
-            while (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
-                auto node = openedSortedByDataSize.top();
-                openedSortedByDataSize.pop();
+            while (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap && openedSortedByRowCount) {
+                auto node = openedSortedByRowCount.top();
+                openedSortedByRowCount.pop();
 
                 if (node->State != OPENED_STATE) {
-                    Y_ABORT_UNLESS(node->State == CLOSED_STATE);
+                    Y_ABORT_UNLESS(node->State == CLOSED_STATE || node->State == IGNORED_STATE);
                     continue;
                 }
 
                 if (node->Level) {
-                    node->Ignore(openedDataSize);
+                    node->Ignore(openedRowCount, openedDataSize);
                     if (!TryLoadNode(*node, addNode)) {
                         return false;
                     }
                 } // else: leaf nodes will be closed later
             }
 
-            // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
+            while (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
+                auto node = openedSortedByDataSize.top();
+                openedSortedByDataSize.pop();
+
+                if (node->State != OPENED_STATE) {
+                    Y_ABORT_UNLESS(node->State == CLOSED_STATE || node->State == IGNORED_STATE);
+                    continue;
+                }
+
+                if (node->Level) {
+                    node->Ignore(openedRowCount, openedDataSize);
+                    if (!TryLoadNode(*node, addNode)) {
+                        return false;
+                    }
+                } // else: leaf nodes will be closed later
+            }
 
             if (!event.IsBegin) { // add only newly closed nodes
+                rowCount = closedRowCount + openedRowCount / 2;
                 dataSize = closedDataSize + openedDataSize / 2;
             }
 
             if (event.Key) {
+                // we search value in interval [nextRowCount - RowCountResolutionGap, nextRowCount + RowCountResolutionGap]
+                if (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap || closedRowCount > nextRowCount - RowCountResolutionGap) {
+                    if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < rowCount) {
+                        AddBucket(stats.RowCountHistogram, event.Key, rowCount);
+                        nextRowCount = Max(rowCount + 1, nextRowCount + RowCountResolution);
+                    }
+                }
+                // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
                 if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
                     if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
                         AddBucket(stats.DataSizeHistogram, event.Key, dataSize);

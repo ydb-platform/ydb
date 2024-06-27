@@ -154,8 +154,9 @@ public:
             return false;
         }
 
-        BuildIterate(stats);
+        ready &= BuildIterate(stats);
 
+        NodeEvents.clear();
         LoadedBTreeNodes.clear();
         LoadedStateNodes.clear();
 

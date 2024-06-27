@@ -582,7 +582,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             }
         };
 
-        const ui32 attempts = 35;
+        const ui32 attempts = 100;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;

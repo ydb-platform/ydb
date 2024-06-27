@@ -849,8 +849,12 @@ std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::
 template <typename T>
 arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false);
 
+arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot);
+
 template <typename T>
 arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false);
+
+arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot);
 
 template<typename TDerived>
 struct TUnaryKernelExecsBase {
@@ -1200,10 +1204,8 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
     }
 };
 
-void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
-    const arrow::compute::ArrayKernelExec& exec,
-    arrow::compute::InputType&& inputType1, 
-    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode);
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
+    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode);
 
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
@@ -1217,15 +1219,11 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
     using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
 
-    AddUnaryKernelImpl(owner, TInput::Id, TOutput::Id, &TExecs::Exec, 
-        GetPrimitiveInputArrowType<TInputLayout>(tz), GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz),
-        TFuncInstance::NullMode);
+    AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
 
-void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2, NUdf::TDataTypeId returnType,
-    const arrow::compute::ArrayKernelExec& exec,
-    arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
-    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode);
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
+    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode);
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
@@ -1243,10 +1241,7 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    AddBinaryKernelImpl(owner, TInput1::Id, TInput2::Id, TOutput::Id, &TExecs::Exec, 
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1), GetPrimitiveInputArrowType<TInput2Layout>(tz2),
-        GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None),
-        TFuncInstance::NullMode);
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
@@ -1265,10 +1260,7 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    AddBinaryKernelImpl(owner, TInput1::Id, TInput2::Id, TOutput::Id, &TExecs::Exec, 
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1), GetPrimitiveInputArrowType<TInput2Layout>(tz2),
-        GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None),
-        TFuncInstance::NullMode);
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
 
 template<template<typename, typename> class TFunc>

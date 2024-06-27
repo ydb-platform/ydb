@@ -41,6 +41,74 @@ template arrow::compute::OutputType GetPrimitiveOutputArrowType<double>(bool tz)
 template arrow::compute::OutputType GetPrimitiveOutputArrowType<char*>(bool tz);
 template arrow::compute::OutputType GetPrimitiveOutputArrowType<NYql::NUdf::TUtf8>(bool tz);
 
+arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot) {
+    switch (slot) {
+    case NUdf::EDataSlot::Bool: return GetPrimitiveInputArrowType<bool>();
+    case NUdf::EDataSlot::Int8: return GetPrimitiveInputArrowType<i8>();
+    case NUdf::EDataSlot::Uint8: return GetPrimitiveInputArrowType<ui8>();
+    case NUdf::EDataSlot::Int16: return GetPrimitiveInputArrowType<i16>();
+    case NUdf::EDataSlot::Uint16: return GetPrimitiveInputArrowType<ui16>();
+    case NUdf::EDataSlot::Int32: return GetPrimitiveInputArrowType<i32>();
+    case NUdf::EDataSlot::Uint32: return GetPrimitiveInputArrowType<ui32>();
+    case NUdf::EDataSlot::Int64: return GetPrimitiveInputArrowType<i64>();
+    case NUdf::EDataSlot::Uint64: return GetPrimitiveInputArrowType<ui64>();
+    case NUdf::EDataSlot::Float: return GetPrimitiveInputArrowType<float>();
+    case NUdf::EDataSlot::Double: return GetPrimitiveInputArrowType<double>();
+    case NUdf::EDataSlot::String: return GetPrimitiveInputArrowType<char*>();
+    case NUdf::EDataSlot::Utf8: return GetPrimitiveInputArrowType<NYql::NUdf::TUtf8>();
+    case NUdf::EDataSlot::Date: return GetPrimitiveInputArrowType<ui16>();
+    case NUdf::EDataSlot::TzDate: return GetPrimitiveInputArrowType<ui16>(true);
+    case NUdf::EDataSlot::Datetime: return GetPrimitiveInputArrowType<ui32>();
+    case NUdf::EDataSlot::TzDatetime: return GetPrimitiveInputArrowType<ui32>(true);
+    case NUdf::EDataSlot::Timestamp: return GetPrimitiveInputArrowType<ui64>();
+    case NUdf::EDataSlot::TzTimestamp: return GetPrimitiveInputArrowType<ui64>(true);
+    case NUdf::EDataSlot::Interval: return GetPrimitiveInputArrowType<i64>();
+    case NUdf::EDataSlot::Date32: return GetPrimitiveInputArrowType<i32>();
+    case NUdf::EDataSlot::TzDate32: return GetPrimitiveInputArrowType<i32>(true);
+    case NUdf::EDataSlot::Datetime64: return GetPrimitiveInputArrowType<i64>();
+    case NUdf::EDataSlot::TzDatetime64: return GetPrimitiveInputArrowType<i64>(true);
+    case NUdf::EDataSlot::Timestamp64: return GetPrimitiveInputArrowType<i64>();
+    case NUdf::EDataSlot::TzTimestamp64: return GetPrimitiveInputArrowType<i64>(true);
+    case NUdf::EDataSlot::Interval64: return GetPrimitiveInputArrowType<i64>();
+    default:
+        ythrow yexception() << "Unexpected data slot: " << slot;
+    }
+}
+
+arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot) {
+    switch (slot) {
+    case NUdf::EDataSlot::Bool: return GetPrimitiveOutputArrowType<bool>();
+    case NUdf::EDataSlot::Int8: return GetPrimitiveOutputArrowType<i8>();
+    case NUdf::EDataSlot::Uint8: return GetPrimitiveOutputArrowType<ui8>();
+    case NUdf::EDataSlot::Int16: return GetPrimitiveOutputArrowType<i16>();
+    case NUdf::EDataSlot::Uint16: return GetPrimitiveOutputArrowType<ui16>();
+    case NUdf::EDataSlot::Int32: return GetPrimitiveOutputArrowType<i32>();
+    case NUdf::EDataSlot::Uint32: return GetPrimitiveOutputArrowType<ui32>();
+    case NUdf::EDataSlot::Int64: return GetPrimitiveOutputArrowType<i64>();
+    case NUdf::EDataSlot::Uint64: return GetPrimitiveOutputArrowType<ui64>();
+    case NUdf::EDataSlot::Float: return GetPrimitiveOutputArrowType<float>();
+    case NUdf::EDataSlot::Double: return GetPrimitiveOutputArrowType<double>();
+    case NUdf::EDataSlot::String: return GetPrimitiveOutputArrowType<char*>();
+    case NUdf::EDataSlot::Utf8: return GetPrimitiveOutputArrowType<NYql::NUdf::TUtf8>();
+    case NUdf::EDataSlot::Date: return GetPrimitiveOutputArrowType<ui16>();
+    case NUdf::EDataSlot::TzDate: return GetPrimitiveOutputArrowType<ui16>(true);
+    case NUdf::EDataSlot::Datetime: return GetPrimitiveOutputArrowType<ui32>();
+    case NUdf::EDataSlot::TzDatetime: return GetPrimitiveOutputArrowType<ui32>(true);
+    case NUdf::EDataSlot::Timestamp: return GetPrimitiveOutputArrowType<ui64>();
+    case NUdf::EDataSlot::TzTimestamp: return GetPrimitiveOutputArrowType<ui64>(true);
+    case NUdf::EDataSlot::Interval: return GetPrimitiveOutputArrowType<i64>();
+    case NUdf::EDataSlot::Date32: return GetPrimitiveOutputArrowType<i32>();
+    case NUdf::EDataSlot::TzDate32: return GetPrimitiveOutputArrowType<i32>(true);
+    case NUdf::EDataSlot::Datetime64: return GetPrimitiveOutputArrowType<i64>();
+    case NUdf::EDataSlot::TzDatetime64: return GetPrimitiveOutputArrowType<i64>(true);
+    case NUdf::EDataSlot::Timestamp64: return GetPrimitiveOutputArrowType<i64>();
+    case NUdf::EDataSlot::TzTimestamp64: return GetPrimitiveOutputArrowType<i64>(true);
+    case NUdf::EDataSlot::Interval64: return GetPrimitiveOutputArrowType<i64>();
+    default:
+        ythrow yexception() << "Unexpected data slot: " << slot;
+    }
+}
+
 std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type) {
     if (!addTz) {
         return type;
@@ -192,16 +260,15 @@ const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
     return *ArrowKernel;
 }
 
-void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
-    const arrow::compute::ArrayKernelExec& exec,
-    arrow::compute::InputType&& inputType1, arrow::compute::OutputType&& outputType,
-    TKernel::ENullMode nullMode) {
-
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
+    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode) {
+    auto type1 = NUdf::GetDataTypeInfo(arg1).TypeId;
+    auto returnType = NUdf::GetDataTypeInfo(res).TypeId;
     std::vector<NUdf::TDataTypeId> argTypes({ type1 });
 
     auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
-        std::move(inputType1)
-    }, std::move(outputType), exec);
+        GetPrimitiveInputArrowType(arg1)
+    }, GetPrimitiveOutputArrowType(res), exec);
 
     switch (nullMode) {
     case TKernel::ENullMode::Default:
@@ -218,15 +285,16 @@ void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf:
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
 }
 
-void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2, NUdf::TDataTypeId returnType,
-    const arrow::compute::ArrayKernelExec& exec,
-    arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
-    arrow::compute::OutputType&& outputType, TKernel::ENullMode nullMode) {
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
+    const arrow::compute::ArrayKernelExec& exec, TKernel::ENullMode nullMode) {
+    auto type1 = NUdf::GetDataTypeInfo(arg1).TypeId;
+    auto type2 = NUdf::GetDataTypeInfo(arg2).TypeId;
+    auto returnType = NUdf::GetDataTypeInfo(res).TypeId;
     std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
 
     auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
-        std::move(inputType1), std::move(inputType2)
-    }, std::move(outputType), exec);
+        GetPrimitiveInputArrowType(arg1), GetPrimitiveInputArrowType(arg2)
+    }, GetPrimitiveOutputArrowType(res), exec);
 
     switch (nullMode) {
     case TKernel::ENullMode::Default:

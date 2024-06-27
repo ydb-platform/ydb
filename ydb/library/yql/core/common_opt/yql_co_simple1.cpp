@@ -3455,6 +3455,12 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
     return OptimizeExtend<true>(node, ctx, optCtx);
 }
 
+bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const TString skipNullFlags = to_lower(TString("EarlyExpandSkipNull"));
+    return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -3609,7 +3615,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ConvertSqlInPredicatesToJoins(self, ctx);
     };
 
-    map["SkipNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["SkipNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsEarlyExpandOfSkipNullAllowed(optCtx)) {
+            return ExpandSkipNullFields(node, ctx);
+        }
         const auto skipNullMembers = TCoSkipNullMembers(node);
         if (!skipNullMembers.Members()) {
             return node;
@@ -3650,7 +3659,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["SkipNullElements"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["SkipNullElements"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsEarlyExpandOfSkipNullAllowed(optCtx)) {
+            return ExpandSkipNullFields(node, ctx);
+        }
         const auto skipNullElements = TCoSkipNullElements(node);
         if (!skipNullElements.Elements()) {
             return node;

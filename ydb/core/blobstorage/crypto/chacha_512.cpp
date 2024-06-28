@@ -1,3 +1,10 @@
+/* ChaCha implementation using 256-bit (512-bit) vectorization by the authors of [1].
+* This is a public domain implementation, which improves the slightly modified implementations
+* of Ted Krovetz in the Chromium Project by using the Advanced Vector Extensions AVX2 and AVX512
+* to widen the vectorization. Further details and measurement results are provided in:
+* [1] Goll, M., and Gueron,S.: Vectorization of ChaCha Stream Cipher. Cryptology ePrint Archive,
+* Report 2013/759, November, 2013, http://eprint.iacr.org/2013/759.pdf
+*/
 #include "chacha_512.h"
 #include "secured_block.h"
 
@@ -194,6 +201,8 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 		for (i=(len & ~15); i<len; i++) {
 			((unsigned char *)op)[i] = ((unsigned char *)ip)[i] ^ ((unsigned char *)buf)[i-j];
 		}
+
+		SecureWipeBuffer((ui8*)buf, sizeof(buf));
 	}
 
 	return;

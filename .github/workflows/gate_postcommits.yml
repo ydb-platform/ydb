@@ -24,6 +24,7 @@ jobs:
           echo "Open gate for postcommits"
           query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
         fi
+        
         echo "Requesting a list of runners to update labels..."
         j1=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
           -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
@@ -34,7 +35,8 @@ jobs:
           echo "HTTP result code is not 200, exiting"
           exit 1
         fi
-        echo "$j1"
+        # echo "$j1"
+        
         echo "$j1" | sed '$d' | jq "$query" | while read x;do
           echo "Runner: $x"
           if (( queue_size > 0 ));then
@@ -48,3 +50,4 @@ jobs:
               -d '{"labels":["postcommit"]}'
           fi
         done
+        echo "Runner labels synchronized"

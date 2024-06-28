@@ -34,19 +34,13 @@ namespace NKikimr::NColumnShard {
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }
-        bool Broken = false;
     public:
         using TBase::TBase;
 
         void OnTabletInit(TColumnShard& owner) override {
             for (auto&& writeId : WriteIds) {
-                if (!owner.LongTxWrites.contains(writeId)) {
-                    Broken = true;
-                } else {
-                    AFL_VERIFY(!Broken);
-                    AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
-                    owner.AddLongTxWrite(writeId, GetTxId());
-                }
+                AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
+                owner.AddLongTxWrite(writeId, GetTxId());
             }
         }
 
@@ -65,10 +59,8 @@ namespace NKikimr::NColumnShard {
             owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
             NIceDb::TNiceDb db(txc.DB);
-            if (!Broken) {
-                for (TWriteId writeId : WriteIds) {
-                    AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
-                }
+            for (TWriteId writeId : WriteIds) {
+                AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             owner.UpdateInsertTableCounters();
             return true;
@@ -83,10 +75,8 @@ namespace NKikimr::NColumnShard {
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             NIceDb::TNiceDb db(txc.DB);
-            if (!Broken) {
-                for (TWriteId writeId : WriteIds) {
-                    AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
-                }
+            for (TWriteId writeId : WriteIds) {
+                AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);

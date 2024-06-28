@@ -200,12 +200,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT count(1) FROM graph_edges_cx WHERE first_vertice_type_val = "puid" AND first_vertice_id = "1501854694" AND second_vertice_type_val = "phone_pd_id" AND second_vertice_id = "9a66487b3b624fa9b9fc68dde94f92b1" AND deleted_dttm is null;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT count(1) FROM graph_edges_cx WHERE first_vertice_type_val = "puid" AND first_vertice_id = "1501854694" AND second_vertice_type_val = "passport_phone_id" AND second_vertice_id = "6266cb190e3429fb40fa3b2d" AND deleted_dttm is null;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

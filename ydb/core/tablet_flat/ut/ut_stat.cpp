@@ -594,6 +594,11 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         CheckHistogram(subset, stats.RowCountHistogram, false, totalRows, verifyPercents);
         CheckHistogram(subset, stats.DataSizeHistogram, true, totalBytes, verifyPercents);
+
+        if (mode == BTreeIndex && verifyPercents && histogramBucketsCount != 1000) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.RowCountHistogram.size(), histogramBucketsCount - 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.DataSizeHistogram.size(), histogramBucketsCount - 1);
+        }
     }
 
     Y_UNIT_TEST(Single)

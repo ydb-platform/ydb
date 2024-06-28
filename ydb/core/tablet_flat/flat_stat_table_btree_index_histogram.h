@@ -271,7 +271,7 @@ private:
                 addEvent(childEnd);
             };
 
-            while (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap && openedSortedByRowCount) {
+            while (nextRowCount != Max<ui64>() && closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap && openedSortedByRowCount) {
                 auto node = openedSortedByRowCount.top();
                 openedSortedByRowCount.pop();
 
@@ -288,7 +288,7 @@ private:
                 } // else: leaf nodes will be closed later
             }
 
-            while (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
+            while (nextDataSize != Max<ui64>() && closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
 
@@ -309,20 +309,34 @@ private:
                 rowCount = closedRowCount + openedRowCount / 2;
                 dataSize = closedDataSize + openedDataSize / 2;
             }
+            rowCount = Min(rowCount, stats.RowCount);
+            dataSize = Min(dataSize, stats.DataSize.Size);
 
             if (event.Key) {
                 // we search value in interval [nextRowCount - RowCountResolutionGap, nextRowCount + RowCountResolutionGap]
-                if (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap || closedRowCount > nextRowCount - RowCountResolutionGap) {
-                    if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < rowCount) {
-                        AddBucket(stats.RowCountHistogram, event.Key, rowCount);
-                        nextRowCount = Max(rowCount + 1, nextRowCount + RowCountResolution);
+                if (nextRowCount != Max<ui64>()) {
+                    if (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap || closedRowCount > nextRowCount - RowCountResolutionGap) {
+                        if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < rowCount) {
+                            AddBucket(stats.RowCountHistogram, event.Key, rowCount);
+                            nextRowCount = Max(rowCount + 1, nextRowCount + RowCountResolution);
+                            if (nextRowCount + RowCountResolutionGap > stats.RowCount) {
+                                nextRowCount = Max<ui64>();
+                                if (nextDataSize == Max<ui64>()) break;
+                            }
+                        }
                     }
                 }
                 // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
-                if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
-                    if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
-                        AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
-                        nextDataSize = Max(dataSize + 1, nextDataSize + DataSizeResolution);
+                if (nextDataSize != Max<ui64>()) {
+                    if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
+                        if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
+                            AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
+                            nextDataSize = Max(dataSize + 1, nextDataSize + DataSizeResolution);
+                            if (nextDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
+                                nextDataSize = Max<ui64>();
+                                if (nextRowCount == Max<ui64>()) break;
+                            }
+                        }
                     }
                 }
             }
@@ -416,12 +430,6 @@ private:
     TPriorityQueue<TNodeEvent, TVector<TNodeEvent>, TNodeEventKeyGreater> NodeEvents;
 };
 
-void ClampHistogram(THistogram& histogram, ui64 total) {
-    for (auto& bucket : histogram) {
-        bucket.Value = Min(bucket.Value, total);
-    }
-}
-
 }
 
 inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
@@ -430,9 +438,6 @@ inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats,
     if (!builder.Build(stats)) {
         return false;
     }
-
-    ClampHistogram(stats.DataSizeHistogram, stats.DataSize.Size);
-    ClampHistogram(stats.RowCountHistogram, stats.RowCount);
 
     return true;
 }

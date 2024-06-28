@@ -89,9 +89,6 @@ struct TEvColumnShard {
         EvApplyLinksModificationFinished,
         EvInternalScan,
 
-        EvStatisticsRequest,
-        EvStatisticsResponse,
-
         EvEnd
     };
 

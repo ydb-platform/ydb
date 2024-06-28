@@ -30,6 +30,10 @@ jobs:
         echo "$j1"
         http_code=$(echo "$j1" | tail -n 1)
         echo "Result code: $http_code"
+        if [ "$http_code" != "200" ];then
+          echo "HTTP result code is not 200, exiting"
+          exit 1
+        fi
         #while read x;do
         #  echo "Runner to close: $x"
         #done

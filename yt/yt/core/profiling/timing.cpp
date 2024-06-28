@@ -53,6 +53,11 @@ TDuration TWallTimer::GetElapsedTime() const
     return CpuDurationToDuration(GetElapsedCpuTime());
 }
 
+TDuration TWallTimer::GetCurrentDuration() const
+{
+    return CpuDurationToDuration(GetCurrentCpuDuration());
+}
+
 TCpuInstant TWallTimer::GetStartCpuTime() const
 {
     return StartTime_;

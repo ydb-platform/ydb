@@ -302,8 +302,8 @@ DELEGATE_METHOD(TFuture<void>, AdvanceQueueConsumer, (
 DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
-    i64 epoch,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
+    NQueueClient::TQueueProducerEpoch epoch,
     NTableClient::TNameTablePtr nameTable,
     TSharedRange<NTableClient::TUnversionedRow> rows,
     const TPushQueueProducerOptions& options),

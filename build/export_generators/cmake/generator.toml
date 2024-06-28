@@ -265,6 +265,9 @@ add_values=[{attr="includes", values=["cmake/bison.cmake"]}]
 attrs=[
     "conan-requires",
     "conan-tool_requires",
+    "conan-imports",
+    "conan-options",
+    "conan-generators",
 ]
 copy=["cmake/conan.cmake"]
 add_values=[{attr="includes", values=["cmake/conan.cmake"]}]

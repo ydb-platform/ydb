@@ -31,4 +31,10 @@ DECLARE_REFCOUNTED_CLASS(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSessionId, TString);
+YT_DEFINE_STRONG_TYPEDEF(TQueueProducerEpoch, i64);
+YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSequenceNumber, i64);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NQueueClient

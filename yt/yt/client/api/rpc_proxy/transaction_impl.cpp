@@ -23,6 +23,7 @@ using namespace NApi;
 using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
+using namespace NQueueClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -530,23 +531,23 @@ TFuture<void> TTransaction::AdvanceQueueConsumer(
 TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
-    i64 epoch,
+    const TQueueProducerSessionId& sessionId,
+    TQueueProducerEpoch epoch,
     NTableClient::TNameTablePtr nameTable,
     TSharedRange<NTableClient::TUnversionedRow> rows,
     const TPushQueueProducerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
-    THROW_ERROR_EXCEPTION_IF(epoch < 0,
+    THROW_ERROR_EXCEPTION_IF(epoch.Underlying() < 0,
         "Epoch number %v cannot be negative", epoch);
-    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && *options.SequenceNumber < 0,
+    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && options.SequenceNumber->Underlying() < 0,
         "Sequence number %v cannot be negative", *options.SequenceNumber);
 
     auto req = Proxy_.PushQueueProducer();
     SetTimeoutOptions(*req, options);
     if (options.SequenceNumber) {
-        req->set_sequence_number(*options.SequenceNumber);
+        req->set_sequence_number(options.SequenceNumber->Underlying());
     }
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
@@ -562,7 +563,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch);
+    req->set_epoch(epoch.Underlying());
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
@@ -575,7 +576,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
         return TPushQueueProducerResult{
-            .LastSequenceNumber = rsp->last_sequence_number(),
+            .LastSequenceNumber = TQueueProducerSequenceNumber(rsp->last_sequence_number()),
             .SkippedRowCount = rsp->skipped_row_count(),
         };
     }));

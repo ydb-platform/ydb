@@ -347,7 +347,12 @@ private:
         } while (batch.TryNextRow());
         builder.EndList().Build();
 
-        auto query = withPK ? "SELECT id, embedding FROM table WHERE id IN $ids" : "SELECT embedding FROM table WHERE id IN $ids";
+        TString query = std::format("embedding FROM {0} WHERE id IN $ids", Options.Table);
+        if (withPK) {
+            query = "SELECT id, " + query;
+        } else {
+            query = "SELECT " + query;
+        }
 
         auto fit = Client.StreamExecuteScanQuery(query, ParamsBuilder.Build());
 
@@ -403,7 +408,7 @@ private:
                 if (ParentId == 0 && Table.front() == 'w') {
                     pk = *primaryKey.GetOptionalUint64();
                 } else {
-                    pk = *primaryKey.GetOptionalUint32();
+                    pk = primaryKey.GetUint64();
                 }
                 cb(pk, *embedding.GetOptionalString());
             } while (batch.TryNextRow());

@@ -125,9 +125,9 @@ runs:
         # to be sure
         set -o pipefail
         
-        # check that there are no configure errors configure errors are hidden then '-k' is used, 
+        # check that there are no configure errors configure errors are hidden if '-k' is used, 
         # see https://github.com/yandex/yatool/issues/7
-        ./ya make --build "${build_type}" --force-build-depends -j0
+        ./ya make --build "${build_type}" --force-build-depends -j0 ydb
 
         ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \

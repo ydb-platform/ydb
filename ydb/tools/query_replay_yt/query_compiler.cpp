@@ -22,7 +22,6 @@
 
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
 
-#include <map>
 #include <memory>
 
 using namespace NKikimrConfig;

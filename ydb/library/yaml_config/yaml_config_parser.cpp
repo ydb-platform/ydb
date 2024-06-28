@@ -524,11 +524,12 @@ namespace NKikimr::NYaml {
         // Find the next available host_config_id
         if (ephemeralConfig.HostConfigsSize()) {
             for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
-                Y_ENSURE_BT(hostConfig.HasHostConfigId());
-                nextHostConfigID = Max(
-                    nextHostConfigID,
-                    hostConfig.GetHostConfigId() + 1
-                );
+                if (hostConfig.HasHostConfigId()) {
+                    nextHostConfigID = Max(
+                        nextHostConfigID,
+                        hostConfig.GetHostConfigId() + 1
+                    );
+                }
             }
         }
 
@@ -1115,11 +1116,28 @@ namespace NKikimr::NYaml {
         autoconfigSettings->ClearDefineHostConfig();
         autoconfigSettings->ClearDefineBox();
 
-        if (ephemeralConfig.HostConfigsSize()) {
-            for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
-                hostConfig.CopyToTDefineHostConfig(*autoconfigSettings->AddDefineHostConfig());
+        bool hostConfigIdAssigned = false;
+        bool hostConfigIdProvided = false;
+        constexpr ui64 defaultHostConfigId = 1;
+        THashSet<ui64> validHostConfigIds;
+
+        for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+            auto *hostconf = autoconfigSettings->AddDefineHostConfig();
+            hostConfig.CopyToTDefineHostConfig(*hostconf);
+            if (hostConfig.HasHostConfigId()) {
+                hostConfigIdProvided = true;
+            } else if (!hostConfigIdAssigned) {
+                hostConfigIdAssigned = true;
+                hostconf->SetHostConfigId(defaultHostConfigId);
+            } else {
+                Y_ENSURE_BT(false, "multiple host configs without explicit id");
             }
+            Y_ENSURE_BT(validHostConfigIds.insert(hostconf->GetHostConfigId()).second, "duplicate host config id "
+                << hostconf->GetHostConfigId());
         }
+
+        Y_ENSURE_BT(!hostConfigIdProvided || !hostConfigIdAssigned, "mixed host configs with explicit id and without one");
+        Y_ENSURE_BT(!validHostConfigIds.empty(), "autoconfiguration is enabled, but no host configs provided");
 
         TMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
         Y_ENSURE_BT(config.HasNameserviceConfig());
@@ -1130,36 +1148,36 @@ namespace NKikimr::NYaml {
             hostNodeMap[key] = item.GetNodeId();
         }
 
-
-        if (!ephemeralConfig.HostsSize()) {
-            return;
-        }
-
         NKikimrBlobStorage::TDefineBox* defineBox = nullptr;
         for (const auto& host : ephemeralConfig.GetHosts()) {
-            if (host.HasHostConfigId()) {
-                if (!defineBox) {
-                    defineBox = autoconfigSettings->MutableDefineBox();
-                    defineBox->SetBoxId(1);
-                }
-
-                TString fqdn;
-                if (host.HasInterconnectHost()) {
-                    fqdn = host.GetInterconnectHost();
-                } else {
-                    fqdn = host.GetHost();
-                }
-                ui32 port = 19001;
-                if (host.HasPort()) {
-                    port = host.GetPort();
-                }
-                const auto key = std::make_tuple(fqdn, port);
-                Y_ENSURE_BT(hostNodeMap.contains(key));
-
-                auto* dbHost = defineBox->AddHost();
-                dbHost->SetHostConfigId(host.GetHostConfigId());
-                dbHost->SetEnforcedNodeId(hostNodeMap[key]);
+            if (!host.HasHostConfigId() && !hostConfigIdAssigned) {
+                continue;
             }
+
+            if (!defineBox) {
+                defineBox = autoconfigSettings->MutableDefineBox();
+                defineBox->SetBoxId(1);
+            }
+
+            TString fqdn;
+            if (host.HasInterconnectHost()) {
+                fqdn = host.GetInterconnectHost();
+            } else {
+                fqdn = host.GetHost();
+            }
+            ui32 port = 19001;
+            if (host.HasPort()) {
+                port = host.GetPort();
+            }
+            const auto key = std::make_tuple(fqdn, port);
+            Y_ENSURE_BT(hostNodeMap.contains(key));
+
+            auto* dbHost = defineBox->AddHost();
+            dbHost->SetHostConfigId(host.HasHostConfigId() ? host.GetHostConfigId() : defaultHostConfigId);
+            dbHost->SetEnforcedNodeId(hostNodeMap[key]);
+
+            Y_ENSURE_BT(validHostConfigIds.contains(dbHost->GetHostConfigId()), "invalid host config id "
+                << dbHost->GetHostConfigId() << " for host " << fqdn << " and port " << port);
         }
     }
 

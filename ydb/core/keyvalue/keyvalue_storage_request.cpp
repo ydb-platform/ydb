@@ -109,7 +109,7 @@ public:
         IntermediateResults->Stat.PutLatencies.push_back(duration.MilliSeconds());
 
         auto groupId = ev->Get()->GroupId;
-        CheckYellow(ev->Get()->StatusFlags, groupId.GetRawId());
+        CheckYellow(ev->Get()->StatusFlags, groupId);
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
@@ -157,8 +157,8 @@ public:
         wr->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
         wr->Latency = duration;
         ++WriteRequestsReplied;
-        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += ev->Get()->Id.BlobSize();
-        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += 1; // FIXME: count distinct blobs?
+        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
+        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
         UpdateRequest(ctx);
     }
 
@@ -337,8 +337,8 @@ public:
             if (response.Status == NKikimrProto::OK) {
                 Y_ABORT_UNLESS(response.Buffer.size() == readItem.BlobSize);
                 Y_ABORT_UNLESS(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
-                IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId.GetRawId())] += response.Buffer.size();
-                IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId.GetRawId())] += 1; // FIXME: count distinct blobs?
+                IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
+                IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"

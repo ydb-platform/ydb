@@ -589,8 +589,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             switch (response.Status) {
             case NKikimrProto::OK:
                 Y_ABORT_UNLESS(1 == RefsToCheck.erase(response.Id));
-                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId.GetRawId())] += response.Buffer.size();
-                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId.GetRawId())] += 1;
+                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId)] += response.Buffer.size();
+                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1;
                 break;
             case NKikimrProto::NODATA:
                 BLOG_W("TTabletReqRebuildHistoryGraph::CheckReferences - NODATA for blob " << response.Id, "TRRH07");

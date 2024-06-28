@@ -1,6 +1,7 @@
 #include "dq_output_channel.h"
 #include "dq_transport.h"
 
+#include <format>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
@@ -54,6 +55,7 @@ public:
     }
 
     bool HasMemoryForProcessing() const {
+        std::cerr << std::format("CHAN: {}mb/{}mb YZ: {}\n", NKikimr::NMiniKQL::TlsAllocState->GetUsed() / 1024 / 1024, NKikimr::NMiniKQL::TlsAllocState->GetLimit() / 1024 / 1024, NKikimr::NMiniKQL::TlsAllocState->IsMemoryYellowZoneEnabled());
         return !NKikimr::NMiniKQL::TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
@@ -130,7 +132,9 @@ public:
             packerSize = 0;
         }
 
-        while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes && !HasMemoryForProcessing()) {
+        std::cerr << std::format("Channel_{}: {}/{}\n", PopStats.ChannelId, PackedDataSize + packerSize, MaxStoredBytes);
+        while (Storage && !HasMemoryForProcessing() && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes ) {
+            std::cerr << "spilling!\n";
             auto& head = Data.front();
             size_t bufSize = head.Buffer.size();
             YQL_ENSURE(PackedDataSize >= bufSize);
@@ -364,7 +368,7 @@ private:
         TRope Buffer;
         ui64 RowCount = 0;
     };
-    std::deque<TSerializedBatch> Data;
+    std::deque<TSerializedBatch, NMiniKQL::TMKQLAllocator<TSerializedBatch>> Data;
 
     size_t SpilledRowCount = 0;
     ui64 FirstStoredId = 0;

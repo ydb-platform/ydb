@@ -628,6 +628,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        std::cerr << std::format("JOIN: {}mb/{}mb", NKikimr::NMiniKQL::TlsAllocState->GetUsed() / 1024 / 1024, NKikimr::NMiniKQL::TlsAllocState->GetLimit() / 1024 / 1024);
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 

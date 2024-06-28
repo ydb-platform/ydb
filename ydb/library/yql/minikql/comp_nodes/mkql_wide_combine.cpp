@@ -717,13 +717,14 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        std::cerr << std::format("COMBINE: {}mb/{}mb YZ: {}\n", NKikimr::NMiniKQL::TlsAllocState->GetUsed() / 1024 / 1024, NKikimr::NMiniKQL::TlsAllocState->GetLimit() / 1024 / 1024, NKikimr::NMiniKQL::TlsAllocState->IsMemoryYellowZoneEnabled());
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:

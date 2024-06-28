@@ -432,9 +432,7 @@ namespace NYql::NDqs {
             }
 
             bool enableSpilling = false;
-            if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
-            }
+            enableSpilling = Settings->IsSpillingEnabled();
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
             }

@@ -45,8 +45,6 @@ public:
     void Reset();
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NDetail
 
 //! Helps to perform certain actions periodically.

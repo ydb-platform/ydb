@@ -423,7 +423,7 @@ void TKikimrRunner::CreateSampleTables() {
             ("kikimr-db", 4, "kikimr-db-53", "Discover"),
             ("ydb", 0, "ydb-1000", "some very very very very long string");
 
-        REPLACE INTO `Join1` (Key, Fk21, Fk22, Value) VALUES
+        REPLACE INTO `Join1` (Key, Fk21, Fk22, Value) VALUES 
             (1, 101, "One", "Value1"),
             (2, 102, "Two", "Value1"),
             (3, 103, "One", "Value2"),

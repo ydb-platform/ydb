@@ -212,7 +212,7 @@ runs:
         
         echo "Tests are running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         
-        ./ya test ${{ inputs.build_target }} "${params[@]}" \
+        ./ya test --thinlto ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
           --no-dir-outputs \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (

@@ -87,7 +87,6 @@ public:
     virtual THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) = 0;
 
     // Generic query helpers
-    virtual NYdb::NQuery::TExecuteQueryResult ExecuteQueryGrpc(const TString& query, const TString& poolId = "") const = 0;
     virtual TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
     virtual TQueryRunnerResultAsync ExecuteQueryAsync(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
 
@@ -98,7 +97,7 @@ public:
 
     // Pools actions
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
-    virtual void WaitPoolState(const TPoolStateDescription& state, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
+    virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
 
     virtual TTestActorRuntime* GetRuntime() const = 0;
@@ -123,12 +122,6 @@ struct TSampleQueries {
     static void CheckCancelled(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Request timeout exceeded, cancelling after");
-    }
-
-    template <typename TResult>
-    static void CheckNotFound(const TResult& result, const TString& poolId) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
     }
 
     struct TSelect42 {

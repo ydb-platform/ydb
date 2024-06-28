@@ -178,7 +178,7 @@ public:
 
         TablePathsToCheck.clear();
         for (const auto& result : results) {
-            const TString& path = JoinPath(result.Path);
+            const TString& path = CanonizePath(result.Path);
             LOG_D("Describe table " << path << " status " << result.Status);
 
             switch (result.Status) {
@@ -307,6 +307,11 @@ public:
     {}
 
     void OnRunQuery() override {
+        if (!LeaseDuration) {
+            OnLeaseUpdated();
+            return;
+        }
+
         TString sql = TStringBuilder() << R"(
             -- TRefreshPoolStateQuery::OnRunQuery
             DECLARE $database AS Text;

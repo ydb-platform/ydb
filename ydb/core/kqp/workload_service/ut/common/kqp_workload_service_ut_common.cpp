@@ -58,10 +58,11 @@ class TQueryRunnerActor : public TActorBootstrapped<TQueryRunnerActor> {
     using TBase = TActorBootstrapped<TQueryRunnerActor>;
 
 public:
-    TQueryRunnerActor(std::unique_ptr<TEvKqp::TEvQueryRequest> request, TPromise<TQueryRunnerResult> promise, const TQueryRunnerSettings& settings)
+    TQueryRunnerActor(std::unique_ptr<TEvKqp::TEvQueryRequest> request, TPromise<TQueryRunnerResult> promise, const TQueryRunnerSettings& settings, ui32 targetNodeId)
         : Request_(std::move(request))
         , Promise_(promise)
         , Settings_(settings)
+        , TargetNodeId_(targetNodeId)
     {}
 
     void Registered(TActorSystem* sys, const TActorId& owner) override {
@@ -71,7 +72,7 @@ public:
 
     void Bootstrap() {
         ActorIdToProto(SelfId(), Request_->Record.MutableRequestActorId());
-        Send(MakeKqpProxyID(SelfId().NodeId()), std::move(Request_));
+        Send(MakeKqpProxyID(TargetNodeId_), std::move(Request_));
 
         Become(&TQueryRunnerActor::StateFunc);
     }
@@ -142,6 +143,7 @@ private:
     std::unique_ptr<TEvKqp::TEvQueryRequest> Request_;
     TPromise<TQueryRunnerResult> Promise_;
     const TQueryRunnerSettings Settings_;
+    const ui32 TargetNodeId_;
     TActorId Owner;
 
     TQueryRunnerResult Result_;
@@ -270,7 +272,6 @@ private:
             .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
             .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
 
-        QueryClient_ = std::make_unique<NQuery::TQueryClient>(*YdbDriver_, NQuery::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
         TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
     }
@@ -318,19 +319,12 @@ public:
     }
 
     // Generic query helpers
-    NQuery::TExecuteQueryResult ExecuteQueryGrpc(const TString& query, const TString& poolId = "") const override {
-        NQuery::TExecuteQuerySettings settings;
-        settings.PoolId(poolId ? poolId : Settings_.PoolId_);
-
-        return QueryClient_->ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
-    }
-
     TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const override {
         SetupDefaultSettings(settings, false);
 
         auto event = GetQueryRequest(query, settings);
         auto promise = NewPromise<TQueryRunnerResult>();
-        GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings), settings.NodeIndex_);
+        GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)));
 
         return promise.GetFuture().GetValue(FUTURE_WAIT_TIMEOUT);
     }
@@ -341,7 +335,7 @@ public:
         auto event = GetQueryRequest(query, settings);
         auto promise = NewPromise<TQueryRunnerResult>();
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        auto runerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings), settings.NodeIndex_, 0, TMailboxType::Simple, 0, edgeActor);
+        auto runerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
         return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
     }
@@ -373,10 +367,10 @@ public:
         return response->Get()->PoolState;
     }
 
-    void WaitPoolState(const TPoolStateDescription& state, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
+    void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const override {
         TInstant start = TInstant::Now();
         while (TInstant::Now() - start <= FUTURE_WAIT_TIMEOUT) {
-            auto description = GetPoolDescription(leaseDuration, poolId);
+            auto description = GetPoolDescription(TDuration::Zero(), poolId);
             if (description.DelayedRequests == state.DelayedRequests && description.RunningRequests == state.RunningRequests) {
                 return;
             }
@@ -429,7 +423,6 @@ private:
     std::unique_ptr<TClient> Client_;
     std::unique_ptr<TDriver> YdbDriver_;
 
-    std::unique_ptr<NQuery::TQueryClient> QueryClient_;
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient_;
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;
 };

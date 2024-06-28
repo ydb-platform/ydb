@@ -212,6 +212,10 @@ protected:
         return LocalInFlight;
     }
 
+    ui64 GetLocalSessionsCount() const {
+        return LocalInFlight;
+    }
+
     TMaybe<TInstant> GetWaitDeadline(TInstant startTime) const {
         if (!CancelAfter) {
             return Nothing();
@@ -349,7 +353,7 @@ public:
 
 protected:
     void OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || PendingRequests.size() + DelayedRequests.size() > QueueSizeLimit) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalSessionsCount() - GetLocalInFlight() > QueueSizeLimit + 1) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return;
         }
@@ -384,6 +388,7 @@ protected:
             return;
         }
 
+        RemoveFinishedRequests();
         RefreshRequired |= !PendingRequests.empty();
         RefreshRequired |= (GetLocalInFlight() || !DelayedRequests.empty()) && TInstant::Now() - LastRefreshTime > LEASE_DURATION / 4;
         if (RefreshRequired) {

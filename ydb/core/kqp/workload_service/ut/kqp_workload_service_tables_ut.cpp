@@ -62,12 +62,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         }
 
         for (const auto& result : asyncResults) {
-            TSampleQueries::TSelect42::CheckResult(result);
+            TSampleQueries::TSelect42::CheckResult(result.GetResult());
         }
 
-        // Check that tables in .metadata/workload_service created
+        // Check that tables in .metadata/workload_manager created
         auto listResult = ydb->GetSchemeClient().ListDirectory(
-            CanonizePath({ydb->GetSettings().DomainName_, ".metadata/workload_service"})
+            CanonizePath({ydb->GetSettings().DomainName_, ".metadata/workload_manager"})
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
@@ -79,21 +79,25 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             .QueueSize(10)
             .Create();
 
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         // Check that there is no .metadata folder
         auto listResult = ydb->GetSchemeClient().ListDirectory(
             CanonizePath(ydb->GetSettings().DomainName_)
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".sys");
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".resource_pools");
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[1].Name, ".sys");
     }
 
     Y_UNIT_TEST(TestPoolStateFetcherActor) {
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(1)
             .Create();
+
+        // Create tables
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         CheckPoolDescription(ydb, 0, 0);
 
@@ -111,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             .Create();
 
         // Create tables
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         StartRequest(ydb, "test_session", 2 * FUTURE_WAIT_TIMEOUT);
         DelayRequest(ydb, "test_session",  2 * FUTURE_WAIT_TIMEOUT);
@@ -132,12 +136,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             .Create();
 
         // Create tables
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         const TDuration leaseDuration = TDuration::Seconds(10);
         StartRequest(ydb, "test_session", leaseDuration);
         DelayRequest(ydb, "test_session",  leaseDuration);
-        CheckPoolDescription(ydb, 1, 1);
+        CheckPoolDescription(ydb, 1, 1, leaseDuration);
 
         ydb->StopWorkloadService();
 
@@ -152,13 +156,13 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             .Create();
 
         // Create tables
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQueryGrpc(TSampleQueries::TSelect42::Query));
+        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
         ydb->StopWorkloadService();
 
         const TDuration leaseDuration = TDuration::Seconds(10);
         StartRequest(ydb, "test_session", leaseDuration);
         DelayRequest(ydb, "test_session",  leaseDuration);
-        CheckPoolDescription(ydb, 1, 1);
+        CheckPoolDescription(ydb, 1, 1, leaseDuration);
 
         // Wait lease duration time and check state
         Sleep(leaseDuration / 2);

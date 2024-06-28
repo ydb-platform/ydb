@@ -26,7 +26,6 @@ public:
         if (!Event->Get()->PoolId) {
             Event->Get()->PoolId = NResourcePool::DEFAULT_POOL_ID;
         }
-        UseDefaultPool = Event->Get()->PoolId == NResourcePool::DEFAULT_POOL_ID;
     }
 
     void DoBootstrap() {
@@ -51,7 +50,7 @@ public:
             case EStatus::AccessDenied:
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
-                if (!UseDefaultPool) {
+                if (Event->Get()->PoolId != NResourcePool::DEFAULT_POOL_ID) {
                     Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << Event->Get()->PoolId << " not found");
                 } else {
                     CreateDefaultPool();
@@ -113,7 +112,7 @@ protected:
     }
 
     TString LogPrefix() const override {
-        return TStringBuilder() << "[TPoolFetcherActor] ActorId: " << SelfId() << ", Database: " << Event->Get()->Database << ", PoolId: " << Event->Get()->PoolId << ", SessionId: " << Event->Get()->SessionId;
+        return TStringBuilder() << "[TPoolFetcherActor] ActorId: " << SelfId() << ", Database: " << Event->Get()->Database << ", PoolId: " << Event->Get()->PoolId << ", SessionId: " << Event->Get()->SessionId << ", ";
     }
 
 private:
@@ -170,7 +169,6 @@ private:
 
 private:
     TEvPlaceRequestIntoPool::TPtr Event;
-    bool UseDefaultPool = false;  // Skip access checks for default pool
 
     NResourcePool::TPoolSettings PoolConfig;
 };
@@ -227,8 +225,14 @@ protected:
         LOG_D("Start pool creating");
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        BuildCreatePoolRequest(*event->Record.MutableTransaction()->MutableModifyScheme());
-        BuildModifyAclRequest(*event->Record.MutableTransaction()->AddTransactionalModification());
+        auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
+        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools"}));
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
+        schemeTx.SetInternal(true);
+        schemeTx.SetAllowAccessToPrivatePaths(true);
+
+        BuildCreatePoolRequest(*schemeTx.MutableCreateResourcePool());
+        BuildModifyAclRequest(*schemeTx.MutableModifyACL());
 
         if (UserToken) {
             event->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -246,13 +250,7 @@ protected:
     }
 
 private:
-    void BuildCreatePoolRequest(NKikimrSchemeOp::TModifyScheme& schemeTx) {
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools/"}));
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
-        schemeTx.SetInternal(true);
-        schemeTx.SetAllowAccessToPrivatePaths(true);
-
-        auto& poolDescription = *schemeTx.MutableCreateResourcePool();
+    void BuildCreatePoolRequest(NKikimrSchemeOp::TResourcePoolDescription& poolDescription) {
         poolDescription.SetName(PoolId);
         for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
             poolDescription.MutableProperties()->MutableProperties()->insert({
@@ -262,13 +260,7 @@ private:
         }
     }
 
-    void BuildModifyAclRequest(NKikimrSchemeOp::TModifyScheme& schemeTx) const {
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools/"}));
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
-        schemeTx.SetInternal(true);
-        schemeTx.SetAllowAccessToPrivatePaths(true);
-
-        auto& modifyACL = *schemeTx.MutableModifyACL();
+    void BuildModifyAclRequest(NKikimrSchemeOp::TModifyACL& modifyACL) const {
         modifyACL.SetName(PoolId);
         modifyACL.SetDiffACL(DiffAcl.SerializeAsString());
         if (UserToken) {

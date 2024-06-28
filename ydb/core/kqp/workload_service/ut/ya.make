@@ -5,8 +5,8 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 SRCS(
-    # kqp_workload_service_actors_ut.cpp
-    # kqp_workload_service_tables_ut.cpp
+    kqp_workload_service_actors_ut.cpp
+    kqp_workload_service_tables_ut.cpp
     kqp_workload_service_ut.cpp
 )
 

@@ -43,8 +43,7 @@ public:
             hFunc(TEvStartTask, Handle);
             hFunc(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated, Handle);
             default:
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("problem", "unexpected event");
-                AFL_VERIFY_DEBUG(false);
+                AFL_VERIFY(false);
         }
     }
 };

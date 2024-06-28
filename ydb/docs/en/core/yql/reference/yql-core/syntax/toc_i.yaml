@@ -31,7 +31,7 @@ items:
 - { name: PROCESS,                      href: process.md,                    when: feature_mapreduce and process_command == "PROCESS" }
 - { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }
 - { name: REPLACE,                      href: replace_into.md,               when: feature_replace }
-- { name: SELECT,                       href: select.md }
+- { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }

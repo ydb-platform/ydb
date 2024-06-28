@@ -1,5 +1,5 @@
 items:
-- { name: Обзор,             href: index.md                                                }
+- { name: Overview,          href: index.md                                                }
 - { name: TEMPORARY TABLE,   href: temporary_table.md,       when: feature_temp_table      }
 - { name: FROM,              href: from.md                                                 }
 - { name: FROM AS_TABLE,     href: from_as_table.md                                        }

@@ -1208,7 +1208,7 @@ message AutoPartitioningWriteSpeedStrategy {
 
     //Partition will become a candidate to the auto partitioning down
     //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
-    //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
+    //This candidate partition will be auto partitioned down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
 
     // Zero value means default - 300.
     google.protobuf.Duration stabilization_window = 1;

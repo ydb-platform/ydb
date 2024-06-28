@@ -14,7 +14,7 @@ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurren
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
                 .Application = "nbs",
-                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 4 },
+                .LowerLimit = TVersionConstructor{ .Year = 23, .Major = 3 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 2 },
             },
         },

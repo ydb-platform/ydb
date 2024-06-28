@@ -95,7 +95,7 @@ Technically, tablets are [actors](#actors) with a persistent state reliably save
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).
+{% if oss %}The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).{% endif %}
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -442,7 +442,7 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below.{% if oss %} The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).{% endif %}
 
 #### Deterministic transactions {#deterministic-transactions}
 

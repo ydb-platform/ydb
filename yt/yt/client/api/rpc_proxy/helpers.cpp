@@ -947,6 +947,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.JobCookie) {
         protoJob->set_job_cookie(*job.JobCookie);
     }
+    if (job.ArchiveFeatures) {
+        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -1085,6 +1088,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->JobCookie = protoJob.job_cookie();
     } else {
         job->JobCookie.reset();
+    }
+    if (protoJob.has_archive_features()) {
+        job->ArchiveFeatures = TYsonString(protoJob.archive_features());
+    } else {
+        job->ArchiveFeatures = TYsonString();
     }
 }
 

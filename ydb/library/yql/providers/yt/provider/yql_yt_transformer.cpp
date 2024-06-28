@@ -52,7 +52,6 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     }
     AddHandler(0, &TCoExtendBase::Match, HNDL(Extend));
     AddHandler(0, &TCoAssumeSorted::Match, HNDL(AssumeSorted));
-    AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
@@ -359,4 +358,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     return NPrivate::WrapOp(map, ctx);
 }
 
-}  // namespace NYql 
+}  // namespace NYql

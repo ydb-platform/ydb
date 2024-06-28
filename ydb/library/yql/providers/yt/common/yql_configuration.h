@@ -22,7 +22,7 @@ constexpr bool DEFAULT_USE_FLOW = true;
 
 constexpr bool DEFAULT_USE_NATIVE_YT_TYPES = false;
 
-constexpr bool DEFAULT_USE_INTERMEDIATE_SCHEMA = true;
+constexpr bool DEFAULT_USE_INTERMEDIATE_STREAMS = false;
 
 constexpr bool DEFAULT_USE_SKIFF = true;
 

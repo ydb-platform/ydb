@@ -106,12 +106,19 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
+message TimeDifferenceStatus {
+    StatusFlag.Status overall = 1;
+    int64 difference_ms = 2;
+    string peer = 3;
+}
+
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
+    TimeDifferenceStatus max_time_difference = 6;
 }
 
 message ComputeStatus {
@@ -120,13 +127,6 @@ message ComputeStatus {
     repeated ComputeTabletStatus tablets = 3;
     float paths_quota_usage = 4;
     float shards_quota_usage = 5;
-}
-
-message TimeDifferenceStatus {
-    StatusFlag.Status overall = 1;
-    int64 max_difference_ms = 2;
-    string node = 3;
-    string peer = 4;
 }
 
 message LocationNode {
@@ -174,6 +174,7 @@ message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
+    LocationNode peer = 4;
 }
 
 message LocationDatabase {
@@ -205,7 +206,6 @@ message DatabaseStatus {
     StatusFlag.Status overall = 2;
     StorageStatus storage = 3;
     ComputeStatus compute = 4;
-    TimeDifferenceStatus time_difference = 5;
 }
 
 message SelfCheckResult {

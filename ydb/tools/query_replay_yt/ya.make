@@ -1,4 +1,4 @@
-PROGRAM(ydb_query_replay)
+PROGRAM(query_replay_yt)
 
 OWNER(
     shumkovnd

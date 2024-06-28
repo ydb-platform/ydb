@@ -204,7 +204,6 @@ void TClusterizer<T>::BadCluster(const TOptions& options) {
 
 template <typename T>
 bool TClusterizer<T>::Init(ui64 k) {
-    // Cout << "Start init" << Endl;
     // TODO kmeans++, kmeans||?
     if (k < kMinClusters || k * kMinClusterSize >= It.Rows()) {
         return false;

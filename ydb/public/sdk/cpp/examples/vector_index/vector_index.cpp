@@ -83,7 +83,6 @@ static void DropTable(TTableClient& client, const TString& table) {
         return session.DropTable(table).ExtractValueSync();
     });
     if (!r.IsSuccess() && r.GetStatus() != EStatus::SCHEME_ERROR) {
-        Cout << "Exception1" << Endl;
         ythrow TVectorException{r};
     }
 }
@@ -103,7 +102,6 @@ static void CreateFlat(TTableClient& client, const TOptions& options) {
         return session.CreateTable(FullIndexName(options), std::move(desc)).ExtractValueSync();
     });
     if (!r.IsSuccess()) {
-        Cout << "Exception2" << Endl;
         ythrow TVectorException{r};
     }
 }
@@ -121,7 +119,6 @@ static void CreateKMeans(TTableClient& client, const TOptions& options, std::str
         return session.CreateTable(FullIndexName(options) + suffix, std::move(desc)).ExtractValueSync();
     });
     if (!r.IsSuccess()) {
-        Cout << "Exception3" << Endl;
         ythrow TVectorException{r};
     }
 }
@@ -140,7 +137,6 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
                                 IndexName(options),
                                 options.PrimaryKey,
                                 options.Embedding);
-    Cout << query << Endl;
     for (ui64 i = 0; i < options.Rows; i += kBulkSize) {
         TParamsBuilder paramsBuilder;
         paramsBuilder.AddParam("$begin").Uint64(i).Build();
@@ -153,7 +149,6 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
                 .ExtractValueSync();
         });
         if (!r.IsSuccess()) {
-            Cout << "Exception4" << Endl;
             ythrow TVectorException{r};
         }
     }
@@ -223,14 +218,9 @@ public:
                     cb(*embedding.GetOptionalString());
                 }
             }
-            if (!r.IsSuccess()) {
-                Cout << "Exception5" << Endl;
-                ythrow TVectorException{r};
-            }
             return r;
         });
         if (!r.IsSuccess()) {
-            Cout << "Exception6" << Endl;
             ythrow TVectorException{r};
         }
     }
@@ -295,7 +285,6 @@ private:
             return TStatus{EStatus::SUCCESS, {}};
         });
         if (!r.IsSuccess()) {
-            Cout << "Exception7" << Endl;
             ythrow TVectorException{r};
         }
         ProcessImpl<WithPK>(read, cb);
@@ -303,7 +292,6 @@ private:
 
     void ReadImpl(TTablePartIterator r) {
         if (!r.IsSuccess()) {
-            Cout << "Exception8" << Endl;
             ythrow TVectorException{r};
         }
         ThreadPool.Submit([this, it = std::move(r)]() mutable {
@@ -319,7 +307,6 @@ private:
                         part = TSimpleStreamPart<TResultSet>{TResultSet{Ydb::ResultSet{}}, TStatus{EStatus::CLIENT_OUT_OF_RANGE, {}}};
                     }
                 } else if (Y_UNLIKELY(!part.EOS())) {
-                    Cout << "Some read error: " << static_cast<const TStatus&>(part) << Endl;
                     wasGood = true;
                     continue;
                 }
@@ -370,7 +357,6 @@ private:
             if (r.EOS()) {
                 return false;
             }
-            Cout << "Exception9" << Endl;
             ythrow TVectorException{r};
         }
         TResultSetParser batch(r.ExtractPart());
@@ -484,13 +470,7 @@ struct TBulkSender {
         auto f = Client.RetryOperation([table = std::move(table), value = std::move(value)](TTableClient& client) {
             auto r = value;
             return client.BulkUpsert(table, std::move(r)).Apply([](TAsyncBulkUpsertResult result) -> TStatus {
-                auto r = result.ExtractValueSync();
-                if (!r.IsSuccess()) {
-                    Cout << "BulkUpsert: ";
-                    r.Out(Cout);
-                    Cout << Endl;
-                }
-                return r;
+                return result.ExtractValueSync();
             });
         }, RetrySettings);
         ToSend.emplace_back(std::move(f));
@@ -512,7 +492,6 @@ private:
             for (auto& f : ToWait) {
                 auto r = f.ExtractValueSync();
                 if (!r.IsSuccess()) {
-                    Cout << "Exception10" << Endl;
                     ythrow TVectorException{r};
                 }
             }
@@ -807,7 +786,7 @@ static void TopKFlatBit(TTableClient& client, const TOptions& options) {
                                 options.Embedding,
                                 options.Data,
                                 options.TopK);
-    Cout << query << Endl;
+    // Cout << query << Endl;
     query = std::format(kTargetQuery, query);
     auto r = client.RetryOperationSync([&](TSession session) -> TStatus {
         auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
@@ -826,7 +805,6 @@ static void TopKFlatBit(TTableClient& client, const TOptions& options) {
         return result;
     });
     if (!r.IsSuccess()) {
-        Cout << "Exception11" << Endl;
         ythrow TVectorException{r};
     }
 }
@@ -840,7 +818,7 @@ static void TopKKMeansNone(TTableClient& client, const TOptions& options) {
                                 options.Embedding,
                                 options.Data,
                                 options.TopK);
-    Cout << query << Endl;
+    // Cout << query << Endl;
     query = std::format(kTargetQuery, query);
     auto r = client.RetryOperationSync([&](TSession session) -> TStatus {
         auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
@@ -859,7 +837,6 @@ static void TopKKMeansNone(TTableClient& client, const TOptions& options) {
         return result;
     });
     if (!r.IsSuccess()) {
-        Cout << "Exception12" << Endl;
         ythrow TVectorException{r};
     }
 }

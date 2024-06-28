@@ -191,6 +191,11 @@ message ChangefeedDescription {
         STATE_INITIAL_SCAN = 3;
     }
 
+    message InitialScanProgress {
+        uint32 parts_total = 1;
+        uint32 parts_completed = 2;
+    }
+
     // Name of the feed
     string name = 1;
     // Mode specifies the information that will be written to the feed
@@ -207,6 +212,8 @@ message ChangefeedDescription {
     string aws_region = 7;
     // Interval of emitting of resolved timestamps. If unspecified, resolved timestamps are not emitted.
     google.protobuf.Duration resolved_timestamps_interval = 8;
+    // Progress of initial scan. If unspecified, initial scan was not launched.
+    InitialScanProgress initial_scan_progress = 9;
 }
 
 message StoragePool {

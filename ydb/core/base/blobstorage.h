@@ -1855,11 +1855,18 @@ struct TEvBlobStorage {
         TLogoBlobID To;
 
         TVector<TResponse> Responses;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         TString ErrorReason;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, TGroupId groupId)
+            : Status(status)
+            , From(from)
+            , To(to)
+            , GroupId(groupId.GetRawId())
+        {}
+
+        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
             : Status(status)
             , From(from)
             , To(to)

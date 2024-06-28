@@ -66,11 +66,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
             ui32 size1 = (size - in_offset) % 257;
             ui32 size2 = (size - in_offset - size1) % 263;
             ui32 size3 = size - size1 - size2 - in_offset;
-
-            if (size == 448) {
-                Cout << 'a';
-            }
-
             cypher1.StartMessage(nonce, 0);
             cypher1.Encrypt(out, in + in_offset, size1);
             cypher1.StartMessage(nonce, size1);
@@ -83,9 +78,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
             cypher2.InplaceEncrypt(out, size - in_offset);
 
             for (ui32 i = 0; i < size - in_offset; ++i) {
-                if (in[i + in_offset] != out[i]) {
-                    Cout << "Mismatch at " << i << " of " << size << Endl;
-                }
                 UNIT_ASSERT(in[i + in_offset] == out[i]);
             }
         }

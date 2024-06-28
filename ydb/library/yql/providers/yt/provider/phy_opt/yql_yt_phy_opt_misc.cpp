@@ -1,50 +1,126 @@
+#include "yql_yt_phy_opt.h"
+#include "yql_yt_phy_opt_helper.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.h>
-
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 #include <util/generic/xrange.h>
-#include <util/string/type.h>
-
 namespace NYql {
 
+using namespace NNodes;
 using namespace NPrivate;
 
-bool TYtPhysicalOptProposalTransformer::CanBePulledIntoParentEquiJoin(const TCoFlatMapBase& flatMap, const TGetParents& getParents) {
-    const TParentsMap* parents = getParents();
-    YQL_ENSURE(parents);
-
-    auto equiJoinParents = CollectEquiJoinOnlyParents(flatMap, *parents);
-    if (equiJoinParents.empty()) {
-        return false;
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EmbedLimit(TExprBase node, TExprContext& ctx) const {
+    auto op = node.Cast<TYtWithUserJobsOpBase>();
+    if (op.Output().Size() != 1) {
+        return node;
+    }
+    auto settings = op.Settings();
+    auto limitSetting = NYql::GetSetting(settings.Ref(), EYtSettingType::Limit);
+    if (!limitSetting) {
+        return node;
+    }
+    if (HasNodesToCalculate(node.Ptr())) {
+        return node;
     }
 
-    bool suitable = true;
-    for (auto it = equiJoinParents.begin(); it != equiJoinParents.end() && suitable; ++it) {
-        TCoEquiJoin equiJoin(it->Node);
-        auto inputIndex = it->Index;
-
-        auto equiJoinTree = equiJoin.Arg(equiJoin.ArgCount() - 2);
-        THashMap<TStringBuf, THashSet<TStringBuf>> tableKeysMap =
-            CollectEquiJoinKeyColumnsByLabel(equiJoinTree.Ref());
-
-        auto input = equiJoin.Arg(inputIndex).Cast<TCoEquiJoinInput>();
-
-        suitable = suitable && IsLambdaSuitableForPullingIntoEquiJoin(flatMap, input.Scope().Ref(), tableKeysMap,
-                                                                      it->ExtractedMembers);
+    TMaybe<ui64> limit = GetLimit(settings.Ref());
+    if (!limit) {
+        return node;
     }
 
-    return suitable;
+    auto sortLimitBy = NYql::GetSettingAsColumnPairList(settings.Ref(), EYtSettingType::SortLimitBy);
+    if (!sortLimitBy.empty() && *limit > State_->Configuration->TopSortMaxLimit.Get().GetOrElse(DEFAULT_TOP_SORT_LIMIT)) {
+        return node;
+    }
+
+    size_t lambdaIdx = op.Maybe<TYtMapReduce>()
+        ? TYtMapReduce::idx_Reducer
+        : op.Maybe<TYtReduce>()
+            ? TYtReduce::idx_Reducer
+            : TYtMap::idx_Mapper;
+
+    auto lambda = TCoLambda(op.Ref().ChildPtr(lambdaIdx));
+    if (IsEmptyContainer(lambda.Body().Ref()) || IsEmpty(lambda.Body().Ref(), *State_->Types)) {
+        return node;
+    }
+
+    if (sortLimitBy.empty()) {
+        if (lambda.Body().Maybe<TCoTake>()) {
+            return node;
+        }
+
+        lambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"stream"})
+            .Body<TCoTake>()
+                .Input<TExprApplier>()
+                    .Apply(lambda)
+                    .With(0, "stream")
+                .Build()
+                .Count<TCoUint64>()
+                    .Literal()
+                        .Value(ToString(*limit))
+                    .Build()
+                .Build()
+            .Build()
+            .Done();
+    } else {
+        if (lambda.Body().Maybe<TCoTopBase>()) {
+            return node;
+        }
+
+        if (const auto& body = lambda.Body().Ref(); body.IsCallable("ExpandMap") && body.Head().IsCallable({"Top", "TopSort"})) {
+            return node;
+        }
+
+        lambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"stream"})
+            .Body<TCoTop>()
+                .Input<TExprApplier>()
+                    .Apply(lambda)
+                    .With(0, "stream")
+                .Build()
+                .Count<TCoUint64>()
+                    .Literal()
+                        .Value(ToString(*limit))
+                    .Build()
+                .Build()
+                .SortDirections([&sortLimitBy] (TExprNodeBuilder& builder) {
+                    auto listBuilder = builder.List();
+                    for (size_t i: xrange(sortLimitBy.size())) {
+                        listBuilder.Callable(i, TCoBool::CallableName())
+                            .Atom(0, sortLimitBy[i].second ? "True" : "False")
+                            .Seal();
+                    }
+                    listBuilder.Seal();
+                })
+                .KeySelectorLambda()
+                    .Args({"item"})
+                    .Body([&sortLimitBy] (TExprNodeBuilder& builder) {
+                        auto listBuilder = builder.List();
+                        for (size_t i: xrange(sortLimitBy.size())) {
+                            listBuilder.Callable(i, TCoMember::CallableName())
+                                .Arg(0, "item")
+                                .Atom(1, sortLimitBy[i].first)
+                                .Seal();
+                        }
+                        listBuilder.Seal();
+                    })
+                .Build()
+            .Build().Done();
+
+        if (auto& l = lambda.Ref(); l.Tail().Head().IsCallable("ExpandMap")) {
+            lambda = TCoLambda(ctx.ChangeChild(l, 1U, ctx.SwapWithHead(l.Tail())));
+        }
+     }
+
+    return TExprBase(ctx.ChangeChild(op.Ref(), lambdaIdx, lambda.Ptr()));
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TExprContext& ctx) const {
@@ -231,296 +307,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
         .Input<TExprList>()
             .Add(newMuxParts)
         .Build()
-        .Done();
-}
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase node, TExprContext& ctx) const {
-    if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
-        return node;
-    }
-
-    auto combineByKey = node.Cast<TCoCombineByKey>();
-
-    auto input = combineByKey.Input();
-    if (!IsYtProviderInput(input)) {
-        return node;
-    }
-
-    if (!GetSequenceItemType(input, false, ctx)) {
-        return {};
-    }
-
-    const TStructExprType* outItemType = nullptr;
-    if (auto type = SilentGetSequenceItemType(combineByKey.FinishHandlerLambda().Body().Ref(), false); type && type->IsPersistable()) {
-        outItemType = type->Cast<TStructExprType>();
-    } else {
-        return node;
-    }
-
-    auto cluster = TString{GetClusterName(input)};
-    TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-
-    auto preMapLambda = CleanupWorld(combineByKey.PreMapLambda(), ctx);
-    auto keySelectorLambda = CleanupWorld(combineByKey.KeySelectorLambda(), ctx);
-    auto initHandlerLambda = CleanupWorld(combineByKey.InitHandlerLambda(), ctx);
-    auto updateHandlerLambda = CleanupWorld(combineByKey.UpdateHandlerLambda(), ctx);
-    auto finishHandlerLambda = CleanupWorld(combineByKey.FinishHandlerLambda(), ctx);
-    if (!preMapLambda || !keySelectorLambda || !initHandlerLambda || !updateHandlerLambda || !finishHandlerLambda) {
-        return {};
-    }
-
-    auto lambdaBuilder = Build<TCoLambda>(ctx, combineByKey.Pos());
-    TMaybe<TCoLambda> lambdaRet;
-    if (!IsDepended(keySelectorLambda.Cast().Body().Ref(), keySelectorLambda.Cast().Args().Arg(0).Ref())) {
-        lambdaBuilder
-            .Args({TStringBuf("stream")})
-            .Body<TCoFlatMap>()
-                .Input<TCoCondense1>()
-                    .Input<TCoFlatMap>()
-                        .Input(TStringBuf("stream"))
-                        .Lambda()
-                            .Args({TStringBuf("item")})
-                            .Body<TExprApplier>()
-                                .Apply(preMapLambda.Cast())
-                                .With(0, TStringBuf("item"))
-                            .Build()
-                        .Build()
-                    .Build()
-                    .InitHandler()
-                        .Args({TStringBuf("item")})
-                        .Body<TExprApplier>()
-                            .Apply(initHandlerLambda.Cast())
-                            .With(0, keySelectorLambda.Cast().Body())
-                            .With(1, TStringBuf("item"))
-                        .Build()
-                    .Build()
-                    .SwitchHandler()
-                        .Args({TStringBuf("item"), TStringBuf("state")})
-                        .Body<TCoBool>()
-                            .Literal().Build("false")
-                        .Build()
-                    .Build()
-                    .UpdateHandler()
-                        .Args({TStringBuf("item"), TStringBuf("state")})
-                        .Body<TExprApplier>()
-                            .Apply(updateHandlerLambda.Cast())
-                            .With(0, keySelectorLambda.Cast().Body())
-                            .With(1, TStringBuf("item"))
-                            .With(2, TStringBuf("state"))
-                        .Build()
-                    .Build()
-                .Build()
-                .Lambda()
-                    .Args({TStringBuf("state")})
-                    .Body<TExprApplier>()
-                        .Apply(finishHandlerLambda.Cast())
-                        .With(0, keySelectorLambda.Cast().Body())
-                        .With(1, TStringBuf("state"))
-                    .Build()
-                .Build()
-            .Build();
-
-        lambdaRet = lambdaBuilder.Done();
-    } else {
-        lambdaBuilder
-            .Args({TStringBuf("stream")})
-            .Body<TCoCombineCore>()
-                .Input<TCoFlatMap>()
-                    .Input(TStringBuf("stream"))
-                    .Lambda()
-                        .Args({TStringBuf("item")})
-                        .Body<TExprApplier>()
-                            .Apply(preMapLambda.Cast())
-                            .With(0, TStringBuf("item"))
-                        .Build()
-                    .Build()
-                .Build()
-                .KeyExtractor()
-                    .Args({TStringBuf("item")})
-                    .Body<TExprApplier>()
-                        .Apply(keySelectorLambda.Cast())
-                        .With(0, TStringBuf("item"))
-                    .Build()
-                .Build()
-                .InitHandler()
-                    .Args({TStringBuf("key"), TStringBuf("item")})
-                    .Body<TExprApplier>()
-                        .Apply(initHandlerLambda.Cast())
-                        .With(0, TStringBuf("key"))
-                        .With(1, TStringBuf("item"))
-                    .Build()
-                .Build()
-                .UpdateHandler()
-                    .Args({TStringBuf("key"), TStringBuf("item"), TStringBuf("state")})
-                    .Body<TExprApplier>()
-                        .Apply(updateHandlerLambda.Cast())
-                        .With(0, TStringBuf("key"))
-                        .With(1, TStringBuf("item"))
-                        .With(2, TStringBuf("state"))
-                    .Build()
-                .Build()
-                .FinishHandler()
-                    .Args({TStringBuf("key"), TStringBuf("state")})
-                    .Body<TExprApplier>()
-                        .Apply(finishHandlerLambda.Cast())
-                        .With(0, TStringBuf("key"))
-                        .With(1, TStringBuf("state"))
-                    .Build()
-                .Build()
-                .MemLimit()
-                    .Value(ToString(State_->Configuration->CombineCoreLimit.Get().GetOrElse(0)))
-                .Build()
-            .Build();
-
-        lambdaRet = lambdaBuilder.Done();
-    }
-
-    if (HasContextFuncs(*lambdaRet->Ptr())) {
-        lambdaRet = Build<TCoLambda>(ctx, combineByKey.Pos())
-            .Args({ TStringBuf("stream") })
-            .Body<TCoWithContext>()
-                .Name()
-                    .Value("Agg")
-                .Build()
-                .Input<TExprApplier>()
-                    .Apply(*lambdaRet)
-                    .With(0, TStringBuf("stream"))
-                .Build()
-            .Build()
-            .Done();
-    }
-
-    TYtOutTableInfo combineOut(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-
-    return Build<TYtOutput>(ctx, combineByKey.Pos())
-        .Operation<TYtMap>()
-            .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-            .DataSink(GetDataSink(input, ctx))
-            .Input(ConvertInputTable(input, ctx))
-            .Output()
-                .Add(combineOut.ToExprNode(ctx, combineByKey.Pos()).Cast<TYtOutTable>())
-            .Build()
-            .Settings(GetFlowSettings(combineByKey.Pos(), *State_, ctx))
-            .Mapper(*lambdaRet)
-        .Build()
-        .OutIndex().Value(0U).Build()
-        .Done();
-}
-
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TExprContext& ctx) const {
-    if (State_->PassiveExecution) {
-        return node;
-    }
-
-    auto write = node.Cast<TYtWriteTable>();
-
-    auto mode = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Mode);
-
-    if (mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Drop) {
-        return node;
-    }
-
-    auto cluster = TString{write.DataSink().Cluster().Value()};
-    TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, true, false)) {
-        return node;
-    }
-
-    if (FindNode(write.Content().Ptr(),
-        [] (const TExprNode::TPtr& node) { return !TMaybeNode<TYtOutputOpBase>(node).IsValid(); },
-        [] (const TExprNode::TPtr& node) { return TMaybeNode<TDqConnection>(node).IsValid(); })) {
-        return node;
-    }
-
-    const TStructExprType* outItemType = nullptr;
-    if (auto type = GetSequenceItemType(write.Content(), false, ctx)) {
-        if (!EnsurePersistableType(write.Content().Pos(), *type, ctx)) {
-            return {};
-        }
-        outItemType = type->Cast<TStructExprType>();
-    } else {
-        return {};
-    }
-    TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-
-    {
-        auto path = write.Table().Name().StringValue();
-        auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
-        auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
-        outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
-    }
-    auto content = write.Content();
-    if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
-        const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
-        TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outItemType);
-        builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
-
-        if (builder.NeedMap()) {
-            content = Build<TExprApplier>(ctx, content.Pos())
-                .Apply(TCoLambda(builder.MakeRemapLambda(true)))
-                .With(0, content)
-                .Done();
-            outItemType = builder.MakeRemapType();
-        }
-
-    } else if (auto unordered = content.Maybe<TCoUnorderedBase>()) {
-        content = unordered.Cast().Input();
-    }
-    outTable.RowSpec->SetConstraints(write.Content().Ref().GetConstraintSet());
-    outTable.SetUnique(write.Content().Ref().GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
-
-    TYtTableInfo::TPtr pubTableInfo = MakeIntrusive<TYtTableInfo>(write.Table());
-    const bool renew = !mode || FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Renew;
-    const bool flush = mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Flush;
-    const bool transactionalOverrideTarget = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Initial)
-        && !flush && (renew || !pubTableInfo->Meta->DoesExist);
-
-    auto publishSettings = write.Settings();
-    if (transactionalOverrideTarget) {
-        publishSettings = TCoNameValueTupleList(NYql::RemoveSetting(publishSettings.Ref(), EYtSettingType::Mode, ctx));
-    }
-
-    auto cleanup = CleanupWorld(content, ctx);
-    if (!cleanup) {
-        return {};
-    }
-
-    return Build<TYtPublish>(ctx, write.Pos())
-        .World(write.World())
-        .DataSink(write.DataSink())
-        .Input()
-            .Add()
-                .Operation<TYtFill>()
-                    .World(ApplySyncListToWorld(ctx.NewWorld(write.Pos()), syncList, ctx))
-                    .DataSink(write.DataSink())
-                    .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
-                    .Output()
-                        .Add(outTable.ToExprNode(ctx, write.Pos()).Cast<TYtOutTable>())
-                    .Build()
-                    .Settings(GetFlowSettings(write.Pos(), *State_, ctx))
-                .Build()
-                .OutIndex().Value(0U).Build()
-            .Build()
-        .Build()
-        .Publish(write.Table())
-        .Settings(publishSettings)
         .Done();
 }
 
@@ -1110,43 +896,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TransientOpWithSettings
     return TExprBase(res);
 }
 
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnorderedPublishTarget(TExprBase node, TExprContext& ctx) const {
-    auto publish = node.Cast<TYtPublish>();
-
-    auto cluster = TString{publish.DataSink().Cluster().Value()};
-    auto pubTableInfo = TYtTableInfo(publish.Publish());
-    if (auto commitEpoch = pubTableInfo.CommitEpoch.GetOrElse(0)) {
-        const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, pubTableInfo.Name, commitEpoch);
-        YQL_ENSURE(nextDescription.RowSpec);
-        if (!nextDescription.RowSpec->IsSorted()) {
-            bool modified = false;
-            TVector<TYtOutput> outs;
-            for (auto out: publish.Input()) {
-                if (!IsUnorderedOutput(out) && TYqlRowSpecInfo(GetOutTable(out).Cast<TYtOutTable>().RowSpec()).IsSorted()) {
-                    outs.push_back(Build<TYtOutput>(ctx, out.Pos())
-                        .InitFrom(out)
-                        .Mode()
-                            .Value(ToString(EYtSettingType::Unordered))
-                        .Build()
-                        .Done());
-                    modified = true;
-                } else {
-                    outs.push_back(out);
-                }
-            }
-            if (modified) {
-                return Build<TYtPublish>(ctx, publish.Pos())
-                    .InitFrom(publish)
-                    .Input()
-                        .Add(outs)
-                    .Build()
-                    .Done();
-            }
-        }
-    }
-    return node;
-}
-
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddTrivialMapperForNativeYtTypes(TExprBase node, TExprContext& ctx) const {
     if (State_->Configuration->UseIntermediateSchema.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_SCHEMA)) {
         return node;
@@ -1173,4 +922,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddTrivialMapperForNati
     return ctx.ChangeChild(node.Ref(), TYtMapReduce::idx_Mapper, mapper.Ptr());
 }
 
-}  // namespace NYql 
+}  // namespace NYql

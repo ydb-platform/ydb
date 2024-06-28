@@ -1,21 +1,22 @@
+#include "yql_yt_phy_opt_helper.h"
 
-#include "yql_yt_transformer_helper.h"
-
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_join.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <util/generic/xrange.h>
 #include <util/string/type.h>
 
 namespace NYql::NPrivate {
+
+using namespace NNodes;
 
 TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConvertInputOpts& opts)
 {
@@ -710,7 +711,7 @@ TConvertInputOpts::TConvertInputOpts()
 {
 }
 
-TConvertInputOpts& 
+TConvertInputOpts&
 TConvertInputOpts::Settings(const TMaybeNode<TCoNameValueTupleList>& settings) {
     Settings_ = settings;
     return *this;
@@ -764,7 +765,7 @@ TConvertInputOpts::ClearUnordered() {
     ClearUnordered_ = true;
     return *this;
 }
-        
+
 void TYtSortMembersCollection::BuildKeyFilters(TPositionHandle pos, size_t tableCount, size_t orGroupCount, TExprNode::TListType& result, TExprContext& ctx) {
         TExprNode::TListType prefix;
         for (size_t orGroup = 0; orGroup < orGroupCount; ++orGroup) {
@@ -1067,4 +1068,4 @@ TVector<TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool
     return TVector<TYtOutTable>{ConvertSingleOutTableWithSortAware(lambda, ordered, pos, outItemType, ctx, state, constraints)};
 }
 
-}  // namespace NYql 
+}  // namespace NYql

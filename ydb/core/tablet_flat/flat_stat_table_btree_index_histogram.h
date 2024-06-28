@@ -148,7 +148,7 @@ public:
         , DataSizeResolutionGap(DataSizeResolution / 2)
         , Env(env)
         , YieldHandler(yieldHandler)
-        , NodeEventKeyGreater(KeyDefaults)
+        , NodeEventKeyGreater{KeyDefaults}
         , NodeEvents(NodeEventKeyGreater)
     {
     }

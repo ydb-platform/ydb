@@ -24,22 +24,9 @@ using namespace Aws::Utils::Stream;
 
 namespace {
 
-struct TCurlInitializer {
-    TCurlInitializer() {
-        curl_global_init(CURL_GLOBAL_ALL);
-    }
-
-    ~TCurlInitializer() {
-        curl_global_cleanup();
-    }
-};
-
 struct TApiInitializer {
     TApiInitializer() {
-        Options.httpOptions.initAndCleanupCurl = false;
         InitAPI(Options);
-
-        Internal::CleanupEC2MetadataClient(); // speeds up config construction
     }
 
     ~TApiInitializer() {
@@ -50,31 +37,9 @@ private:
     SDKOptions Options;
 };
 
-class TApiOwner {
-public:
-    void Ref() {
-        auto guard = Guard(Mutex);
-        if (!RefCount++) {
-            if (!CurlInitializer) {
-                CurlInitializer.Reset(new TCurlInitializer);
-            }
-            ApiInitializer.Reset(new TApiInitializer);
-        }
-    }
-
-    void UnRef() {
-        auto guard = Guard(Mutex);
-        if (!--RefCount) {
-            ApiInitializer.Destroy();
-        }
-    }
-
-private:
-    ui64 RefCount = 0;
-    TMutex Mutex;
-    THolder<TCurlInitializer> CurlInitializer;
-    THolder<TApiInitializer> ApiInitializer;
-};
+void EnsureAwsSdkInitialized() {
+    static TApiInitializer awsSdk;
+}
 
 namespace NPrivate {
 
@@ -114,20 +79,11 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 
 } // anonymous
 
-TS3User::TS3User(const TS3User& /*baseObject*/) {
-    Singleton<TApiOwner>()->Ref();
-}
-
-TS3User::TS3User(TS3User& /*baseObject*/) {
-    Singleton<TApiOwner>()->Ref();
-}
-
 TS3User::TS3User() {
-    Singleton<TApiOwner>()->Ref();
+    EnsureAwsSdkInitialized();
 }
 
 TS3User::~TS3User() {
-    Singleton<TApiOwner>()->UnRef();
 }
 
 class TS3ThreadsPoolByEndpoint {

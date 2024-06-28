@@ -313,10 +313,10 @@ private:
                 std::unique_lock lock{M};
                 Queue.emplace(std::move(part));
                 if (Queue.size() == 1) {
-                    Finish.notify_one();
+                    CVProcess.notify_one();
                 }
                 while (Queue.size() > kReadQueuePrefetch) {
-                    Start.wait(lock);
+                    CVRead.wait(lock);
                 }
             }
         });
@@ -336,12 +336,12 @@ private:
                 lock.lock();
             }
             while (Queue.empty()) {
-                Finish.wait(lock);
+                CVProcess.wait(lock);
             }
             auto part = std::move(Queue.front());
             Queue.pop();
             if (Queue.size() == kReadQueuePrefetch) {
-                Start.notify_one();
+                CVRead.notify_one();
             }
             lock.unlock();
             if (!ProcessPart<WithPK>(std::move(part), cb)) {
@@ -397,9 +397,8 @@ private:
     ui64 RowsCount = 0;
 
     std::mutex M;
-    std::condition_variable Start;
-    std::condition_variable Middle;
-    std::condition_variable Finish;
+    std::condition_variable CVRead;
+    std::condition_variable CVProcess;
     std::queue<TSimpleStreamPart<TResultSet>> Queue;
     std::queue<std::vector<TString>> Data;
 

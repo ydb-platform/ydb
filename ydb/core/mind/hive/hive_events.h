@@ -27,6 +27,7 @@ struct TEvPrivate {
         EvProcessIncomingEvent,
         EvRefreshStorageInfo,
         EvLogTabletMoves,
+        EvCanMoveTablets,
         EvStartStorageBalancer,
         EvRestartCancelled,
         EvProcessStorageBalancer,
@@ -94,6 +95,8 @@ struct TEvPrivate {
     struct TEvRefreshStorageInfo : TEventLocal<TEvRefreshStorageInfo, EvRefreshStorageInfo> {};
 
     struct TEvLogTabletMoves : TEventLocal<TEvLogTabletMoves, EvLogTabletMoves> {};
+
+    struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
 
     struct TEvStartStorageBalancer : TEventLocal<TEvStartStorageBalancer, EvStartStorageBalancer> {
         TStorageBalancerSettings Settings;

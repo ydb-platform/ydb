@@ -1861,6 +1861,20 @@
             "uri": "https://{canondata_backend}/1900335/dd59ce09b5b70054bb239659c9dedc5218a4d0cd/resource.tar.gz#test.test_optimizers-yql-10042_disable_flow_fuse_depends_on-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[optimizers-yql-18408_filter_multiusage_pushdown-default.txt-Debug]": [
+        {
+            "checksum": "467188d975bb48ebdef28538e86a61b9",
+            "size": 21237,
+            "uri": "https://{canondata_backend}/1937424/686478058d4a01eccc043c84a5d7653887ac4a2b/resource.tar.gz#test.test_optimizers-yql-18408_filter_multiusage_pushdown-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[optimizers-yql-18408_filter_multiusage_pushdown-default.txt-Plan]": [
+        {
+            "checksum": "85deff5f593489d59001e1d308d3c607",
+            "size": 36117,
+            "uri": "https://{canondata_backend}/1937424/686478058d4a01eccc043c84a5d7653887ac4a2b/resource.tar.gz#test.test_optimizers-yql-18408_filter_multiusage_pushdown-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[optimizers-yql-5833-table_content--Debug]": [
         {
             "checksum": "200043c6d598ee9ed8829299b2bee9b6",

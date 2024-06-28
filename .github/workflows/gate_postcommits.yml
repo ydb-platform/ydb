@@ -34,6 +34,7 @@ jobs:
           echo "HTTP result code is not 200, exiting"
           exit 1
         fi
+        echo "$j1"
         echo "$j1" | sed '$d' | jq "$query" | while read x;do
           echo "Runner: $x"
           if (( queue_size > 0 ));then

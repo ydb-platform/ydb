@@ -77,17 +77,7 @@ public:
         }
     }
 
-    TString ExtractBlobData() {
-        AFL_VERIFY(BlobSize);
-        AFL_VERIFY(!Extracted);
-        Extracted = true;
-        TString result;
-        result.reserve(BlobSize);
-        for (auto&& i : BlobData) {
-            result += i;
-        }
-        return result;
-    }
+    TString ExtractBlobData();
 
     ui64 GetSize() const {
         return BlobSize;

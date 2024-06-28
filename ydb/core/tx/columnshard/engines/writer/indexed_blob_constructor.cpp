@@ -76,4 +76,17 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
     return result;
 }
 
+TString TWritingBlob::ExtractBlobData() {
+    AFL_VERIFY(BlobSize);
+    AFL_VERIFY(!Extracted);
+    Extracted = true;
+    TString result;
+    result.reserve(BlobSize);
+    for (auto&& i : BlobData) {
+        result.append(i);
+    }
+    BlobData.clear();
+    return result;
+}
+
 }

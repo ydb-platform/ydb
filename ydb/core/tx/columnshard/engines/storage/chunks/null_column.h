@@ -45,12 +45,8 @@ public:
         , DefaultValue(defaultValue)
         , RecordsCount(recordsCount)
     {
-        if (defaultValue) {
-            Data = saver.Apply(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), defaultValue, recordsCount), f);
-        } else {
-            Data = saver.Apply(NArrow::TThreadSimpleArraysCache::GetNull(f->type(), recordsCount), f);
-        }
         Y_ABORT_UNLESS(RecordsCount);
+        Data = saver.Apply(NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, RecordsCount), f);
         SetChunkIdx(0);
     }
 };

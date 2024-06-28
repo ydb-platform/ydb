@@ -13,7 +13,7 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 {
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {
-        auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlobData(), action));
+        auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.ExtractBlobData(), action));
         b.InitBlobId(task.GetBlobId());
     }
 }

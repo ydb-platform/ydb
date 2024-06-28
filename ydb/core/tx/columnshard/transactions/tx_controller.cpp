@@ -232,7 +232,7 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
     size_t removedCount = 0;
     if (HaveOutdatedTxs()) {
         ui64 outdatedStep = Owner.GetOutdatedStep();
-        while (!DeadlineQueue.empty()) {
+        while (DeadlineQueue.size()) {
             auto it = DeadlineQueue.begin();
             if (outdatedStep < it->Step) {
                 // This transaction has a chance to be planned

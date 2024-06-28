@@ -248,30 +248,21 @@ std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted) {
+                                                   const std::shared_ptr<arrow::Schema>& dstSchema) {
     Y_ABORT_UNLESS(srcBatch);
     Y_ABORT_UNLESS(dstSchema);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(dstSchema->num_fields());
 
     for (auto& field : dstSchema->fields()) {
-        columns.push_back(srcBatch->GetColumnByName(field->name()));
-        if (!columns.back()) {
-            if (addNotExisted) {
-                auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
-                if (!result.ok()) {
-                    return nullptr;
-                }
-                columns.back() = *result;
-            } else {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
-                    ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
-                return nullptr;
-            }
+        const int index = srcBatch->schema()->GetFieldIndex(field->name());
+        if (index == -1) {
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
+                ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
+            return nullptr;
         } else {
-            auto srcField = srcBatch->schema()->GetFieldByName(field->name());
-            Y_ABORT_UNLESS(srcField);
+            columns.push_back(srcBatch->column(index));
+            auto srcField = srcBatch->schema()->field(index);
             if (!field->Equals(srcField)) {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
@@ -279,35 +270,11 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             }
         }
 
-        Y_ABORT_UNLESS(columns.back());
-        if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+        AFL_VERIFY(columns.back()->type()->Equals(field->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
-            return nullptr;
-        }
     }
 
     return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                          const arrow::FieldVector& fieldsToExtract) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(fieldsToExtract.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(fieldsToExtract.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& fldToExtract : fieldsToExtract) {
-        auto& name = fldToExtract->name();
-        auto field = srcSchema->GetFieldByName(name);
-        if (field && field->type()->Equals(fldToExtract->type())) {
-            fields.push_back(field);
-            columns.push_back(srcBatch->GetColumnByName(name));
-        }
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
 }
 
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {

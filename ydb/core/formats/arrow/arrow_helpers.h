@@ -77,15 +77,7 @@ std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted = false);
-std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                          const arrow::FieldVector& fields);
-inline std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                                 const std::shared_ptr<arrow::Schema>& dstSchema)
-{
-    return ExtractExistedColumns(srcBatch, dstSchema->fields());
-}
+                                                   const std::shared_ptr<arrow::Schema>& dstSchema);
 
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable, const bool combine);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);

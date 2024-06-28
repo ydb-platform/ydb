@@ -163,22 +163,43 @@ auto TClusterizer<T>::Run(const TOptions& options) -> TClusters {
         }
         Finalize();
     } else {
-        auto rows = It.Rows();
-        Cout << "Bad dataset (" << rows << ") for such clusterization ( iterations: " << options.maxIterations << ", k: " << options.maxK << " )" << Endl;
-#if 0
-        Progress.Reset("read", rows);
-        auto parentId = ++gId;
-        // It.Iterate([&](ui32, TId id, TRawEmbedding rawEmbedding) {
-        //     Progress.Report(1);
-        //     Create(parentId, id, std::move(rawEmbedding));
-        // });
-        Progress.ForceReport();
-        Clusters.Ids.emplace_back(parentId);
-        Clusters.Count.emplace_back(rows);
-        Clusters.Coords.emplace_back();
-#endif
+        BadCluster(options);
     }
     return std::move(Clusters);
+}
+
+template <typename T>
+void TClusterizer<T>::BadCluster(const TOptions& options) {
+    auto rows = It.Rows();
+    Cout << "Bad dataset {" << rows << "} for such clusterization { iterations: " << options.maxIterations << ", k: " << options.maxK << " }" << Endl;
+    if (ThreadPool) {
+        Progress.Reset("finalize bad dataset", It.Rows());
+    }
+    Clusters.Ids.emplace_back(options.parentId);
+    Clusters.Count.emplace_back(rows);
+
+    It.IterateId([&](TId id, TRawEmbedding rawEmbedding) {
+        auto embedding = GetArray<T>(rawEmbedding);
+        if (AggregatedClusters.empty()) {
+            auto& aggregated = AggregatedClusters.emplace_back();
+            aggregated.Coords.resize(embedding.size(), 0);
+        }
+        Update({}, embedding);
+        Create(options.parentId, id, std::move(rawEmbedding));
+    });
+    if (!AggregatedClusters.empty()) {
+        auto& aggregated = AggregatedClusters[0];
+        auto& coords = Clusters.Coords.emplace_back(aggregated.Coords.size());
+        auto coordsCount = static_cast<TSum>(aggregated.Count);
+        for (size_t j = 0; auto& coord : aggregated.Coords) {
+            coords[j++] = static_cast<T>(coord / coordsCount);
+            coord = 0;
+        }
+        aggregated.Count = 0;
+    }
+    if (ThreadPool) {
+        Progress.ForceReport();
+    }
 }
 
 template <typename T>

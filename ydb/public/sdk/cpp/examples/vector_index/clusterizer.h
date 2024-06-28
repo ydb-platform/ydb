@@ -30,6 +30,7 @@ public:
     virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)> cb) = 0;
     virtual void IterateEmbedding(TReadCallback& cb) = 0;
     virtual void IterateId(TReadCallback& cb) = 0;
+    virtual void IterateId(std::function<void(TId, TRawEmbedding)> cb) = 0;
 };
 
 using TCreateParentChild = std::function<void(TId, TId, TRawEmbedding)>;
@@ -43,6 +44,7 @@ public:
     TClusterizer(TDatasetIterator& it, TDistance distance, TCreateParentChild create, NVectorIndex::TThreadPool* tp = nullptr);
 
     struct TOptions {
+        TId parentId = 0;
         ui32 maxIterations = 10;
         ui32 maxK = 10;
         bool normalize = false;
@@ -64,6 +66,7 @@ private:
     void TriggerEmbeddings() final;
     void TriggerIds() final;
 
+    void BadCluster(const TOptions& options);
     bool Init(ui64 k);
     void StepUpdate();
     bool Step(ui32 iteration, ui32 maxIterations, float neededDiff);

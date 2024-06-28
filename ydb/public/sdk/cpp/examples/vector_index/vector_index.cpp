@@ -237,14 +237,14 @@ public:
 
     void IterateEmbedding(TReadCallback& read) final {
         if (Rows() > kSmallClusterSize) {
-            IterateImpl<false>(read, [&](TRawEmbedding rawEmbedding) {
+            IterateImpl<false>(&read, [&](TRawEmbedding rawEmbedding) {
                 read.Handle(std::move(rawEmbedding));
             });
             return;
         }
         if (Embeddings.empty()) {
             Embeddings.reserve(Rows());
-            IterateImpl<false>(read, [&](TRawEmbedding embedding) {
+            IterateImpl<false>(&read, [&](TRawEmbedding embedding) {
                 Embeddings.push_back(std::move(embedding));
             });
         }
@@ -253,14 +253,21 @@ public:
 
     void IterateId(TReadCallback& read) final {
         Embeddings.clear();
-        IterateImpl<true>(read, [&](TId id, TRawEmbedding rawEmbedding) {
+        IterateImpl<true>(&read, [&](TId id, TRawEmbedding rawEmbedding) {
             read.Handle(id, std::move(rawEmbedding));
+        });
+    }
+
+    void IterateId(std::function<void(TId, TRawEmbedding)> cb) {
+        Embeddings.clear();
+        IterateImpl<true>(nullptr, [&](TId id, TRawEmbedding rawEmbedding) {
+            cb(id, std::move(rawEmbedding));
         });
     }
 
 private:
     template <bool WithPK>
-    void IterateImpl(TReadCallback& read, auto&& cb) {
+    void IterateImpl(TReadCallback* read, auto&& cb) {
         TReadTableSettings settings;
         if constexpr (WithPK) {
             settings.AppendColumns(Options.PrimaryKey);
@@ -284,17 +291,17 @@ private:
 
         auto r = Client.RetryOperationSync([&](TSession session) {
             auto fit = session.ReadTable(FullName(Options, Table), settings);
-            ReadImpl<WithPK>(read, fit.ExtractValueSync(), cb);
+            ReadImpl(fit.ExtractValueSync());
             return TStatus{EStatus::SUCCESS, {}};
         });
         if (!r.IsSuccess()) {
             Cout << "Exception7" << Endl;
             ythrow TVectorException{r};
         }
+        ProcessImpl<WithPK>(read, cb);
     }
 
-    template <bool WithPK>
-    void ReadImpl(TReadCallback& read, TTablePartIterator r, auto&& cb) {
+    void ReadImpl(TTablePartIterator r) {
         if (!r.IsSuccess()) {
             Cout << "Exception8" << Endl;
             ythrow TVectorException{r};
@@ -311,6 +318,10 @@ private:
                         wasGood = false;
                         part = TSimpleStreamPart<TResultSet>{TResultSet{Ydb::ResultSet{}}, TStatus{EStatus::CLIENT_OUT_OF_RANGE, {}}};
                     }
+                } else if (Y_UNLIKELY(!part.EOS())) {
+                    Cout << "Some read error: " << static_cast<const TStatus&>(part) << Endl;
+                    wasGood = true;
+                    continue;
                 }
                 std::unique_lock lock{M};
                 Queue.emplace(std::move(part));
@@ -322,14 +333,18 @@ private:
                 }
             }
         });
+    }
+
+    template <bool WithPK>
+    void ProcessImpl(TReadCallback* read, auto&& cb) {
         std::unique_lock lock{M};
         while (true) {
-            if (Queue.empty()) {
+            if (read && Queue.empty()) {
                 lock.unlock();
                 if constexpr (WithPK) {
-                    read.TriggerIds();
+                    read->TriggerIds();
                 } else {
-                    read.TriggerEmbeddings();
+                    read->TriggerEmbeddings();
                 }
                 lock.lock();
             }
@@ -633,6 +648,7 @@ static void UpdateKMeans(TTableClient& client, const TOptions& options) {
         reader.UseLevel(level, parentId, count);
         writer.UseLevel(level);
         auto clusters = clusterizer.Run({
+            .parentId = parentId,
             .maxIterations = options.Iterations,
             .maxK = options.Clusters,
         });

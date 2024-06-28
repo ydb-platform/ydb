@@ -60,11 +60,16 @@ public:
         return NKikimrServices::TActivity::KQP_NODE_SERVICE;
     }
 
-    TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config, const TIntrusivePtr<TKqpCounters>& counters,
+    TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config,
+        std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+        std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
+        const TIntrusivePtr<TKqpCounters>& counters,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : Config(config.GetResourceManager())
         , Counters(counters)
+        , ResourceManager_(std::move(resourceManager))
+        , CaFactory_(std::move(caFactory))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , State_(std::make_shared<TNodeServiceState>())
@@ -190,11 +195,11 @@ private:
             // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
             resourcesRequest.Memory = (1 << 19) /* 512kb limit for check that memory exists for processing with minimal requirements */;
 
-            auto result = ResourceManager()->AllocateResources(txId, task.first, resourcesRequest);
+            auto result = ResourceManager_->AllocateResources(txId, task.first, resourcesRequest);
 
             if (!result) {
                 for (ui64 taskId : allocatedTasks) {
-                    ResourceManager()->FreeResources(txId, taskId);
+                    ResourceManager_->FreeResources(txId, taskId);
                 }
 
                 ReplyError(txId, request.Executer, msg, result.GetStatus(), result.GetFailReason());
@@ -208,16 +213,6 @@ private:
         reply->Record.SetTxId(txId);
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        runtimeSettingsBase.ExtraMemoryAllocationPool = memoryPool;
-        runtimeSettingsBase.FailOnUndelivery = msgRtSettings.GetExecType() != NYql::NDqProto::TComputeRuntimeSettings::SCAN;
-
-        runtimeSettingsBase.StatsMode = msgRtSettings.GetStatsMode();
-        runtimeSettingsBase.UseSpilling = msgRtSettings.GetUseSpilling();
-
-        if (msgRtSettings.HasRlPath()) {
-            runtimeSettingsBase.RlPath = msgRtSettings.GetRlPath();
-        }
-
         runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{MinStatInterval, MaxStatInterval};
 
         TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
@@ -234,10 +229,12 @@ private:
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
             YQL_ENSURE(taskCtx.TaskId != 0);
 
-            taskCtx.ComputeActorId = CaFactory()->CreateKqpComputeActor(
+            taskCtx.ComputeActorId = CaFactory_->CreateKqpComputeActor(
                 request.Executer, txId, &dqTask, runtimeSettingsBase,
-                NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, serializedGUCSettings, computesByStage,
-                msg.GetOutputChunkMaxSize(), State_, memoryPool, tasksCount);
+                NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, serializedGUCSettings, tasksCount,
+                msgRtSettings.GetUseSpilling(), msgRtSettings.GetStatsMode(), TInstant(), false,
+                msgRtSettings.HasRlPath() ? msgRtSettings.GetRlPath() : TString(),
+                msg.GetOutputChunkMaxSize(), memoryPool, &computesByStage, State_);
 
             LOG_D("TxId: " << txId << ", executing task: " << taskCtx.TaskId << " on compute actor: " << taskCtx.ComputeActorId);
 
@@ -442,24 +439,6 @@ private:
         Send(executer, ev.Release());
     }
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager() {
-        if (Y_LIKELY(ResourceManager_)) {
-            return ResourceManager_;
-        }
-        ResourceManager_ = GetKqpResourceManager();
-        return ResourceManager_;
-    }
-
-    std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory() {
-        if (Y_LIKELY(CaFactory_)) {
-            return CaFactory_;
-        }
-
-        CaFactory_ = NComputeActor::MakeKqpCaFactory(
-            Config, ResourceManager(), AsyncIoFactory, FederatedQuerySetup);
-        return CaFactory_;
-    }
-
 private:
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -468,7 +447,6 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    //state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;
 };
 
@@ -476,10 +454,13 @@ private:
 } // anonymous namespace
 
 IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
     TIntrusivePtr<TKqpCounters> counters, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
 {
-    return new TKqpNodeService(tableServiceConfig, counters, std::move(asyncIoFactory), federatedQuerySetup);
+    return new TKqpNodeService(tableServiceConfig, std::move(resourceManager), std::move(caFactory),
+        counters, std::move(asyncIoFactory), federatedQuerySetup);
 }
 
 } // namespace NKqp

@@ -27,6 +27,15 @@ class IRequestCtxMtSafe;
 
 }
 
+namespace NKikimr::NKqp::NRm {
+    class IKqpResourceManager;
+}
+
+namespace NKikimr::NKqp::NComputeActor {
+    struct IKqpNodeComputeActorFactory;
+}
+
+
 namespace NKikimr::NKqp {
 
 const TStringBuf ParamNamePrefix = "%kqp%";
@@ -145,6 +154,8 @@ public:
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
+        std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+        std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;

@@ -6,6 +6,7 @@
 
 namespace NKikimr::NKqp::NComputeActor {
 
+
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
@@ -26,7 +27,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     ~TMemoryQuotaManager() override {
-        State->OnTaskTerminate(TxId, TaskId, Success);
+        if (State) {
+            State->OnTaskTerminate(TxId, TaskId, Success);
+        }
+
         ResourceManager->FreeResources(TxId, TaskId);
     }
 
@@ -96,8 +100,10 @@ public:
     TActorId CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* dqTask,
         const NYql::NDq::TComputeRuntimeSettings& settings,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena, const TString& serializedGUCSettings,
-        TComputeStagesWithScan& computesByStage, ui64 outputChunkMaxSize, std::shared_ptr<IKqpNodeState> state,
-        NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks)
+        ui32 numberOfTasks, ui64 outputChunkMaxSize, NRm::EKqpMemoryPool memoryPool,
+        bool withSpilling, NYql::NDqProto::EDqStatsMode statsMode, const TInstant deadline, bool shareMailbox,
+        const TString& rlPath,
+        TComputeStagesWithScan* computesByStage, std::shared_ptr<IKqpNodeState> state)
     {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
@@ -137,6 +143,18 @@ public:
             Config.GetReasonableSpillingTreshold());
 
         auto runtimeSettings = settings;
+        runtimeSettings.ExtraMemoryAllocationPool = memoryPool;
+        runtimeSettings.UseSpilling = withSpilling;
+        runtimeSettings.StatsMode = statsMode;
+
+        if (deadline) {
+            runtimeSettings.Timeout = deadline - TAppData::TimeProvider->Now();
+        }
+
+        if (rlPath) {
+            runtimeSettingsBase.RlPath = rlPath;
+        }
+
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
         runtimeSettings.TerminateHandler = [memoryQuotaManager]
             (bool success, const NYql::TIssues& issues) {
@@ -158,14 +176,16 @@ public:
 
         ETableKind tableKind = ETableKind::Unknown;
         if (dqTask->HasMetaId()) {
-            YQL_ENSURE(computesByStage.GetMetaById(*dqTask, meta) || dqTask->GetMeta().UnpackTo(&meta), "cannot take meta on MetaId exists in tasks");
+            YQL_ENSURE(computesByStage);
+            YQL_ENSURE(computesByStage->GetMetaById(*dqTask, meta) || dqTask->GetMeta().UnpackTo(&meta), "cannot take meta on MetaId exists in tasks");
             tableKind = tableKindExtract(meta);
         } else if (dqTask->GetMeta().UnpackTo(&meta)) {
             tableKind = tableKindExtract(meta);
         }
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
-            auto& info = computesByStage.UpsertTaskWithScan(*dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
+            YQL_ENSURE(computesByStage);
+            auto& info = computesByStage->UpsertTaskWithScan(*dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
             IActor* computeActor = CreateKqpScanComputeActor(executerId, txId, dqTask,
                 AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(traceId), std::move(arena));
@@ -179,7 +199,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(executerId, txId, dqTask, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(traceId), std::move(arena), FederatedQuerySetup, GUCSettings);
-            return TlsActivationContext->Register(computeActor);
+            return shareMailbox ? TlsActivationContext->RegisterWithSameMailbox(computeActor) ?  TlsActivationContext->Register(computeActor);
         }
     }
 };

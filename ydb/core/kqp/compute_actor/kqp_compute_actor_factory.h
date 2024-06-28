@@ -106,8 +106,11 @@ public:
     virtual NActors::TActorId CreateKqpComputeActor(const NActors::TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
         const NYql::NDq::TComputeRuntimeSettings& settings,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena, const TString& serializedGUCSettings,
-        TComputeStagesWithScan& computeStages, ui64 outputChunkMaxSize, std::shared_ptr<IKqpNodeState> state,
-        NKikimr::NKqp::NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks) = 0;
+        ui32 numberOfTasks, ui64 outputChunkMaxSize, NKikimr::NKqp::NRm::EKqpMemoryPool memoryPool,
+        bool withSpilling, NYql::NDqProto::EDqStatsMode statsMode, const TInstant& deadline, bool shareMailbox,
+        TString rlPath,
+        TComputeStagesWithScan* computeStages = nullptr,
+        std::shared_ptr<IKqpNodeState> state = nullptr) = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
-        for (ui64 key = 0; key < 1000; ++key) {
+        for (ui64 key = 0; key < 1200; ++key) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, key* 1'000'000);
         }
 

@@ -1,131 +1,19 @@
+#include "yql_yt_phy_opt.h"
+#include "yql_yt_phy_opt_helper.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 
 #include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/xrange.h>
-#include <util/string/type.h>
 
 namespace NYql {
 
+using namespace NNodes;
 using namespace NPrivate;
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EmbedLimit(TExprBase node, TExprContext& ctx) const {
-    auto op = node.Cast<TYtWithUserJobsOpBase>();
-    if (op.Output().Size() != 1) {
-        return node;
-    }
-    auto settings = op.Settings();
-    auto limitSetting = NYql::GetSetting(settings.Ref(), EYtSettingType::Limit);
-    if (!limitSetting) {
-        return node;
-    }
-    if (HasNodesToCalculate(node.Ptr())) {
-        return node;
-    }
-
-    TMaybe<ui64> limit = GetLimit(settings.Ref());
-    if (!limit) {
-        return node;
-    }
-
-    auto sortLimitBy = NYql::GetSettingAsColumnPairList(settings.Ref(), EYtSettingType::SortLimitBy);
-    if (!sortLimitBy.empty() && *limit > State_->Configuration->TopSortMaxLimit.Get().GetOrElse(DEFAULT_TOP_SORT_LIMIT)) {
-        return node;
-    }
-
-    size_t lambdaIdx = op.Maybe<TYtMapReduce>()
-        ? TYtMapReduce::idx_Reducer
-        : op.Maybe<TYtReduce>()
-            ? TYtReduce::idx_Reducer
-            : TYtMap::idx_Mapper;
-
-    auto lambda = TCoLambda(op.Ref().ChildPtr(lambdaIdx));
-    if (IsEmptyContainer(lambda.Body().Ref()) || IsEmpty(lambda.Body().Ref(), *State_->Types)) {
-        return node;
-    }
-
-    if (sortLimitBy.empty()) {
-        if (lambda.Body().Maybe<TCoTake>()) {
-            return node;
-        }
-
-        lambda = Build<TCoLambda>(ctx, lambda.Pos())
-            .Args({"stream"})
-            .Body<TCoTake>()
-                .Input<TExprApplier>()
-                    .Apply(lambda)
-                    .With(0, "stream")
-                .Build()
-                .Count<TCoUint64>()
-                    .Literal()
-                        .Value(ToString(*limit))
-                    .Build()
-                .Build()
-            .Build()
-            .Done();
-    } else {
-        if (lambda.Body().Maybe<TCoTopBase>()) {
-            return node;
-        }
-
-        if (const auto& body = lambda.Body().Ref(); body.IsCallable("ExpandMap") && body.Head().IsCallable({"Top", "TopSort"})) {
-            return node;
-        }
-
-        lambda = Build<TCoLambda>(ctx, lambda.Pos())
-            .Args({"stream"})
-            .Body<TCoTop>()
-                .Input<TExprApplier>()
-                    .Apply(lambda)
-                    .With(0, "stream")
-                .Build()
-                .Count<TCoUint64>()
-                    .Literal()
-                        .Value(ToString(*limit))
-                    .Build()
-                .Build()
-                .SortDirections([&sortLimitBy] (TExprNodeBuilder& builder) {
-                    auto listBuilder = builder.List();
-                    for (size_t i: xrange(sortLimitBy.size())) {
-                        listBuilder.Callable(i, TCoBool::CallableName())
-                            .Atom(0, sortLimitBy[i].second ? "True" : "False")
-                            .Seal();
-                    }
-                    listBuilder.Seal();
-                })
-                .KeySelectorLambda()
-                    .Args({"item"})
-                    .Body([&sortLimitBy] (TExprNodeBuilder& builder) {
-                        auto listBuilder = builder.List();
-                        for (size_t i: xrange(sortLimitBy.size())) {
-                            listBuilder.Callable(i, TCoMember::CallableName())
-                                .Arg(0, "item")
-                                .Atom(1, sortLimitBy[i].first)
-                                .Seal();
-                        }
-                        listBuilder.Seal();
-                    })
-                .Build()
-            .Build().Done();
-
-        if (auto& l = lambda.Ref(); l.Tail().Head().IsCallable("ExpandMap")) {
-            lambda = TCoLambda(ctx.ChangeChild(l, 1U, ctx.SwapWithHead(l.Tail())));
-        }
-     }
-
-    return TExprBase(ctx.ChangeChild(op.Ref(), lambdaIdx, lambda.Ptr()));
-}
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtSortOverAlreadySorted(TExprBase node, TExprContext& ctx) const {
     auto sort = node.Cast<TYtSort>();
@@ -165,6 +53,211 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtSortOverAlreadySorted
 
     return node;
 }
+
+template<bool IsTop>
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TExprContext& ctx) const {
+    if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
+        return node;
+    }
+
+    const auto sort = node.Cast<std::conditional_t<IsTop, TCoTopBase, TCoSort>>();
+    if (!IsYtProviderInput(sort.Input())) {
+        return node;
+    }
+
+    auto sortDirections = sort.SortDirections();
+    if (!IsConstExpSortDirections(sortDirections)) {
+        return node;
+    }
+
+    auto keySelectorLambda = sort.KeySelectorLambda();
+    auto cluster = TString{GetClusterName(sort.Input())};
+    TSyncMap syncList;
+    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, true, false)) {
+        return node;
+    }
+
+    const TStructExprType* outType = nullptr;
+    if (auto type = GetSequenceItemType(node, false, ctx)) {
+        outType = type->Cast<TStructExprType>();
+    } else {
+        return {};
+    }
+
+    TVector<TYtPathInfo::TPtr> inputInfos = GetInputPaths(sort.Input());
+
+    TMaybe<NYT::TNode> firstNativeType;
+    if (!inputInfos.empty()) {
+        firstNativeType = inputInfos.front()->GetNativeYtType();
+    }
+    auto maybeReadSettings = sort.Input().template Maybe<TCoRight>().Input().template Maybe<TYtReadTable>().Input().Item(0).Settings();
+    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
+         ? GetNativeYtTypeFlags(*outType)
+         : 0ul;
+    const bool needMap = (maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::SysColumns))
+        || AnyOf(inputInfos, [nativeTypeFlags, firstNativeType] (const TYtPathInfo::TPtr& path) {
+            return path->RequiresRemap()
+                || nativeTypeFlags != path->GetNativeYtTypeFlags()
+                || firstNativeType != path->GetNativeYtType();
+        });
+
+    bool useExplicitColumns = AnyOf(inputInfos, [] (const TYtPathInfo::TPtr& path) {
+        return !path->Table->IsTemp || (path->Table->RowSpec && path->Table->RowSpec->HasAuxColumns());
+    });
+
+    const bool needMerge = maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::Sample);
+
+    const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+
+    TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outType);
+    builder.ProcessKeySelector(keySelectorLambda.Ptr(), sortDirections.Ptr());
+
+    TYtOutTableInfo sortOut(outType, nativeTypeFlags);
+    builder.FillRowSpecSort(*sortOut.RowSpec);
+    sortOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+
+    TExprBase sortInput = sort.Input();
+    TExprBase world = TExprBase(ApplySyncListToWorld(NPrivate::GetWorld(sortInput, {}, ctx).Ptr(), syncList, ctx));
+    bool unordered = ctx.IsConstraintEnabled<TSortedConstraintNode>();
+    if (needMap || builder.NeedMap()) {
+        auto mapper = builder.MakeRemapLambda();
+
+        auto mapperClean = CleanupWorld(TCoLambda(mapper), ctx);
+        if (!mapperClean) {
+            return {};
+        }
+
+        TYtOutTableInfo mapOut(builder.MakeRemapType(), nativeTypeFlags);
+        mapOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+
+        sortInput = Build<TYtOutput>(ctx, node.Pos())
+            .Operation<TYtMap>()
+                .World(world)
+                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, NPrivate::TConvertInputOpts().MakeUnordered(unordered)))
+                .Output()
+                    .Add(mapOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
+                .Build()
+                .Settings(GetFlowSettings(node.Pos(), *State_, ctx))
+                .Mapper(mapperClean.Cast())
+            .Build()
+            .OutIndex()
+                .Value(0U)
+            .Build()
+            .Done();
+        world = TExprBase(ctx.NewWorld(node.Pos()));
+        unordered = false;
+    }
+    else if (needMerge) {
+        TYtOutTableInfo mergeOut(outType, nativeTypeFlags);
+        mergeOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+        if (firstNativeType) {
+            mergeOut.RowSpec->CopyTypeOrders(*firstNativeType);
+            sortOut.RowSpec->CopyTypeOrders(*firstNativeType);
+        }
+
+        NPrivate::TConvertInputOpts opts;
+        if (useExplicitColumns) {
+            opts.ExplicitFields(*mergeOut.RowSpec, node.Pos(), ctx);
+            useExplicitColumns = false;
+        }
+
+        sortInput = Build<TYtOutput>(ctx, node.Pos())
+            .Operation<TYtMerge>()
+                .World(world)
+                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, opts.MakeUnordered(unordered)))
+                .Output()
+                    .Add(mergeOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
+                .Build()
+                .Settings()
+                    .Add()
+                        .Name()
+                            .Value(ToString(EYtSettingType::ForceTransform), TNodeFlags::Default)
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+            .OutIndex()
+                .Value(0U)
+            .Build()
+            .Done();
+        world = TExprBase(ctx.NewWorld(node.Pos()));
+        unordered = false;
+    } else if (firstNativeType) {
+        sortOut.RowSpec->CopyTypeOrders(*firstNativeType);
+    }
+
+    bool canUseMerge = !needMap && !needMerge;
+    if (auto maxTablesForSortedMerge = State_->Configuration->MaxInputTablesForSortedMerge.Get()) {
+        if (inputInfos.size() > *maxTablesForSortedMerge) {
+            canUseMerge = false;
+        }
+    }
+
+    if (canUseMerge) {
+        TYqlRowSpecInfo commonSorted = *sortOut.RowSpec;
+        for (auto& pathInfo: inputInfos) {
+            commonSorted.MakeCommonSortness(*pathInfo->Table->RowSpec);
+        }
+        // input is sorted at least as strictly as output
+        if (!sortOut.RowSpec->CompareSortness(commonSorted)) {
+            canUseMerge = false;
+        }
+    }
+
+    sortOut.RowSpec->SetConstraints(sort.Ref().GetConstraintSet());
+
+    NPrivate::TConvertInputOpts opts;
+    if (useExplicitColumns) {
+        opts.ExplicitFields(*sortOut.RowSpec, node.Pos(), ctx);
+    }
+
+    auto res = canUseMerge ?
+        TExprBase(Build<TYtMerge>(ctx, node.Pos())
+            .World(world)
+            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.ClearUnordered()))
+            .Output()
+                .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
+            .Build()
+            .Settings()
+                .Add()
+                    .Name()
+                        .Value(ToString(EYtSettingType::KeepSorted), TNodeFlags::Default)
+                    .Build()
+                .Build()
+            .Build()
+        .Done()):
+        TExprBase(Build<TYtSort>(ctx, node.Pos())
+            .World(world)
+            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.MakeUnordered(unordered)))
+            .Output()
+                .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
+            .Build()
+            .Settings().Build()
+        .Done());
+
+    res = Build<TYtOutput>(ctx, node.Pos())
+        .Operation(res)
+        .OutIndex().Value(0U).Build()
+        .Done();
+
+
+    if constexpr (IsTop) {
+        res = Build<TCoTake>(ctx, node.Pos())
+            .Input(res)
+            .Count(sort.Count())
+            .Done();
+    }
+
+    return res;
+}
+
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort<true>(TExprBase node, TExprContext& ctx) const;
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort<false>(TExprBase node, TExprContext& ctx) const;
+
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node, TExprContext& ctx) const {
     auto sort = node.Cast<TYtSort>();

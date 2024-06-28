@@ -1,24 +1,13 @@
+#include "yql_yt_phy_opt.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.h>
-
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/utils/log/log.h>
 
-#include <util/generic/xrange.h>
-#include <util/string/type.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NYql {
 
-using namespace NPrivate;
+using namespace NNodes;
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(TExprBase node, TExprContext& ctx) const {
     if (node.Ref().HasResult() && node.Ref().GetResult().Type() != TExprNode::World) {
@@ -391,4 +380,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         .Done();
 }
 
-}  // namespace NYql 
+}  // namespace NYql

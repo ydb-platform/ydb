@@ -1,24 +1,75 @@
+#include "yql_yt_phy_opt.h"
+#include "yql_yt_phy_opt_helper.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.h>
-
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
-#include <util/generic/xrange.h>
-#include <util/string/type.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
+
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 
+using namespace NNodes;
 using namespace NPrivate;
+
+TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& innerLambda, const TCoLambda& outerLambda, TExprContext& ctx) const {
+    auto maxJobMemoryLimit = State_->Configuration->MaxExtraJobMemoryToFuseOperations.Get();
+    auto maxOperationFiles = State_->Configuration->MaxOperationFiles.Get().GetOrElse(DEFAULT_MAX_OPERATION_FILES);
+    TMap<TStringBuf, ui64> memUsage;
+
+    TExprNode::TPtr updatedBody = innerLambda.Body().Ptr();
+    if (maxJobMemoryLimit) {
+        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        if (status.Level != TStatus::Ok) {
+            return {};
+        }
+    }
+    size_t innerFiles = 1; // jobstate. Take into account only once
+    ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, maxJobMemoryLimit ? &memUsage : nullptr, nullptr, &innerFiles);
+
+    auto prevMemory = Accumulate(memUsage.begin(), memUsage.end(), 0ul,
+        [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
+
+    updatedBody = outerLambda.Body().Ptr();
+    if (maxJobMemoryLimit) {
+        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        if (status.Level != TStatus::Ok) {
+            return {};
+        }
+    }
+    size_t outerFiles = 0;
+    ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, maxJobMemoryLimit ? &memUsage : nullptr, nullptr, &outerFiles);
+
+    auto currMemory = Accumulate(memUsage.begin(), memUsage.end(), 0ul,
+        [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
+
+    if (maxJobMemoryLimit && currMemory != prevMemory && currMemory > *maxJobMemoryLimit) {
+        YQL_CLOG(DEBUG, ProviderYt) << "Memory usage: innerLambda=" << prevMemory
+            << ", joinedLambda=" << currMemory << ", MaxJobMemoryLimit=" << *maxJobMemoryLimit;
+        return false;
+    }
+    if (innerFiles + outerFiles > maxOperationFiles) {
+        YQL_CLOG(DEBUG, ProviderYt) << "Files usage: innerLambda=" << innerFiles
+            << ", outerLambda=" << outerFiles << ", MaxOperationFiles=" << maxOperationFiles;
+        return false;
+    }
+
+    if (auto maxReplcationFactor = State_->Configuration->MaxReplicationFactorToFuseOperations.Get()) {
+        double replicationFactor1 = NCommon::GetDataReplicationFactor(innerLambda.Ref(), ctx);
+        double replicationFactor2 = NCommon::GetDataReplicationFactor(outerLambda.Ref(), ctx);
+        YQL_CLOG(DEBUG, ProviderYt) << "Replication factors: innerLambda=" << replicationFactor1
+            << ", outerLambda=" << replicationFactor2 << ", MaxReplicationFactorToFuseOperations=" << *maxReplcationFactor;
+
+        if (replicationFactor1 > 1.0 && replicationFactor2 > 1.0 && replicationFactor1 * replicationFactor2 > *maxReplcationFactor) {
+            return false;
+        }
+    }
+    return true;
+}
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
     auto outerReduce = node.Cast<TYtReduce>();
@@ -482,4 +533,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     return TExprBase(res);
 }
 
-}  // namespace NYql 
+}  // namespace NYql

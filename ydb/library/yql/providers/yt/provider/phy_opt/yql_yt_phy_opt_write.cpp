@@ -1,24 +1,24 @@
+#include "yql_yt_phy_opt.h"
+#include "yql_yt_phy_opt_helper.h"
 
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.h>
-
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 
-#include <util/generic/xrange.h>
-#include <util/string/type.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 namespace NYql {
 
-using namespace NDq;
+using namespace NNodes;
 using namespace NPrivate;
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
@@ -107,7 +107,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     TMaybeNode<TDqConnection> result;
-    if (GetStageOutputsCount(dqUnion.Output().Stage()) > 1) {
+    if (NDq::GetStageOutputsCount(dqUnion.Output().Stage()) > 1) {
         result = Build<TDqCnUnionAll>(ctx, write.Pos())
             .Output()
                 .Stage<TDqStage>()
@@ -115,7 +115,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
                         .Add(dqUnion)
                     .Build()
                     .Program(writeLambda)
-                    .Settings(TDqStageSettings().BuildNode(ctx, write.Pos()))
+                    .Settings(NDq::TDqStageSettings().BuildNode(ctx, write.Pos()))
                 .Build()
                 .Index().Build("0")
             .Build()
@@ -139,7 +139,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
                     .Args({"row"})
                     .Body("row")
                 .Build()
-                .Settings(TDqStageSettings().BuildNode(ctx, write.Pos()))
+                .Settings(NDq::TDqStageSettings().BuildNode(ctx, write.Pos()))
             .Build()
             .Index().Build("0")
         .Build()
@@ -695,4 +695,142 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqWrite(TExprBase nod
         .Build().Done();
 }
 
-}  // namespace NYql 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TExprContext& ctx) const {
+    if (State_->PassiveExecution) {
+        return node;
+    }
+
+    auto write = node.Cast<TYtWriteTable>();
+
+    auto mode = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Mode);
+
+    if (mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Drop) {
+        return node;
+    }
+
+    auto cluster = TString{write.DataSink().Cluster().Value()};
+    TSyncMap syncList;
+    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, true, false)) {
+        return node;
+    }
+
+    if (FindNode(write.Content().Ptr(),
+        [] (const TExprNode::TPtr& node) { return !TMaybeNode<TYtOutputOpBase>(node).IsValid(); },
+        [] (const TExprNode::TPtr& node) { return TMaybeNode<TDqConnection>(node).IsValid(); })) {
+        return node;
+    }
+
+    const TStructExprType* outItemType = nullptr;
+    if (auto type = GetSequenceItemType(write.Content(), false, ctx)) {
+        if (!EnsurePersistableType(write.Content().Pos(), *type, ctx)) {
+            return {};
+        }
+        outItemType = type->Cast<TStructExprType>();
+    } else {
+        return {};
+    }
+    TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+    {
+        auto path = write.Table().Name().StringValue();
+        auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
+        auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+        outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
+    }
+    auto content = write.Content();
+    if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
+        const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outItemType);
+        builder.ProcessConstraint(*sorted);
+        builder.FillRowSpecSort(*outTable.RowSpec);
+
+        if (builder.NeedMap()) {
+            content = Build<TExprApplier>(ctx, content.Pos())
+                .Apply(TCoLambda(builder.MakeRemapLambda(true)))
+                .With(0, content)
+                .Done();
+            outItemType = builder.MakeRemapType();
+        }
+
+    } else if (auto unordered = content.Maybe<TCoUnorderedBase>()) {
+        content = unordered.Cast().Input();
+    }
+    outTable.RowSpec->SetConstraints(write.Content().Ref().GetConstraintSet());
+    outTable.SetUnique(write.Content().Ref().GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+
+    TYtTableInfo::TPtr pubTableInfo = MakeIntrusive<TYtTableInfo>(write.Table());
+    const bool renew = !mode || FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Renew;
+    const bool flush = mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Flush;
+    const bool transactionalOverrideTarget = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Initial)
+        && !flush && (renew || !pubTableInfo->Meta->DoesExist);
+
+    auto publishSettings = write.Settings();
+    if (transactionalOverrideTarget) {
+        publishSettings = TCoNameValueTupleList(NYql::RemoveSetting(publishSettings.Ref(), EYtSettingType::Mode, ctx));
+    }
+
+    auto cleanup = CleanupWorld(content, ctx);
+    if (!cleanup) {
+        return {};
+    }
+
+    return Build<TYtPublish>(ctx, write.Pos())
+        .World(write.World())
+        .DataSink(write.DataSink())
+        .Input()
+            .Add()
+                .Operation<TYtFill>()
+                    .World(ApplySyncListToWorld(ctx.NewWorld(write.Pos()), syncList, ctx))
+                    .DataSink(write.DataSink())
+                    .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
+                    .Output()
+                        .Add(outTable.ToExprNode(ctx, write.Pos()).Cast<TYtOutTable>())
+                    .Build()
+                    .Settings(GetFlowSettings(write.Pos(), *State_, ctx))
+                .Build()
+                .OutIndex().Value(0U).Build()
+            .Build()
+        .Build()
+        .Publish(write.Table())
+        .Settings(publishSettings)
+        .Done();
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnorderedPublishTarget(TExprBase node, TExprContext& ctx) const {
+    auto publish = node.Cast<TYtPublish>();
+
+    auto cluster = TString{publish.DataSink().Cluster().Value()};
+    auto pubTableInfo = TYtTableInfo(publish.Publish());
+    if (auto commitEpoch = pubTableInfo.CommitEpoch.GetOrElse(0)) {
+        const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, pubTableInfo.Name, commitEpoch);
+        YQL_ENSURE(nextDescription.RowSpec);
+        if (!nextDescription.RowSpec->IsSorted()) {
+            bool modified = false;
+            TVector<TYtOutput> outs;
+            for (auto out: publish.Input()) {
+                if (!IsUnorderedOutput(out) && TYqlRowSpecInfo(GetOutTable(out).Cast<TYtOutTable>().RowSpec()).IsSorted()) {
+                    outs.push_back(Build<TYtOutput>(ctx, out.Pos())
+                        .InitFrom(out)
+                        .Mode()
+                            .Value(ToString(EYtSettingType::Unordered))
+                        .Build()
+                        .Done());
+                    modified = true;
+                } else {
+                    outs.push_back(out);
+                }
+            }
+            if (modified) {
+                return Build<TYtPublish>(ctx, publish.Pos())
+                    .InitFrom(publish)
+                    .Input()
+                        .Add(outs)
+                    .Build()
+                    .Done();
+            }
+        }
+    }
+    return node;
+}
+
+}  // namespace NYql

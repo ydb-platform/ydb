@@ -37,6 +37,7 @@ struct TOptions {
     ui16 Clusters = 80;
     // ui16 Levels = 3;
     // ui16 Clusters = 120;
+    bool ShuffleWithEmbeddings = false;
     bool LastLevelEmbeddings = false;
 };
 

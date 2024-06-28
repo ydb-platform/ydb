@@ -416,12 +416,25 @@ private:
     TPriorityQueue<TNodeEvent, TVector<TNodeEvent>, TNodeEventKeyGreater> NodeEvents;
 };
 
+void ClampHistogram(THistogram& histogram, ui64 total) {
+    for (auto& bucket : histogram) {
+        bucket.Value = Min(bucket.Value, total);
+    }
+}
+
 }
 
 inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     TTableHistogramBuilderBtreeIndex builder(subset, rowCountResolution, dataSizeResolution, env, yieldHandler);
 
-    return builder.Build(stats);
+    if (!builder.Build(stats)) {
+        return false;
+    }
+
+    ClampHistogram(stats.DataSizeHistogram, stats.DataSize.Size);
+    ClampHistogram(stats.RowCountHistogram, stats.RowCount);
+
+    return true;
 }
 
 }

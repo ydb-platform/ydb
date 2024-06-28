@@ -177,9 +177,7 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
     auto transactionCommitResult = WaitFor(transaction->Commit(Options))
         .ValueOrThrow();
 
-    if (context->GetConfig()->ApiVersion == ApiVersion3 || !context->GetConfig()->EnableInternalCommands) {
-        ProduceEmptyOutput(context);
-    } else {
+    if (context->GetConfig()->ApiVersion >= ApiVersion4) {
         ProduceOutput(
             context,
             [&] (IYsonConsumer* consumer) {
@@ -193,6 +191,8 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
                             })
                     .EndMap();
             });
+    } else {
+        ProduceEmptyOutput(context);
     }
 }
 

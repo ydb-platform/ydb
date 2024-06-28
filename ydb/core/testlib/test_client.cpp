@@ -2583,7 +2583,8 @@ namespace Tests {
             return TServerSetup("localhost", 0);
         }
 
-        TStringBuf str(GetEnv(ServerRedirectEnvVar));
+        const auto& envValue = GetEnv(ServerRedirectEnvVar);
+        TStringBuf str(envValue);
         TStringBuf address;
         TStringBuf port;
         str.Split('/', address, port);

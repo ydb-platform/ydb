@@ -263,7 +263,7 @@ namespace {
         return columnTypeError;
     }
 
-    TStringBuf GetColumnTypeName(const TTypeAnnotationNode* type) {
+    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
         if (type->GetKind() == ETypeAnnotationKind::Data) {
             return type->Cast<TDataExprType>()->GetName();
         } else {

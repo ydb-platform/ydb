@@ -7583,7 +7583,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
-            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : "";
+            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())

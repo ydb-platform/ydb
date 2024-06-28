@@ -4,9 +4,27 @@
 
 #include <util/string/printf.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
+
 using namespace NSchemeShardUT_Private;
 using namespace NSchemeShardUT_Private::NExportReboots;
 using namespace NKikimr::NWrappers::NTestHelpers;
+
+namespace {
+
+Aws::SDKOptions Options;
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    Aws::InitAPI(Options);
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    Aws::ShutdownAPI(Options);
+}
+
+}
 
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>;

@@ -47,9 +47,8 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
-    -DHAVE_CONFIG_H
-    -DHAVE_PTHREAD=1
-    -DHAVE_ZLIB=1
+    -DGOOGLE_PROTOBUF_CMAKE_BUILD
+    -DHAVE_ZLIB
 )
 
 SRCS(
@@ -131,8 +130,6 @@ SRCS(
     src/google/protobuf/compiler/objectivec/objectivec_oneof.cc
     src/google/protobuf/compiler/objectivec/objectivec_primitive_field.cc
     src/google/protobuf/compiler/parser.cc
-    src/google/protobuf/compiler/perlxs/perlxs_generator.cc
-    src/google/protobuf/compiler/perlxs/perlxs_helpers.cc
     src/google/protobuf/compiler/php/php_generator.cc
     src/google/protobuf/compiler/plugin.cc
     src/google/protobuf/compiler/plugin.pb.cc

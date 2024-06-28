@@ -1028,15 +1028,14 @@ void TPartition::WriteInfoResponseHandler(
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
     auto& tx = (*txIter->second);
-    if (auto msg = std::get<0>(ev)) {
-        tx.WriteInfo.Reset(msg.Release());
+    if (auto* msg = std::get_if<0>(&ev)) {
+        tx.WriteInfo.Reset(msg->Release());
     } else {
-        auto err = std::get<1>(ev);
+        auto* err = std::get_if<1>(&ev);
         tx.Predicate = false;
         tx.WriteInfoApplied = true;
-        tx.Message = err->Message;
+        tx.Message = (*err)->Message;
     }
-    auto ret = txIter->second;
     WriteInfosToTx.erase(txIter);
     ProcessTxsAndUserActs(ctx);
 }

@@ -23,7 +23,7 @@ PY3TEST()
     )
     IF(NOT OPENSOURCE)
         DATA (
-            sbr://6563908726
+            sbr://6581137886
         )
     ENDIF()
 

@@ -27,8 +27,9 @@ PY3TEST()
         )
     ENDIF()
 
-    DEPENDS (
-        ydb/apps/ydb
-    )
-
+    IF(NOT NOT_INCLUDE_CLI)
+        DEPENDS (
+            ydb/apps/ydb
+        )
+    ENDIF()
 END()

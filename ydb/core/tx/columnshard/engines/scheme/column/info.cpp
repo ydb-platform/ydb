@@ -38,13 +38,16 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
 }
 
 TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-    const bool needMinMax, const bool isSorted)
+    const bool needMinMax, const bool isSorted,
+    const std::shared_ptr<arrow::Scalar>& defaultWriteValue, const std::shared_ptr<arrow::Scalar>& defaultReadValue)
     : ColumnId(columnId)
     , ArrowField(arrowField)
     , ArrowSchema(std::make_shared<arrow::Schema>(arrow::FieldVector({arrowField})))
     , Serializer(serializer)
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
+    , DefaultWriteValue(defaultWriteValue)
+    , DefaultReadValue(defaultReadValue)
 {
     ColumnName = ArrowField->name();
     Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, ArrowSchema, ColumnId);

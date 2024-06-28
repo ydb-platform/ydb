@@ -762,12 +762,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
         std::shared_ptr<arrow::Scalar> scalar;
         if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
             auto type = i.GetField()->type();
-            std::shared_ptr<arrow::Array> arr;
-            if (scalar) {
-                arr = NArrow::TThreadSimpleArraysCache::GetConst(type, scalar, RowsCount);
-            } else {
-                arr = NArrow::TThreadSimpleArraysCache::GetNull(type, RowsCount);
-            }
+            std::shared_ptr<arrow::Array> arr = NArrow::TThreadSimpleArraysCache::Get(type, scalar, RowsCount);
             columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
         } else {
             columns.emplace_back(i.Assemble());

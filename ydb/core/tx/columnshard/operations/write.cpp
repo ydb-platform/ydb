@@ -94,7 +94,7 @@ namespace NKikimr::NColumnShard {
         if (proto.HasModificationType()) {
             ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
         } else {
-            ModificationType = NEvWrite::EModificationType::Upsert;
+            ModificationType = NEvWrite::EModificationType::Replace;
         }
     }
 

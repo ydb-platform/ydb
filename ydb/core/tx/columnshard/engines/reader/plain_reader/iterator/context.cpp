@@ -110,7 +110,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
         result->SetBranchName("simple");
-        TColumnsSet columnsFetch = *FFColumns - *ShardingColumns;
+        TColumnsSet columnsFetch = *FFColumns;
         if (needFilterDeletion) {
             columnsFetch = columnsFetch + *DeletionColumns;
         }
@@ -132,16 +132,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             }
             if (!exclusiveSource) {
                 acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
-                acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
-            } else {
-                acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
             }
+            acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
         } else {
             return nullptr;
         }
     } else if (exclusiveSource) {
         result->SetBranchName("exclusive");
-        TColumnsSet columnsFetch = *EFColumns - *ShardingColumns;
+        TColumnsSet columnsFetch = *EFColumns;
         if (needFilterDeletion) {
             columnsFetch = columnsFetch + *DeletionColumns;
         }
@@ -179,7 +177,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
     } else {
         result->SetBranchName("merge");
-        TColumnsSet columnsFetch = *MergeColumns + *EFColumns - *ShardingColumns;
+        TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
         if (needFilterDeletion) {
             columnsFetch = columnsFetch + *DeletionColumns;
         }

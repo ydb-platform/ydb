@@ -4,6 +4,8 @@
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+
 namespace NKikimr::NOlap {
 
 std::shared_ptr<NKikimr::NOlap::TColumnLoader> IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
@@ -97,6 +99,34 @@ std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldVerified(const ui32 colu
     auto result = GetColumnFieldOptional(columnId);
     AFL_VERIFY(result);
     return result;
+}
+
+std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnWriteValue(const ui32 colId) {
+    if (colId == (ui32)ESpecialColumn::PLAN_STEP) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::TX_ID) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::DELETE_FLAG) {
+        static const std::shared_ptr<arrow::Scalar> deleteDefault(new arrow::BooleanScalar(false));
+        return deleteDefault;
+    } else {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
+}
+
+std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnReadValue(const ui32 colId) {
+    if (colId == (ui32)ESpecialColumn::PLAN_STEP) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::TX_ID) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::DELETE_FLAG) {
+        static const std::shared_ptr<arrow::Scalar> deleteDefault(new arrow::BooleanScalar(false));
+        return deleteDefault;
+    } else {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
 }
 
 } // namespace NKikimr::NOlap

@@ -1021,22 +1021,25 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
 
 void TPartition::WriteInfoResponseHandler(
         const TActorId& sender,
-        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+        TGetWriteInfoResp&& ev,
         const TActorContext& ctx
 ) {
     auto txIter = WriteInfosToTx.find(sender);
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
     auto& tx = (*txIter->second);
-    if (auto msg = std::get<0>(ev)) {
-        tx.WriteInfo.Reset(msg.Release());
-    } else {
-        auto err = std::get<1>(ev);
-        tx.Predicate = false;
-        tx.WriteInfoApplied = true;
-        tx.Message = err->Message;
-    }
-    auto ret = txIter->second;
+
+    std::visit(TOverloaded{
+        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>& msg) {
+            tx.WriteInfo.Reset(msg.Release());
+        },
+        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoError>& err) {
+            tx.Predicate = false;
+            tx.WriteInfoApplied = true;
+            tx.Message = err->Message;
+        }
+    }, ev);
+
     WriteInfosToTx.erase(txIter);
     ProcessTxsAndUserActs(ctx);
 }

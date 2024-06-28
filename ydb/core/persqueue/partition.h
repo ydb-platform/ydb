@@ -140,6 +140,9 @@ private:
     struct THasDataReq;
     struct THasDataDeadline;
     using TMessageQueue = std::deque<TMessage>;
+    using TGetWriteInfoResp =
+        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>,
+                     TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
     bool CanWrite() const;
@@ -328,7 +331,7 @@ private:
 
     void SendWriteInfoRequest(const TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate>& event);
     void WriteInfoResponseHandler(const TActorId& sender,
-                        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+                        TGetWriteInfoResp&& ev,
                         const TActorContext& ctx);
 
 

@@ -137,6 +137,8 @@ runs:
     - name: Notify about failed build
       if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
         

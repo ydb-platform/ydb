@@ -20,9 +20,14 @@ void ValidateGenericConnectionSetting(
     }
 
     if (!connection.database_id() && !(connection.host() && connection.port())) {
-        auto msg = TStringBuilder() << "content.setting.clickhouse_cluster.{database_id or host,port} field is not specified";
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.{database_id or host,port} field is not specified";
         issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
+
+    if (!connection.database_name() || connection.database_name() == "") {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.{database_id or host,port} field is not specified";
+        issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+    }    
 
     if (!connection.login()) {
         auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.login is not specified";
@@ -67,24 +72,20 @@ NYql::TIssues ValidateConnectionSetting(
     }
     case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
         ValidateGenericConnectionSetting(setting.postgresql_cluster(), "postgresql", disableCurrentIam, passwordRequired, issues);
-
-        const FederatedQuery::PostgreSQLCluster database = setting.postgresql_cluster(); 
-        if (!database.database_name()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.postgres_database.{database_name} field is not specified"));
-        }
         break;
     }
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
-        const FederatedQuery::GreenplumCluster database = setting.greenplum_cluster(); 
-        if (!database.has_auth() || database.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+        const FederatedQuery::GreenplumCluster& greenplumStorage = setting.greenplum_cluster(); 
+
+        if (!greenplumStorage.has_auth() || greenplumStorage.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.auth field is not specified"));
         }
 
-        if (database.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (greenplumStorage.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
-        if (!database.database_id() && !database.database_name()) {
+        if (!greenplumStorage.database_id() && !greenplumStorage.database_name()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.{database_id or database_name} field is not specified"));
         }
         break;

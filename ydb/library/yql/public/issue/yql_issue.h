@@ -142,6 +142,14 @@ public:
         SanitizeNonAscii(Message);
     }    
 
+    explicit TIssue(const std::string& message)
+        : Message(message)
+        , Position(TPosition())
+        , EndPosition(TPosition())
+    {
+        SanitizeNonAscii(Message);
+    }    
+
     TIssue(TPosition position, const char* message)
         : Message(message)
         , Position(position)
@@ -165,6 +173,14 @@ public:
     {
         SanitizeNonAscii(Message);
     }    
+
+    TIssue(TPosition position, const std::string& message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(position)
+    {
+        SanitizeNonAscii(Message);
+    }        
 
     inline TRange Range() const {
         return{ Position, EndPosition };
@@ -193,6 +209,14 @@ public:
     {
         SanitizeNonAscii(Message);
     }    
+
+    TIssue(TPosition position, TPosition endPosition, const std::string& message)
+        : Message(message)
+        , Position(position)
+        , EndPosition(endPosition)
+    {
+        SanitizeNonAscii(Message);
+    }        
 
     inline bool operator==(const TIssue& other) const {
         return Position == other.Position && Message == other.Message

@@ -1,11 +1,8 @@
 import "ydb/library/actors/protos/actors.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
-import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
-import "ydb/core/formats/arrow/protos/ssa.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";

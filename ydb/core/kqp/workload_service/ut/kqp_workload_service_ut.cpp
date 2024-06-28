@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=1
             );
-            GRANT DESCRIBE SCHEMA ON `.resource_pools/)" << poolId << "` TO " << userSID << ";"
+            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
             .PoolId(poolId)
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         ), poolId);
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT SELECT ROW ON `.resource_pools/)" << poolId << "` TO " << userSID << ";"
+            GRANT SELECT ROW ON `.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
         );
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
             .PoolId(poolId)

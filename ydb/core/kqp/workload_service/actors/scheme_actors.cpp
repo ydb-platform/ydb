@@ -49,15 +49,12 @@ public:
                 Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid resource pool id " << Event->Get()->PoolId);
                 return;
             case EStatus::AccessDenied:
-                Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << Event->Get()->PoolId);
-                return;
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
                 if (!UseDefaultPool) {
-                    Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << Event->Get()->PoolId << " not found or you don't have access permissions");
+                    Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << Event->Get()->PoolId << " not found");
                 } else {
-                    LOG_D("Start default pool creation");
-                    Register(CreatePoolCreatorActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, PoolConfig, Event->Get()->UserToken));
+                    CreateDefaultPool();
                 }
                 return;
             case EStatus::LookupError:
@@ -67,6 +64,13 @@ public:
                 }
                 return;
             case EStatus::Ok:
+                if (auto securityObject = result.SecurityObject) {
+                    auto token = Event->Get()->UserToken;
+                    if (!token || !securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *token)) {
+                        Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << Event->Get()->PoolId);
+                        return;
+                    }
+                }
                 Reply(result.ResourcePoolInfo);
                 return;
         }
@@ -98,9 +102,8 @@ protected:
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{".resource_pools", Event->Get()->PoolId}},
             Event->Get()->Database,
-            UseDefaultPool ? nullptr : Event->Get()->UserToken
+            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})
         );
-        event->ResultSet[0].Access |= NACLib::EAccessRights::SelectRow;
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
@@ -114,6 +117,25 @@ protected:
     }
 
 private:
+    void CreateDefaultPool() const {
+        LOG_D("Start default pool creation");
+
+        NACLib::TDiffACL diffAcl;
+        for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
+        }
+
+        auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
+        for (const TString& usedSid : AppData()->DefaultUserSIDs) {
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, usedSid);
+        }
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);  // Used in case of DefaultUserSIDs is empty and AllAuthenticatedUsers is not specified
+
+        auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+        Register(CreatePoolCreatorActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, PoolConfig, token, diffAcl));
+    }
+
     void Reply(const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& poolInfo) {
         if (!poolInfo) {
             Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected scheme cache response");
@@ -156,11 +178,12 @@ private:
 
 class TPoolCreatorActor : public TSchemeActorBase<TPoolCreatorActor> {
 public:
-    TPoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TPoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PoolId(poolId)
         , UserToken(userToken)
+        , DiffAcl(diffAcl)
         , PoolConfig(poolConfig)
     {}
 
@@ -204,19 +227,11 @@ protected:
         LOG_D("Start pool creating");
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools/"}));
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
-        schemeTx.SetInternal(true);
-        schemeTx.SetAllowAccessToPrivatePaths(true);
+        BuildCreatePoolRequest(*event->Record.MutableTransaction()->MutableModifyScheme());
+        BuildModifyAclRequest(*event->Record.MutableTransaction()->AddTransactionalModification());
 
-        auto& poolDescription = *schemeTx.MutableCreateResourcePool();
-        poolDescription.SetName(PoolId);
-        for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
-            poolDescription.MutableProperties()->MutableProperties()->insert({
-                property,
-                std::visit(NResourcePool::TSettingsExtractor{}, value)
-            });
+        if (UserToken) {
+            event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         Send(MakeTxProxyID(), std::move(event));
@@ -231,6 +246,36 @@ protected:
     }
 
 private:
+    void BuildCreatePoolRequest(NKikimrSchemeOp::TModifyScheme& schemeTx) {
+        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools/"}));
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
+        schemeTx.SetInternal(true);
+        schemeTx.SetAllowAccessToPrivatePaths(true);
+
+        auto& poolDescription = *schemeTx.MutableCreateResourcePool();
+        poolDescription.SetName(PoolId);
+        for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
+            poolDescription.MutableProperties()->MutableProperties()->insert({
+                property,
+                std::visit(NResourcePool::TSettingsExtractor{}, value)
+            });
+        }
+    }
+
+    void BuildModifyAclRequest(NKikimrSchemeOp::TModifyScheme& schemeTx) const {
+        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools/"}));
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+        schemeTx.SetInternal(true);
+        schemeTx.SetAllowAccessToPrivatePaths(true);
+
+        auto& modifyACL = *schemeTx.MutableModifyACL();
+        modifyACL.SetName(PoolId);
+        modifyACL.SetDiffACL(DiffAcl.SerializeAsString());
+        if (UserToken) {
+            modifyACL.SetNewOwner(UserToken->GetUserSID());
+        }
+    }
+
     void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
         Reply(status, {NYql::TIssue(message)});
     }
@@ -252,6 +297,7 @@ private:
     const TString Database;
     const TString PoolId;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const NACLibProto::TDiffACL DiffAcl;
     NResourcePool::TPoolSettings PoolConfig;
 };
 
@@ -261,8 +307,8 @@ IActor* CreatePoolFetcherActor(TEvPlaceRequestIntoPool::TPtr event) {
     return new TPoolFetcherActor(std::move(event));
 }
 
-IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-    return new TPoolCreatorActor(replyActorId, database, poolId, poolConfig, userToken);
+IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl) {
+    return new TPoolCreatorActor(replyActorId, database, poolId, poolConfig, userToken, diffAcl);
 }
 
 }  // NKikimr::NKqp::NWorkload

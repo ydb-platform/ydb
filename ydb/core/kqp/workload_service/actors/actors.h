@@ -10,6 +10,6 @@ NActors::IActor* CreatePoolHandlerActor(const TString& database, const TString& 
 
 // Fetch and create pool in scheme shard
 NActors::IActor* CreatePoolFetcherActor(TEvPlaceRequestIntoPool::TPtr event);
-NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl);
 
 }  // NKikimr::NKqp::NWorkload

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>

@@ -7,7 +7,6 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 SRCS(
-    kqp_resource_estimation_ut.cpp
     kqp_rm_ut.cpp
 )
 

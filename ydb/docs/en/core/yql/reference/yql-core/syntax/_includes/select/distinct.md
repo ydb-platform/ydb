@@ -1,4 +1,4 @@
-## DISTINCT {#distinct}
+# DISTINCT {#distinct}
 
 Selecting unique rows.
 

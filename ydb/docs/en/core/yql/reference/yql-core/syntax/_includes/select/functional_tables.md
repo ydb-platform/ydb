@@ -1,6 +1,6 @@
 ## Accessing multiple tables in a single query {#concat} {#each} {#range} {#like} {#filter} {#regexp}
 
-Standard SQL uses [UNION ALL](#unionall) to execute a query across multiple tables and combine the results of two or more `SELECT` statements. This is not very convenient for the use case of running the same query on multiple tables (for example, if they contain data for different dates). To make this more convenient, in YQL `SELECT` statements, after `FROM`, you can specify not only a table or a subquery, but also call built-in functions letting you combine data from multiple tables.
+Standard SQL uses [UNION ALL](../../select/union.md#unionall) to execute a query across multiple tables and combine the results of two or more `SELECT` statements. This is not very convenient for the use case of running the same query on multiple tables (for example, if they contain data for different dates). To make this more convenient, in YQL `SELECT` statements, after `FROM`, you can specify not only a table or a subquery, but also call built-in functions letting you combine data from multiple tables.
 
 The following functions are defined for these purposes:
 

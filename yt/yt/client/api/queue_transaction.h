@@ -39,7 +39,7 @@ struct TPushQueueProducerResult
      * All rows with greater sequence number will be ignored in future calls of PushQueueProducer.
      */
     NQueueClient::TQueueProducerSequenceNumber LastSequenceNumber{-1};
-    //! Count of rows which were skipped because of their sequence number.
+    //! Number of rows which were skipped because of their sequence number.
     /*!
      * Skipped rows were written before.
      */
@@ -80,7 +80,7 @@ struct IQueueTransaction
         i64 newOffset,
         const TAdvanceQueueConsumerOptions& options) = 0;
 
-    //! Write rows in the queue with checking their sequence number.
+    //! Writes rows in the queue with checking their sequence number.
     /*!
      * If row sequence number is less than sequence number saved in producer table, then this row will not be written.
      * #sessionId - an identificator of write session, for example, `<host>-<filename>`.

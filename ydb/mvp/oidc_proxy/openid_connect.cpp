@@ -28,7 +28,7 @@ struct TRedirectUrlParameters {
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    TStringBuf authUrl = "/oauth/authorize";
+    TStringBuf authUrl = "/oauth2/authorize";
     const auto& eventDetails = parameters.SessionServerCheckDetails;
     size_t posAuthUrl = eventDetails.find(authUrl);
     if (posAuthUrl != TStringBuf::npos) {

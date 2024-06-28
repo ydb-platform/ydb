@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "cli_cmds.h"
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <ydb/core/driver_lib/run/factories.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -23,7 +24,7 @@ public:
         AddCommand(std::make_unique<TClientCommandAdmin>());
         AddCommand(std::make_unique<TClientCommandDb>());
         AddCommand(std::make_unique<TClientCommandCms>());
-        AddCommand(std::make_unique<TClientCommandWhoAmI>());
+        AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
         AddClientCommandServer(*this, std::move(factories));
         AddCommand(std::make_unique<TClientCommandConfig>());

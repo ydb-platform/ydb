@@ -2017,9 +2017,9 @@
     ],
     "test.test[pg-select_win_expr_partition-default.txt-Debug]": [
         {
-            "checksum": "dfc0ca1913d0615f0e9a5f01128a99ef",
-            "size": 2008,
-            "uri": "https://{canondata_backend}/1889210/796baf28896eb5aaad8828a0b6000e7d17563447/resource.tar.gz#test.test_pg-select_win_expr_partition-default.txt-Debug_/opt.yql_patched"
+            "checksum": "934508323c3557fa34e8cb5b7f82a9cc",
+            "size": 2011,
+            "uri": "https://{canondata_backend}/1899731/e198b7ef79a77ed789fe5760772f063e72267539/resource.tar.gz#test.test_pg-select_win_expr_partition-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_expr_partition-default.txt-Plan]": [

@@ -1933,9 +1933,9 @@
     ],
     "test.test[pg-select_win_expr_lead-default.txt-Debug]": [
         {
-            "checksum": "f59b9561ff38506d43ed6529520191b6",
-            "size": 1824,
-            "uri": "https://{canondata_backend}/1942415/7d25a5a35013170d9778cd1c66debf68f8bad90a/resource.tar.gz#test.test_pg-select_win_expr_lead-default.txt-Debug_/opt.yql"
+            "checksum": "9cf20c422f871054b78aa803c83d1280",
+            "size": 1827,
+            "uri": "https://{canondata_backend}/1899731/1b5aa158e1e36ca9df03972fa2bb6f26e5880579/resource.tar.gz#test.test_pg-select_win_expr_lead-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_win_expr_lead-default.txt-Plan]": [

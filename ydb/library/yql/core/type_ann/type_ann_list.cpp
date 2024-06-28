@@ -4802,7 +4802,9 @@ namespace {
         TVector<const TItemExprType*> rowColumns;
         TMaybe<TStringBuf> sessionColumnName;
         TMaybe<TStringBuf> hoppingColumnName;
-        for (const auto& setting : settings->Children()) {
+        TExprNode::TPtr outputColumns;
+        for (ui32 i = 0; i < settings->ChildrenSize(); ++i) {
+            const auto& setting = settings->ChildPtr(i);
             if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4923,6 +4925,21 @@ namespace {
                 if (!ValidateAggManyStreams(*value, input->Child(2)->ChildrenSize(), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
+            } else if (settingName == "output_columns" && suffix.empty()) {
+                if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                TExprNode::TPtr newSetting;
+                auto status = NormalizeTupleOfAtoms(setting, 1, newSetting, ctx.Expr);
+                if (status != IGraphTransformer::TStatus::Ok) {
+                    if (status == IGraphTransformer::TStatus::Repeat) {
+                        auto newSettings = ctx.Expr.ChangeChild(*settings, i, std::move(newSetting));
+                        output = ctx.Expr.ChangeChild(*input, TCoAggregateBase::idx_Settings, std::move(newSettings));
+                    }
+                    return status;
+                }
+                outputColumns = setting->ChildPtr(1);
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Head().Pos()),
                     TStringBuilder() << "Unexpected setting: " << settingName));
@@ -5077,6 +5094,28 @@ namespace {
         auto rowType = ctx.Expr.MakeType<TStructExprType>(rowColumns);
         if (!rowType->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (outputColumns) {
+            THashSet<TStringBuf> originalColumns;
+            for (auto& item : rowColumns) {
+                originalColumns.insert(item->GetName());
+            }
+            THashSet<TStringBuf> outputColumnNames;
+            for (auto& col : outputColumns->ChildrenList()) {
+                if (!originalColumns.contains(col->Content())) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(col->Pos()), TStringBuilder() << "Unknown output column " << col->Content()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                outputColumnNames.insert(col->Content());
+            }
+            EraseIf(rowColumns, [&](const auto& item) { return !outputColumnNames.contains(item->GetName()); });
+            if (rowColumns.size() == originalColumns.size()) {
+                auto newSettings = RemoveSetting(*settings, "output_columns", ctx.Expr);
+                output = ctx.Expr.ChangeChild(*input, TCoAggregateBase::idx_Settings, std::move(newSettings));
+                return IGraphTransformer::TStatus::Repeat;
+            }
+            rowType = ctx.Expr.MakeType<TStructExprType>(rowColumns);
         }
 
         input->SetTypeAnn(MakeSequenceType(inputTypeKind, *rowType, ctx.Expr));

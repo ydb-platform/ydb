@@ -52,7 +52,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     }
     Counters.WaitingQueueSize->Set(Waiting.size());
     Counters.AvailableWorkersCount->Set(Workers.size());
-    ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=processed;owner=" << ev->Get()->GetOwnerId() << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
+    ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=processed;owner=" << ev->Get()->GetOwnerId().value_or(NActors::TActorId()) << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {

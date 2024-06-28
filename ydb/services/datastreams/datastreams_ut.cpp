@@ -2689,9 +2689,9 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 .BeginConfigurePartitioningSettings()
                     .MinActivePartitions(3)
                     .MaxActivePartitions(7)
-                    .BeginConfigureAutoscalingSettings()
-                        .Strategy(NYdb::NTopic::EAutoscalingStrategy::ScaleUpAndDown)
-                    .EndConfigureAutoscalingSettings()
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown)
+                    .EndConfigureAutoPartitioningSettings()
                 .EndConfigurePartitioningSettings()
                 ;
             auto result = pqClient.CreateTopic(streamName, settings).ExtractValueSync();

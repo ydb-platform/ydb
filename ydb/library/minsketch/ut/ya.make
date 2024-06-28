@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/util)
+UNITTEST_FOR(ydb/library/minsketch)
 
 FORK_SUBTESTS()
 IF (WITH_VALGRIND)

@@ -132,8 +132,8 @@ public:
         ReplyContinue(request, status, {NYql::TIssue(message)});
     }
 
-    void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, NYql::TIssues issues = {}) {
-        this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, std::move(issues)));
+    void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
+        this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
@@ -183,7 +183,7 @@ public:
         if (request->State == TRequest::EState::Canceling) {
             ReplyCancel(request);
         } else {
-            ReplyCleanup(request, status, std::move(issues));
+            ReplyCleanup(request, status, issues);
         }
 
         LocalSessions.erase(request->SessionId);
@@ -224,8 +224,8 @@ protected:
     }
 
 private:
-    void ReplyCleanup(const TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, NYql::TIssues issues = {}) {
-        this->Send(request->WorkerActorId, new TEvCleanupResponse(status, std::move(issues)));
+    void ReplyCleanup(const TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
+        this->Send(request->WorkerActorId, new TEvCleanupResponse(status, issues));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             CleanupOk->Inc();

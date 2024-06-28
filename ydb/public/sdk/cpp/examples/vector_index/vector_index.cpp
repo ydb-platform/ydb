@@ -21,7 +21,6 @@ using namespace NTable;
 
 static constexpr ui64 kBulkSize = 1000;
 static constexpr ui64 kSmallClusterSize = 20'000;
-static constexpr ui64 kReadQueuePrefetch = 2;
 
 static constexpr std::string_view FlatIndex = "flat";
 static constexpr std::string_view KMeansIndex = "kmeans";
@@ -185,16 +184,23 @@ public:
 
     TString RandomKQuery(ui64 k) {
         Y_ASSERT(kMinClusterSize * k < Rows());
+        auto r = std::max(0.5 / k, static_cast<double>(k * kMinClusterSize) / Rows());
+        if (ParentId != 0 && !Options.ShuffleWithEmbeddings) {
+            TString query = std::format(R"(
+                $ids = SELECT id FROM {0} WHERE parent_id = {2} AND RANDOM(id) < {3} LIMIT {4};
+                SELECT embedding FROM {1} WHERE id IN $ids LIMIT {4};
+            )", Table, Options.Table, ParentId, r, k);
+            // Cout << query << Endl;
+            return query;
+        }
 
-        TString query = std::format(R"(SELECT {0} FROM {1}
-  WHERE)",
+        TString query = std::format(R"(SELECT {0} FROM {1} WHERE)",
                                     Options.Embedding,
                                     Table);
         if (ParentId != 0) {
             query = std::format(R"({0} {1} = {2} AND)", query, "parent_" + Options.PrimaryKey, ParentId);
         }
-        query = std::format(R"({0} RANDOM({1}) < {2}
-  LIMIT {3})", query, Options.Embedding, std::max(0.5 / k, static_cast<double>(k * kMinClusterSize) / Rows()), k);
+        query = std::format(R"({0} RANDOM({1}) < {2} LIMIT {3})", query, Options.Embedding, r, k);
         // Cout << query << Endl;
         return query;
     }
@@ -258,11 +264,13 @@ public:
 private:
     template <bool WithPK>
     void IterateImpl(TReadCallback* read, auto&& cb) {
+        ReadImpl(WithPK);
+        JoinImpl(WithPK);
+        ProcessImpl<WithPK>(read, cb);
+    }
+
+    auto ReadSettings(bool withPK) {
         TReadTableSettings settings;
-        if constexpr (WithPK) {
-            settings.AppendColumns(Options.PrimaryKey);
-        }
-        settings.AppendColumns(Options.Embedding);
         if (ParentId != 0) {
             TValueBuilder pk;
 
@@ -277,91 +285,112 @@ private:
             pk.AddElement().Uint32(0);
             pk.EndTuple();
             settings.To(TKeyBound::Exclusive(pk.Build()));
+            settings.AppendColumns(Options.PrimaryKey);
+        } else {
+            if (withPK) {
+                settings.AppendColumns(Options.PrimaryKey);
+            }
+            settings.AppendColumns(Options.Embedding);
         }
+        return settings;
+    }
 
+    bool ReadPart(TTablePartIterator& it, ui64& rows) {
+        auto next = it.ReadNext();
+        auto part = next.ExtractValueSync();
+        if (part.EOS()) {
+            rows = std::numeric_limits<ui64>::max();
+        } else if (!part.IsSuccess() || part.GetPart().RowsCount() == 0) {
+            return true;
+        } else {
+            rows += part.GetPart().RowsCount();
+        }
+        if (Y_UNLIKELY(rows > Rows())) {
+            Read.Stop();
+            return false;
+        }
+        Read.Push(part.ExtractPart());
+        return true;
+    }
+
+    void ReadImpl(bool WithPK) {
+        auto settings = ReadSettings(WithPK);
         auto r = Client.RetryOperationSync([&](TSession session) {
             auto fit = session.ReadTable(FullName(Options, Table), settings);
-            ReadImpl(fit.ExtractValueSync());
+            auto r = fit.ExtractValueSync();
+            if (!r.IsSuccess()) {
+                ythrow TVectorException{r};
+            }
+            ThreadPool.Submit([this, it = std::move(r)]() mutable {
+                ui64 rows = 0;
+                while (ReadPart(it, rows)) {
+                }
+            });
             return TStatus{EStatus::SUCCESS, {}};
         });
         if (!r.IsSuccess()) {
             ythrow TVectorException{r};
         }
-        ProcessImpl<WithPK>(read, cb);
     }
 
-    void ReadImpl(TTablePartIterator r) {
-        if (!r.IsSuccess()) {
-            ythrow TVectorException{r};
+    bool JoinPart(bool withPK, TResultSet&& r) {
+        TResultSetParser batch{r};
+        if (!batch.TryNextRow()) {
+            return false;
         }
-        ThreadPool.Submit([this, it = std::move(r)]() mutable {
-            ui64 rows = 0;
-            for (bool wasGood = true; wasGood;) {
-                auto next = it.ReadNext();
-                auto part = next.ExtractValueSync();
-                wasGood = part.IsSuccess();
-                if (Y_LIKELY(wasGood)) {
-                    rows += part.GetPart().RowsCount();
-                    if (Y_UNLIKELY(rows > Rows())) {
-                        wasGood = false;
-                        part = TSimpleStreamPart<TResultSet>{TResultSet{Ydb::ResultSet{}}, TStatus{EStatus::CLIENT_OUT_OF_RANGE, {}}};
-                    }
-                } else if (Y_UNLIKELY(!part.EOS())) {
-                    wasGood = true;
-                    continue;
-                }
-                std::unique_lock lock{M};
-                Queue.emplace(std::move(part));
-                if (Queue.size() == 1) {
-                    CVProcess.notify_one();
-                }
-                while (Queue.size() > kReadQueuePrefetch) {
-                    CVRead.wait(lock);
+        Y_ASSERT(batch.ColumnsCount() == 1);
+        auto& builder = ParamsBuilder.AddParam("$ids").BeginList();
+        auto primaryKeyIdx = batch.ColumnIndex(Options.PrimaryKey);
+        auto& primaryKey = batch.ColumnParser(primaryKeyIdx);
+        do {
+            builder.AddListItem().Uint32(*primaryKey.GetOptionalUint32());
+        } while (batch.TryNextRow());
+        builder.EndList().Build();
+
+        auto query = withPK ? "SELECT id, embedding FROM table WHERE id IN $ids" : "SELECT embedding FROM table WHERE id IN $ids";
+
+        auto fit = Client.StreamExecuteScanQuery(query, ParamsBuilder.Build());
+
+        auto it = fit.ExtractValueSync();
+        if (!it.IsSuccess()) {
+            ythrow TVectorException{it};
+        }
+
+        while (true) {
+            auto next = it.ReadNext();
+            auto part = next.ExtractValueSync();
+            if (part.EOS()) {
+                break;
+            } else if (!part.IsSuccess() || part.GetResultSet().RowsCount() == 0) {
+                continue;
+            }
+            Join.Push(part.ExtractResultSet());
+        }
+        return true;
+    }
+
+    void JoinImpl(bool withPK) {
+        if (ParentId == 0) {
+            Process = &Read;
+            return;
+        }
+        Process = &Join;
+        ThreadPool.Submit([this, withPK]() mutable {
+            while (true) {
+                auto part = Read.Pop();
+                if (!JoinPart(withPK, std::move(part))) {
+                    Join.Stop();
+                    return;
                 }
             }
         });
     }
 
     template <bool WithPK>
-    void ProcessImpl(TReadCallback* read, auto&& cb) {
-        std::unique_lock lock{M};
-        while (true) {
-            if (read && Queue.empty()) {
-                lock.unlock();
-                if constexpr (WithPK) {
-                    read->TriggerIds();
-                } else {
-                    read->TriggerEmbeddings();
-                }
-                lock.lock();
-            }
-            while (Queue.empty()) {
-                CVProcess.wait(lock);
-            }
-            auto part = std::move(Queue.front());
-            Queue.pop();
-            if (Queue.size() == kReadQueuePrefetch) {
-                CVRead.notify_one();
-            }
-            lock.unlock();
-            if (!ProcessPart<WithPK>(std::move(part), cb)) {
-                return;
-            }
-            lock.lock();
-        }
-    }
-
-    template <bool WithPK>
-    bool ProcessPart(TSimpleStreamPart<TResultSet>&& r, auto&& cb) {
-        if (!r.IsSuccess()) {
-            if (r.EOS()) {
-                return false;
-            }
-            ythrow TVectorException{r};
-        }
-        TResultSetParser batch(r.ExtractPart());
+    bool ProcessPart(TResultSet&& r, auto&& cb) {
+        TResultSetParser batch{r};
         if (!batch.TryNextRow()) {
-            return true;
+            return false;
         }
         if constexpr (WithPK) {
             Y_ASSERT(batch.ColumnsCount() == 2);
@@ -389,18 +418,90 @@ private:
         return true;
     }
 
+    template <bool WithPK>
+    void ProcessImpl(TReadCallback* read, auto&& cb) {
+        while (true) {
+            std::unique_lock lock{Process->M};
+            if (read && Process->Queue.empty()) {
+                lock.unlock();
+                if constexpr (WithPK) {
+                    read->TriggerIds();
+                } else {
+                    read->TriggerEmbeddings();
+                }
+                lock.lock();
+            }
+            auto part = Process->PopImpl(lock);
+            lock.unlock();
+            if (!ProcessPart<WithPK>(std::move(part), cb)) {
+                return;
+            }
+        }
+    }
+
     const TOptions& Options;
     TTableClient& Client;
     NVectorIndex::TThreadPool& ThreadPool;
     TString Table;
     TId ParentId = 0;
     ui64 RowsCount = 0;
+    TParamsBuilder ParamsBuilder;
 
-    std::mutex M;
-    std::condition_variable CVRead;
-    std::condition_variable CVProcess;
-    std::queue<TSimpleStreamPart<TResultSet>> Queue;
-    std::queue<std::vector<TString>> Data;
+    struct Stream {
+        static constexpr ui64 kPrefetch = 1;
+        inline static const TResultSet EmptyPart{Ydb::ResultSet{}};
+
+        std::mutex M;
+        std::condition_variable WasPush;
+        std::condition_variable WasPop;
+        std::queue<TResultSet> Queue;
+
+        void Push(TResultSet&& part) {
+            std::unique_lock lock{M};
+            PushImpl(std::move(part));
+            while (Queue.size() > kPrefetch) {
+                WasPop.wait(lock);
+            }
+        }
+
+        void Stop() {
+            auto part = EmptyPart;
+            std::unique_lock lock{M};
+            PushImpl(std::move(part));
+        }
+
+        TResultSet PopImpl(std::unique_lock<std::mutex>& lock) {
+            while (Queue.empty()) {
+                WasPush.wait(lock);
+            }
+            auto part = std::move(Queue.front());
+            Queue.pop();
+            if (Queue.size() == kPrefetch) {
+                WasPop.notify_one();
+            }
+            return part;
+        }
+
+        TResultSet Pop() {
+            std::unique_lock lock{M};
+            return PopImpl(lock);
+        }
+
+    private:
+        void PushImpl(TResultSet&& part) {
+            Queue.emplace(std::move(part));
+            if (Queue.size() == 1) {
+                WasPush.notify_one();
+            }
+        }
+    };
+
+    // Read push to Read Stream
+    Stream Read;
+    // Join pop from Read Stream and push to Join Stream
+    Stream Join; // Join is optional step
+    // Process pop from Join Stream if it's present otherwise Read
+    Stream* Process = nullptr;
 
     std::vector<TString> Embeddings;
 };
@@ -541,7 +642,7 @@ struct TBulkWriter {
         auto indexTable = FullIndexName(Sender.Options);
         Embeddings = Sender.Options.LastLevelEmbeddings;
         if (level < Sender.Options.Levels) {
-            Embeddings = true;
+            Embeddings = Sender.Options.ShuffleWithEmbeddings;
             indexTable += "_" + std::to_string((level + 1) % 2);
         }
         if (indexTable != Table) {
@@ -620,7 +721,7 @@ static void UpdateKMeans(TTableClient& client, const TOptions& options) {
     using TClusters = typename TClusterizer::TClusters;
     const auto cores = std::thread::hardware_concurrency() / 2;
     NVectorIndex::TThreadPool tpCompute{cores};
-    NVectorIndex::TThreadPool tpIO{cores};
+    NVectorIndex::TThreadPool tpIO{cores * 2}; // x2 because join
 
     auto makeClustersImpl = [&options](TTableIterator& reader, TBulkWriter& writer, TClusterizer& clusterizer, ui8 level, TId parentId, ui64 count) {
         reader.UseLevel(level, parentId, count);

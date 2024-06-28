@@ -38,7 +38,7 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool r
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
-    auto keyBatch = ExtractColumns(batch, sortingKey, false);
+    auto keyBatch = ExtractColumns(batch, sortingKey);
     AFL_VERIFY(batch);
     AFL_VERIFY(sortingKey);
     AFL_VERIFY(!!keyBatch)("problem", "cannot_find_columns")("schema", batch->schema()->ToString())("columns", sortingKey->ToString());

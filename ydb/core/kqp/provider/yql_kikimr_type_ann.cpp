@@ -265,7 +265,7 @@ namespace {
 
     TString GetColumnTypeName(const TTypeAnnotationNode* type) {
         if (type->GetKind() == ETypeAnnotationKind::Data) {
-            return type->Cast<TDataExprType>()->GetName();
+            return ToString(type->Cast<TDataExprType>()->GetName());
         } else {
             auto pgTypeId = type->Cast<TPgExprType>()->GetId();
             auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);

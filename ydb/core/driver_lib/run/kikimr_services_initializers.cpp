@@ -241,6 +241,25 @@
 
 #include <util/system/hostname.h>
 
+#include <aws/core/Aws.h>
+
+namespace {
+
+struct TAwsApiGuard {
+    TAwsApiGuard() {
+        Aws::InitAPI(Options);
+    }
+
+    ~TAwsApiGuard() {
+        Aws::ShutdownAPI(Options);
+    }
+
+private:
+    Aws::SDKOptions Options;
+};
+
+}
+
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -2808,6 +2827,17 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
     setup->LocalServices.emplace_back(
         NGraph::MakeGraphServiceId(),
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
+}
+
+TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
+    : GlobalObjects(globalObjects)
+{
+}
+
+void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
 
 } // namespace NKikimrServicesInitializers

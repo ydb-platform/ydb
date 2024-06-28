@@ -619,5 +619,14 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TAwsApiInitializer : public IServiceInitializer {
+    IGlobalObjectStorage& GlobalObjects;
+
+public:
+    TAwsApiInitializer(IGlobalObjectStorage& globalObjects);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

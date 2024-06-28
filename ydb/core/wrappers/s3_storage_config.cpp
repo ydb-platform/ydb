@@ -37,9 +37,28 @@ private:
     SDKOptions Options;
 };
 
-void EnsureAwsSdkInitialized() {
-    static TApiInitializer awsSdk;
-}
+class TApiOwner {
+public:
+    void Ref() {
+        auto guard = Guard(Mutex);
+        if (!RefCount++) {
+            Y_ABORT_UNLESS(!ApiInitializer);
+            ApiInitializer.emplace();
+        }
+    }
+
+    void UnRef() {
+        auto guard = Guard(Mutex);
+        if (!--RefCount) {
+            ApiInitializer.reset();
+        }
+    }
+
+private:
+    ui64 RefCount = 0;
+    TMutex Mutex;
+    std::optional<TApiInitializer> ApiInitializer;
+};
 
 namespace NPrivate {
 
@@ -80,10 +99,11 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 } // anonymous
 
 TS3User::TS3User() {
-    EnsureAwsSdkInitialized();
+    Singleton<TApiOwner>()->Ref();
 }
 
 TS3User::~TS3User() {
+    Singleton<TApiOwner>()->UnRef();
 }
 
 class TS3ThreadsPoolByEndpoint {

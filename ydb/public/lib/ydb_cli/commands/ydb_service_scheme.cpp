@@ -517,12 +517,18 @@ namespace {
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const auto& changefeed : changefeeds) {
-            table.AddRow()
+            auto& row = table.AddRow()
                 .Column(0, changefeed.GetName())
                 .Column(1, changefeed.GetMode())
                 .Column(2, changefeed.GetFormat())
-                .Column(3, changefeed.GetState())
                 .Column(4, changefeed.GetVirtualTimestamps() ? "on" : "off");
+            if (changefeed.GetState() == NTable::EChangefeedState::InitialScan && changefeed.GetInitialScanProgress()) {
+                const float percentage = changefeed.GetInitialScanProgress()->GetProgress();
+                row.Column(3, TStringBuilder() << changefeed.GetState()
+                    << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) << "%)");
+            } else {
+                row.Column(3, changefeed.GetState());
+            }
         }
 
         Cout << Endl << "Changefeeds:" << Endl << table;

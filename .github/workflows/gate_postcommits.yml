@@ -23,7 +23,7 @@ jobs:
           https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1 | \
             jq '.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id' |
           while read x;do
-            echo 'Runner to close: $x;
+            echo 'Runner to close: $x'
           done
         else
           echo "Open gate for postcommits"
@@ -31,6 +31,6 @@ jobs:
           https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1 | \
             jq '.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id' |
           while read x;do
-            echo 'Runner to open: $x;
+            echo 'Runner to open: $x'
           done
         fi

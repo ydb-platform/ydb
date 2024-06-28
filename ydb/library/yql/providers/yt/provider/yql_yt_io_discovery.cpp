@@ -709,7 +709,7 @@ private:
 
                 auto parsedKey = keys.ExtractKeys().front();
                 if (!parsedKey.GetWalkFolderImplArgs()) {
-                    YQL_CLOG(INFO, ProviderYt) << "Failed to parse WalkFolderImpl args";
+                    YQL_CLOG(ERROR, ProviderYt) << "Failed to parse WalkFolderImpl args";
                     return {};
                 }
                 const ui64 instanceKey = parsedKey.GetWalkFolderImplArgs()->StateKey;
@@ -781,7 +781,7 @@ private:
                     return readNode.Ptr();
                 }
 
-                YQL_CLOG(DEBUG, ProviderYt) << "State expr ast: " << ConvertToAst(*nextState, ctx, {}).Root->ToString();
+                YQL_CLOG(TRACE, ProviderYt) << "State expr ast: " << ConvertToAst(*nextState, ctx, {}).Root->ToString();
 
                 auto walkFoldersImplNode = ctx.ChangeChild(*parsedKey.GetNode(), 0, std::move(nextState));
                 return ctx.ChangeChild(readNode.Ref(), 2, std::move(walkFoldersImplNode));

@@ -418,7 +418,7 @@ namespace NKikimr::NStorage {
 
     template<typename T>
     void EnumerateConfigDrives(const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId, T&& callback,
-            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> *nodeMap = nullptr) {
+            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> *nodeMap = nullptr, bool fillInPDiskConfig = false) {
         if (!config.HasBlobStorageConfig()) {
             return;
         }
@@ -458,9 +458,30 @@ namespace NKikimr::NStorage {
                 const auto& node = *it->second;
                 if (const auto it = defineHostConfigMap.find(host.GetHostConfigId()); it != defineHostConfigMap.end()) {
                     const auto& hostConfig = *it->second;
+                    auto processDrive = [&](const auto& drive) {
+                        if (fillInPDiskConfig && !drive.HasPDiskConfig() && hostConfig.HasDefaultHostPDiskConfig()) {
+                            NKikimrBlobStorage::THostConfigDrive temp;
+                            temp.CopyFrom(drive);
+                            temp.MutablePDiskConfig()->CopyFrom(hostConfig.GetDefaultHostPDiskConfig());
+                            callback(node, temp);
+                        } else {
+                            callback(node, drive);
+                        }
+                    };
                     for (const auto& drive : hostConfig.GetDrive()) {
-                        callback(node, drive);
+                        processDrive(drive);
                     }
+                    auto processTypedDrive = [&](const auto& field, NKikimrBlobStorage::EPDiskType type) {
+                        for (const auto& path : field) {
+                            NKikimrBlobStorage::THostConfigDrive drive;
+                            drive.SetType(type);
+                            drive.SetPath(path);
+                            processDrive(drive);
+                        }
+                    };
+                    processTypedDrive(hostConfig.GetRot(), NKikimrBlobStorage::EPDiskType::ROT);
+                    processTypedDrive(hostConfig.GetSsd(), NKikimrBlobStorage::EPDiskType::SSD);
+                    processTypedDrive(hostConfig.GetNvme(), NKikimrBlobStorage::EPDiskType::NVME);
                 }
             }
         }

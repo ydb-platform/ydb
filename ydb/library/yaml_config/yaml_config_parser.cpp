@@ -6,9 +6,11 @@
 #include <ydb/library/pdisk_io/device_type.h>
 #include <ydb/library/yaml_config/protos/config.pb.h>
 
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/blobstorage_pdisk_category.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
 
@@ -692,18 +694,52 @@ namespace NKikimr::NYaml {
         TMaybe<TString> defaultDiskTypeLower;
         TMaybe<NKikimrBlobStorage::EPDiskType> dtEnum;
 
+        const NKikimrConfig::TBlobStorageConfig::TAutoconfigSettings *autoconf = nullptr;
+        if (config.HasBlobStorageConfig()) {
+            if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
+                autoconf = &bsConfig.GetAutoconfigSettings();
+            }
+        }
+
         if (ephemeralConfig.HasErasure()) {
             erasureName = ephemeralConfig.GetErasure();
+        } else if (autoconf && autoconf->HasErasureSpecies()) {
+            erasureName = autoconf->GetErasureSpecies();
         }
 
         if (ephemeralConfig.HasDefaultDiskType()) {
             defaultDiskType = ephemeralConfig.GetDefaultDiskType();
-            defaultDiskTypeLower = *defaultDiskType.Get();
-            defaultDiskTypeLower.Get()->to_lower();
-            Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(*defaultDiskType, *dtEnum), "incorrect enum: " << defaultDiskType);
+            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
+                "incorrect enum: " << defaultDiskType);
+        } else if (autoconf) {
+            THashSet<TMaybe<NKikimrBlobStorage::EPDiskType>> options;
+            bool error = false;
+
+            for (const auto& filter : autoconf->GetPDiskFilter()) {
+                TMaybe<NKikimrBlobStorage::EPDiskType> type;
+                for (const auto& prop : filter.GetProperty()) {
+                    if (prop.HasType()) {
+                        if (type) { // two Type values in single filter
+                            error = true;
+                        } else {
+                            type = prop.GetType();
+                        }
+                    }
+                }
+                options.insert(type);
+            }
+
+            if (options.size() == 1 && !error) {
+                dtEnum = *options.begin();
+                defaultDiskType = NKikimrBlobStorage::EPDiskType_Name(*dtEnum);
+            }
         }
 
-        // TODO: warn?
+        if (defaultDiskType) {
+            defaultDiskTypeLower = *defaultDiskType.Get();
+            defaultDiskTypeLower.Get()->to_lower();
+        }
+
         if (erasureName && !ephemeralConfig.HasStaticErasure()) {
             ephemeralConfig.SetStaticErasure(*erasureName);
         }
@@ -784,7 +820,7 @@ namespace NKikimr::NYaml {
             for (size_t i = 0; i < 3; ++i) {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName.GetRef());
-                channel.SetPDiskCategory(1);
+                channel.SetPDiskCategory(TPDiskCategory(PDiskTypeToPDiskType(*dtEnum), 0));
                 channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
             };
         }
@@ -910,7 +946,9 @@ namespace NKikimr::NYaml {
         }
 
         auto* bsConfig = config.MutableBlobStorageConfig();
-        Y_ENSURE_BT(bsConfig->HasServiceSet(), "service_set field in blob_storage_config must be json map.");
+        if (!bsConfig->HasServiceSet()) {
+            return;
+        }
 
         auto* serviceSet = bsConfig->MutableServiceSet();
         if (!serviceSet->AvailabilityDomainsSize()) {

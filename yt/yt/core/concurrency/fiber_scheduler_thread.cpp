@@ -502,15 +502,11 @@ Y_FORCE_INLINE TClosure PickCallback(TFiberSchedulerThread* fiberThread)
     // that the propagating storage created there won't spill into the fiber callbacks.
 
     TNullPropagatingStorageGuard guard;
-    YT_VERIFY(guard.GetOldStorage().IsNull());
+    YT_VERIFY(guard.GetOldStorage().IsEmpty());
     callback = fiberThread->OnExecute();
 
     return callback;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -528,18 +524,7 @@ void FiberTrampoline()
         YT_VERIFY(!TryGetResumerFiber());
         YT_VERIFY(CurrentFls() == nullptr);
 
-        if (auto perThreadFls = NDetail::PerThreadFls()) {
-            const auto* propStorage = TryGetPropagatingStorage(*perThreadFls);
-            if (propStorage != nullptr) {
-                if (!propStorage->IsNull()) {
-                    Cerr << "Unexpected propagating storage" << Endl;
-                    PrintLocationToStderr();
-                    YT_ABORT();
-                }
-            }
-        }
-
-        YT_VERIFY(GetCurrentPropagatingStorage().IsNull());
+        YT_VERIFY(GetCurrentPropagatingStorage().IsEmpty());
 
         auto callback = PickCallback(fiberThread);
 

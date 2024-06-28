@@ -25,6 +25,14 @@
 #include <atomic>
 #include <mutex>
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT::NConcurrency::NDetail {
+
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
+
+} // NYT::NConcurrency::NDetail
+
 namespace NYT::NTracing {
 
 using namespace NConcurrency;
@@ -116,10 +124,20 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
 {
+    if (NConcurrency::NDetail::PerThreadFls() && newContext) {
+        YT_LOG_DEBUG("Writing propagating storage in thread FLS (Location: %v)",
+            loc);
+    }
+
     auto& propagatingStorage = GetCurrentPropagatingStorage();
-    auto oldContext = propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr);
+
+    auto oldContext = newContext
+        ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
+        : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
+
+    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();

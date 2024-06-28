@@ -44,6 +44,9 @@ __pycache__/
 # KDevelop IDE
 *.kdev4
 
+kube-slice/
+.clang-format
+
 # Other symlinks
 contrib/python/protobuf/py3/google.protobuf.internal._api_implementation.reg3.cpp
 contrib/python/protobuf/py3/google.protobuf.pyext._message.reg3.cpp

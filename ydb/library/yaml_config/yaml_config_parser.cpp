@@ -715,6 +715,10 @@ namespace NKikimr::NYaml {
             THashSet<TMaybe<NKikimrBlobStorage::EPDiskType>> options;
             bool error = false;
 
+            if (autoconf->HasPDiskType()) {
+                options.insert(autoconf->GetPDiskType());
+            }
+
             for (const auto& filter : autoconf->GetPDiskFilter()) {
                 TMaybe<NKikimrBlobStorage::EPDiskType> type;
                 for (const auto& prop : filter.GetProperty()) {
@@ -744,7 +748,22 @@ namespace NKikimr::NYaml {
             ephemeralConfig.SetStaticErasure(*erasureName);
         }
 
-        if (config.HasDomainsConfig()) {
+        if (!config.HasDomainsConfig()) {
+            auto& domainsConfig = *config.MutableDomainsConfig();
+            auto& domain = *domainsConfig.AddDomain();
+            domain.SetName("Root");
+
+            if (erasureName && defaultDiskTypeLower && dtEnum) {
+                auto& poolType = *domain.AddStoragePoolTypes();
+                poolType.SetKind(*defaultDiskTypeLower);
+                auto& poolConfig = *poolType.MutablePoolConfig();
+                poolConfig.SetErasureSpecies(*erasureName);
+                poolConfig.SetVDiskKind("Default");
+                auto& filter = *poolConfig.AddPDiskFilter();
+                auto& prop = *filter.AddProperty();
+                prop.SetType(*dtEnum);
+            }
+        } else {
             auto& domainsConfig = *config.MutableDomainsConfig();
 
             Y_ENSURE_BT(domainsConfig.DomainSize() <= 1, "Only a single domain is currently supported");
@@ -779,6 +798,11 @@ namespace NKikimr::NYaml {
                     ++storagePoolTypeId;
                 }
             }
+        }
+
+        if (!config.HasGRpcConfig()) {
+            auto& grpc = *config.MutableGRpcConfig();
+            grpc.SetPort(2135);
         }
 
         if (config.HasBlobStorageConfig()) {
@@ -1197,7 +1221,6 @@ namespace NKikimr::NYaml {
 
         if (!domainsConfig->HiveConfigSize()) {
             auto* hiveConfig = domainsConfig->AddHiveConfig();
-            hiveConfig->SetHiveUid(1);
             hiveConfig->SetHive(72057594037968897);
         }
 
@@ -1216,14 +1239,6 @@ namespace NKikimr::NYaml {
 
             if (!domain.HasPlanResolution()) {
                 domain.SetPlanResolution(10);
-            }
-
-            if (!domain.HiveUidSize()) {
-                domain.AddHiveUid(1);
-            }
-
-            if (!domain.SSIdSize()) {
-                domain.AddSSId(1);
             }
 
             const auto& exps = EXPLICIT_TABLETS;

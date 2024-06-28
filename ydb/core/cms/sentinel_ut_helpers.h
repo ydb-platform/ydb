@@ -16,6 +16,29 @@ using TPDiskID = NCms::TPDiskID;
 const auto& MockConfig = TFakeNodeWhiteboardService::Config;
 auto& MockNodes = TFakeNodeWhiteboardService::Info;
 
+static constexpr ui32 DefaultStateLimit = 5;
+static constexpr ui32 DefaultErrorStateLimit = 60;
+auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
+
+static constexpr NCms::EPDiskState ErrorStates[] = {
+    NKikimrBlobStorage::TPDiskState::InitialFormatReadError,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogReadError,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogParseError,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError,
+    NKikimrBlobStorage::TPDiskState::CommonLoggerInitError,
+    NKikimrBlobStorage::TPDiskState::OpenFileError,
+    NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
+    NKikimrBlobStorage::TPDiskState::DeviceIoError,
+};
+
+constexpr NCms::EPDiskState FaultyStates[] = {
+    NKikimrBlobStorage::TPDiskState::Initial,
+    NKikimrBlobStorage::TPDiskState::InitialFormatRead,
+    NKikimrBlobStorage::TPDiskState::InitialSysLogRead,
+    NKikimrBlobStorage::TPDiskState::InitialCommonLogRead,
+};
+
 class TTestEnv: public TCmsTestEnv {
     static void MockClusterInfo(TClusterInfoPtr& info) {
         info.Reset(new TClusterInfo);

@@ -14,29 +14,6 @@
 
 namespace NKikimr::NCmsTest {
 
-static constexpr ui32 DefaultStateLimit = 5;
-static constexpr ui32 DefaultErrorStateLimit = 60;
-auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
-
-static constexpr NCms::EPDiskState ErrorStates[] = {
-    NKikimrBlobStorage::TPDiskState::InitialFormatReadError,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogReadError,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogParseError,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError,
-    NKikimrBlobStorage::TPDiskState::CommonLoggerInitError,
-    NKikimrBlobStorage::TPDiskState::OpenFileError,
-    NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
-    NKikimrBlobStorage::TPDiskState::DeviceIoError,
-};
-
-constexpr NCms::EPDiskState FaultyStates[] = {
-    NKikimrBlobStorage::TPDiskState::Initial,
-    NKikimrBlobStorage::TPDiskState::InitialFormatRead,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogRead,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogRead,
-};
-
 Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     using namespace NCms;
     using namespace NCms::NSentinel;
@@ -418,27 +395,6 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
     }
-
-    Y_UNIT_TEST(BSControllerCantChangeStatus) {
-        TTestEnv env(8, 4);
-
-        const TPDiskID id1 = env.RandomPDiskID();
-        const TPDiskID id2 = env.RandomPDiskID();
-        const TPDiskID id3 = env.RandomPDiskID();
-
-        for (size_t i = 0; i < sizeof(ErrorStates) / sizeof(ErrorStates[0]); ++i) {
-            env.AddBSCFailures(id1, {true, false, false, true, false, false});
-            // will fail for all requests assuming there is only 5 retries
-            env.AddBSCFailures(id2, {false, false, false, false, false, false});
-            env.AddBSCFailures(id3, {false, true, false, false, true, false});
-        }
-
-        for (const EPDiskState state : ErrorStates) {
-            env.SetPDiskState({id1, id2, id3}, state, EPDiskStatus::FAULTY);
-            env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
-        }
-    }
-
 } // TSentinelTests
 
 }

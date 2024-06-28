@@ -188,7 +188,7 @@ void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
                         .Item("primary_commit_timestamp").Value(transactionCommitResult.PrimaryCommitTimestamp)
                         .Item("commit_timestamps").DoMapFor(
                             transactionCommitResult.CommitTimestamps.Timestamps,
-                            [&](auto fluent, const auto& pair) {
+                            [&] (auto fluent, const auto& pair) {
                                 fluent.Item(ToString(pair.first)).Value(pair.second);
                             })
                     .EndMap();

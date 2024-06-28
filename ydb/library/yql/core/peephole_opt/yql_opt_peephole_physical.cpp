@@ -6560,56 +6560,6 @@ TExprNode::TPtr  OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext
     return node;
 }
 
-TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TStructExprType& type, TExprContext& ctx) {
-    TExprNode::TListType result;
-    for (const auto& item : type.GetItems())
-        if (ETypeAnnotationKind::Optional == item->GetItemType()->GetKind())
-            result.emplace_back(ctx.NewAtom(pos, item->GetName()));
-    return result;
-}
-
-TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprType& type, TExprContext& ctx) {
-    TExprNode::TListType result;
-    if (const auto& items = type.GetItems(); !items.empty())
-        for (ui32 i = 0U; i < items.size(); ++i)
-            if (ETypeAnnotationKind::Optional == items[i]->GetKind())
-                result.emplace_back(ctx.NewAtom(pos, i));
-    return result;
-}
-
-template <bool TupleOrStruct>
-TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (auto fields = node->ChildrenSize() > 1U ? node->Tail().ChildrenList() :
-            GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<std::conditional_t<TupleOrStruct, TTupleExprType, TStructExprType>>(), ctx);
-        fields.empty()) {
-        return node->HeadPtr();
-    } else {
-        return ctx.Builder(node->Pos())
-            .Callable("OrderedFilter")
-                .Add(0, node->HeadPtr())
-                .Lambda(1)
-                    .Param("item")
-                    .Callable("And")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < fields.size(); ++i) {
-                                parent
-                                    .Callable(i, "Exists")
-                                        .Callable(0, TupleOrStruct ? "Nth" : "Member")
-                                            .Arg(0, "item")
-                                            .Add(1, std::move(fields[i]))
-                                        .Seal()
-                                    .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-    }
-    return node;
-}
-
 TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
 
@@ -8256,8 +8206,8 @@ struct TPeepHoleRules {
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
         {"FinalizeByKey", &ExpandFinalizeByKey},
-        {"SkipNullMembers", &ExpandSkipNullFields<false>},
-        {"SkipNullElements", &ExpandSkipNullFields<true>},
+        {"SkipNullMembers", &ExpandSkipNullFields},
+        {"SkipNullElements", &ExpandSkipNullFields},
         {"ConstraintsOf", &ExpandConstraintsOf},
         {"==", &ExpandSqlEqual<true, false>},
         {"!=", &ExpandSqlEqual<false, false>},

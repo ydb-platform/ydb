@@ -34,7 +34,16 @@ jobs:
           echo "HTTP result code is not 200, exiting"
           exit 1
         fi
-        echo "$j1" | sed '$d' | jq "$query"
-        #while read x;do
-        #  echo "Runner to close: $x"
-        #done
+        echo "$j1" | sed '$d' | jq "$query" | while read x;do
+          echo "Runner: $x"
+          if (( queue_size > 0 ));then
+            curl -Ls -X DELETE -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels/postcommit
+          else
+            curl -Ls -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/actions/runners/$x/labels \
+              -d '{"labels":["postcommit"]}'
+          fi
+        done

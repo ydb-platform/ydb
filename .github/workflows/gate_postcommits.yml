@@ -12,13 +12,25 @@ jobs:
     - name: main
       shell: bash
       run: |
-        queue_size=$(curl -L -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+        queue_size=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/actions/runs?per_page=1000\&page=1\&status=queued\&event=pull_request_target | \
           jq '[.workflow_runs[] | {name,status,id,updated_at,"waiting_seconds":(now - (.updated_at | fromdate)), html_url}]' | \
           jq '[.[] | select(.waiting_seconds > 600)] | length')
         echo "Queue size: $queue_size"
         if (( queue_size > 0 ));then
           echo "Close gate for postcommits"
+          curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1 | \
+            jq '.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id' |
+          while read x;do
+            echo 'Runner to close: $x;
+          done
         else
           echo "Open gate for postcommits"
+          curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100\&page=1 | \
+            jq '.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id' |
+          while read x;do
+            echo 'Runner to open: $x;
+          done
         fi

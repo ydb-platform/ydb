@@ -78,6 +78,8 @@ std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow
     const std::vector<std::string>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames);
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema);
 

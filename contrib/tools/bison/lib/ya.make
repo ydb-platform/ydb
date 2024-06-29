@@ -15,8 +15,13 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
+CFLAGS(
+    -DEXEEXT=\"\"
+)
+
 SRCS(
-    abitset.c
+    allocator.c
+    areadlink.c
     argmatch.c
     asnprintf.c
     basename-lgpl.c
@@ -24,12 +29,16 @@ SRCS(
     binary-io.c
     bitrotate.c
     bitset.c
-    bitset_stats.c
-    bitsetv-print.c
+    bitset/array.c
+    bitset/list.c
+    bitset/stats.c
+    bitset/table.c
+    bitset/vector.c
     bitsetv.c
     c-ctype.c
     c-strcasecmp.c
     c-strncasecmp.c
+    careadlinkat.c
     cloexec.c
     close-stream.c
     closeout.c
@@ -38,10 +47,8 @@ SRCS(
     dirname.c
     dup-safer-flag.c
     dup-safer.c
-    ebitset.c
     exitfail.c
     fatal-signal.c
-    fd-hook.c
     fd-safer-flag.c
     fd-safer.c
     fopen-safer.c
@@ -49,14 +56,12 @@ SRCS(
     get-errno.c
     gethrxtime.c
     getprogname.c
-    glthread/lock.c
-    glthread/threadlib.c
+    gl_array_list.c
+    gl_list.c
+    gl_xlist.c
     hard-locale.c
     hash.c
-    lbitset.c
     localcharset.c
-    localtime-buffer.c
-    malloca.c
     math.c
     mbrtowc.c
     mbswidth.c
@@ -72,20 +77,19 @@ SRCS(
     quotearg.c
     sig-handler.c
     spawn-pipe.c
-    stat-time.c
     stripslash.c
     timespec.c
     timevar.c
     unistd.c
     uniwidth/width.c
     vasnprintf.c
-    vbitset.c
     wait-process.c
     wctype-h.c
     xalloc-die.c
     xconcat-filename.c
     xmalloc.c
     xmemdup0.c
+    xreadlink.c
     xsize.c
     xstrndup.c
     xtime.c
@@ -108,6 +112,7 @@ ELSEIF (OS_WINDOWS)
         dup2.c
         error.c
         fcntl.c
+        fd-hook.c
         fpending.c
         getdtablesize.c
         getopt.c

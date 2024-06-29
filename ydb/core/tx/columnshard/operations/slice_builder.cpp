@@ -47,6 +47,12 @@ bool TBuildSlicesTask::DoExecute() {
         return true;
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
+    OriginalBatch = NArrow::ExtractColumnsOptional(OriginalBatch, indexSchema->field_names());
+    if (!OriginalBatch) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadoptable schemas")("index", indexSchema->ToString());
+        ReplyError("cannot adapt schema");
+        return true;
+    }
     if (!OriginalBatch->schema()->Equals(indexSchema)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())
             ("index", indexSchema->ToString());

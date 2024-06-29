@@ -257,7 +257,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
 
     if (!status.Ok()) {
         LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Got error. Status: " << status.Status
-                                            << ". Description: " << IssuesSingleLineString(status.Issues));
+                                               << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
     NYdbGrpc::IQueueClientContextPtr delayContext = nullptr;

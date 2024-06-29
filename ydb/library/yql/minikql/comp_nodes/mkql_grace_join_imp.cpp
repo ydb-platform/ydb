@@ -679,7 +679,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
         t.NSlots = DefaultTuplesNum;
     }
 
-    if ( ( (t.NSlots - t.FillCount) * 100 ) / t.NSlots < 50 ) {
+    if ( t.FillCount > t.NSlots/2 ) {
         ResizeHashTable(t, 2 * t.NSlots + 1);
     }
 

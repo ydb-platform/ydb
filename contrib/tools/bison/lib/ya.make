@@ -47,6 +47,7 @@ SRCS(
     fopen-safer.c
     fseterr.c
     get-errno.c
+    gethrxtime.c
     getprogname.c
     glthread/lock.c
     glthread/threadlib.c
@@ -54,10 +55,12 @@ SRCS(
     hash.c
     lbitset.c
     localcharset.c
+    localtime-buffer.c
     malloca.c
     math.c
     mbrtowc.c
     mbswidth.c
+    path-join.c
     pipe-safer.c
     pipe2-safer.c
     pipe2.c
@@ -71,6 +74,7 @@ SRCS(
     spawn-pipe.c
     stat-time.c
     stripslash.c
+    timespec.c
     timevar.c
     unistd.c
     uniwidth/width.c
@@ -84,6 +88,7 @@ SRCS(
     xmemdup0.c
     xsize.c
     xstrndup.c
+    xtime.c
 )
 
 IF (OS_DARWIN)

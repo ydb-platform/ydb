@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.1)
+VERSION(3.2.4)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.1.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.2.4.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib

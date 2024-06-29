@@ -517,7 +517,8 @@
 
 - source_filter: "^contrib/tools/bison/data"
   includes:
-    - position.hh
+    - "]b4_location_include["
+    - "position.hh"
 
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:

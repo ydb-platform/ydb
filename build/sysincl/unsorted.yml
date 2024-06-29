@@ -105,7 +105,6 @@
   - pire/config.h
   - pngusr.h
   - pth.h
-  - relocatable.h
   - rtl.h
   - shlib-compat.h
   - sigsegv.h

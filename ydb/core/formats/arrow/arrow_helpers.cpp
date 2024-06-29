@@ -197,9 +197,9 @@ std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>
 }
 
 namespace {
-template <class TDataContainer>
+template <class TDataContainer, class TStringImpl>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TString>& columnNames, const bool necessaryColumns) {
+    const std::vector<TStringImpl>& columnNames, const bool necessaryColumns) {
     if (!srcBatch) {
         return srcBatch;
     }
@@ -244,6 +244,16 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr
 
 std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<std::string>& columnNames) {
     return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
 }
 

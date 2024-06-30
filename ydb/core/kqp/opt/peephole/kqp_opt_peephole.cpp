@@ -240,11 +240,12 @@ bool CanPropagateWideBlockThroughChannel(
 
     const auto& program = programs.at(output.Stage().Ref().UniqueId());
 
-    auto outputItemType = program.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    if (IsWideBlockType(*outputItemType)) {
-        // output is already wide block
-        return false;
-    }
+    // TODO(ilezhankin): fails with "Cannot cast type Void to Stream".
+    // auto outputItemType = program.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+    // if (IsWideBlockType(*outputItemType)) {
+    //     // output is already wide block
+    //     return false;
+    // }
 
     if (!stageSettings.WideChannels) {
         return false;
@@ -322,6 +323,8 @@ TKqpProgram PropagateWideBlockThroughChannels(const TDqPhyStage& stage, THashMap
         } else {
             argsMap.emplace(oldArg.Raw(), newArg.Ptr());
         }
+
+        argsMap.at(oldArg.Raw())->SetTypeAnn(oldArg.Raw()->GetTypeAnn());
     }
 
     TDqPhyStage newStage = stage;
@@ -444,6 +447,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         }
 
         optimizedStages.emplace(stage.Ref().UniqueId());
+        stagePrograms.emplace(stage.Ref().UniqueId(), newProgram);
     }
 
     TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());

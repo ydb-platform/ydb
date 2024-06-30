@@ -11,9 +11,9 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PROVIDES(protobuf)
 
-VERSION(3.20.2)
+VERSION(3.21.3)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.20.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.21.3.tar.gz)
 
 IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(

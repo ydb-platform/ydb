@@ -16,6 +16,8 @@ struct TPoolSettings {
     TDuration QueryCancelAfter = TDuration::Zero();  // 0 = disabled
 
     TPercent QueryMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity, -1 = disabled
+
+    bool operator==(const TPoolSettings& other) const = default;
 };
 
 struct TSettingsParser {

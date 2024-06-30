@@ -2,6 +2,8 @@
 
 #include <ydb/core/kqp/common/events/workload_service.h>
 
+#include <ydb/core/scheme/scheme_pathid.h>
+
 #include <ydb/core/protos/kqp.pb.h>
 
 
@@ -18,9 +20,14 @@ struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
         EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvResolvePoolResponse,
         EvFetchPoolResponse,
         EvCreatePoolResponse,
         EvPrepareTablesRequest,
+        EvPlaceRequestIntoPoolResponse,
+        EvFinishRequestInPool,
+        EvResignPoolHandler,
+        EvStopPoolHandler,
         EvCancelRequest,
 
         EvTablesCreationFinished,
@@ -40,17 +47,41 @@ struct TEvPrivate {
     struct TEvRefreshPoolState : public NActors::TEventPB<TEvRefreshPoolState, NKikimrKqp::TEvRefreshPoolState, EvRefreshPoolState> {
     };
 
-    struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
-        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TEvPlaceRequestIntoPool::TPtr event, NYql::TIssues issues)
-            : Status(status)
+    struct TEvResolvePoolResponse : public NActors::TEventLocal<TEvResolvePoolResponse, EvResolvePoolResponse> {
+        TEvResolvePoolResponse(const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, TEvPlaceRequestIntoPool::TPtr event)
+            : Status(Ydb::StatusIds::SUCCESS)
             , PoolConfig(poolConfig)
+            , PathId(pathId)
+            , Event(std::move(event))
+            , Issues({})
+        {}
+
+        TEvResolvePoolResponse(Ydb::StatusIds::StatusCode status, TEvPlaceRequestIntoPool::TPtr event, NYql::TIssues issues)
+            : Status(status)
+            , PoolConfig({})
+            , PathId({})
             , Event(std::move(event))
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
         const NResourcePool::TPoolSettings PoolConfig;
+        const TPathId PathId;
         TEvPlaceRequestIntoPool::TPtr Event;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
+            : Status(status)
+            , PoolConfig(poolConfig)
+            , PathId(pathId)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const NResourcePool::TPoolSettings PoolConfig;
+        const TPathId PathId;
         const NYql::TIssues Issues;
     };
 
@@ -72,6 +103,41 @@ struct TEvPrivate {
 
         const TString Database;
         const TString PoolId;
+    };
+
+    struct TEvPlaceRequestIntoPoolResponse : public NActors::TEventLocal<TEvPlaceRequestIntoPoolResponse, EvPlaceRequestIntoPoolResponse> {
+        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId)
+            : Database(database)
+            , PoolId(poolId)
+        {}
+
+        const TString Database;
+        const TString PoolId;
+    };
+
+    struct TEvFinishRequestInPool : public NActors::TEventLocal<TEvFinishRequestInPool, EvFinishRequestInPool> {
+        TEvFinishRequestInPool(const TString& database, const TString& poolId)
+            : Database(database)
+            , PoolId(poolId)
+        {}
+
+        const TString Database;
+        const TString PoolId;
+    };
+
+    struct TEvResignPoolHandler : public NActors::TEventLocal<TEvResignPoolHandler, EvResignPoolHandler> {
+        TEvResignPoolHandler(const TString& database, const TString& poolId, const TActorId& newHandler)
+            : Database(database)
+            , PoolId(poolId)
+            , NewHandler(newHandler)
+        {}
+
+        const TString Database;
+        const TString PoolId;
+        const TActorId NewHandler;
+    };
+
+    struct TEvStopPoolHandler : public NActors::TEventLocal<TEvStopPoolHandler, EvStopPoolHandler> {
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {

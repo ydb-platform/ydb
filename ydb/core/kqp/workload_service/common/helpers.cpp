@@ -11,4 +11,13 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     return {rootIssue};
 }
 
+void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig) {
+    const auto& properties = description.GetProperties().GetProperties();
+    for (auto& [property, value] : NResourcePool::GetPropertiesMap(poolConfig)) {
+        if (auto propertyIt = properties.find(property); propertyIt != properties.end()) {
+            std::visit(NResourcePool::TSettingsParser{propertyIt->second}, value);
+        }
+    }
+}
+
 }  // NKikimr::NKqp::NWorkload

@@ -285,6 +285,7 @@ private:
         poolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
         poolConfig.QueueSize = Settings_.QueueSize_;
         poolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
+        poolConfig.QueryMemoryLimitPercentPerNode = Settings_.QueryMemoryLimitPercentPerNode_;
 
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
         GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, poolConfig, nullptr, {}));

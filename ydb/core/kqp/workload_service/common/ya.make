@@ -8,6 +8,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/common/events
 
+    ydb/core/scheme
+
     ydb/core/tx/scheme_cache
 
     ydb/library/actors/core

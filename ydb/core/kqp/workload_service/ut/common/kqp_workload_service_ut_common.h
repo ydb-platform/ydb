@@ -66,8 +66,6 @@ struct TYdbSetupSettings {
     // Cluster settings
     FLUENT_SETTING_DEFAULT(ui32, NodeCount, 1);
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
-
-    // Cluster configuration
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
 
     // Default pool settings
@@ -75,6 +73,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(i32, ConcurrentQueryLimit, -1);
     FLUENT_SETTING_DEFAULT(i32, QueueSize, -1);
     FLUENT_SETTING_DEFAULT(TDuration, QueryCancelAfter, FUTURE_WAIT_TIMEOUT);
+    FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
 
     TIntrusivePtr<IYdbSetup> Create() const;
 };

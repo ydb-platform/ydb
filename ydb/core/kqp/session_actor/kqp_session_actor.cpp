@@ -243,7 +243,6 @@ public:
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken
         ));
-        QueryState->PlacedInWorkloadPool = true;
 
         Become(&TKqpSessionActor::ExecuteState);
     }
@@ -469,7 +468,6 @@ public:
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Failed to place request in resource pool, feature flag is disabled");
             QueryState->UserRequestContext->PoolId.clear();
-            QueryState->PlacedInWorkloadPool = false;
             CompileQuery();
             return;
         }
@@ -483,6 +481,7 @@ public:
         }
 
         LOG_D("continue request, pool id: " << poolId);
+        QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
         CompileQuery();
@@ -2053,14 +2052,15 @@ public:
             SendRollbackRequest(CleanupCtx->TransactionsToBeAborted.front().Get());
         }
 
-        if (QueryState && QueryState->PlacedInWorkloadPool) {
+        if (QueryState && QueryState->PoolHandlerActor) {
             if (!CleanupCtx) {
                 CleanupCtx.reset(new TKqpCleanupCtx);
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
-            QueryState->PlacedInWorkloadPool = false;
-            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId));
+            auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
+            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
+            QueryState->PoolHandlerActor = Nothing();
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}

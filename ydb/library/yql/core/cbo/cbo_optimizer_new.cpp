@@ -182,56 +182,60 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     EJoinKind joinKind) const
 {
     double newCard{};
-    std::optional<EStatisticsType> outputType;
+    EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
         switch (joinKind) {
-            case EJoinKind::InnerJoin:
-            case EJoinKind::LeftSemi:
-                newCard = leftStats.Nrows * rightStats.Selectivity; break;
             case EJoinKind::LeftJoin:
             case EJoinKind::LeftOnly:
                 newCard = leftStats.Nrows; break;
             default: {
-                newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
-                outputType = EStatisticsType::ManyManyJoin;
+                newCard = leftStats.Nrows * rightStats.Selectivity;
             }
         }
 
-        if (!outputType.has_value()) {
-            selectivity = leftStats.Selectivity * rightStats.Selectivity;
-            leftKeyColumns = true;
-            if (leftStats.Type == EStatisticsType::BaseTable){
-                outputType = EStatisticsType::FilteredFactTable;
-            } else {
-                outputType = leftStats.Type;
-            }
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        leftKeyColumns = true;
+        if (leftStats.Type == EStatisticsType::BaseTable){
+            outputType = EStatisticsType::FilteredFactTable;
+        } else {
+            outputType = leftStats.Type;
         }
     } else if (IsPKJoin(leftStats,leftJoinKeys)) {
         switch (joinKind) {
-            case EJoinKind::InnerJoin:
-            case EJoinKind::LeftSemi:
-                newCard = leftStats.Selectivity * rightStats.Nrows; break;
             default: {
-                newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
-                outputType = EStatisticsType::ManyManyJoin;
+                newCard = leftStats.Selectivity * rightStats.Nrows;
             }
         }
-
-        if (!outputType.has_value()) {
-            selectivity = leftStats.Selectivity * rightStats.Selectivity;
-            rightKeyColumns = true;
-            if (rightStats.Type == EStatisticsType::BaseTable){
-                outputType = EStatisticsType::FilteredFactTable;
-            } else {
-                outputType = rightStats.Type;
-            }
+        
+        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        rightKeyColumns = true;
+        if (rightStats.Type == EStatisticsType::BaseTable){
+            outputType = EStatisticsType::FilteredFactTable;
+        } else {
+            outputType = rightStats.Type;
         }
     } else {
-        newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+        std::optional<double> lhsUniqueVals;
+        std::optional<double> rhsUniqueVals;
+        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics) {
+            auto lhs = leftJoinKeys[0];
+            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            auto rhs = rightJoinKeys[0];
+            rightStats.ColumnStatistics->Data[rhs];
+            rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+        }
+
+        if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
+            selectivity = std::max(*lhsUniqueVals, *rhsUniqueVals);
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+        } else {
+            newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+        }
+
         outputType = EStatisticsType::ManyManyJoin;
     }
 
@@ -242,8 +246,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;
 
-    Y_ENSURE(outputType.has_value());
-    auto result = TOptimizerStatistics(outputType.value(), newCard, newNCols, newByteSize, cost,
+    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
     result.Selectivity = selectivity;
     return result;

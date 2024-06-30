@@ -1077,8 +1077,8 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
-
-        if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
+        GetContex
+        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge()) {
             Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
         } else {
             Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());

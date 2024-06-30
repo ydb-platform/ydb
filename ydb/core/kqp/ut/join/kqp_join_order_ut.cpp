@@ -325,6 +325,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin
         );
     }
+
+    Y_UNIT_TEST_TWIN(kal, StreamLookupJoin) {
+        JoinOrderTestWithOverridenStats(
+            "queries/tmp.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
+        );
+    }
 }
 }
 }

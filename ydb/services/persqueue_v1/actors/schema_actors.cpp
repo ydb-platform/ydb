@@ -1077,7 +1077,13 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
+
+        if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
+            Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
+        } else {
+            Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
+        }
+
         Result.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
         switch(config.GetPartitionStrategy().GetPartitionStrategyType()) {
             case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT:

@@ -219,7 +219,7 @@ private:
     std::shared_ptr<ISnapshotSchema> Schema;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds,
-        TBlobsAction& blobsAction, THashMap<TChunkAddress, ui32>& nullBlocks,
+        TBlobsAction& blobsAction, THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks,
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;

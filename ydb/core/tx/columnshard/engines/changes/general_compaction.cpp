@@ -183,7 +183,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 } else {
                     AFL_VERIFY(dataSchema->IsSpecialColumnId(columnId));
                 }
-                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetDefaultReadValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
+                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetDefaultValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
                 records = { nullptr };
             }
             AFL_VERIFY(!!loader);

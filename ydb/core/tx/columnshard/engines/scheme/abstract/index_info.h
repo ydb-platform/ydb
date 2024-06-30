@@ -47,9 +47,7 @@ public:
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    static std::shared_ptr<arrow::Scalar> DefaultColumnWriteValue(const ui32 colId);
-
-    static std::shared_ptr<arrow::Scalar> DefaultColumnReadValue(const ui32 colId);
+    static std::shared_ptr<arrow::Scalar> DefaultColumnValue(const ui32 colId);
 
     static std::shared_ptr<arrow::Schema> AddSpecialFields(const std::shared_ptr<arrow::Schema>& schema) {
         std::vector<std::shared_ptr<arrow::Field>> fields = schema->fields();

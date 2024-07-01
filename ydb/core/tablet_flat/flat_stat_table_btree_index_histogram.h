@@ -218,10 +218,10 @@ private:
     bool BuildIterate(TStats& stats) {
         // The idea is the following:
         // - we move some key pointer through all parts simultaneously
-        //   keeping all nodes that have current key pointer in opened heap (sorted by size)
+        //   keeping all nodes that have current key pointer in opened heap (sorted by size descending)
         //   all nodes before current key pointer are considered as closed
-        // - we keep invariant that size of closed and opened nodes <= next requested histogram bucket value
-        //   if it false we load opened nodes and split them using current key pointer
+        // - we keep an invariant that size of closed and opened nodes <= next requested histogram bucket value
+        //   if it is false, we load opened nodes and split them using current key pointer
 
         ui64 nextRowCount = RowCountResolution, closedRowCount = 0, openedRowCount = 0;
         ui64 nextDataSize = DataSizeResolution, closedDataSize = 0, openedDataSize = 0;
@@ -271,6 +271,7 @@ private:
                 addEvent(childEnd);
             };
 
+            // we search value in interval [nextRowCount - RowCountResolutionGap, nextRowCount + RowCountResolutionGap]
             while (nextRowCount != Max<ui64>() && closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap && openedSortedByRowCount) {
                 auto node = openedSortedByRowCount.top();
                 openedSortedByRowCount.pop();
@@ -288,6 +289,7 @@ private:
                 } // else: leaf nodes will be closed later
             }
 
+            // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
             while (nextDataSize != Max<ui64>() && closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
@@ -313,11 +315,10 @@ private:
             dataSize = Min(dataSize, stats.DataSize.Size);
 
             if (event.Key) {
-                // we search value in interval [nextRowCount - RowCountResolutionGap, nextRowCount + RowCountResolutionGap]
                 if (nextRowCount != Max<ui64>()) {
                     if (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap || closedRowCount > nextRowCount - RowCountResolutionGap) {
                         if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < rowCount) {
-                            AddBucket(stats.RowCountHistogram, event.Key, rowCount);
+                            AddKey(stats.RowCountHistogram, event.Key, rowCount);
                             nextRowCount = Max(rowCount + 1, nextRowCount + RowCountResolution);
                             if (nextRowCount + RowCountResolutionGap > stats.RowCount) {
                                 nextRowCount = Max<ui64>();
@@ -326,11 +327,10 @@ private:
                         }
                     }
                 }
-                // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
                 if (nextDataSize != Max<ui64>()) {
                     if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
                         if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
-                            AddBucket(stats.DataSizeHistogram, event.Key, dataSize);
+                            AddKey(stats.DataSizeHistogram, event.Key, dataSize);
                             nextDataSize = Max(dataSize + 1, nextDataSize + DataSizeResolution);
                             if (nextDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
                                 nextDataSize = Max<ui64>();
@@ -345,7 +345,7 @@ private:
         return true;
     }
 
-    void AddBucket(THistogram& histogram, TCellsIterable key, ui64 value) {
+    void AddKey(THistogram& histogram, TCellsIterable key, ui64 value) {
         TVector<TCell> splitKeyCells;
 
         // Add columns that are present in the part

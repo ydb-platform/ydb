@@ -53,6 +53,10 @@ public:
         PopStats.DstStageId = dstStageId;
     }
 
+    bool HasMemoryForProcessing() const {
+        return !NKikimr::NMiniKQL::TlsAllocState->IsMemoryYellowZoneEnabled();
+    }
+
     ui64 GetChannelId() const override {
         return PopStats.ChannelId;
     }
@@ -126,7 +130,7 @@ public:
             packerSize = 0;
         }
 
-        while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
+        while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes && !HasMemoryForProcessing()) {
             auto& head = Data.front();
             size_t bufSize = head.Buffer.size();
             YQL_ENSURE(PackedDataSize >= bufSize);

@@ -63,17 +63,7 @@ public:
         for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
             diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
         }
-
-        auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
-        for (const TString& usedSid : AppData()->DefaultUserSIDs) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, usedSid);
-        }
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);  // Used in case of DefaultUserSIDs is empty and AllAuthenticatedUsers is not specified
-
-        if (Event->Get()->UserToken) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, Event->Get()->UserToken->GetUserSID());
-        }
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema, AppData()->AllAuthenticatedUsers);
 
         auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
         Register(CreatePoolCreatorActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));

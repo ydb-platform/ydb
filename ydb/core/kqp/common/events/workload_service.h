@@ -23,7 +23,7 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
     const TString Database;
     const TString SessionId;
     TString PoolId;  // Can be changed to default pool id
-    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {

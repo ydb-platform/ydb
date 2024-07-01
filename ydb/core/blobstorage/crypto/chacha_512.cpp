@@ -1,6 +1,6 @@
-/* ChaCha implementation using 256-bit (512-bit) vectorization by the authors of [1].
+/* ChaCha implementation using 512-bit vectorization by the authors of [1].
 * This is a public domain implementation, which improves the slightly modified implementations
-* of Ted Krovetz in the Chromium Project by using the Advanced Vector Extensions AVX2 and AVX512
+* of Ted Krovetz in the Chromium Project by using the Advanced Vector Extensions AVX512
 * to widen the vectorization. Further details and measurement results are provided in:
 * [1] Goll, M., and Gueron,S.: Vectorization of ChaCha Stream Cipher. Cryptology ePrint Archive,
 * Report 2013/759, November, 2013, http://eprint.iacr.org/2013/759.pdf

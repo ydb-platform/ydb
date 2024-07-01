@@ -382,19 +382,19 @@ public:
         return HasDataForProcessing;
     }
 
-    bool UpdateSpillingAndWait() {
+    bool UpdateAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
                 if (CheckMemoryAndSwitchToSpilling()) {
-                    return UpdateSpillingAndWait();
+                    return UpdateAndWait();
                 }
-                Tongue = InMemoryProcessingState.Tongue;
                 return false;
             }
                 
             case EOperatingMode::ProcessSpilled:
                 return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
+                std::fill_n(Tongue, KeyAndStateType->GetElementsCount(), NUdf::TUnboxedValuePod());
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
@@ -420,12 +420,14 @@ public:
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
             Throat = InMemoryProcessingState.Throat;
+            Tongue = InMemoryProcessingState.Tongue;
             return isNew;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
+            Tongue = SpilledBuckets.front().InMemoryProcessingState->Tongue;
             return isNew;
         }
 
@@ -436,27 +438,23 @@ public:
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            MoveKeyAndStateToBucket(bucket);
+            MoveKeyToBucket(bucket);
             Throat = bucket.InMemoryProcessingState->Throat;
             return bucket.InMemoryProcessingState->TasteIt();
         }
 
         IsImmediateProcessingAvaliable = false;
 
-        // Corresponding bucket is spilled. No need to store key anymore. We'll save whole input.
-        BufferForKeyAndState.resize(0);
-
         TryToSpillRawData(bucket, bucketId);
         
         return false;
     }
 
-    void MoveKeyAndStateToBucket(TSpilledBucket& bucket) {
+    void MoveKeyToBucket(TSpilledBucket& bucket) {
         for (size_t i = 0; i < KeyWidth; ++i) {
             //jumping into unsafe world, refusing ownership
             static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
         }
-        BufferForKeyAndState.resize(0);
     }
 
     // Copies data from WideFields to local and tries to spill it using suitable bucket.
@@ -659,6 +657,9 @@ private:
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 }
             }
+
+            Tongue = bucket.InMemoryProcessingState->Tongue;
+            Throat = bucket.InMemoryProcessingState->Throat;
             
             HasDataForProcessing = true;
             return false;
@@ -689,6 +690,7 @@ private:
                 }
                 SplitStateIntoBuckets();
 
+                BufferForKeyAndState.resize(KeyAndStateType->GetElementsCount());
                 Tongue = BufferForKeyAndState.data();
                 break;
             }
@@ -707,9 +709,9 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:
@@ -1251,7 +1253,7 @@ public:
                 for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                     fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
 
-                if (ptr->UpdateSpillingAndWait()) {
+                if (ptr->UpdateAndWait()) {
                     return EFetchResult::Yield;
                 }
 

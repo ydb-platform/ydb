@@ -161,8 +161,19 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(           
-         ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin)));
+    typeCtx->SetStats(
+        join.Raw(), 
+        std::make_shared<TOptimizerStatistics>(           
+            ctx.ComputeJoinStats(
+                *leftStats, 
+                *rightStats, 
+                leftJoinKeys, 
+                rightJoinKeys, 
+                EJoinAlgoType::MapJoin, 
+                ConvertToJoinKind(join.JoinKind().StringValue())
+            )
+        )
+    );
 }
 
 /**
@@ -193,8 +204,19 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin)));
+    typeCtx->SetStats(
+        join.Raw(), 
+        std::make_shared<TOptimizerStatistics>(
+                ctx.ComputeJoinStats(
+                    *leftStats,
+                    *rightStats,
+                    leftJoinKeys,
+                    rightJoinKeys, 
+                    EJoinAlgoType::GraceJoin,
+                    ConvertToJoinKind(join.JoinKind().StringValue())
+                )
+            )
+    );
 }
 
 /**

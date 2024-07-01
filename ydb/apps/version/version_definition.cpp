@@ -11,21 +11,10 @@ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurren
             .Year = 24,
             .Major = 3,
         },
-        .CanLoadFrom = {
-            TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 2 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 3 },
-            },
-        },
-        .StoresReadableBy = {
-            TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 2 },
-                .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 3 },
-            },
-        },
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
-                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 2 },
+                .Application = "nbs"
+                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 3 },
             }
         }

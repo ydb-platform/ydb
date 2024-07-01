@@ -70,8 +70,8 @@ public:
 
         txState->ClearShardsInProgress();
         TString columnShardTxBody;
+        const auto seqNo = context.SS->StartRound(*txState);
         {
-            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 

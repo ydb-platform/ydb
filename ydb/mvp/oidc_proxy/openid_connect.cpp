@@ -28,17 +28,17 @@ struct TRedirectUrlParameters {
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    TStringBuf authUrl = "/oauth2/authorize";
+    TStringBuf authUrl = parameters.OidcSettings.AuthRequest;
     const auto& eventDetails = parameters.SessionServerCheckDetails;
     size_t posAuthUrl = eventDetails.find(authUrl);
     if (posAuthUrl != TStringBuf::npos) {
         size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos);
+        auto address = TString(eventDetails.substr(pos, posAuthUrl - pos));
+        locationHeaderValue << parameters.OidcSettings.GetAuthRequestEndpoint(address);
     } else {
-        locationHeaderValue << parameters.OidcSettings.AuthorizationServerAddress;
+        locationHeaderValue << parameters.OidcSettings.GetAuthRequestEndpoint();
     }
-    locationHeaderValue << authUrl
-                        << "?response_type=code"
+    locationHeaderValue << "?response_type=code"
                         << "&scope=openid"
                         << "&state=" << parameters.State
                         << "&client_id=" << parameters.OidcSettings.CLIENT_ID

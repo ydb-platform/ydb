@@ -358,6 +358,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthRequest = "/oauth2/authorize",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {allowedProxyHost}
         };
@@ -476,6 +477,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthRequest = "/oauth2/authorize",
             .ClientSecret = "0123456789abcdef"
         };
 
@@ -584,6 +586,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthRequest = "/oauth2/authorize",
             .ClientSecret = "123456789abcdef"
         };
 

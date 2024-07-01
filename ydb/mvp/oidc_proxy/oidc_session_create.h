@@ -143,7 +143,7 @@ public:
         NHttp::TCookies cookies(headers.Get("cookie"));
 
         if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
-            NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.AuthorizationServerAddress + "/oauth2/token");
+            NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetAuthRequestEndpoint());
             httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
             httpRequest->Set("Authorization", "Basic " + Settings.GetAuthorizationString());
             TStringBuilder body;

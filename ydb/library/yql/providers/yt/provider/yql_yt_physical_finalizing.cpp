@@ -72,6 +72,31 @@ public:
             res.emplace_back(reader, sec, out.Raw(), path);
         };
 
+        TParentsMap parentsMap;
+        GatherParents(*input, parentsMap);
+
+        auto getParentCallables = [&parentsMap](const TExprNode& node) -> std::vector<const TExprNode*> {
+            std::vector<const TExprNode*> res, lst;
+            if (auto it = parentsMap.find(&node); it != parentsMap.end()) {
+                for (auto n: it->second) {
+                    (n->IsCallable() ? &res : &lst)->push_back(n);
+                }
+            }
+            while (!lst.empty()) {
+                std::vector<const TExprNode*> tmp;
+                tmp.reserve(lst.size());
+                for (auto n: lst) {
+                    if (auto it = parentsMap.find(n); it != parentsMap.end()) {
+                        for (auto p: it->second) {
+                            (p->IsCallable() ? &res : &tmp)->push_back(p);
+                        }
+                    }
+                }
+                lst = std::move(tmp);
+            }
+            return res;
+        };
+
         VisitExpr(input, [&](const TExprNode::TPtr& node)->bool {
             if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
                 auto op = maybeOp.Cast();
@@ -101,52 +126,15 @@ public:
                     }
                 }
             }
-            else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
-                auto publish = maybePublish.Cast();
-                for (auto out: publish.Input()) {
-                    storeDep(out, publish.Raw(), nullptr, nullptr);
-                }
-            }
-            else if (auto maybeLength = TMaybeNode<TYtLength>(node)) {
-                auto length = maybeLength.Cast();
-                if (auto maybeOutput = length.Input().Maybe<TYtOutput>()) {
-                    auto out = maybeOutput.Cast();
-                    storeDep(out, length.Raw(), nullptr, nullptr);
-                }
-            }
-            else if (auto maybeTableContent = TMaybeNode<TYtTableContent>(node)) {
-                auto tableContent = maybeTableContent.Cast();
-                if (auto maybeOutput = tableContent.Input().Maybe<TYtOutput>()) {
-                    auto out = maybeOutput.Cast();
-                    storeDep(out, tableContent.Raw(), nullptr, nullptr);
-                    if (enableChunkCombining) {
-                        CollectForCombine(out, toCombine, neverCombine);
+            else if (auto maybeOutput = TMaybeNode<TYtOutput>(node)) {
+                auto out = maybeOutput.Cast();
+                for (auto c: getParentCallables(*node)) {
+                    if (!TYtPath::Match(c)) {
+                        storeDep(out, c, nullptr, nullptr);
+                        if (enableChunkCombining && (TYtTableContent::Match(c) || TResWriteBase::Match(c) || TYtStatOut::Match(c))) {
+                            CollectForCombine(out, toCombine, neverCombine);
+                        }
                     }
-                }
-            }
-            else if (auto maybeResWrite = TMaybeNode<TResWriteBase>(node)) {
-                auto resWrite = maybeResWrite.Cast();
-                if (auto maybeOutput = resWrite.Data().Maybe<TYtOutput>()) {
-                    auto out = maybeOutput.Cast();
-                    storeDep(out, resWrite.Raw(), nullptr, nullptr);
-                    if (enableChunkCombining) {
-                        CollectForCombine(out, toCombine, neverCombine);
-                    }
-                }
-            }
-            else if (auto maybeSqlIn = TMaybeNode<TCoSqlIn>(node)) {
-                auto sqlIn = maybeSqlIn.Cast();
-                if (auto maybeOutput = sqlIn.Collection().Maybe<TYtOutput>()) {
-                    auto out = maybeOutput.Cast();
-                    storeDep(out, sqlIn.Raw(), nullptr, nullptr);
-                }
-            }
-            else if (auto maybeStatOut = TMaybeNode<TYtStatOut>(node)) {
-                auto statOut = maybeStatOut.Cast();
-                auto out = statOut.Input();
-                storeDep(out, statOut.Raw(), nullptr, nullptr);
-                if (enableChunkCombining) {
-                    CollectForCombine(out, toCombine, neverCombine);
                 }
             }
             else if (auto maybeLeft = TMaybeNode<TCoLeft>(node)) {

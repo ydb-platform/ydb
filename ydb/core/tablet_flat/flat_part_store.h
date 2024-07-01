@@ -76,13 +76,13 @@ public:
     ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->PageCollection->Page(pageId).Size;
+        return PageCollections[groupId.Index]->GetPageSize(pageId);
     }
 
     NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
-        return EPage(PageCollections[groupId.Index]->PageCollection->Page(pageId).Type);
+        return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override

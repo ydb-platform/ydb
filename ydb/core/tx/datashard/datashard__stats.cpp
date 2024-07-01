@@ -89,7 +89,7 @@ public:
 
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
-        auto type = EPage(info->PageCollection->Page(pageId).Type);
+        auto type = info->GetPageType(pageId);
         Y_ABORT_UNLESS(type == EPage::FlatIndex || type == EPage::BTreeIndex);
 
         auto& partPages = Pages[part];
@@ -99,7 +99,7 @@ public:
         }
 
         auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
-        PagesSize += info->PageCollection->Page(pageId).Size;
+        PagesSize += info->GetPageSize(pageId);
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId));
 
         Spent->Alter(false); // pause measurement

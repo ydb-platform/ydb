@@ -362,6 +362,8 @@ public:
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         BufferForKeyAndState.reserve(keyAndStateType->GetElementsCount());
+        Tongue = InMemoryProcessingState.Tongue;
+        Throat = InMemoryProcessingState.Throat;
     }
     ~TSpillingSupportState() {
     }
@@ -392,7 +394,6 @@ public:
             case EOperatingMode::ProcessSpilled:
                 return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
-                CurrentBucketId = -1;
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
@@ -412,78 +413,65 @@ public:
         }
     }
 
-    NUdf::TUnboxedValuePod* GetThroat() const {
-        if (GetMode() == EOperatingMode::InMemory) {
-            return InMemoryProcessingState.Throat;
-        }
-        if (GetMode() == EOperatingMode::ProcessSpilled) {
-            return SpilledBuckets.front().InMemoryProcessingState->Throat;
-        }
-
-        MKQL_ENSURE(CurrentBucketId != -1, "Internal logic error");
-
-        return SpilledBuckets[CurrentBucketId].InMemoryProcessingState->Throat;
-    }
-
-    NUdf::TUnboxedValuePod* GetTongue() {
-        if (GetMode() == EOperatingMode::InMemory) {
-            return InMemoryProcessingState.Tongue;
-        }
-        if (GetMode() == EOperatingMode::ProcessSpilled) {
-            return SpilledBuckets.front().InMemoryProcessingState->Tongue;
-        }
-
-        if (CurrentBucketId == -1) {
-            BufferForKeyAndState.resize(KeyWidth);
-            return BufferForKeyAndState.data();
-        }
-
-        return SpilledBuckets[CurrentBucketId].InMemoryProcessingState->Tongue;
-    }
-
     bool TasteIt() {
+        IsImmediateProcessingAvaliable = true;
+
         if (GetMode() == EOperatingMode::InMemory) {
             return InMemoryProcessingState.TasteIt();
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
+            // while restoration we process buckets one by one starting from the first in a queue
+            Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
             return SpilledBuckets.front().InMemoryProcessingState->TasteIt();
         }
 
         MKQL_ENSURE(!BufferForKeyAndState.empty(), "Internal logic error");
+
         auto hash = Hasher(BufferForKeyAndState.data());
-
-        MKQL_ENSURE(CurrentBucketId == -1, "Internal logic error");
-        CurrentBucketId = hash % SpilledBucketCount;
-
-        auto& bucket = SpilledBuckets[CurrentBucketId];
+        auto bucketId = hash % SpilledBucketCount;
+        auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            for (size_t i = 0; i < KeyWidth; ++i) {
-                //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
-            }
-            BufferForKeyAndState.resize(0);
+            MoveKeyAndStateToBucket(bucket);
+            Throat = bucket.InMemoryProcessingState->Throat;
             return bucket.InMemoryProcessingState->TasteIt();
         }
 
+        IsImmediateProcessingAvaliable = false;
+
+        // Corresponding bucket is spilled. No need to store key anymore. We'll save whole input.
         BufferForKeyAndState.resize(0);
 
+        TryToSpillRawData(bucket, bucketId);
+        
+        return false;
+    }
+
+    void MoveKeyAndStateToBucket(TSpilledBucket& bucket) {
+        for (size_t i = 0; i < KeyWidth; ++i) {
+            //jumping into unsafe world, refusing ownership
+            static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
+        }
+        BufferForKeyAndState.resize(0);
+    }
+
+    // Copies data from WideFields to local and tries to spill it using suitable bucket.
+    // if the bucket is already busy, then the buffer will wait for the next iteration.
+    void TryToSpillRawData(TSpilledBucket& bucket, size_t bucketId) {
         auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
         MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
+
         for (size_t i = 0; i < ItemNodesSize; ++i) {
             if (fields[i]) {
                 BufferForUsedInputItems.push_back(*fields[i]);
             }
         }
         if (bucket.AsyncWriteOperation.has_value()) {
-            BufferForUsedInputItemsBucketId = CurrentBucketId;
-            return false;
+            BufferForUsedInputItemsBucketId = bucketId;
+            return;
         }
         bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-        BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
-
-        
-        return false;
+        BufferForUsedInputItems.resize(0);
     }
 
     NUdf::TUnboxedValuePod* Extract() {
@@ -498,14 +486,6 @@ public:
         }
 
         return value;
-    }
-
-    bool IsImmediateProcessingAvaliable() const {
-        if (GetMode() == EOperatingMode::InMemory || GetMode() == EOperatingMode::ProcessSpilled) return true;
-
-        MKQL_ENSURE(CurrentBucketId != -1, "Internal logic error");
-
-        return SpilledBuckets[CurrentBucketId].BucketState == TSpilledBucket::EBucketState::InMemory;
     }
 
     bool FlushSpillingBuffersAndWait() {
@@ -704,6 +684,8 @@ private:
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 SplitStateIntoBuckets();
+
+                Tongue = BufferForKeyAndState.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
@@ -728,6 +710,11 @@ private:
 
 public:
     EFetchResult InputStatus = EFetchResult::One;
+    NUdf::TUnboxedValuePod* Tongue = nullptr;
+    NUdf::TUnboxedValuePod* Throat = nullptr;
+    // This value is set during TasteIt call. Used for spilling.
+    // False if the corresponding bucket is already spilled and processing is unavaliable at the moment.
+    bool IsImmediateProcessingAvaliable = true;
 
 private:
     ui64 NextBucketToSpill = 0;
@@ -743,7 +730,6 @@ private:
     THashFunc const Hasher;
     EOperatingMode Mode;
     bool RecoverState; //sub mode for ProcessSpilledData
-    i64 CurrentBucketId = -1;
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
@@ -1247,6 +1233,8 @@ public:
         , AllowSpilling(allowSpilling)
     {}
 
+
+    // MARK: DoCalculate
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeSpillingSupportState(ctx, state, AllowSpilling);
@@ -1275,11 +1263,11 @@ public:
                 }
 
                 if (ptr->IsProcessingRequired()) {
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()));
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
 
                     bool isNew = ptr->TasteIt();
-                    if (ptr->IsImmediateProcessingAvaliable()) {
-                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->GetTongue()), static_cast<NUdf::TUnboxedValue*>(ptr->GetThroat()));
+                    if (ptr->IsImmediateProcessingAvaliable) {
+                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                     }
                     continue;
                 }

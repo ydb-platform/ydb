@@ -679,7 +679,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             if (Settings.DirectRead_) {
                 // First send Start response to the control session,
                 // then send Start request to the direct read session.
-                // As the messages are sent to different nodes, there no order between them,
+                // As the messages are sent to different nodes, there is no order between them,
                 // we just give the control session a bit more time to process the Start response.
 
                 Y_ABORT_UNLESS(DirectReadSessionManager.Defined());

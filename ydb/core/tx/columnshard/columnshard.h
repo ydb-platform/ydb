@@ -152,9 +152,7 @@ struct TEvColumnShard {
             : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
-            if (seqNo) {
-                *Record.MutableSeqNo() = seqNo->SerializeToProto();
-            }
+            *Record.MutableSeqNo() = seqNo.SerializeToProto();
         }
 
         TActorId GetSource() const {

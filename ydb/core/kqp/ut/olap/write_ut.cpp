@@ -1,5 +1,8 @@
 #include "helpers/local.h"
 #include "helpers/writer.h"
+#include "helpers/typed_local.h"
+#include "helpers/query_executor.h"
+#include "helpers/get_value.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -105,6 +108,28 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             ("writes", writesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount());
         AFL_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount())
             ("deletes", deletesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+    }
+
+    Y_UNIT_TEST(DefaultValues) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`, `DEFAULT_VALUE`=`abcde`);");
+        helper.FillPKOnly(0, 800000);
+
+        auto selectQuery = TString(R"(
+                SELECT
+                    count(*) as count,
+                FROM `/Root/olapStore/olapTable`
+                WHERE field = 'abcde'
+            )");
+
+        auto tableClient = kikimr.GetTableClient();
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 800000);
+    }
 
     }
 

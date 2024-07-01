@@ -388,6 +388,7 @@ public:
                 if (CheckMemoryAndSwitchToSpilling()) {
                     return UpdateSpillingAndWait();
                 }
+                Tongue = InMemoryProcessingState.Tongue;
                 return false;
             }
                 
@@ -417,12 +418,15 @@ public:
         IsImmediateProcessingAvaliable = true;
 
         if (GetMode() == EOperatingMode::InMemory) {
-            return InMemoryProcessingState.TasteIt();
+            bool isNew = InMemoryProcessingState.TasteIt();
+            Throat = InMemoryProcessingState.Throat;
+            return isNew;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
             // while restoration we process buckets one by one starting from the first in a queue
+            bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
-            return SpilledBuckets.front().InMemoryProcessingState->TasteIt();
+            return isNew;
         }
 
         MKQL_ENSURE(!BufferForKeyAndState.empty(), "Internal logic error");

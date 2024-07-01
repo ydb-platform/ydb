@@ -113,14 +113,16 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     }
 
     YQL_CLOG(DEBUG, Core) << "Pushdown " << parentFilters.size() << " filters to common parent " << node->Content();
-    const TStringBuf columnPrefx = "_yql_filter_pushdown";
+
+    const auto inputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto genColumnNames = GenNoClashColumns(*inputStructType, "_yql_filter_pushdown", parentFilterLambdas.size());
 
     TExprNode::TPtr mapArg = ctx.NewArgument(node->Pos(), "row");
     TExprNode::TPtr mapBody = mapArg;
     TExprNode::TPtr filterArg = ctx.NewArgument(node->Pos(), "row");
     TExprNodeList filterPreds;
     for (size_t i = 0; i < parentFilterLambdas.size(); ++i) {
-        TString memberName = TStringBuilder() << columnPrefx << i;
+        TString memberName = genColumnNames[i];
         mapBody = ctx.Builder(mapBody->Pos())
             .Callable("AddMember")
                 .Add(0, mapBody)
@@ -156,7 +158,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                 resultNode = ctx.ChangeChild(*ctx.RenameNode(*curr, "AssumeColumnOrderPartial"), 0, std::move(resultNode));
             } else if (curr->IsCallable("ExtractMembers")) {
                 TExprNodeList columns = curr->Child(1)->ChildrenList();
-                columns.push_back(ctx.NewAtom(curr->Child(1)->Pos(), TStringBuilder() << columnPrefx << i));
+                columns.push_back(ctx.NewAtom(curr->Child(1)->Pos(), genColumnNames[i]));
                 resultNode = ctx.ChangeChildren(*curr, { resultNode, ctx.NewList(curr->Child(1)->Pos(), std::move(columns)) });
             } else {
                 resultNode = ctx.ChangeChild(*curr, 0, std::move(resultNode));
@@ -178,7 +180,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                         .Callable(0, "Likely")
                             .Callable(0, "Member")
                                 .Arg(0, "row")
-                                .Atom(1, TStringBuilder() << columnPrefx << i)
+                                .Atom(1, genColumnNames[i])
                             .Seal()
                         .Seal()
                         .Apply(1, parentValueLambdas[i])

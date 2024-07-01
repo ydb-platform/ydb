@@ -164,4 +164,8 @@ std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(co
 template<bool Ordered = false>
 TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg);
 
+// generates column names with pattern "prefixN" that do not clash with source columns
+// prefix should start with "_yql"
+TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
+
 }

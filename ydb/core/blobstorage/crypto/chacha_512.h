@@ -11,7 +11,7 @@
 #define CHACHA_ROUNDS 8
 #endif
 
-#ifdef __AVX2__
+#ifdef __AVX512F__
 typedef unsigned vec128 __attribute__ ((vector_size (16)));
 #define XOR128(a,b)	(vec128)_mm_xor_si128((__m128i)a, (__m128i)b)
 #define LOAD128(m)	(vec128)_mm_loadu_si128((__m128i*)(m))
@@ -67,7 +67,6 @@ typedef unsigned vec256 __attribute__ ((vector_size (32)));
     STORE256(op + d + 8, XOR256(LOAD256(ip + d + 8), _mm256_permute2x128_si256((__m256i)v2, (__m256i)v3, 0x20)));	\
     STORE256(op + d +16, XOR256(LOAD256(ip + d +16), _mm256_permute2x128_si256((__m256i)v0, (__m256i)v1, 0x31)));	\
 	STORE256(op + d +24, XOR256(LOAD256(ip + d +24), _mm256_permute2x128_si256((__m256i)v2, (__m256i)v3, 0x31)));
-#ifdef __AVX512F__
 typedef unsigned vec512 __attribute__ ((vector_size (64)));
 typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
 #define ONE_	_mm512_set_epi64(0,1,0,1,0,1,0,1)
@@ -118,7 +117,6 @@ typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
 			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v0)), 0xfff0,	\
 			(__m512i)(v3))))));
 #endif
-#endif
 
 class ChaCha512
 {
@@ -145,8 +143,6 @@ private:
 
 #ifdef __AVX512F__
 	vec512 q0_, q1_, q2_, q3_;
-#elif __AVX2__
-	vec256 d0_, d1_, d2_, d3_;
 #endif
     ui8 rounds_;
 };

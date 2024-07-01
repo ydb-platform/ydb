@@ -23,10 +23,6 @@ void ChaCha512::SetKey(const ui8* key, size_t size)
 	q0_ = (vec512)_mm512_broadcast_i32x4(*(__m128i*)chacha_const);
 	q1_ = (vec512)_mm512_broadcast_i32x4(((__m128i*)key)[0]);
 	q2_ = (vec512)_mm512_broadcast_i32x4(((__m128i*)key)[1]);
-#elif __AVX2__
-	d0_ = (vec256)_mm256_broadcastsi128_si256(*(__m128i*)chacha_const);
-	d1_ = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[0]);
-	d2_ = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[1]);
 #else
 	Y_UNUSED(key);
 	return;
@@ -35,24 +31,17 @@ void ChaCha512::SetKey(const ui8* key, size_t size)
 
 void ChaCha512::SetIV(const ui8* iv, const ui8* blockIdx)
 {
+#ifdef __AVX512F__
     ui64 counter = *((ui64*)blockIdx);
     ui32 *nonce = ((ui32*)iv);
-
-#ifdef __AVX2__
     vec128 s3 = (vec128) {
 		static_cast<unsigned int>(counter & 0xffffffff), static_cast<unsigned int>(counter >> 32),
 		((unsigned int *)nonce)[0], ((unsigned int *)nonce)[1]
 	};
-#else
-	Y_UNUSED(counter);
-	Y_UNUSED(nonce);
-	return;
-#endif
-
-#ifdef __AVX512F__
 	q3_ = ADD512_64(_mm512_broadcast_i32x4((__m128i)s3), _mm512_set_epi64(0,3,0,2,0,1,0,0));
-#elif __AVX2__
-    d3_ = ADD256_64(_mm256_broadcastsi128_si256((__m128i)s3), _mm256_set_epi64x(0,1,0,0));
+#else
+	Y_UNUSED(iv);
+	Y_UNUSED(blockIdx);
 #endif
 }
 
@@ -210,117 +199,6 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 	}
 
 	return;
-#elif __AVX2__
-    vec256 d0, d1, d2, d3;
-	d0 = (vec256)_mm256_broadcastsi128_si256(*(__m128i*)chacha_const);
-	d1 = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[0]);
-	d2 = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[1]);
-	d3 = ADD256_64(_mm256_broadcastsi128_si256((__m128i)s3), _mm256_set_epi64x(0,1,0,0));
-
-	for (j=0; j < inlen/384; j++) {
-		vec256 v0=d0, v1=d1, v2=d2, v3=d3;
-		vec256 v4=d0, v5=d1, v6=d2, v7=ADD256_64(d3, TWO);
-		vec256 v8=d0, v9=d1, v10=d2, v11=ADD256_64(v7, TWO);
-
-		for (i = CHACHA_RNDS/2; i; i--) {
-			DQROUND_VECTORS_256(v0,v1,v2,v3)
-			DQROUND_VECTORS_256(v4,v5,v6,v7)
-			DQROUND_VECTORS_256(v8,v9,v10,v11)
-		}
-
-		WRITE_XOR_256(ip, op, 0, ADD256_32(v0,d0), ADD256_32(v1,d1), ADD256_32(v2,d2), ADD256_32(v3,d3))
-		d3 = ADD256_64(d3, TWO);
-		WRITE_XOR_256(ip, op,32, ADD256_32(v4,d0), ADD256_32(v5,d1), ADD256_32(v6,d2), ADD256_32(v7,d3))
-		d3 = ADD256_64(d3, TWO);
-		WRITE_XOR_256(ip, op,64, ADD256_32(v8,d0), ADD256_32(v9,d1), ADD256_32(v10,d2), ADD256_32(v11,d3))
-		d3 = ADD256_64(d3, TWO);
-
-		ip += 96;
-		op += 96;
-	}
-	inlen = inlen % 384;
-
-	if(inlen >= 256) {
-		vec256 v0=d0, v1=d1, v2=d2, v3=d3;
-		vec256 v4=d0, v5=d1, v6=d2, v7=ADD256_64(d3, TWO);
-
-		for (i = CHACHA_RNDS/2; i; i--) {
-			DQROUND_VECTORS_256(v0,v1,v2,v3)
-			DQROUND_VECTORS_256(v4,v5,v6,v7)
-		}
-
-		WRITE_XOR_256(ip, op, 0, ADD256_32(v0,d0), ADD256_32(v1,d1), ADD256_32(v2,d2), ADD256_32(v3,d3))
-		d3 = ADD256_64(d3, TWO);
-		WRITE_XOR_256(ip, op,32, ADD256_32(v4,d0), ADD256_32(v5,d1), ADD256_32(v6,d2), ADD256_32(v7,d3))
-		d3 = ADD256_64(d3, TWO);
-
-		ip += 64;
-		op += 64;
-
-		inlen = inlen % 256;
-	}
-
-	if (inlen >= 128) {
-		vec256 v0=d0, v1=d1, v2=d2, v3=d3;
-
-		for (i = CHACHA_RNDS/2; i; i--) {
-			DQROUND_VECTORS_256(v0,v1,v2,v3)
-		}
-
-		WRITE_XOR_256(ip, op, 0, ADD256_32(v0,d0), ADD256_32(v1,d1), ADD256_32(v2,d2), ADD256_32(v3,d3))
-		d3 = ADD256_64(d3, TWO);
-
-		ip += 32;
-		op += 32;
-
-		inlen = inlen % 128;
-	}
-
-	if (inlen) {
-		vec256 v0=d0, v1=d1, v2=d2, v3=d3;
-		__attribute__ ((aligned (16))) vec128 buf[4];
-
-		for (i = CHACHA_RNDS/2; i; i--) {
-			DQROUND_VECTORS_256(v0,v1,v2,v3)
-		}
-		v0 = ADD256_32(v0,d0); v1 = ADD256_32(v1,d1);
-		v2 = ADD256_32(v2,d2); v3 = ADD256_32(v3,d3);
-
-		if (inlen >= 64) {
-			WRITE_XOR_128(ip, op, 0, LOW128(v0), LOW128(v1), LOW128(v2), LOW128(v3));
-			buf[0] = HIGH128(v0); j = 64;
-			if (inlen >= 80) {
-				STORE128(op + 16, XOR128(LOAD128(ip + 16), buf[0]));
-				buf[1] = HIGH128(v1);
-				if (inlen >= 96) {
-					STORE128(op + 20, XOR128(LOAD128(ip + 20), buf[1]));
-					buf[2] = HIGH128(v2);
-					if (inlen >= 112) {
-						STORE128(op + 24, XOR128(LOAD128(ip + 24), buf[2]));
-						buf[3] = HIGH128(v3);
-					}
-				}
-			}
-		} else {
-			buf[0] = LOW128(v0);  j = 0;
-			if (inlen >= 16) {
-				STORE128(op + 0, XOR128(LOAD128(ip + 0), buf[0]));
-				buf[1] = LOW128(v1);
-				if (inlen >= 32) {
-					STORE128(op + 4, XOR128(LOAD128(ip + 4), buf[1]));
-					buf[2] = LOW128(v2);
-					if (inlen >= 48) {
-						STORE128(op + 8, XOR128(LOAD128(ip + 8), buf[2]));
-						buf[3] = LOW128(v3);
-					}
-				}
-			}
-		}
-
-		for (i=(inlen & ~15); i<inlen; i++) {
-			((unsigned char *)op)[i] = ((unsigned char *)ip)[i] ^ ((unsigned char *)buf)[i-j];
-		}
-	}
 #else
 	Y_UNUSED(ip);
 	Y_UNUSED(op);
@@ -338,8 +216,5 @@ ChaCha512::~ChaCha512() {
 #ifdef __AVX512F__
     SecureWipeBuffer((ui8*)&q1_, 64);
     SecureWipeBuffer((ui8*)&q2_, 64);
-#elif __AVX2__
-    SecureWipeBuffer((ui8*)&d1_, 32);
-    SecureWipeBuffer((ui8*)&d2_, 32);
 #endif
 }

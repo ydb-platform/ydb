@@ -265,6 +265,20 @@ Y_UNIT_TEST(TestAsInt) {
         v128 <<= 112;
         UNIT_ASSERT_EQUAL(v128, r128);
     }
+
+    {
+        NYql::NDecimal::TUint128 v128 = 0x0102030405060708ull;
+        v128 <<= 64;
+        v128 += 0x0910111213141516ull;
+        NYql::NDecimal::TUint128 r128 = AsInt<NYql::NDecimal::TUint128>(AsKeyBound(v128));
+        UNIT_ASSERT_EQUAL(v128, r128);
+    }
+}
+
+Y_UNIT_TEST(TestToHex) {
+    ui64 v = 0x0102030405060708;
+    TString r = NPQ::ToHex<ui64>(v);
+    UNIT_ASSERT_VALUES_EQUAL(r, "0x0102030405060708");
 }
 
 Y_UNIT_TEST(StoreKeys) {

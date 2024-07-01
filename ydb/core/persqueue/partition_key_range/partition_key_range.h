@@ -69,6 +69,32 @@ Type AsInt(const TString& bound) {
     return result;
 }
 
+template <typename Type>
+    requires std::integral<Type>
+TString ToHex(const Type value) {
+    static constexpr char prefix[] = "0x";
+    static constexpr char alphabet[] = "0123456789ABCDEF";
+
+    TString result;
+    result.reserve((sizeof(Type) << 1) + sizeof(prefix));
+    result.append(prefix);
+
+#ifdef WORDS_BIGENDIAN
+    char* c = (char*)&value;
+    char* e = c + sizeof(Type);
+    for (; c != e; ++c) {
+#else
+    unsigned char* e = (unsigned char*)&value;
+    unsigned char* c = e + sizeof(Type);
+    while (c-- != e) {
+#endif
+        result.append(alphabet[(*c & 0xF0u ) >> 4]);
+        result.append(alphabet[*c & 0x0Fu]);
+    }
+
+    return result;
+}
+
 TString MiddleOf(const TString& fromBound, const TString& toBound);
 
 

@@ -485,7 +485,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     auto& init = *req.mutable_init_request();
 
     init.set_consumer(Settings.ConsumerName_);
-    init.set_autoscaling_support(Settings.AutoscalingSupport_);
+    init.set_auto_partitioning_support(Settings.AutoPartitioningSupport_);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();

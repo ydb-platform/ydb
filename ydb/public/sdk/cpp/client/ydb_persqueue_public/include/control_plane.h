@@ -118,6 +118,12 @@ struct TDescribeTopicResult : public TStatus {
         }
         GETTER(TMaybe<TRemoteMirrorRule>, RemoteMirrorRule);
 
+        GETTER(TMaybe<ui64>, MaxPartitionsCount);
+        GETTER(TMaybe<TDuration>, StabilizationWindow);
+        GETTER(TMaybe<ui64>, UpUtilizationPercent);
+        GETTER(TMaybe<ui64>, DownUtilizationPercent);
+        GETTER(TMaybe<Ydb::PersQueue::V1::AutoPartitioningStrategy>, AutoPartitioningStrategy);
+
 
 #undef GETTER
 
@@ -139,6 +145,12 @@ struct TDescribeTopicResult : public TStatus {
         TMaybe<ui32> AbcId_;
         TMaybe<TString> AbcSlug_;
         TString FederationAccount_;
+
+        TMaybe<ui64> MaxPartitionsCount_;
+        TMaybe<TDuration> StabilizationWindow_;
+        TMaybe<ui64> UpUtilizationPercent_;
+        TMaybe<ui64> DownUtilizationPercent_;
+        TMaybe<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
     };
 
     TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result);
@@ -192,6 +204,7 @@ struct TReadRuleSettings {
 // Settings for topic.
 template <class TDerived>
 struct TTopicSettings : public TOperationRequestSettings<TDerived> {
+    friend class TPersQueueClient;
 
     struct TRemoteMirrorRuleSettings {
         TRemoteMirrorRuleSettings() {}
@@ -267,8 +280,22 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         if (settings.RemoteMirrorRule()) {
             RemoteMirrorRule_ = TRemoteMirrorRuleSettings().SetSettings(settings.RemoteMirrorRule().GetRef());
         }
+
+        MaxPartitionsCount_ = settings.MaxPartitionsCount();
+        StabilizationWindow_ = settings.StabilizationWindow();
+        UpUtilizationPercent_ = settings.UpUtilizationPercent();
+        DownUtilizationPercent_ = settings.DownUtilizationPercent();
+        AutoPartitioningStrategy_ = settings.AutoPartitioningStrategy();
+
         return static_cast<TDerived&>(*this);
     }
+
+    private:
+        TMaybe<ui64> MaxPartitionsCount_;
+        TMaybe<TDuration> StabilizationWindow_;
+        TMaybe<ui64> UpUtilizationPercent_;
+        TMaybe<ui64> DownUtilizationPercent_;
+        TMaybe<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
 
 };
 

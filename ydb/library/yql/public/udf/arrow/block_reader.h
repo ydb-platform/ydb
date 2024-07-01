@@ -109,6 +109,14 @@ public:
 };
 
 template<bool Nullable>
+class TFixedSizeBlockReader<NYql::NDecimal::TInt128, Nullable> : public TFixedSizeBlockReaderBase<NYql::NDecimal::TInt128, Nullable, TFixedSizeBlockReader<NYql::NDecimal::TInt128, Nullable>> {
+public:
+    TBlockItem MakeBlockItem(const NYql::NDecimal::TInt128& item) const {
+        return std::bit_cast<TBlockItem>(item);
+    }
+};
+
+template<bool Nullable>
 class TResourceBlockReader : public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
 public:
     TBlockItem MakeBlockItem(const TUnboxedValuePod& pod) const {
@@ -660,8 +668,9 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
         case NUdf::EDataSlot::TzTimestamp64:
             return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
-        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Decimal:
+            return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }

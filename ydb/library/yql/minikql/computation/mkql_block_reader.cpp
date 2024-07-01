@@ -40,6 +40,29 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeBlockItemConverter<NYql::NDecimal::TInt128, Nullable> : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+        return NUdf::TUnboxedValuePod(std::bit_cast<NYql::NDecimal::TInt128>(item));
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+        return std::bit_cast<TBlockItem>(value.GetInt128());
+    }
+};
+
+template <bool Nullable>
 class TResourceBlockItemConverter : public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {

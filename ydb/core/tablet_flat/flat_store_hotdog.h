@@ -29,9 +29,10 @@ namespace NTabletFlatExecutor {
 
         TPageCollectionProtoHelper() = delete;
 
-        TPageCollectionProtoHelper(bool meta, bool pages)
+        TPageCollectionProtoHelper(bool meta, bool pages, bool stickyFlatIndex)
             : PutMeta(meta)
             , PutPages(pages)
+            , StickyFlatIndex(stickyFlatIndex)
         {
 
         }
@@ -57,6 +58,7 @@ namespace NTabletFlatExecutor {
     private:
         const bool PutMeta = false;     /* Save page collection metablob in bundle  */
         const bool PutPages = false;    /* Save special pages within bundle */
+        const bool StickyFlatIndex = false;
     };
 }
 }

@@ -17,7 +17,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), partView);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), partView);
 }
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TIntrusiveConstPtr<TColdPart> &part, ui32 table, ui32 level)
@@ -25,7 +25,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), part);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), part);
 }
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TPartComponents &pc, ui32 table, ui32 level)
@@ -33,7 +33,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), pc);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), pc);
 }
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
@@ -41,7 +41,7 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
 
     for (auto &one : pc.PageCollectionComponents)
-        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get(), one.Sticky);
+        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get(), one.Pages);
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
@@ -113,13 +113,13 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
         for (ui32 pageId : xrange(pack->Meta.TotalPages())) {
             auto type = NTable::EPage(pack->Meta.GetPageType(pageId));
 
-            if (!NTable::TLoader::NeedIn(type)) {
-
-            } else if (auto* body = cache.Lookup(pageId)) {
-                pages.emplace_back(pageId, *body);
-            } else {
-                Y_ABORT("index and page collection pages must be kept inmemory");
-            }
+            if (NTable::NPage::NeedInLoader(type) || StickyFlatIndex && type == NTable::EPage::FlatIndex || type == NTable::EPage::BTreeIndex) {
+                if (auto* body = cache.Lookup(pageId)) {
+                    pages.emplace_back(pageId, *body);
+                } else {
+                    Y_ABORT_IF(NTable::NPage::NeedInLoader(type), "Needed pages must be kept in memory");
+                }
+            } 
         }
     }
 
@@ -161,7 +161,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
 
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
-        item.Sticky = std::move(pages);
+        item.Pages = std::move(pages);
         if (pageCollection.HasMeta()) {
             item.ParsePacket(TSharedData::Copy(pageCollection.GetMeta()));
         }

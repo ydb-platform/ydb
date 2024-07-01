@@ -21,6 +21,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     ydb/library/actors/core
     ydb/library/actors/dnsresolver
     ydb/library/actors/interconnect

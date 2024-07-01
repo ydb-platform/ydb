@@ -19,8 +19,6 @@ namespace NKikimr::NWrappers::NExternalStorage {
 
 struct TS3User {
     TS3User();
-    TS3User(const TS3User& baseObject);
-    TS3User(TS3User& baseObject);
     ~TS3User();
 };
 

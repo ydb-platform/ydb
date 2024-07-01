@@ -29,6 +29,25 @@
 
 #include <filesystem>
 
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+
+namespace {
+
+struct TApiInitializer {
+    TApiInitializer() {
+        Aws::InitAPI(Options);
+    }
+
+    ~TApiInitializer() {
+        Aws::ShutdownAPI(Options);
+    }
+
+private:
+    Aws::SDKOptions Options;
+};
+
+}
+
 namespace NKikimr {
 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
@@ -43,6 +62,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
+        TApiInitializer awsApi;
         runner->KikimrStart();
         runner->BusyLoop();
         // exit busy loop by a signal

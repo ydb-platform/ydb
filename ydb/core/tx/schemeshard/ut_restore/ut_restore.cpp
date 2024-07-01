@@ -20,8 +20,10 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <aws/core/Aws.h>
 #include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
@@ -36,6 +38,16 @@ using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
+
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
@@ -315,7 +327,6 @@ namespace {
 
         runtime.SetObserverFunc(prevObserver);
     }
-
 
 } // anonymous
 

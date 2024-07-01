@@ -14,7 +14,12 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
+
 using namespace NYdb;
+using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(YdbImport) {
 
@@ -135,164 +140,63 @@ Y_UNIT_TEST_SUITE(YdbImport) {
 
 }
 
+namespace {
+
+void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
+    const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "script:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
+}
+
+TDataQueryResult ExecuteDataModificationQuery(TSession& session,
+                                                const TString& script,
+                                                const TExecDataQuerySettings& settings = {}
+) {
+    const auto result = session.ExecuteDataQuery(
+        script,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        settings
+    ).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "script:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
+
+    return result;
+}
+
+TValue GetSingleResult(const TDataQueryResult& rawResults) {
+    auto resultSetParser = rawResults.GetResultSetParser(0);
+    UNIT_ASSERT(resultSetParser.TryNextRow());
+    return resultSetParser.GetValue(0);
+}
+
+ui64 GetUint64(const TValue& value) {
+    return TValueParser(value).GetUint64();
+}
+
+auto CreateMinPartitionsChecker(ui64 expectedMinPartitions) {
+    return [=](const TTableDescription& tableDescription) {
+        return tableDescription.GetPartitioningSettings().GetMinPartitionsCount() == expectedMinPartitions;
+    };
+}
+
+void CheckTableDescription(TSession& session, const TString& path, auto&& checker) {
+    auto describeResult = session.DescribeTable(path).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    auto tableDescription = describeResult.GetTableDescription();
+    Ydb::Table::CreateTableRequest descriptionProto;
+    // The purpose of translating to CreateTableRequest is solely to produce a clearer error message.
+    tableDescription.SerializeTo(descriptionProto);
+    UNIT_ASSERT_C(
+        checker(tableDescription),
+        descriptionProto.DebugString()
+    );
+}
+
+}
+
 Y_UNIT_TEST_SUITE(BackupRestore) {
-
-    using namespace NYdb::NTable;
-    using NKikimr::NWrappers::NTestHelpers::TS3Mock;
-
-    void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
-        const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "script:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
-    }
-
-    TDataQueryResult ExecuteDataModificationQuery(TSession& session,
-                                                  const TString& script,
-                                                  const TExecDataQuerySettings& settings = {}
-    ) {
-        const auto result = session.ExecuteDataQuery(
-            script,
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-            settings
-        ).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "script:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
-
-        return result;
-    }
-
-    TValue GetSingleResult(const TDataQueryResult& rawResults) {
-        auto resultSetParser = rawResults.GetResultSetParser(0);
-        UNIT_ASSERT(resultSetParser.TryNextRow());
-        return resultSetParser.GetValue(0);
-    }
-
-    ui64 GetUint64(const TValue& value) {
-        return TValueParser(value).GetUint64();
-    }
         
     void Restore(NDump::TClient& client, const TFsPath& sourceFile, const TString& dbPath) {
         auto result = client.Restore(sourceFile, dbPath);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    auto CreateMinPartitionsChecker(ui64 expectedMinPartitions) {
-        return [=](const TTableDescription& tableDescription) {
-            return tableDescription.GetPartitioningSettings().GetMinPartitionsCount() == expectedMinPartitions;
-        };
-    }
-
-    void CheckTableDescription(TSession& session, const TString& path, auto&& checker) {
-        auto describeResult = session.DescribeTable(path).ExtractValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        auto tableDescription = describeResult.GetTableDescription();
-        Ydb::Table::CreateTableRequest descriptionProto;
-        // The purpose of translating to CreateTableRequest is solely to produce a clearer error message.
-        tableDescription.SerializeTo(descriptionProto);
-        UNIT_ASSERT_C(
-            checker(tableDescription),
-            descriptionProto.DebugString()
-        );
-    }
-
-    class TS3TestEnv {
-        TKikimrWithGrpcAndRootSchema server;
-        TDriver driver;
-        TTableClient tableClient;
-        TSession session;
-        ui16 s3Port;
-        TS3Mock s3Mock;
-        // required for exports to function
-        TDataShardExportFactory dataShardExportFactory;
-
-    public:
-        TS3TestEnv()
-            : driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())))
-            , tableClient(driver)
-            , session(tableClient.CreateSession().ExtractValueSync().GetSession())
-            , s3Port(server.GetPortManager().GetPort())
-            , s3Mock({}, TS3Mock::TSettings(s3Port))
-        {
-            UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
-
-            auto& runtime = *server.GetRuntime();
-            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
-            runtime.GetAppData().DataShardExportFactory = &dataShardExportFactory;
-        }
-
-        TKikimrWithGrpcAndRootSchema& GetServer() {
-            return server;
-        }
-
-        const TDriver& GetDriver() const {
-            return driver;
-        }
-
-        TSession& GetSession() {
-            return session;
-        }
-
-        ui16 GetS3Port() const {
-            return s3Port;
-        }
-    };
-
-    template <typename TOperation>
-    bool WaitForOperation(NOperation::TOperationClient& client, NOperationId::TOperationId id,
-        int retries = 10, TDuration sleepDuration = TDuration::MilliSeconds(100)
-    ) {
-        for (int retry = 0; retry <= retries; ++retry) {
-            auto result = client.Get<TOperation>(id).ExtractValueSync();
-            if (result.Ready()) {
-                UNIT_ASSERT_VALUES_EQUAL_C(
-                    result.Status().GetStatus(), EStatus::SUCCESS,
-                    result.Status().GetIssues().ToString()
-                );
-                return true;
-            }
-            Sleep(sleepDuration *= 2);
-        }
-        return false;
-    }
-
-    void ExportToS3(NExport::TExportClient& exportClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
-        const TString& source, const TString& destination
-   ) {
-        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock.
-        // Any non-empty strings should do.
-        const auto exportSettings = NExport::TExportToS3Settings()
-            .Endpoint(Sprintf("localhost:%d", s3Port))
-            .Scheme(ES3Scheme::HTTP)
-            .Bucket("test_bucket")
-            .AccessKey("test_key")
-            .SecretKey("test_secret")
-            .AppendItem(NExport::TExportToS3Settings::TItem{.Src = source, .Dst = destination});
-
-        auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
-        UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, response.Id()),
-            Sprintf("The export from %s to %s did not complete within the allocated time.",
-                source.c_str(), destination.c_str()
-            )
-        );
-    }
-
-    void ImportFromS3(NImport::TImportClient& importClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
-        const TString& source, const TString& destination
-    ) {
-        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock. 
-        // Any non-empty strings should do.
-        const auto importSettings = NImport::TImportFromS3Settings()
-            .Endpoint(Sprintf("localhost:%d", s3Port))
-            .Scheme(ES3Scheme::HTTP)
-            .Bucket("test_bucket")
-            .AccessKey("test_key")
-            .SecretKey("test_secret")
-            .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = source, .Dst = destination});
-
-        auto response = importClient.ImportFromS3(importSettings).ExtractValueSync();
-        UNIT_ASSERT_C(WaitForOperation<NImport::TImportFromS3Response>(operationClient, response.Id()),
-            Sprintf("The import from %s to %s did not complete within the allocated time.",
-                source.c_str(), destination.c_str()
-            )
-        );
     }
 
     Y_UNIT_TEST(Basic) {
@@ -448,7 +352,125 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minPartitions));
     }
 
-    Y_UNIT_TEST(BasicS3) {
+}
+
+Y_UNIT_TEST_SUITE(BackupRestoreS3) {
+
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
+
+    using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+    class TS3TestEnv {
+        TKikimrWithGrpcAndRootSchema server;
+        TDriver driver;
+        TTableClient tableClient;
+        TSession session;
+        ui16 s3Port;
+        TS3Mock s3Mock;
+        // required for exports to function
+        TDataShardExportFactory dataShardExportFactory;
+
+    public:
+        TS3TestEnv()
+            : driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())))
+            , tableClient(driver)
+            , session(tableClient.CreateSession().ExtractValueSync().GetSession())
+            , s3Port(server.GetPortManager().GetPort())
+            , s3Mock({}, TS3Mock::TSettings(s3Port))
+        {
+            UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+            auto& runtime = *server.GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            runtime.GetAppData().DataShardExportFactory = &dataShardExportFactory;
+        }
+
+        TKikimrWithGrpcAndRootSchema& GetServer() {
+            return server;
+        }
+
+        const TDriver& GetDriver() const {
+            return driver;
+        }
+
+        TSession& GetSession() {
+            return session;
+        }
+
+        ui16 GetS3Port() const {
+            return s3Port;
+        }
+    };
+
+    template <typename TOperation>
+    bool WaitForOperation(NOperation::TOperationClient& client, NOperationId::TOperationId id,
+        int retries = 10, TDuration sleepDuration = TDuration::MilliSeconds(100)
+    ) {
+        for (int retry = 0; retry <= retries; ++retry) {
+            auto result = client.Get<TOperation>(id).ExtractValueSync();
+            if (result.Ready()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    result.Status().GetStatus(), EStatus::SUCCESS,
+                    result.Status().GetIssues().ToString()
+                );
+                return true;
+            }
+            Sleep(sleepDuration *= 2);
+        }
+        return false;
+    }
+
+    void ExportToS3(NExport::TExportClient& exportClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
+        const TString& source, const TString& destination
+   ) {
+        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock.
+        // Any non-empty strings should do.
+        const auto exportSettings = NExport::TExportToS3Settings()
+            .Endpoint(Sprintf("localhost:%d", s3Port))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .AppendItem(NExport::TExportToS3Settings::TItem{.Src = source, .Dst = destination});
+
+        auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, response.Id()),
+            Sprintf("The export from %s to %s did not complete within the allocated time.",
+                source.c_str(), destination.c_str()
+            )
+        );
+    }
+
+    void ImportFromS3(NImport::TImportClient& importClient, ui16 s3Port, NOperation::TOperationClient& operationClient,
+        const TString& source, const TString& destination
+    ) {
+        // The exact values for Bucket, AccessKey and SecretKey do not matter if the S3 backend is TS3Mock. 
+        // Any non-empty strings should do.
+        const auto importSettings = NImport::TImportFromS3Settings()
+            .Endpoint(Sprintf("localhost:%d", s3Port))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = source, .Dst = destination});
+
+        auto response = importClient.ImportFromS3(importSettings).ExtractValueSync();
+        UNIT_ASSERT_C(WaitForOperation<NImport::TImportFromS3Response>(operationClient, response.Id()),
+            Sprintf("The import from %s to %s did not complete within the allocated time.",
+                source.c_str(), destination.c_str()
+            )
+        );
+    }
+
+    Y_UNIT_TEST(Basic) {
         TS3TestEnv testEnv;
 
         constexpr const char* table = "/Root/table";
@@ -498,7 +520,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    Y_UNIT_TEST(RestoreTablePartitioningSettingsS3) {
+    Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TS3TestEnv testEnv;
 
         constexpr const char* table = "/Root/table";
@@ -535,7 +557,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         CheckTableDescription(testEnv.GetSession(), table, CreateMinPartitionsChecker(minPartitions));
     }
 
-    Y_UNIT_TEST(RestoreIndexTablePartitioningSettingsS3) {
+    Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
         TS3TestEnv testEnv;
 
         constexpr const char* table = "/Root/table";

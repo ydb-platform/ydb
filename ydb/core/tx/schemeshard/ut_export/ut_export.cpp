@@ -7,15 +7,29 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/env.h>
 
+#include <aws/core/Aws.h>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
+
+    Aws::SDKOptions Options;
+
+    Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+        Aws::InitAPI(Options);
+    }
+
+    Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+        Aws::ShutdownAPI(Options);
+    }
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,

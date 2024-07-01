@@ -11,8 +11,6 @@ namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
 
-struct TAwsApiGuard;
-
 class TS3Mock: public THttpServer::ICallBack {
 public:
     struct TSettings {
@@ -66,7 +64,6 @@ public:
     explicit TS3Mock(const TSettings& settings = {});
     explicit TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings = {});
     explicit TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings = {});
-    ~TS3Mock();
 
     TClientRequest* CreateClient();
     bool Start();
@@ -81,7 +78,6 @@ private:
     int NextUploadId = 1;
     THashMap<std::pair<TString, TString>, TVector<TString>> MultipartUploads;
     THttpServer HttpServer;
-    THolder<TAwsApiGuard> AwsApiGuard;
 
 }; // TS3Mock
 

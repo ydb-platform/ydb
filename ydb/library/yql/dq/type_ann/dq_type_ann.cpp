@@ -273,6 +273,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             for (auto sink : sinks) {
                 sink->SetTypeAnn(resultType);
             }
+            stage->Child(TDqStageBase::idx_Outputs)->SetTypeAnn(stage->Child(TDqStageBase::idx_Outputs)->GetTypeAnn());
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {

@@ -1,4 +1,5 @@
 #include "mkql_block_agg_minmax.h"
+#include "mkql_block_agg_state_helper.h"
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -129,7 +130,7 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         if constexpr (IsNullable) {
             if (!typedState->IsValid) {
                 Builder_.Add(TBlockItem());
@@ -620,8 +621,9 @@ public:
         Y_UNUSED(type);
     }
 
-    void InitState(void* state) final {
-        new(state) TStateType();
+    void InitState(void* ptr) final {
+        TStateType state;
+        memcpy(ptr, &state, sizeof(state));
     }
 
     void DestroyState(void* state) noexcept final {
@@ -630,18 +632,18 @@ public:
     }
 
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        auto typedState = static_cast<TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if constexpr (IsScalar) {
             Y_ENSURE(datum.is_scalar());
             if constexpr (IsNullable) {
                 if (datum.scalar()->is_valid) {
-                    typedState->Value = datum.scalar_as<TInScalar>().value;
+                    typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
                     typedState->IsValid = 1;
                 }
             } else {
-                typedState->Value = datum.scalar_as<TInScalar>().value;
+                typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
             }
         } else {
             const auto& array = datum.array();
@@ -706,7 +708,7 @@ public:
     }
 
     NUdf::TUnboxedValue FinishOne(const void* state) final {
-        auto typedState = static_cast<const TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         if constexpr (IsNullable) {
             if (!typedState->IsValid) {
                 return NUdf::TUnboxedValuePod();
@@ -727,11 +729,11 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
         Y_ENSURE(datum.is_scalar());
         if constexpr (IsNullable) {
             if (datum.scalar()->is_valid) {
-                typedState->Value = datum.scalar_as<TInScalar>().value;
+                typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
                 typedState->IsValid = 1;
             }
         } else {
-            typedState->Value = datum.scalar_as<TInScalar>().value;
+            typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
         }
     } else {
         const auto &array = datum.array();
@@ -767,7 +769,8 @@ public:
     }
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TStateType();
+        TStateType st;
+        memcpy(state, &st, sizeof(st));
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -778,9 +781,9 @@ public:
 
     void UpdateKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         Y_UNUSED(batchNum);
-        auto typedState = static_cast<TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
-        PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState, datum, row);
+        PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState.Get(), datum, row);
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
@@ -807,7 +810,8 @@ public:
     }
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new(state) TStateType();
+        TStateType st;
+        memcpy(state, &st, sizeof(st));
         UpdateState(state, batchNum, columns, row);
     }
 
@@ -818,9 +822,9 @@ public:
 
     void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         Y_UNUSED(batchNum);
-        auto typedState = static_cast<TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
-        PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState, datum, row);
+        PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState.Get(), datum, row);
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
@@ -963,6 +967,8 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMax(TTupleType* tu
         return PrepareMinMaxFixed<TTag, float, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Double:
         return PrepareMinMaxFixed<TTag, double, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
+    case NUdf::EDataSlot::Decimal:
+        return PrepareMinMaxFixed<TTag, NYql::NDecimal::TInt128, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     default:
         throw yexception() << "Unsupported MIN/MAX input type";
     }

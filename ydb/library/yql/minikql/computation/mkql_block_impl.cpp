@@ -167,6 +167,12 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
 
             return arrow::Datum(std::make_shared<arrow::StructScalar>(items, MakeTzDateArrowType<NUdf::EDataSlot::TzTimestamp64>()));
         }        
+        case NUdf::EDataSlot::Decimal: {
+            std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, &pool)));
+            auto integer = value.GetInt128();
+            memcpy(buffer->mutable_data(), (void*)&integer, sizeof(integer));
+            return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+        }
         default:
             MKQL_ENSURE(false, "Unsupported data slot " << slot);
         }

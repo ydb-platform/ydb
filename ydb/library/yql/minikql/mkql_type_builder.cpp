@@ -1499,7 +1499,8 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         return false;
     }
     case NUdf::EDataSlot::Decimal: {
-        return false;
+        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+        return true;
     }
     case NUdf::EDataSlot::DyNumber: {
         return false;
@@ -2478,7 +2479,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }
         case NUdf::EDataSlot::Decimal: {
-            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+            return sizeof(NYql::NDecimal::TInt128);
         }
         case NUdf::EDataSlot::DyNumber: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);

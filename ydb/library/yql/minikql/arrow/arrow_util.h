@@ -160,6 +160,29 @@ struct TPrimitiveDataType<NYql::NUdf::TUtf8> {
     using TScalarResult = arrow::StringScalar;
 };
 
+template<>
+struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
+    class TResult: public arrow::FixedSizeBinaryType
+    {
+    public:
+        TResult(): arrow::FixedSizeBinaryType(16)
+        { }
+    };
+
+
+    class TScalarResult: public arrow::FixedSizeBinaryScalar
+    {
+    public:
+        TScalarResult(std::shared_ptr<arrow::Buffer> value)
+            : arrow::FixedSizeBinaryScalar(std::move(value), arrow::fixed_size_binary(16))
+        { }
+
+        TScalarResult()
+            : arrow::FixedSizeBinaryScalar(arrow::fixed_size_binary(16))
+        { }
+    };
+};
+
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {
     return arrow::Datum(std::make_shared<typename TPrimitiveDataType<T>::TScalarResult>(value));
@@ -177,5 +200,16 @@ inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
 }
 
 using NYql::NUdf::TTypedBufferBuilder;
+
+}
+
+namespace arrow {
+
+template <>
+struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NDecimal::TInt128>::TResult> {
+    static inline std::shared_ptr<DataType> type_singleton() {
+        return arrow::fixed_size_binary(16);
+    }
+};
 
 }

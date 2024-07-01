@@ -520,7 +520,6 @@ TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
 
 TDataType* TDataType::Create(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env) {
     MKQL_ENSURE(schemeType, "Null type isn't allowed.");
-    MKQL_ENSURE(schemeType != NUdf::TDataType<NUdf::TDecimal>::Id, "Can't' create Decimal.");
     MKQL_ENSURE(schemeType != NKikimr::NScheme::NTypeIds::Pg, "Can't create Pg.");
     MKQL_ENSURE(schemeType != 0, "0 type");
     return ::new(env.Allocate<TDataType>()) TDataType(schemeType, env);

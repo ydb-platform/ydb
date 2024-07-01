@@ -22,7 +22,8 @@ public:
     template <typename T>
     T PopNumber() {
         Ensure(sizeof(T));
-        T t = *(const T*)(Buf_.Data() + Pos_);
+        T t;
+        std::memcpy(&t, Buf_.Data() + Pos_, sizeof(t));
         Pos_ += sizeof(T);
         return t;
     }
@@ -56,7 +57,7 @@ public:
     template <typename T>
     void PushNumber(T t) {
         Ensure(sizeof(T));
-        *(T*)&Vec_[Pos_] = t;
+        std::memcpy(Vec_.data() + Pos_, &t, sizeof(T));
         Pos_ += sizeof(T);
     }
 

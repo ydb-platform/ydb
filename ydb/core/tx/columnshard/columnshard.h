@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "common/snapshot.h"
 
+#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -289,7 +290,6 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
-
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

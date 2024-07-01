@@ -31,6 +31,7 @@
 #include "subscriber/abstract/manager/manager.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -223,6 +224,8 @@ class TColumnShard
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
@@ -376,6 +379,8 @@ protected:
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
+
+            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

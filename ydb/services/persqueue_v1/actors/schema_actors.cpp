@@ -1070,10 +1070,26 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
-            auto part = Result.add_partitions();
-            part->set_partition_id(i);
-            part->set_active(true);
+        for (auto& sourcePart: pqDescr.GetPartitions()) {
+            auto destPart = Result.add_partitions();
+            destPart->set_partition_id(sourcePart.GetPartitionId());
+            destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+            if (sourcePart.HasKeyRange()) {
+                if (sourcePart.GetKeyRange().HasFromBound()) {
+                    destPart->set_frombound(sourcePart.GetKeyRange().GetFromBound());
+                }
+                if (sourcePart.GetKeyRange().HasToBound()) {
+                    destPart->set_tobound(sourcePart.GetKeyRange().GetToBound());
+                }
+            }
+
+            for (size_t i = 0; i < sourcePart.ChildPartitionIdsSize(); ++i) {
+                destPart->add_child_partition_ids(static_cast<int64_t>(sourcePart.GetChildPartitionIds(i)));
+            }
+
+            for (size_t i = 0; i < sourcePart.ParentPartitionIdsSize(); ++i) {
+                destPart->add_parent_partition_ids(static_cast<int64_t>(sourcePart.GetParentPartitionIds(i)));
+            }
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
@@ -1401,7 +1417,6 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
     for (auto partData : record.GetPartResult()) {
         if ((ui32)partData.GetPartition() != Settings.Partitions[0])
             continue;
-
         Y_ABORT_UNLESS((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
         partResult->set_partition_id(partData.GetPartition());
         partResult->set_active(true);

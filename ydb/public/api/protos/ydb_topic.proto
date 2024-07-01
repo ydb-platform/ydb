@@ -1087,6 +1087,11 @@ message DescribeTopicResult {
 
         // Partition location, filled only when include_location in request is true.
         PartitionLocation partition_location = 6;
+
+        // Inclusive left border. Emptiness means -inf.
+        optional bytes FromBound = 7;
+        // Exclusive right border. Emptiness means +inf.
+        optional bytes ToBound = 8;
     }
 
     message TopicStats {

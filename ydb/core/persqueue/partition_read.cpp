@@ -402,6 +402,7 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
+    auto now = ctx.Now();
     for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
         Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
         Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
@@ -416,7 +417,7 @@ TReadAnswer TReadInfo::FormAnswer(
             LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, "Not full answer here!");
             ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
-                userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
+                userInfo->ReadDone(ctx, now, answerSize, cnt, ClientDC,
                         tablet, IsExternalRead);
             }
             readResult->SetSizeLag(sizeLag - size);
@@ -469,7 +470,7 @@ TReadAnswer TReadInfo::FormAnswer(
                 if (userInfo) {
                     userInfo->AddTimestampToCache(
                                                   Offset, res.WriteTimestamp, res.CreateTimestamp,
-                                                  Destination != 0, ctx.Now()
+                                                  Destination != 0, now
                                               );
                 }
 
@@ -505,7 +506,7 @@ TReadAnswer TReadInfo::FormAnswer(
             if (userInfo) {
                 userInfo->AddTimestampToCache(
                     Offset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
-                    Destination != 0, ctx.Now()
+                    Destination != 0, now
                 );
             }
             AddResultBlob(readResult, writeBlob, Offset);
@@ -520,7 +521,7 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_ABORT_UNLESS(Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, Offset);
     ui64 answerSize = answer->Response->ByteSize();
     if (userInfo && Destination != 0) {
-        userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
+        userInfo->ReadDone(ctx, now, answerSize, cnt, ClientDC,
                         tablet, IsExternalRead);
 
     }
@@ -746,8 +747,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     }
     userInfo->ReadsInQuotaQueue--;
     ui64 offset = read->Offset;
+    auto now = ctx.Now();
     if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo->ReadFromTimestamp > TInstant::MilliSeconds(1))) {
-        TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
+        TInstant timestamp = read->MaxTimeLagMs > 0 ? now - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
         timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
         timestamp = Max(timestamp, userInfo->ReadFromTimestamp);
         offset = Max(GetOffsetEstimate(DataKeysBody, timestamp, Min(Head.Offset, EndOffset - 1)), offset);
@@ -782,7 +784,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         }
         Subscriber.AddSubscription(std::move(info), read->Timeout, cookie, ctx);
         ++userInfo->Subscriptions;
-        userInfo->UpdateReadOffset((i64)offset - 1, userInfo->WriteTimestamp, userInfo->CreateTimestamp, ctx.Now());
+        userInfo->UpdateReadOffset((i64)offset - 1, userInfo->WriteTimestamp, userInfo->CreateTimestamp, now);
 
         return;
     }
@@ -958,11 +960,13 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ui32 count = 0;
     ui32 size = 0;
 
+    auto now = ctx.Now();
+
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {
-        userInfo.ForgetSubscription(ctx.Now());
+        userInfo.ForgetSubscription(now);
     }
 
     TVector<TRequestedBlob> blobs = GetReadRequestFromBody(
@@ -983,7 +987,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     }
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;
-        userInfo.UpdateReadingTimeAndState(ctx.Now());
+        userInfo.UpdateReadingTimeAndState(now);
     }
 
     if (info.Blobs.empty()) { //all from head, answer right now
@@ -998,7 +1002,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(1);
         }
         TabletCounters.Cumulative()[COUNTER_PQ_READ_HEAD_ONLY_OK].Increment(1);
-        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((now - info.Timestamp).MilliSeconds());
 
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
 

@@ -241,11 +241,12 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
 
     ui64 offset = EndOffset;
+    auto now = ctx.Now();
     while (!Responses.empty()) {
         const auto& response = Responses.front();
 
         const TDuration queueTime = response.QueueTime;
-        const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
+        const TDuration writeTime = now - response.WriteTimeBaseline;
 
         if (response.IsWrite()) {
             const auto& writeResponse = response.GetWrite();
@@ -400,6 +401,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         Head.Batches.clear();
     }
 
+    auto now = ctx.Now();
     while (!CompactedKeys.empty()) {
         const auto& ck = CompactedKeys.front();
         BodySize += ck.second;
@@ -414,7 +416,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 GapSize += ck.first.GetOffset() - lastOffset;
             }
         }
-        DataKeysBody.push_back({ck.first, ck.second, ctx.Now(), DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size});
+        DataKeysBody.push_back({ck.first, ck.second, now, DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size});
 
         CompactedKeys.pop_front();
     } // head cleared, all data moved to body
@@ -436,7 +438,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     CheckHeadConsistency();
 
-    UpdateUserInfoEndOffset(ctx.Now());
+    UpdateUserInfoEndOffset(now);
 }
 
 void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
@@ -494,8 +496,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     ui64 prevEndOffset = EndOffset;
 
-    ui32 totalLatencyMs = (ctx.Now() - WriteCycleStartTime).MilliSeconds();
-    ui32 writeLatencyMs = (ctx.Now() - WriteStartTime).MilliSeconds();
+    auto now = ctx.Now();
+    ui32 totalLatencyMs = (now - WriteCycleStartTime).MilliSeconds();
+    ui32 writeLatencyMs = (now - WriteStartTime).MilliSeconds();
 
     WriteLatency.IncFor(writeLatencyMs, 1);
     if (writeLatencyMs >= AppData(ctx)->PQConfig.GetWriteLatencyBigMs()) {
@@ -511,7 +514,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAfterWriteCounters(true);
 
     //All ok
-    auto now = ctx.Now();
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
     }
@@ -625,6 +627,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     ui64 decReservedSize = 0;
     TStringBuf owner;
+    auto now = ctx.Now();
 
     if (!mirroredPartition && !ev->Get()->IsDirectWrite) {
         owner = TOwnerInfo::GetOwnerFromOwnerCookie(ev->Get()->OwnerCookie);
@@ -640,8 +643,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
                 TStringBuilder() << "Yours maximum written sequence number for session was deleted, need to recreate session. "
                     << "Current count of sourceIds is " << SourceIdStorage.GetInMemorySourceIds().size() << " and limit is " << Config.GetPartitionConfig().GetSourceIdMaxCounts()
-                    << ", current minimum sourceid timestamp(Ms) is " << SourceIdStorage.MinAvailableTimestamp(ctx.Now()).MilliSeconds()
-                    << " and border timestamp(Ms) is " << ((ctx.Now() - TInstant::Seconds(Config.GetPartitionConfig().GetSourceIdLifetimeSeconds())).MilliSeconds()));
+                    << ", current minimum sourceid timestamp(Ms) is " << SourceIdStorage.MinAvailableTimestamp(now).MilliSeconds()
+                    << " and border timestamp(Ms) is " << ((now - TInstant::Seconds(Config.GetPartitionConfig().GetSourceIdLifetimeSeconds())).MilliSeconds()));
             return;
         }
 
@@ -719,7 +722,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     // TODO: remove decReservedSize == 0
     Y_ABORT_UNLESS(size <= decReservedSize || decReservedSize == 0);
-    UpdateWriteBufferIsFullState(ctx.Now());
+    UpdateWriteBufferIsFullState(now);
 
 }
 
@@ -1178,7 +1181,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (p.Msg.TotalParts > 1) { //this is multi-part message
         partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
     }
-    WriteTimestamp = ctx.Now();
+
+    auto now = ctx.Now();
+    WriteTimestamp = now;
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.Data, std::move(partData), WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
@@ -1254,7 +1259,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,
                     "writing blob: topic '" << TopicName() << "' partition " << Partition
-                        << " " << x.first.ToString() << " size " << x.second << " WTime " << ctx.Now().MilliSeconds()
+                        << " " << x.first.ToString() << " size " << x.second << " WTime " << now.MilliSeconds()
             );
 
             CompactedKeys.push_back(x);
@@ -1451,7 +1456,8 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
 }
 
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
-    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
+    auto now = ctx.Now();
+    if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > now) {
         return;
     }
     PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
@@ -1460,7 +1466,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
 
     QuotaDeadline = TInstant::Zero();
 
-    UpdateWriteBufferIsFullState(ctx.Now());
+    UpdateWriteBufferIsFullState(now);
 }
 
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests)

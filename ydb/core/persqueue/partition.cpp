@@ -1397,7 +1397,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         PartitionCountersLabeled->GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
     }
 
-    TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
+    TDuration lifetimeNow = now - SourceIdStorage.MinAvailableTimestamp(now);
     if (lifetimeNow.MilliSeconds() != PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Get()) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
@@ -1856,7 +1856,7 @@ void TPartition::RunPersist() {
         for (const auto& writeInfo : WriteInfosApplied) {
             // writeTimeLag
             if (InputTimeLag && writeInfo->InputLags) {
-                writeInfo->InputLags->UpdateTimestamp(ctx.Now().MilliSeconds());
+                writeInfo->InputLags->UpdateTimestamp(now.MilliSeconds());
                 for (const auto& values : writeInfo->InputLags->GetValues()) {
                     if (values.second)
                         InputTimeLag->IncFor(std::ceil(values.first), values.second);

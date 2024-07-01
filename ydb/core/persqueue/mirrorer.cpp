@@ -252,8 +252,9 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
 
-    if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
-        LastStateLogTimestamp = ctx.Now();
+    auto now = ctx.Now();
+    if (now - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
+        LastStateLogTimestamp = now;
         LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << "[STATE] current state=" << GetCurrentState()
             << ", read session=" << bool(ReadSession) << ", credentials provider=" << bool(CredentialsProvider)
@@ -289,12 +290,12 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             const auto& info = oldest.second;
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << "[STATE] The oldest read future id=" << oldest.first
-            << ", ts=" << info.first << " age=" << (ctx.Now() - info.first)
+            << ", ts=" << info.first << " age=" << (now - info.first)
             << ", future state: " << info.second.Initialized()
             << "/" << info.second.HasValue() << "/" << info.second.HasException());
         }
     }
-    if (!ReadSession && LastInitStageTimestamp + INIT_TIMEOUT < ctx.Now()) {
+    if (!ReadSession && LastInitStageTimestamp + INIT_TIMEOUT < now) {
         ProcessError(ctx, TStringBuilder() << "read session was not created, the last stage of initialization was at "
             << LastInitStageTimestamp.Seconds());
         if (InitTimeoutCounter) {
@@ -303,13 +304,13 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         StartInit(ctx);
         return;
     }
-    if (ReadSession && LastReadEventTime != TInstant::Zero() && ctx.Now() - LastReadEventTime > RECEIVE_READ_EVENT_TIMEOUT) {
+    if (ReadSession && LastReadEventTime != TInstant::Zero() && now - LastReadEventTime > RECEIVE_READ_EVENT_TIMEOUT) {
         ProcessError(ctx, TStringBuilder() << "receive read event timeout, last event was at " << LastReadEventTime
-            << " (" << ctx.Now() - LastReadEventTime << "). Read session will be recreated.");
+            << " (" << now - LastReadEventTime << "). Read session will be recreated.");
         ScheduleConsumerCreation(ctx);
         return;
     }
-    if (WriteRequestInFlight && WriteRequestTimestamp + WRITE_TIMEOUT < ctx.Now()) {
+    if (WriteRequestInFlight && WriteRequestTimestamp + WRITE_TIMEOUT < now) {
         LOG_ERROR_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " write request was sent at "
             << WriteRequestTimestamp.Seconds() << ", but no response has been received yet. Tablet will be killed.");
         if (WriteTimeoutCounter) {

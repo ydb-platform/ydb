@@ -127,7 +127,7 @@ runs:
         
         ./ya make --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
+          --link-threads "${{ inputs.link_threads }}" \
           "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
               RC=$?
               echo "::debug::ya make RC=$RC"

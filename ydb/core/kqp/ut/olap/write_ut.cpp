@@ -131,8 +131,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 800000);
     }
 
-    }
-
 }
 
 } // namespace

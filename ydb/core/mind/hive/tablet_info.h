@@ -245,13 +245,14 @@ public:
         return ExtractResourceUsage(normValues, resource);
     }
 
-    static double ExtractResourceUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource = EResourceToBalance::ComputeResources) {
+    template <typename ResourceTypes>
+    static auto ExtractResourceUsage(const ResourceTypes& values, EResourceToBalance resource = EResourceToBalance::ComputeResources) {
         switch (resource) {
-        case EResourceToBalance::CPU: return std::get<NMetrics::EResource::CPU>(normValues);
-        case EResourceToBalance::Memory: return std::get<NMetrics::EResource::Memory>(normValues);
-        case EResourceToBalance::Network: return std::get<NMetrics::EResource::Network>(normValues);
-        case EResourceToBalance::Counter: return std::get<NMetrics::EResource::Counter>(normValues);
-        case EResourceToBalance::ComputeResources: return max(normValues);
+        case EResourceToBalance::CPU: return std::get<NMetrics::EResource::CPU>(values);
+        case EResourceToBalance::Memory: return std::get<NMetrics::EResource::Memory>(values);
+        case EResourceToBalance::Network: return std::get<NMetrics::EResource::Network>(values);
+        case EResourceToBalance::Counter: return std::get<NMetrics::EResource::Counter>(values);
+        case EResourceToBalance::ComputeResources: return max(values);
         }
     }
 

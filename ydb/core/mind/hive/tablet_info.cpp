@@ -339,7 +339,7 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
     if (!HasAllowedMetric(resource)) {
         return false;
     }
-    return ExtractResourceUsage(ResourceNormalizedValues, resource) > 0;
+    return ExtractResourceUsage(GetResourceCurrentValues(), resource) > 0;
 }
 
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {

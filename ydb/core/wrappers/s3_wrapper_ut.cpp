@@ -17,7 +17,7 @@ using namespace NKikimr;
 using namespace NKikimr::NWrappers;
 using namespace Aws::S3::Model;
 
-class TS3MockTest: public NUnitTest::TTestBase, private NExternalStorage::TS3User {
+class TS3MockTest: public NUnitTest::TTestBase {
     using TS3Mock = NWrappers::NTestHelpers::TS3Mock;
 
     static auto MakeClientConfig(ui16 port) {

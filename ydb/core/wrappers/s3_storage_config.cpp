@@ -24,42 +24,6 @@ using namespace Aws::Utils::Stream;
 
 namespace {
 
-struct TApiInitializer {
-    TApiInitializer() {
-        InitAPI(Options);
-    }
-
-    ~TApiInitializer() {
-        ShutdownAPI(Options);
-    }
-
-private:
-    SDKOptions Options;
-};
-
-class TApiOwner {
-public:
-    void Ref() {
-        auto guard = Guard(Mutex);
-        if (!RefCount++) {
-            Y_ABORT_UNLESS(!ApiInitializer);
-            ApiInitializer.emplace();
-        }
-    }
-
-    void UnRef() {
-        auto guard = Guard(Mutex);
-        if (!--RefCount) {
-            ApiInitializer.reset();
-        }
-    }
-
-private:
-    ui64 RefCount = 0;
-    TMutex Mutex;
-    std::optional<TApiInitializer> ApiInitializer;
-};
-
 namespace NPrivate {
 
 template <class TSettings>
@@ -97,14 +61,6 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 } // namespace NPrivate
 
 } // anonymous
-
-TS3User::TS3User() {
-    Singleton<TApiOwner>()->Ref();
-}
-
-TS3User::~TS3User() {
-    Singleton<TApiOwner>()->UnRef();
-}
 
 class TS3ThreadsPoolByEndpoint {
 private:

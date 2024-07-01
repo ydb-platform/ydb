@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NKikimr::NOlap::TColumnLoader GetColumnLoader(const ui32 columnId) const {
             arrow::FieldVector v = {std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>())};
             auto schema = std::make_shared<arrow::Schema>(v);
-            return NKikimr::NOlap::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(), schema, columnId);
+            return NKikimr::NOlap::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(), schema, nullptr, columnId);
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {

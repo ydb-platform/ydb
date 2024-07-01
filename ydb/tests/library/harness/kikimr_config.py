@@ -396,6 +396,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
+            if not "local_pg_wire_config" in self.yaml_config:
+                self.yaml_config["local_pg_wire_config"] = {}
+            self.yaml_config['local_pg_wire_config']['listening_port'] = 5432
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

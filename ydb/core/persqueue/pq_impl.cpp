@@ -4366,12 +4366,16 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
     TxQueue.clear();
 
     std::deque<std::pair<ui64, ui64>> plannedTxs;
+    const auto& ctx = ActorContext();
 
     for (size_t i = 0; i < readRange.PairSize(); ++i) {
         auto& pair = readRange.GetPair(i);
 
         NKikimrPQ::TTransaction tx;
         Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " " <<
+                    "Tx: " << tx.DebugString());
 
         Txs.emplace(tx.GetTxId(), tx);
 
@@ -4385,6 +4389,11 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
     std::sort(plannedTxs.begin(), plannedTxs.end());
     for (auto& item : plannedTxs) {
         TxQueue.push(item);
+    }
+
+    if (!TxQueue.empty()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " " <<
+                    "top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
     }
 
     Y_UNUSED(partitionTxs);

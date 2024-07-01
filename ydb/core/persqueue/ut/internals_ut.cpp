@@ -75,7 +75,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     ui32 maxBlobSize = 8 << 20;
     TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
-    TVector<std::pair<TKey, TString>> formed;
+    TVector<TPartitionedBlob::TFormedBlobInfo> formed;
 
     TString error;
     for (ui32 i = 0; i < parts; ++i) {
@@ -88,23 +88,23 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         );
         all.push_back(clientBlob);
         auto res = blob.Add(std::move(clientBlob));
-        if (res && !res->second.empty())
-            formed.push_back(*res);
+        if (res && !res->Value.empty())
+            formed.emplace_back(*res);
     }
     UNIT_ASSERT(blob.IsComplete());
     UNIT_ASSERT(formed.size() == blob.GetFormedBlobs().size());
     for (ui32 i = 0; i < formed.size(); ++i) {
-        UNIT_ASSERT(formed[i].first == blob.GetFormedBlobs()[i].first);
-        UNIT_ASSERT(formed[i].second.size() == blob.GetFormedBlobs()[i].second);
-        UNIT_ASSERT(formed[i].second.size() <= 8_MB);
-        UNIT_ASSERT(formed[i].second.size() > 6_MB);
+        UNIT_ASSERT(formed[i].Key == blob.GetFormedBlobs()[i].OldKey);
+        UNIT_ASSERT(formed[i].Value.size() == blob.GetFormedBlobs()[i].Size);
+        UNIT_ASSERT(formed[i].Value.size() <= 8_MB);
+        UNIT_ASSERT(formed[i].Value.size() > 6_MB);
     }
     TVector<TClientBlob> real;
     ui32 nextOffset = headCompacted ? newHead.Offset : head.Offset;
     for (auto& p : formed) {
-        const char* data = p.second.c_str();
-        const char* end = data + p.second.size();
-        ui64 offset = p.first.GetOffset();
+        const char* data = p.Value.c_str();
+        const char* end = data + p.Value.size();
+        ui64 offset = p.Key.GetOffset();
         UNIT_ASSERT(offset == nextOffset);
         while(data < end) {
             auto header = ExtractHeader(data, end - data);

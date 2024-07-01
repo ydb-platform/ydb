@@ -1888,7 +1888,7 @@ void TPartition::RunPersist() {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());
         AnswerCurrentWrites(ctx);
         AnswerCurrentReplies(ctx);
-	    HaveWriteMsg = false;
+        HaveWriteMsg = false;
     }
     PersistRequest = nullptr;
 }
@@ -2078,16 +2078,85 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
+    Y_ABORT_UNLESS(PersistRequest);
+    Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
+
     if (!t.WriteInfo) {
         return;
     }
     const auto& ctx = ActorContext();
 
-    for (auto i = t.WriteInfo->BlobsFromHead.rbegin(); i != t.WriteInfo->BlobsFromHead.rend(); ++i) {
-        auto& blob = *i;
+    if (!HaveWriteMsg) {
+        BeginHandleRequests(PersistRequest.Get(), ctx);
+        if (!DiskIsFull) {
+            BeginProcessWrites(ctx);
+            BeginAppendHeadWithNewWrites(ctx);
+        }
+        HaveWriteMsg = true;
+    }
 
-        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-            .SourceId = blob.SourceId,
+    if (!t.WriteInfo->BodyKeys.empty()) {
+        PartitionedBlob = TPartitionedBlob(Partition,
+                                           NewHead.Offset,
+                                           "", // SourceId
+                                           0,  // SeqNo
+                                           1,  // TotalParts
+                                           0,  // TotalSize
+                                           Head,
+                                           NewHead,
+                                           Parameters->HeadCleared,  // headCleared
+                                           Head.PackedSize != 0,     // needCompactHead
+                                           MaxBlobSize);
+
+        for (auto& k : t.WriteInfo->BodyKeys) {
+            auto write = PartitionedBlob.Add(k.Key, k.Size);
+            if (write && !write->Value.empty()) {
+                AddCmdWrite(write, PersistRequest.Get(), ctx);
+                CompactedKeys.emplace_back(write->Key, write->Value.size());
+                ClearOldHead(write->Key.GetOffset(), write->Key.GetPartNo(), PersistRequest.Get());
+            }
+        }
+
+    }
+
+    if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+        ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+        RenameFormedBlobs(formedBlobs,
+                          *Parameters,
+                          curWrites,
+                          PersistRequest.Get(),
+                          ctx);
+    }
+
+    if (!t.WriteInfo->BodyKeys.empty()) {
+        const auto& last = t.WriteInfo->BodyKeys.back();
+
+        NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
+    }
+
+    if (!t.WriteInfo->BlobsFromHead.empty()) {
+        auto& first = t.WriteInfo->BlobsFromHead.front();
+        NewHead.PartNo = first.GetPartNo();
+
+        Parameters->CurOffset = NewHead.Offset;
+        Parameters->HeadCleared = !t.WriteInfo->BodyKeys.empty();
+
+        PartitionedBlob = TPartitionedBlob(Partition,
+                                           NewHead.Offset,
+                                           first.SourceId,
+                                           first.SeqNo,
+                                           first.GetTotalParts(),
+                                           first.GetTotalSize(),
+                                           Head,
+                                           NewHead,
+                                           Parameters->HeadCleared, // headCleared
+                                           false,                   // needCompactHead
+                                           MaxBlobSize,
+                                           first.GetPartNo());
+
+        for (auto& blob : t.WriteInfo->BlobsFromHead) {
+            TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = blob.SourceId,
                 .SeqNo = blob.SeqNo,
                 .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
                 .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
@@ -2103,12 +2172,17 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-        }, std::nullopt};
-        msg.Internal = true;
-        TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
+            }, std::nullopt};
+            msg.Internal = true;
 
-        UserActionAndTxPendingCommit.emplace_front(std::move(message));
+            ExecRequest(msg, *Parameters, PersistRequest.Get());
+
+            auto& info = TxSourceIdForPostPersist[blob.SourceId];
+            info.SeqNo = blob.SeqNo;
+            info.Offset = NewHead.Offset;
+        }
     }
+
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
 }
 

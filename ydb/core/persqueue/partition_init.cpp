@@ -19,8 +19,8 @@ bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TP
 
 TInitializer::TInitializer(TPartition* partition)
     : Partition(partition)
-    , InProgress(false) {
-
+    , InProgress(false)
+{
     Steps.push_back(MakeHolder<TInitConfigStep>(this));
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
     Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));

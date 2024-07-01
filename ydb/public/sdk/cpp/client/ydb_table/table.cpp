@@ -2340,10 +2340,21 @@ TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescr
     : TChangefeedDescription(FromProto(proto))
 {}
 
+TChangefeedDescription::TInitialScanProgress::TInitialScanProgress()
+    : PartsTotal(0)
+    , PartsCompleted(0)
+{}
+
 TChangefeedDescription::TInitialScanProgress::TInitialScanProgress(ui32 total, ui32 completed)
     : PartsTotal(total)
     , PartsCompleted(completed)
 {}
+
+TChangefeedDescription::TInitialScanProgress& TChangefeedDescription::TInitialScanProgress::operator+=(const TInitialScanProgress& other) {
+    PartsTotal += other.PartsTotal;
+    PartsCompleted += other.PartsCompleted;
+    return *this;
+}
 
 ui32 TChangefeedDescription::TInitialScanProgress::GetPartsTotal() const {
     return PartsTotal;

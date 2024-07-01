@@ -33,6 +33,7 @@ jobs:
         echo "Result code: $http_code"
         if [ "$http_code" != "200" ];then
           echo "HTTP result code is not 200, exiting"
+          echo "$j1"
           exit 1
         fi
         # echo "$j1"

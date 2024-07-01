@@ -626,6 +626,13 @@ message TConveyorConfig {
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
+    optional double WorkersCountDouble = 5;
+}
+
+message TLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 Limit = 2;
+    optional uint64 PeriodMilliSeconds = 3 [default = 1000];
 }
 
 message TExternalIndexConfig {
@@ -1863,6 +1870,7 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
+    optional TLimiterConfig CompDiskLimiterConfig = 79;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

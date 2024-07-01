@@ -199,6 +199,8 @@ public:
 private:
     EStage Stage = EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    TString AbortedReason;
+
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;

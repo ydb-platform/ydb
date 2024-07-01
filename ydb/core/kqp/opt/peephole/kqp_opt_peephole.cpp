@@ -341,9 +341,9 @@ TKqpProgram PropagateWideBlockThroughChannels(const TDqPhyStage& stage, THashMap
     }
 
     TVector<const TTypeAnnotationNode*> argTypes;
-    for (const auto& arg : newStage.Program().Args()) {
-        YQL_ENSURE(arg.Ref().GetTypeAnn());
-        argTypes.push_back(arg.Ref().GetTypeAnn());
+    for (const auto& [_, arg] : argsMap) {
+        YQL_ENSURE(arg->GetTypeAnn());
+        argTypes.push_back(arg->GetTypeAnn());
     }
 
     // TODO: get rid of TKqpProgram-callable (YQL-10078)

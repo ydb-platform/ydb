@@ -52,6 +52,7 @@ SRCS(
     ssa_program_optimizer.cpp
     special_keys.cpp
     simple_arrays_cache.cpp
+    process_columns.cpp
 )
 
 END()

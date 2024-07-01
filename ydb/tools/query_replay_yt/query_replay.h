@@ -62,6 +62,7 @@ struct TQueryReplayEvents {
         bool Success;
         TCheckQueryPlanStatus Status = Unspecified;
         TString Message;
+        TString Plan;
 
         TEvCompileResponse(bool success)
             : Success(success)

@@ -221,6 +221,7 @@ public:
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , FunctionRegistry(functionRegistry)
     {
+        Config->EnableKqpScanQueryStreamLookup = true;
     }
 
     void Bootstrap() {
@@ -278,8 +279,16 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
                 AsyncCompileResult = KqpHost->PrepareGenericScript(Query->Text, prepareSettings);
                 break;
-            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
-            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY: {
+                prepareSettings.ConcurrentResults = false;
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                break;
+            }
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY: {
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                break;
+            }
+
             default:
                 YQL_ENSURE(false, "Unexpected query type: " << Query->Settings.QueryType);
         }

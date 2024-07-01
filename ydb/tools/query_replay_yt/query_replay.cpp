@@ -17,7 +17,8 @@ void TQueryReplayConfig::ParseConfig(int argc, const char** argv) {
     opts.AddLongOption("cluster", "YT cluster").StoreResult(&Cluster).Required();
     opts.AddLongOption("src-path", "Source table path").StoreResult(&SrcPath).Required();
     opts.AddLongOption("dst-path", "Target table path").StoreResult(&DstPath).Required();
-    opts.AddLongOption("threads", "Number of ActorSystem threads").StoreResult(&DstPath);
+    opts.AddLongOption("threads", "Number of ActorSystem threads").StoreResult(&ActorSystemThreadsCount);
+    opts.AddLongOption("udf-file", "UDFS to load").AppendTo(&UdfFiles);
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
 }

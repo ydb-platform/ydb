@@ -14,7 +14,7 @@ namespace NKikimr::NConveyor {
 class TWorkerTask {
 private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
-    YDB_READONLY_DEF(NActors::TActorId, OwnerId);
+    YDB_READONLY_DEF(std::optional<NActors::TActorId>, OwnerId);
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
@@ -28,7 +28,7 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId, std::shared_ptr<TTaskSignals> taskSignals)
+    TWorkerTask(ITask::TPtr task, const std::optional<NActors::TActorId>& ownerId, std::shared_ptr<TTaskSignals> taskSignals)
         : Task(task)
         , OwnerId(ownerId)
         , TaskSignals(taskSignals)
@@ -71,7 +71,7 @@ struct TEvInternal {
     private:
         using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TMonotonic, StartInstant);
-        YDB_READONLY_DEF(NActors::TActorId, OwnerId);
+        YDB_READONLY_DEF(std::optional<NActors::TActorId>, OwnerId);
     public:
         TEvTaskProcessedResult(const TWorkerTask& originalTask, const TString& errorMessage)
             : TBase(TConclusionStatus::Fail(errorMessage))

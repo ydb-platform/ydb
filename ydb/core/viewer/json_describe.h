@@ -201,13 +201,12 @@ public:
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> GetCacheDescribeSchemeInfo() {
         const auto& entry = CacheResult->Request.Get()->ResultSet.front();
         const auto& path = Event->Get()->Request.GetParams().Get("path");
-        const auto& pathId = TPathId();
         const auto& schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
         result->SetPath(path);
-        result->SetPathId(pathId.LocalPathId);
-        result->SetPathOwnerId(pathId.OwnerId);
+        result->SetPathId(entry.Self->Info.GetPathId());
+        result->SetPathOwnerId(entry.Self->Info.GetSchemeshardId());
 
         auto* pathDescription = result->MutablePathDescription();
         auto* self = pathDescription->MutableSelf();

@@ -979,6 +979,8 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
     callback();
+    // To ensure callback is destroyed before switchHandler.
+    callback.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

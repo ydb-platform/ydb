@@ -21,7 +21,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
-        if (Targets.contains(ev->Cookie)) {
+        if (!Targets.contains(ev->Cookie)) {
             LOG_W("Unknown describe response"
                 << ": cookie# " << ev->Cookie);
             return;
@@ -184,6 +184,7 @@ public:
     }
 
     bool DescribeReplication(TReplication::TPtr replication) {
+        Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
 

@@ -411,6 +411,15 @@ static TString ValueOr(const std::optional<T>& value, const U& orValue) {
     }
 }
 
+template <typename U>
+static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
+    if (value) {
+        return TStringBuilder() << FloatToString(*value, PREC_POINT_DIGITS, 2) << "%";
+    } else {
+        return TStringBuilder() << orValue;
+    }
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
@@ -420,7 +429,7 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         if (ShowStats) {
             const auto& stats = desc.GetRunningState().GetStats();
             Cout << Endl << "Lag: " << ValueOr(stats.GetLag(), "n/a");
-            Cout << Endl << "Initial Scan progress: " << ValueOr(stats.GetInitialScanProgress(), "n/a");
+            Cout << Endl << "Initial Scan progress: " << ProgressOr(stats.GetInitialScanProgress(), "n/a");
         }
         break;
     case NReplication::TReplicationDescription::EState::Error:
@@ -461,7 +470,7 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
             if (ShowStats) {
                 row
                     .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
-                    .Column(5, ValueOr(item.Stats.GetInitialScanProgress(), "n/a"));
+                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
             }
         }
         Cout << Endl << "Items:" << Endl << table;

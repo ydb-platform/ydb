@@ -118,8 +118,6 @@ typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
 			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v0)), 0xfff0,	\
 			(__m512i)(v3))))));
 #endif
-#else
-#error -- Implementation supports only microarchitectures with support for Advanced Vector Extensions (AVX2 or AVX512).
 #endif
 
 class ChaCha512

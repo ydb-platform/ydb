@@ -28,6 +28,7 @@ void ChaCha512::SetKey(const ui8* key, size_t size)
 	d1_ = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[0]);
 	d2_ = (vec256)_mm256_broadcastsi128_si256(((__m128i*)key)[1]);
 #else
+	Y_UNUSED(key);
 	return;
 #endif
 }
@@ -43,6 +44,8 @@ void ChaCha512::SetIV(const ui8* iv, const ui8* blockIdx)
 		((unsigned int *)nonce)[0], ((unsigned int *)nonce)[1]
 	};
 #else
+	Y_UNUSED(counter);
+	Y_UNUSED(nonce);
 	return;
 #endif
 
@@ -61,15 +64,14 @@ void ChaCha512::SetIV(const ui8* iv) {
 
 void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 {
-	ui32 i, j;
 	ui32 *op=(ui32 *)ciphertext, *ip=(ui32 *)plaintext;
 #ifdef __AVX512F__
-    for (j=0; j < len/768; j++) {
+    for (ui32 j=0; j < len/768; j++) {
 		vec512 v0=q0_, v1=q1_, v2=q2_, v3=q3_;
 		vec512 v4=q0_, v5=q1_, v6=q2_, v7=ADD512_64(q3_, FOUR);
 		vec512 v8=q0_, v9=q1_, v10=q2_, v11=ADD512_64(v7, FOUR);
 
-		for (i = rounds_/2; i; i--) {
+		for (ui32 i = rounds_/2; i; i--) {
 			DQROUND_VECTORS_512(v0,v1,v2,v3)
 			DQROUND_VECTORS_512(v4,v5,v6,v7)
 			DQROUND_VECTORS_512(v8,v9,v10,v11)
@@ -91,7 +93,7 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 		vec512 v0=q0_, v1=q1_, v2=q2_, v3=q3_;
 		vec512 v4=q0_, v5=q1_, v6=q2_, v7=ADD512_64(q3_, FOUR);
 
-		for (i = rounds_/2; i; i--) {
+		for (ui32 i = rounds_/2; i; i--) {
 			DQROUND_VECTORS_512(v0,v1,v2,v3)
 			DQROUND_VECTORS_512(v4,v5,v6,v7)
 		}
@@ -110,7 +112,7 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 	if (len >= 256) {
 		vec512 v0=q0_, v1=q1_, v2=q2_, v3=q3_;
 
-		for (i = rounds_/2; i; i--) {
+		for (ui32 i = rounds_/2; i; i--) {
 			DQROUND_VECTORS_512(v0,v1,v2,v3)
 		}
 
@@ -127,11 +129,13 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 		vec512 v0=q0_, v1=q1_, v2=q2_, v3=q3_;
 		__attribute__ ((aligned (16))) vec128 buf[4];
 
-		for (i = rounds_/2; i; i--) {
+		for (ui32 i = rounds_/2; i; i--) {
 			DQROUND_VECTORS_512(v0,v1,v2,v3)
 		}
 		v0 = ADD512_32(v0,q0_); v1 = ADD512_32(v1,q1_);
 		v2 = ADD512_32(v2,q2_); v3 = ADD512_32(v3,q3_);
+
+		ui32 j = 0;
 
 		if (len >= 192) {
 			WRITE_XOR_256(ip, op, 0, LOW256(v0), LOW256(v1), LOW256(v2), LOW256(v3));
@@ -198,7 +202,7 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 			}
 		}
 
-		for (i=(len & ~15); i<len; i++) {
+		for (ui32 i=(len & ~15); i<len; i++) {
 			((unsigned char *)op)[i] = ((unsigned char *)ip)[i] ^ ((unsigned char *)buf)[i-j];
 		}
 
@@ -318,6 +322,9 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 		}
 	}
 #else
+	Y_UNUSED(ip);
+	Y_UNUSED(op);
+	Y_UNUSED(len);
     return;
 #endif
 }

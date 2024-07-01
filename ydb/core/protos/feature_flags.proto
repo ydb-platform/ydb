@@ -143,4 +143,5 @@ message TFeatureFlags {
     optional bool EnableTableDatetime64 = 128 [default = false];
     optional bool EnableResourcePools  = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableSingleCompositeActionGroup = 131 [default = false];
 }

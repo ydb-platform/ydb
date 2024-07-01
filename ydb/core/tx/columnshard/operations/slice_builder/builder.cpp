@@ -43,10 +43,10 @@ bool TBuildSlicesTask::DoExecute() {
         return true;
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    OriginalBatch = NArrow::ExtractColumnsOptional(OriginalBatch, indexSchema->field_names());
-    if (!OriginalBatch) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString());
-        ReplyError("cannot adapt schema");
+    auto reorderConclusion = NArrow::TColumnOperator().Reorder(OriginalBatch, indexSchema->field_names());
+    if (reorderConclusion.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
+        ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
         return true;
     }
     if (!OriginalBatch->schema()->Equals(indexSchema)) {

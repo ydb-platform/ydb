@@ -404,8 +404,8 @@ public:
     }
 
     static double GetLoadAverage(const NKikimrViewer::TComputeNodeInfo& nodeInfo) {
-        if (nodeInfo.LoadAverageSize() > 0) {
-            return nodeInfo.GetLoadAverage(0);
+        if (nodeInfo.LoadAverageSize() > 0 && nodeInfo.GetNumberOfCpus() > 0) {
+            return nodeInfo.GetLoadAverage(0) * 100 / nodeInfo.GetNumberOfCpus();
         }
         return 0;
     }

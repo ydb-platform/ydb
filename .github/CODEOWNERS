@@ -21,3 +21,5 @@
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
+
+/ydb/core/config/ut @ydb-platform/core

@@ -25,13 +25,17 @@ private:
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     YDB_READONLY(bool, NeedMinMax, false);
     YDB_READONLY(bool, IsSorted, false);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultWriteValue);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultReadValue);
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 
 public:
 
-    TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted);
+    TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, 
+        const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted,
+        const std::shared_ptr<arrow::Scalar>& defaultWriteValue, const std::shared_ptr<arrow::Scalar>& defaultReadValue);
 
     TColumnSaver GetColumnSaver() const {
         NArrow::NTransformation::ITransformer::TPtr transformer = GetSaveTransformer();

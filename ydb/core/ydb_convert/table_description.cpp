@@ -1002,6 +1002,12 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
             break;
         }
 
+        if (stream.HasScanProgress()) {
+            auto& scanProgress = *changefeed->mutable_initial_scan_progress();
+            scanProgress.set_parts_total(stream.GetScanProgress().GetShardsTotal());
+            scanProgress.set_parts_completed(stream.GetScanProgress().GetShardsCompleted());
+        }
+
         FillAttributesImpl(*changefeed, stream);
     }
 }

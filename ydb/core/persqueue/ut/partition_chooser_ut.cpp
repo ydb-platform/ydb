@@ -126,20 +126,27 @@ Y_UNIT_TEST(THashChooserTest) {
 
     NKikimr::NPQ::NPartitionChooser::THashChooser<NKikimr::NPQ::NPartitionChooser::TAsIsSharder> chooser(config);
 
+    auto sourceId = [](size_t expectedPartition) {
+        NYql::NDecimal::TUint128 m = -1;
+        NYql::NDecimal::TUint128 l = m / 4;
+
+        return AsKeyBound(l * expectedPartition + 7);
+    };
+
     {
-        auto value = chooser.GetPartition("A");
+        auto value = chooser.GetPartition(sourceId(0));
         UNIT_ASSERT_VALUES_EQUAL(value->PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(value->TabletId, 1000);
     }
 
     {
-        auto value = chooser.GetPartition("B");
+        auto value = chooser.GetPartition(sourceId(1));
         UNIT_ASSERT_VALUES_EQUAL(value->PartitionId, 1);
         UNIT_ASSERT_VALUES_EQUAL(value->TabletId, 1001);
     }
 
     {
-        auto value = chooser.GetPartition("C");
+        auto value = chooser.GetPartition(sourceId(2));
         UNIT_ASSERT_VALUES_EQUAL(value->PartitionId, 2);
         UNIT_ASSERT_VALUES_EQUAL(value->TabletId, 1002);
     }

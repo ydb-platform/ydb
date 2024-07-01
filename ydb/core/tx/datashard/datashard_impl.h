@@ -37,6 +37,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -1322,8 +1323,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
@@ -1494,8 +1495,10 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
-    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId,
+        NWilson::TTraceId traceId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId,
+        NWilson::TTraceId traceId);
 
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
@@ -1984,7 +1987,9 @@ public:
             const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
-            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0,
+            const TActorId& sessionId = {},
+            NWilson::TTraceId traceId = {});
     TMonotonic ConfirmReadOnlyLease();
     void ConfirmReadOnlyLease(TMonotonic ts);
     void SendWithConfirmedReadOnlyLease(
@@ -1992,23 +1997,27 @@ public:
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendWithConfirmedReadOnlyLease(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendImmediateReadResult(
         TMonotonic readTime,
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendImmediateReadResult(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
     void CheckMediatorStateRestored();
@@ -2652,11 +2661,16 @@ private:
         TActorId Target;
         THolder<IEventBase> Event;
         ui64 Cookie;
+        TActorId SessionId;
+        NWilson::TSpan Span;
 
-        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie)
+        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie,
+                const TActorId& sessionId, NWilson::TSpan&& span)
             : Target(target)
             , Event(std::move(event))
             , Cookie(cookie)
+            , SessionId(sessionId)
+            , Span(std::move(span))
         { }
     };
 
@@ -3093,7 +3107,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-            HFunc(TEvDataShard::TEvStatisticsScanRequest, Handle);
+            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3191,7 +3205,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
-            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);            
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
             for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
@@ -3295,6 +3309,7 @@ void SendViaSession(const TActorId& sessionId,
                     const TActorId& src,
                     IEventBase* event,
                     ui32 flags = 0,
-                    ui64 cookie = 0);
+                    ui64 cookie = 0,
+                    NWilson::TTraceId traceId = {});
 
 }}

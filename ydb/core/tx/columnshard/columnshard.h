@@ -1,19 +1,24 @@
 #pragma once
 #include "defs.h"
 #include "blob.h"
+#include "common/snapshot.h"
 
+#include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/write_data.h>
-
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
-// TODO: temporarily reuse datashard TEvScan (KIKIMR-11069) and TEvPeriodicTableStats
-#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr {
+
+namespace NOlap {
+class TPKRangesFilter;
+}
 
 namespace NColumnShard {
 
@@ -82,12 +87,41 @@ struct TEvColumnShard {
         EvDataSharingCheckStatusResult,
         EvApplyLinksModification,
         EvApplyLinksModificationFinished,
+        EvInternalScan,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COLUMNSHARD),
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COLUMNSHARD)");
+
+    struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
+    private:
+        YDB_READONLY(ui64, PathId, 0);
+        YDB_ACCESSOR(bool, Reverse, false);
+        YDB_ACCESSOR(ui32, ItemsLimit, 0);
+        YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
+        YDB_READONLY_DEF(std::vector<TString>, ColumnNames);
+        std::set<ui32> ColumnIdsSet;
+        std::set<TString> ColumnNamesSet;
+    public:
+        std::optional<NOlap::TSnapshot> ReadFromSnapshot;
+        std::optional<NOlap::TSnapshot> ReadToSnapshot;
+        std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
+    public:
+        void AddColumn(const ui32 id, const TString& columnName) {
+            AFL_VERIFY(ColumnIdsSet.emplace(id).second);
+            ColumnIds.emplace_back(id);
+            AFL_VERIFY(ColumnNamesSet.emplace(columnName).second);
+            ColumnNames.emplace_back(columnName);
+        }
+
+        TEvInternalScan(const ui64 pathId)
+            : PathId(pathId)
+        {
+
+        }
+    };
 
     struct TEvProposeTransaction
         : public TEventPB<TEvProposeTransaction,
@@ -208,12 +242,14 @@ struct TEvColumnShard {
         TEvWrite() = default;
 
         TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
-                 const TString& dedupId, const TString& data, const ui32 writePartId) {
+                 const TString& dedupId, const TString& data, const ui32 writePartId,
+                const NEvWrite::EModificationType modificationType) {
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTableId(tableId);
             Record.SetDedupId(dedupId);
             Record.SetData(data);
             Record.SetWritePartId(writePartId);
+            Record.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(modificationType));
             longTxId.ToProto(Record.MutableLongTxId());
         }
 
@@ -254,7 +290,6 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
-
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

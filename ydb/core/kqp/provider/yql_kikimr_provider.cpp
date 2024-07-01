@@ -584,10 +584,14 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         case EDataSlot::Int8:
         case EDataSlot::Int32:
+        case EDataSlot::Date32:
             protoValue.SetInt32(FromString<i32>(value));
             break;
         case EDataSlot::Int64:
         case EDataSlot::Interval:
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+        case EDataSlot::Interval64:
             protoValue.SetInt64(FromString<i64>(value));
             break;
         case EDataSlot::Uint64:
@@ -723,10 +727,14 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             break;
         case EDataSlot::Int8:
         case EDataSlot::Int32:
+        case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));
             break;
         case EDataSlot::Int64:
         case EDataSlot::Interval:
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+        case EDataSlot::Interval64:
             protoValue.set_int64_value(FromString<i64>(value));
             break;
         case EDataSlot::Uint64:

@@ -19,7 +19,7 @@ bool DatabasesAreSame(std::shared_ptr<TDbInfo> lhs, std::shared_ptr<TDbInfo> rhs
     if (!lhs || !rhs) {
         return false;
     }
-    return lhs->path() == rhs->path() && lhs->endpoint() == rhs->endpoint();
+    return lhs->name() == rhs->name() && lhs->path() == rhs->path() && lhs->endpoint() == rhs->endpoint();
 }
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
@@ -108,8 +108,10 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (Subsession) {
         PendingToken.Clear();
-        Subsession->Close(TDuration::Zero());
+        OldSubsession = std::move(Subsession);
+        OldSubsession->Close(TDuration::Zero());
     }
+
     auto clientSettings = SubclientSettings;
     clientSettings
         .Database(db->path())
@@ -149,8 +151,13 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
             }
         })
         .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
+            if (ev.IsSuccess()) {
+                // The subsession was closed by the federated write session itself while creating a new subsession.
+                // In this case we get SUCCESS status and don't need to propagate it further.
+                return;
+            }
             if (auto self = selfCtx->LockShared()) {
-                with_lock(self->Lock) {
+                with_lock (self->Lock) {
                     self->CloseImpl(ev);
                 }
             }
@@ -293,8 +300,10 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
     auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
             if (auto self = selfCtx->LockShared()) {
+                std::shared_ptr<NTopic::IWriteSession> old;
                 with_lock(self->Lock) {
                     self->UpdateFederationStateImpl();
+                    old = std::move(self->OldSubsession);
                 }
             }
         }

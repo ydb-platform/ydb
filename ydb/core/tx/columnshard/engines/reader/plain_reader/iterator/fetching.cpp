@@ -101,6 +101,23 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
+TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto filterTable = source->GetStageData().GetTable()->BuildTableOptional(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
+    if (!filterTable) {
+        return true;
+    }
+    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& i : filterTable->column(0)->chunks()) {
+        auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
+        for (ui32 i = 0; i < filterFlags->length(); ++i) {
+            filter.Add(!filterFlags->GetView(i));
+        }
+    }
+    source->MutableStageData().AddFilter(filter);
+    return true;
+}
+
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(source->GetStageData().GetTable()->BuildTable());
@@ -110,8 +127,8 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), std::make_shared<arrow::UInt64Scalar>(0), Count));
+    for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
+        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count));
     }
     source->MutableStageData().AddBatch(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns));
     return true;

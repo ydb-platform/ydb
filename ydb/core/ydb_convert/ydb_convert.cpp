@@ -15,7 +15,6 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {
@@ -1168,141 +1167,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromLiteralExprNode(NYql::NNodes::TExprBase maybeLiteral, TCell& cell, TMemoryPool& valueDataPool) {
-    if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
-        maybeLiteral = maybeJust.Cast().Input();
-    }
 
-    if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
-        auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
-
-        auto type = literal.Ref().GetTypeAnn();
-        auto slot = type->Cast<NYql::TDataExprType>()->GetSlot();
-        auto value = literal.Literal().Value();
-
-        switch (slot) {
-            case NYql::NUdf::EDataSlot::Bool: {
-                ui8 v = FromString<bool>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Uint8: {
-                ui8 v = FromString<ui8>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Int8: {
-                i8 v = FromString<i8>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Uint32: {
-                ui32 v = FromString<ui32>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Int32: {
-                i32 v = FromString<i32>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Uint64: {
-                ui64 v = FromString<ui64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Int64: {
-                i64 v = FromString<i64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Float: {
-                float v = FromString<float>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Double: {
-                double v = FromString<double>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break; 
-            }
-            case NYql::NUdf::EDataSlot::Date: {
-                ui16 v = FromString<ui32>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Datetime: {
-                ui32 v = FromString<ui32>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Utf8:
-            case NYql::NUdf::EDataSlot::String:
-            case NYql::NUdf::EDataSlot::Yson:
-            case NYql::NUdf::EDataSlot::Json: {
-                cell = TCell(value.Data(), value.Size());
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Interval: {
-                i64 v = FromString<i64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Interval64: {
-                i64 v = FromString<i64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;
-            }
-            case NYql::NUdf::EDataSlot::Timestamp: {
-                ui64 v = FromString<ui64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break; 
-            }
-            case NYql::NUdf::EDataSlot::Timestamp64: {
-                i64 v = FromString<i64>(value);
-                cell = TCell((const char*)&v, sizeof(v));
-                break;  
-            }
-            case NYql::NUdf::EDataSlot::DyNumber: {
-                const auto dyNumber = NDyNumber::ParseDyNumberString(value);
-                if (!dyNumber.Defined()) {
-                    return false;
-                }
-                const auto dyNumberInPool = valueDataPool.AppendString(TStringBuf(*dyNumber));
-                cell = TCell(dyNumberInPool.data(), dyNumberInPool.size());
-            }
-            case NYql::NUdf::EDataSlot::Decimal: {
-                const auto paramsDataType = type->Cast<NYql::TDataExprParamsType>();
-                auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-                auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
-
-                auto v = NYql::NDecimal::FromString(literal.Cast<NYql::NNodes::TCoDecimal>().Literal().Value(), precision, scale);
-                const auto p = reinterpret_cast<ui8*>(&v);
-
-                std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64>>();
-                valInPool.first = *reinterpret_cast<ui64*>(p);
-                valInPool.second = *reinterpret_cast<ui64*>(p + 8);
-                cell = TCell((const char*)&valInPool, sizeof(valInPool));
-            }
-            case NYql::NUdf::EDataSlot::Uuid: {
-                const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
-
-                std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64>>();
-                valInPool.first = uuidData[0]; // low128
-                valInPool.second = uuidData[1]; // high128
-                cell = TCell((const char*)&valInPool, sizeof(valInPool));
-                break;
-            }
-            default:
-                YQL_ENSURE(false, "Unexpected type slot " << slot);
-        }   
-
-
-        return true;
-    }
-
-    return false;
-}
 
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)

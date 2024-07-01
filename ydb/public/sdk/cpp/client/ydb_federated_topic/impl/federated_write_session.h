@@ -123,6 +123,7 @@ private:
     TAdaptiveLock Lock;
 
     std::shared_ptr<NTopic::IWriteSession> Subsession;
+    std::shared_ptr<NTopic::IWriteSession> OldSubsession;
 
     std::shared_ptr<NTopic::TWriteSessionEventsQueue> ClientEventsQueue;
 

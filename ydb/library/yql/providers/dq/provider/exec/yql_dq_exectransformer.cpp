@@ -234,7 +234,6 @@ struct TUploadCache {
 struct TPublicIds {
     THashMap<ui32, ui32> AllPublicIds;
     THashMap<ui64, ui32> Stage2publicId;
-    THashMap<ui32, ui64> PublicId2Stage;
     size_t GraphsCount = 0;
 
     using TPtr = std::shared_ptr<TPublicIds>;
@@ -1231,7 +1230,6 @@ private:
                     if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                         if (const auto settings = NDq::TDqStageSettings::Parse(stage); settings.LogicalId) {
                             publicIds->Stage2publicId[settings.LogicalId] = *publicId;
-                            publicIds->PublicId2Stage[*publicId] = settings.LogicalId;
                         }
                         publicIds->AllPublicIds.emplace(*publicId, 0U);
                     }
@@ -1629,12 +1627,9 @@ private:
                     if (publicId.second) {
                         p.Counters.ConstructInPlace();
                         p.Counters->Running = p.Counters->Total = publicId.second;
-                        auto maybeStageId = publicIds->PublicId2Stage.find(publicId.first);
-                        if (maybeStageId != publicIds->PublicId2Stage.end()) {
-                            auto maybeStats = state.Stats.find(maybeStageId->second);
-                            if (maybeStats != state.Stats.end()) {
-                                p.Counters->Custom = maybeStats->second.ToMap();
-                            }
+                        auto maybeStats = state.Stats.find(publicId.first);
+                        if (maybeStats != state.Stats.end()) {
+                            p.Counters->Custom = maybeStats->second.ToMap();
                         }
                     }
                     progressWriter(p);

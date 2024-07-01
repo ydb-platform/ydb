@@ -1,5 +1,6 @@
 #include "transaction.h"
 #include "utils.h"
+#include "partition_log.h"
 
 namespace NKikimr::NPQ {
 
@@ -322,6 +323,8 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
 
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
+
+    PQ_LOG_D("save tx " << tx.DebugString());
 
     TString value;
     Y_ABORT_UNLESS(tx.SerializeToString(&value));

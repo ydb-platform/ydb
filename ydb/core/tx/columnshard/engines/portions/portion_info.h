@@ -180,6 +180,10 @@ public:
         return ShardingVersion;
     }
 
+    bool CrossSSWith(const TPortionInfo& p) const {
+        return std::min(RecordSnapshotMax(), p.RecordSnapshotMax()) <= std::max(RecordSnapshotMin(), p.RecordSnapshotMin());
+    }
+
     ui64 GetShardingVersionDef(const ui64 verDefault) const {
         return ShardingVersion.value_or(verDefault);
     }

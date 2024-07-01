@@ -647,7 +647,10 @@ void TestKeyCastForAllJoinTypes(TSession session, const TString& leftTable, cons
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
             return;
         }
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);

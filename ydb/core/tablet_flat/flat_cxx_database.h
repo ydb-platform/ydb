@@ -110,7 +110,10 @@ public:
 
     operator i64() const {
         Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
-                  || Type() == NScheme::NTypeIds::Interval)
+                  || Type() == NScheme::NTypeIds::Interval
+                  || Type() == NScheme::NTypeIds::Datetime64
+                  || Type() == NScheme::NTypeIds::Timestamp64
+                  || Type() == NScheme::NTypeIds::Interval64)
                  && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
@@ -124,7 +127,9 @@ public:
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Int32 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+                  || Type() == NScheme::NTypeIds::Date32)
+                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
@@ -230,6 +235,10 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Typ
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>

@@ -73,7 +73,7 @@ runs:
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
-          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
+          extra_params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --add-result .o --add-result .a)
         fi
         
         case "${{ inputs.build_preset }}" in
@@ -90,6 +90,7 @@ runs:
             build_type=release
             extra_params+=(--target-platform="CLANG14-LINUX-X86_64")
             extra_params+=(-DLLD_VERSION=16)
+            extra_params+=(-DSTRIP)
             ;;
           release-asan)
             build_type=release
@@ -124,7 +125,7 @@ runs:
         # to be sure
         set -o pipefail
         
-        ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
+        ./ya make --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
           "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (

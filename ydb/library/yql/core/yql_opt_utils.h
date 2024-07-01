@@ -85,6 +85,7 @@ TExprNode::TPtr ExpandAddMember(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx);
 
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns);
 inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {

@@ -212,6 +212,9 @@ jobs:
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
+    - name: Clean ya cache
+      shell: bash
+      run: ./ya gc cache
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

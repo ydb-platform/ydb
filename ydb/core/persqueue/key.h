@@ -53,6 +53,10 @@ public:
     virtual ~TKeyPrefix()
     {}
 
+    TString ToString() const {
+        return TString(Data(), Size());
+    }
+
     bool Marked(EMark mark) {
         if (Size() >= MarkedSize())
             return *PtrMark() == mark;
@@ -64,7 +68,7 @@ public:
 
 
     void SetType(EType type) {
-        if (!IsServicePartition()) {
+        if (!IsServicePartition() && !HasServiceType()) {
             *PtrType() = type;
             return;
         }
@@ -91,7 +95,6 @@ public:
                 Y_ABORT();
         }
     }
-
 
     EType GetType() const {
         switch (*PtrType()) {
@@ -130,6 +133,7 @@ protected:
         Partition.InternalPartitionId = Partition.OriginalPartitionId;
     }
 
+    bool HasServiceType() const;
 
 private:
     enum EServiceType : char {

@@ -284,8 +284,8 @@ struct TYdbSetupSettings {
 
     // Default queue settings
     FLUENT_FIELD_DEFAULT(TString, PoolId, "sample_pool_id");
-    FLUENT_FIELD_DEFAULT(ui64, ConcurrentQueryLimit, 0);
-    FLUENT_FIELD_DEFAULT(ui64, QueryCountLimit, 0);
+    FLUENT_FIELD_DEFAULT(i32, ConcurrentQueryLimit, -1);
+    FLUENT_FIELD_DEFAULT(i32, QueueSize, -1);
     FLUENT_FIELD_DEFAULT(TDuration, QueryCancelAfter, TDuration::Zero());
 };
 
@@ -294,7 +294,7 @@ private:
     TAppConfig GetAppConfig() const {
         NResourcePool::TPoolSettings defaultPoolConfig;
         defaultPoolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
-        defaultPoolConfig.QueryCountLimit = Settings_.QueryCountLimit_;
+        defaultPoolConfig.QueueSize = Settings_.QueueSize_;
         defaultPoolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
 
         TWorkloadManagerConfig workloadManagerConfig;
@@ -470,17 +470,17 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TSampleQueries::TSelect42::CheckResult(ydb.ExecuteQueryGrpc(TSampleQueries::TSelect42::Query, "another_pool_id"));
     }
 
-    Y_UNIT_TEST(ValidationOfQueryCountLimit) {
+    Y_UNIT_TEST(ValidationOfQueueSize) {
         auto settings = TYdbSetupSettings()
             .ConcurrentQueryLimit(1)
-            .QueryCountLimit(2);
+            .QueueSize(1);
         TWorkloadServiceYdbSetup ydb(settings);
 
         // Query will be executed after hanging
         auto hangingRequest = ydb.ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
         ydb.WaitQueryExecution(hangingRequest);
 
-        // One of these requests should be rejected by QueryCountLimit
+        // One of these requests should be rejected by QueueSize
         auto firstRequest = ydb.ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
         auto secondRequest = ydb.ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
         WaitAny(firstRequest.GetFuture(), secondRequest.GetFuture()).GetValue(FUTURE_WAIT_TIMEOUT);
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         const ui64 overallCountLimit = 50;
         TWorkloadServiceYdbSetup ydb(TYdbSetupSettings()
             .ConcurrentQueryLimit(activeCountLimit)
-            .QueryCountLimit(overallCountLimit));
+            .QueueSize(overallCountLimit));
 
         const auto& inFlightCoordinator = ydb.CreateInFlightCoordinator(overallCountLimit, activeCountLimit);
 

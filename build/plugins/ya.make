@@ -48,5 +48,5 @@ RECURSE(
     lib/proxy
     lib/test_const
     lib/test_const/proxy
-    lib/tests/ruff
+    lib/tests/utils
 )

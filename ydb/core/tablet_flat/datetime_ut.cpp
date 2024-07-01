@@ -21,9 +21,13 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 struct Datetime : Column<3, NScheme::NTypeIds::Datetime> {};
                 struct Timestamp : Column<4, NScheme::NTypeIds::Timestamp> {};
                 struct Interval : Column<5, NScheme::NTypeIds::Interval> {};
+                struct Date32 : Column<6, NScheme::NTypeIds::Date32> {};
+                struct Datetime64 : Column<7, NScheme::NTypeIds::Datetime64> {};
+                struct Timestamp64 : Column<8, NScheme::NTypeIds::Timestamp64> {};
+                struct Interval64 : Column<9, NScheme::NTypeIds::Interval64> {};
 
                 using TKey = TableKey<Key>;
-                using TColumns = TableColumns<Key, Date, Datetime, Timestamp, Interval>;
+                using TColumns = TableColumns<Key, Date, Datetime, Timestamp, Interval, Date32, Datetime64, Timestamp64, Interval64>;
             };
 
             struct DateKey : Table<2> {
@@ -58,8 +62,39 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 using TColumns = TableColumns<Key, Value>;
             };
 
+            struct Date32Key : Table<6> {
+                struct Key : Column<1, NScheme::NTypeIds::Date32> {};
+                struct Value : Column<2, NScheme::NTypeIds::Uint32> {};
 
-            using TTables = SchemaTables<DateValue, DateKey, DatetimeKey, TimestampKey, IntervalKey>;
+                using TKey = TableKey<Key>;
+                using TColumns = TableColumns<Key, Value>;
+            };
+
+            struct Datetime64Key : Table<7> {
+                struct Key : Column<1, NScheme::NTypeIds::Datetime64> {};
+                struct Value : Column<2, NScheme::NTypeIds::Uint32> {};
+
+                using TKey = TableKey<Key>;
+                using TColumns = TableColumns<Key, Value>;
+            };
+
+            struct Timestamp64Key : Table<8> {
+                struct Key : Column<1, NScheme::NTypeIds::Timestamp64> {};
+                struct Value : Column<2, NScheme::NTypeIds::Uint32> {};
+
+                using TKey = TableKey<Key>;
+                using TColumns = TableColumns<Key, Value>;
+            };
+
+            struct Interval64Key : Table<9> {
+                struct Key : Column<1, NScheme::NTypeIds::Interval64> {};
+                struct Value : Column<2, NScheme::NTypeIds::Uint32> {};
+
+                using TKey = TableKey<Key>;
+                using TColumns = TableColumns<Key, Value>;
+            };
+
+            using TTables = SchemaTables<DateValue, DateKey, DatetimeKey, TimestampKey, IntervalKey, Date32Key, Datetime64Key, Timestamp64Key, Interval64Key>;
             using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                              ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
         };
@@ -105,17 +140,30 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                     .Update<Schema::DateValue::Date>(Min<ui16>())
                     .Update<Schema::DateValue::Datetime>(Min<ui32>())
                     .Update<Schema::DateValue::Timestamp>(Min<ui64>())
-                    .Update<Schema::DateValue::Interval>(Min<i64>());
+                    .Update<Schema::DateValue::Interval>(Min<i64>())
+                    .Update<Schema::DateValue::Date32>(Min<i32>())
+                    .Update<Schema::DateValue::Datetime64>(Min<i64>())
+                    .Update<Schema::DateValue::Timestamp64>(Min<i64>())
+                    .Update<Schema::DateValue::Interval64>(Min<i64>());
                 db.Table<Schema::DateValue>().Key(2)
                     .Update<Schema::DateValue::Date>((ui16)100)
                     .Update<Schema::DateValue::Datetime>((ui32)100)
                     .Update<Schema::DateValue::Timestamp>((ui64)100)
-                    .Update<Schema::DateValue::Interval>((i64)100);
+                    .Update<Schema::DateValue::Interval>((i64)100)
+                    .Update<Schema::DateValue::Date32>((i32)-100)
+                    .Update<Schema::DateValue::Datetime64>((i64)-100)
+                    .Update<Schema::DateValue::Timestamp64>((i64)-100)
+                    .Update<Schema::DateValue::Interval64>((i64)-100);
+                    
                 db.Table<Schema::DateValue>().Key(3)
                     .Update<Schema::DateValue::Date>(Max<ui16>())
                     .Update<Schema::DateValue::Datetime>(Max<ui32>())
                     .Update<Schema::DateValue::Timestamp>(Max<ui64>())
-                    .Update<Schema::DateValue::Interval>(Max<i64>());
+                    .Update<Schema::DateValue::Interval>(Max<i64>())
+                    .Update<Schema::DateValue::Date32>(Max<i32>())
+                    .Update<Schema::DateValue::Datetime64>(Max<i64>())
+                    .Update<Schema::DateValue::Timestamp64>(Max<i64>())
+                    .Update<Schema::DateValue::Interval64>(Max<i64>());
 
                 // DateKey
                 for (ui16 i = 1; i <= 10; ++i) {
@@ -126,6 +174,14 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                     db.Table<Schema::TimestampKey>().Key((ui64)i)
                         .Update<Schema::DateKey::Value>(i);
                     db.Table<Schema::IntervalKey>().Key((i64)i - 5)
+                        .Update<Schema::DateKey::Value>(i);
+                    db.Table<Schema::Date32Key>().Key(i)
+                        .Update<Schema::Date32Key::Value>(i);
+                    db.Table<Schema::Datetime64Key>().Key((ui32)i)
+                        .Update<Schema::DateKey::Value>(i);
+                    db.Table<Schema::Timestamp64Key>().Key((ui64)i)
+                        .Update<Schema::DateKey::Value>(i);
+                    db.Table<Schema::Interval64Key>().Key((i64)i - 5)
                         .Update<Schema::DateKey::Value>(i);
                 }
 
@@ -158,14 +214,26 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                     UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Datetime>(), Min<ui32>());
                     UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Timestamp>(), Min<ui64>());
                     UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Interval>(), Min<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Date32>(), Min<i32>());
+                    UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Datetime64>(), Min<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Timestamp64>(), Min<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row1.GetValue<Schema::DateValue::Interval64>(), Min<i64>());
                     UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Date>(), (ui16)100);
                     UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Datetime>(), (ui32)100);
                     UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Timestamp>(), (ui64)100);
                     UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Interval>(), (i64)100);
+                    UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Date32>(), (i32)-100);
+                    UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Datetime64>(), (i64)-100);
+                    UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Timestamp64>(), (i64)-100);
+                    UNIT_ASSERT_VALUES_EQUAL(row2.GetValue<Schema::DateValue::Interval64>(), (i64)-100);
                     UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Date>(), Max<ui16>());
                     UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Datetime>(), Max<ui32>());
                     UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Timestamp>(), Max<ui64>());
                     UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Interval>(), Max<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Date32>(), Max<i32>());
+                    UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Datetime64>(), Max<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Timestamp64>(), Max<i64>());
+                    UNIT_ASSERT_VALUES_EQUAL(row3.GetValue<Schema::DateValue::Interval64>(), Max<i64>());
                 }
 
                 // DateKey
@@ -199,6 +267,38 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                         return false;
                     UNIT_ASSERT_VALUES_EQUAL(row.GetValue<Schema::IntervalKey::Value>(), i);
                 }
+
+                // Date32Key
+                for (ui16 i = 1; i <= 10; ++i) {
+                    auto row = db.Table<Schema::Date32Key>().Key(i).Select();
+                    if (!IsReady(row))
+                        return false;
+                    UNIT_ASSERT_VALUES_EQUAL(row.GetValue<Schema::Date32Key::Value>(), (ui16)i);
+                }
+
+                // Datetime64Key
+                for (ui32 i = 1; i <= 10; ++i) {
+                    auto row = db.Table<Schema::Datetime64Key>().Key(i).Select();
+                    if (!IsReady(row))
+                        return false;
+                    UNIT_ASSERT_VALUES_EQUAL(row.GetValue<Schema::Datetime64Key::Value>(), i);
+                }
+
+                // Timestamp64Key
+                for (ui64 i = 1; i <= 10; ++i) {
+                    auto row = db.Table<Schema::Timestamp64Key>().Key(i).Select();
+                    if (!IsReady(row))
+                        return false;
+                    UNIT_ASSERT_VALUES_EQUAL(row.GetValue<Schema::Timestamp64Key::Value>(), i);
+                }
+
+                // Interval64Key
+                for (i16 i = 1; i <= 10; ++i) {
+                    auto row = db.Table<Schema::Interval64Key>().Key(i - 5).Select();
+                    if (!IsReady(row))
+                        return false;
+                    UNIT_ASSERT_VALUES_EQUAL(row.GetValue<Schema::Interval64Key::Value>(), i);
+                }                
 
                 return true;
             }
@@ -275,6 +375,66 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                     }
                     UNIT_ASSERT(rowset.EndOfSet());
                 }
+
+                // Date32Key
+                {
+                    auto rowset = db.Table<Schema::Date32Key>().GreaterOrEqual(5).Select();
+                    if (!rowset.IsReady())
+                        return false;
+                    for (ui16 i = 5; i <= 10; ++i) {
+                        UNIT_ASSERT(!rowset.EndOfSet());
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetKey(), i);
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::Date32Key::Value>(), i);
+                        if (!rowset.Next())
+                            return false;
+                    }
+                    UNIT_ASSERT(rowset.EndOfSet());
+                }
+
+                // Datetime64Key
+                {
+                    auto rowset = db.Table<Schema::Datetime64Key>().GreaterOrEqual(5).Select();
+                    if (!rowset.IsReady())
+                        return false;
+                    for (ui32 i = 5; i <= 10; ++i) {
+                        UNIT_ASSERT(!rowset.EndOfSet());
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetKey(), i);
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::Datetime64Key::Value>(), i);
+                        if (!rowset.Next())
+                            return false;
+                    }
+                    UNIT_ASSERT(rowset.EndOfSet());
+                }
+
+                // Timestamp64Key
+                {
+                    auto rowset = db.Table<Schema::Timestamp64Key>().GreaterOrEqual(5).Select();
+                    if (!rowset.IsReady())
+                        return false;
+                    for (ui64 i = 5; i <= 10; ++i) {
+                        UNIT_ASSERT(!rowset.EndOfSet());
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetKey(), i);
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::Timestamp64Key::Value>(), i);
+                        if (!rowset.Next())
+                            return false;
+                    }
+                    UNIT_ASSERT(rowset.EndOfSet());
+                }
+
+                // Interval64Key
+                {
+                    auto rowset = db.Table<Schema::Interval64Key>().GreaterOrEqual(-2).Select();
+                    if (!rowset.IsReady())
+                        return false;
+                    for (i64 i = 3; i <= 10; ++i) {
+                        UNIT_ASSERT(!rowset.EndOfSet());
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetKey(), i - 5);
+                        UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::Interval64Key::Value>(), i);
+                        if (!rowset.Next())
+                            return false;
+                    }
+                    UNIT_ASSERT(rowset.EndOfSet());
+                }                
 
                 return true;
             }

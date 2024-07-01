@@ -337,7 +337,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     const TDqJoin& join,
     TExprBase leftInput,
     const TPrefixLookup& rightLookup,
-
     const TKqpMatchReadResult& rightReadMatch,
     TExprContext& ctx)
 {

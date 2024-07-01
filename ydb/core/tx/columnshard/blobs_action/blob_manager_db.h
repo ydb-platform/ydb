@@ -59,6 +59,7 @@ public:
 
     [[nodiscard]] bool LoadGCBarrierPreparation(TGenStep& genStep) override;
     void SaveGCBarrierPreparation(const TGenStep& genStep) override;
+    static void SaveGCBarrierPreparation(NTable::TDatabase& database, const TGenStep& step);
 
     [[nodiscard]] bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
         const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) override;

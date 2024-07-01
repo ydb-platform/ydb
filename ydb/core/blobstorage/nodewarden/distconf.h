@@ -78,6 +78,8 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
                 std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord, std::optional<ui64>>> MetadataPerPath;
+                std::vector<std::tuple<TString, std::optional<ui64>>> NoMetadata;
+                std::vector<TString> Errors;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
@@ -295,6 +297,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -324,6 +327,7 @@ namespace NKikimr::NStorage {
         void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
+            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
@@ -415,7 +419,7 @@ namespace NKikimr::NStorage {
 
     template<typename T>
     void EnumerateConfigDrives(const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId, T&& callback,
-            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> *nodeMap = nullptr) {
+            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> *nodeMap = nullptr, bool fillInPDiskConfig = false) {
         if (!config.HasBlobStorageConfig()) {
             return;
         }
@@ -455,9 +459,30 @@ namespace NKikimr::NStorage {
                 const auto& node = *it->second;
                 if (const auto it = defineHostConfigMap.find(host.GetHostConfigId()); it != defineHostConfigMap.end()) {
                     const auto& hostConfig = *it->second;
+                    auto processDrive = [&](const auto& drive) {
+                        if (fillInPDiskConfig && !drive.HasPDiskConfig() && hostConfig.HasDefaultHostPDiskConfig()) {
+                            NKikimrBlobStorage::THostConfigDrive temp;
+                            temp.CopyFrom(drive);
+                            temp.MutablePDiskConfig()->CopyFrom(hostConfig.GetDefaultHostPDiskConfig());
+                            callback(node, temp);
+                        } else {
+                            callback(node, drive);
+                        }
+                    };
                     for (const auto& drive : hostConfig.GetDrive()) {
-                        callback(node, drive);
+                        processDrive(drive);
                     }
+                    auto processTypedDrive = [&](const auto& field, NKikimrBlobStorage::EPDiskType type) {
+                        for (const auto& path : field) {
+                            NKikimrBlobStorage::THostConfigDrive drive;
+                            drive.SetType(type);
+                            drive.SetPath(path);
+                            processDrive(drive);
+                        }
+                    };
+                    processTypedDrive(hostConfig.GetRot(), NKikimrBlobStorage::EPDiskType::ROT);
+                    processTypedDrive(hostConfig.GetSsd(), NKikimrBlobStorage::EPDiskType::SSD);
+                    processTypedDrive(hostConfig.GetNvme(), NKikimrBlobStorage::EPDiskType::NVME);
                 }
             }
         }
@@ -650,9 +675,9 @@ namespace NKikimr::NStorage {
     // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
     template<typename T>
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig) {
+            const TNodeWardenConfig& nwConfig, bool mindPrev = true) {
         return HasDiskQuorum(config, generateSuccessful) &&
-            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!config.HasPrevConfig() || (
+            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!mindPrev || !config.HasPrevConfig() || (
             HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
             HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
     }

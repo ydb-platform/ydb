@@ -134,6 +134,10 @@ message TExtendedDefineHostConfig {
 
     optional NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 
+    repeated string Rot = 5 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Ssd = 6 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+    repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
+
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }
 

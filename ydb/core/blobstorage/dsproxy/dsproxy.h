@@ -392,6 +392,17 @@ public:
 
     template<typename T>
     void SendToQueue(std::unique_ptr<T> event, ui64 cookie, bool timeStatsEnabled = false) {
+        if constexpr (
+            !std::is_same_v<T, TEvBlobStorage::TEvVGetBlock>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVBlock>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVStatus>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVCollectGarbage>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>
+        ) {
+            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
+            event->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
+        }
+
         if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
             event->MessageRelevanceTracker = MessageRelevanceTracker;
             ui64 cost;
@@ -423,8 +434,6 @@ public:
         for (auto& request : vGets) {
             const ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
-            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
         }
     }
@@ -459,8 +468,6 @@ public:
         for (auto& request : events) {
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
-            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             TLogoBlobID id = GetBlobId(request);
             TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
             LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),

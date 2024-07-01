@@ -285,6 +285,11 @@ bool IsUploadTransactionType(EObjectType type)
         type == EObjectType::UploadNestedTransaction;
 }
 
+bool IsCompositeNodeType(EObjectType type)
+{
+    return type == EObjectType::MapNode || type == EObjectType::ListNode;
+}
+
 bool HasSchema(EObjectType type)
 {
     if (type == EObjectType::Master) {

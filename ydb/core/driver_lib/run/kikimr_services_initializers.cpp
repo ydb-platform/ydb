@@ -552,6 +552,10 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.ErrorSleepRetryMultiplier = config.GetErrorSleepRetryMultiplier();
     }
 
+    if (config.HasEventDelayMicrosec()) {
+        result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
+    }
+
     return result;
 }
 

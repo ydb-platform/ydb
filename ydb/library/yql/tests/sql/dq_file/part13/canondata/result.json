@@ -1990,9 +1990,9 @@
     ],
     "test.test[pg-select_win_expr_order-default.txt-Debug]": [
         {
-            "checksum": "55224d81e45d2fc2eca42a9b8cf95b93",
-            "size": 2010,
-            "uri": "https://{canondata_backend}/1937027/5c72195b4220737ff2c85cc87e9305d1d3749b17/resource.tar.gz#test.test_pg-select_win_expr_order-default.txt-Debug_/opt.yql_patched"
+            "checksum": "763139bfb4526d3647a66ebcf037a0e0",
+            "size": 2013,
+            "uri": "https://{canondata_backend}/1130705/6c54f70b6ca10a02b9f318b370b9fd95ba01421a/resource.tar.gz#test.test_pg-select_win_expr_order-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_win_expr_order-default.txt-Plan]": [

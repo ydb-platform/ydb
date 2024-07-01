@@ -197,9 +197,9 @@ std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>
 }
 
 namespace {
-template <class TDataContainer>
+template <class TDataContainer, class TStringImpl>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TString>& columnNames) {
+    const std::vector<TStringImpl>& columnNames, const bool necessaryColumns) {
     if (!srcBatch) {
         return srcBatch;
     }
@@ -214,7 +214,11 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        if (necessaryColumns) {
+            AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
+        } else if (pos == -1) {
+            continue;
+        }
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
     }
@@ -225,39 +229,50 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted) {
+                                                   const std::shared_ptr<arrow::Schema>& dstSchema) {
     Y_ABORT_UNLESS(srcBatch);
     Y_ABORT_UNLESS(dstSchema);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(dstSchema->num_fields());
 
     for (auto& field : dstSchema->fields()) {
-        columns.push_back(srcBatch->GetColumnByName(field->name()));
-        if (!columns.back()) {
-            if (addNotExisted) {
-                auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
-                if (!result.ok()) {
-                    return nullptr;
-                }
-                columns.back() = *result;
-            } else {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
-                    ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
-                return nullptr;
-            }
+        const int index = srcBatch->schema()->GetFieldIndex(field->name());
+        if (index == -1) {
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
+                ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
+            return nullptr;
         } else {
-            auto srcField = srcBatch->schema()->GetFieldByName(field->name());
-            Y_ABORT_UNLESS(srcField);
+            columns.push_back(srcBatch->column(index));
+            auto srcField = srcBatch->schema()->field(index);
             if (!field->Equals(srcField)) {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
@@ -265,35 +280,11 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             }
         }
 
-        Y_ABORT_UNLESS(columns.back());
-        if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+        AFL_VERIFY(columns.back()->type()->Equals(field->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
-            return nullptr;
-        }
     }
 
     return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                          const arrow::FieldVector& fieldsToExtract) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(fieldsToExtract.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(fieldsToExtract.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& fldToExtract : fieldsToExtract) {
-        auto& name = fldToExtract->name();
-        auto field = srcSchema->GetFieldByName(name);
-        if (field && field->type()->Equals(fldToExtract->type())) {
-            fields.push_back(field);
-            columns.push_back(srcBatch->GetColumnByName(name));
-        }
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
 }
 
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
@@ -636,6 +627,54 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
         } else if constexpr (arrow::has_c_type<T>::value) {
             using TCType = typename arrow::TypeTraits<T>::CType;
             out = std::make_shared<TScalar>(Min<TCType>());
+        } else {
+            return false;
+        }
+        return true;
+    });
+    Y_ABORT_UNLESS(out);
+    return out;
+}
+
+namespace {
+
+template <class T>
+class TDefaultScalarValue {
+public:
+    static constexpr T Value = 0;
+};
+
+template <>
+class TDefaultScalarValue<bool> {
+public:
+    static constexpr bool Value = false;
+};
+
+}
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type) {
+    std::shared_ptr<arrow::Scalar> out;
+    SwitchType(type->id(), [&](const auto& t) {
+        using TWrap = std::decay_t<decltype(t)>;
+        using T = typename TWrap::T;
+        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+        if constexpr (std::is_same_v<T, arrow::StringType> ||
+            std::is_same_v<T, arrow::BinaryType> ||
+            std::is_same_v<T, arrow::LargeStringType> ||
+            std::is_same_v<T, arrow::LargeBinaryType>) {
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
+        } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
+            std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(s), type);
+        } else if constexpr (std::is_same_v<T, arrow::HalfFloatType>) {
+            return false;
+        } else if constexpr (arrow::is_temporal_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value, type);
+        } else if constexpr (arrow::has_c_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value);
         } else {
             return false;
         }
@@ -1020,6 +1059,27 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
         return nullptr;
     }
     return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+}
+
+bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
+    AFL_VERIFY(column);
+    return column->null_bitmap_data();
+}
+
+std::vector<TString> ConvertStrings(const std::vector<std::string>& input) {
+    std::vector<TString> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
+}
+
+std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
+    std::vector<std::string> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
 }
 
 }

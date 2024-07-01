@@ -1,6 +1,5 @@
 #include "dq_opt_stat.h"
 
-#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -20,7 +19,7 @@ namespace {
      */
     bool IsAttribute(const TExprBase& input, TString& attributeName) {
         if (auto member = input.Maybe<TCoMember>()) {
-            attributeName = member.Cast().Name().StringValue();
+            attributeName = member.Cast().Raw()->Content();
             return true;
         } else if (auto cast = input.Maybe<TCoSafeCast>()) {
             return IsAttribute(cast.Cast().Value(), attributeName);
@@ -39,22 +38,6 @@ namespace {
         return false;
     }
 
-    double DefaultSelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
-        if (stats->KeyColumns && stats->KeyColumns->Data.size() == 1 && attributeName == stats->KeyColumns->Data[0]) {
-            if (stats->Nrows > 1) {
-                return 1.0 / stats->Nrows;
-            }
-            
-            return 1.0;
-        } else {
-            if (stats->Nrows > 1) {
-                return 0.1;
-            }
-                
-            return 1.0;
-        }
-    }
-
     double ComputeEqualitySelectivity(TExprBase& left, TExprBase& right, const std::shared_ptr<TOptimizerStatistics>& stats) {
 
         TString attributeName;
@@ -62,7 +45,7 @@ namespace {
         if (IsAttribute(right, attributeName) && IsConstantExpr(left.Ptr())) {
             std::swap(left, right);
         }
-
+        
         if (IsAttribute(left, attributeName)) {
             // In case both arguments refer to an attribute, return 0.2
             TString rightAttributeName;
@@ -73,22 +56,21 @@ namespace {
             // Currently, with the basic statistics we just return 1/nRows
 
             else if (IsConstantExpr(right.Ptr())) {
-                if (stats->ColumnStatistics == nullptr) {
-                    return DefaultSelectivity(stats, attributeName);
-                }
-                
-                if (auto countMinSketch = stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
-                    
-                    TMemoryPool valueDataPool(256);
-                    NKikimr::TCell cell;
-                    if (!NKikimr::CellFromLiteralExprNode(right, cell, valueDataPool)) {
-                        return DefaultSelectivity(stats, attributeName);
+                if (stats->KeyColumns && stats->KeyColumns->Data.size()==1 && attributeName==stats->KeyColumns->Data[0]) {
+                    if (stats->Nrows > 1) {
+                        return 1.0 / stats->Nrows;
                     }
-                    ui32 countMinEstimation = countMinSketch->Probe(cell.Data(), cell.Size());
-                    return countMinEstimation / stats->Nrows;
+                    else {
+                        return 1.0;
+                    }
+                } else {
+                    if (stats->Nrows > 1) {
+                        return 0.1;
+                    }
+                    else {
+                        return 1.0;
+                    }
                 }
-                
-                return DefaultSelectivity(stats, attributeName);
             }
         }
 

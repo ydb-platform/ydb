@@ -68,8 +68,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
-    appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
-
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
     return TKikimrRunner(serverSettings);
@@ -276,6 +274,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExplainJoinOrderTestDataQuery("queries/tpcds96.sql", StreamLookupJoin);     
     }
 
+
     void JoinOrderTestWithOverridenStats(const TString& queryPath, const TString& statsPath, const TString& correctJoinOrderPath, bool useStreamLookupJoin) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
         auto db = kikimr.GetTableClient();
@@ -294,9 +293,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto res = CollectStreamResult(it);
 
             TString ref = GetStatic(correctJoinOrderPath);
-
-            /* correct canonized join order in cout, change corresponding join_order/.json file */
-            Cout << CanonizeJoinOrder(*res.PlanJson) << Endl;
 
             UNIT_ASSERT(JoinOrderAndAlgosMatch(*res.PlanJson, ref));
         }

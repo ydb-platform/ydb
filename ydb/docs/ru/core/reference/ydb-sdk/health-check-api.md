@@ -58,7 +58,9 @@ message IssueLog {
 * `Pool usage over 90/95/99%` — один из CPU пулов перегружен.
 * `System tablet is unresponsive / response time over 1000ms/5000ms` — системная таблетка не отвечает или отвечает долго.
 * `Tablets are restarting too often` — таблетки слишком часто перезапускаются.
-* `Tablets are dead` — таблетки не запущены (или не могут быть запущены).
+* `Tablets/Followers are dead` — таблетки не запущены (или не могут быть запущены).
+* `Node is restarting too often` — узлы слишком часто перезапускаются.
+* `The number of node restarts has increased` — количество рестартов ноды превысило порог.
 * `LoadAverage above 100%` — физический хост перегружен.
 * `There are no compute nodes` — у базы нет нод для запуска таблеток.
 * `PDisk state is ...` — сообщает о проблемах с физическим диском.
@@ -72,3 +74,4 @@ message IssueLog {
 * `Group has no redundancy` — группа хранения потеряла избыточность.
 * `Group failed` — группа хранения потеряла целостность.
 * `Group degraded` — в группе недоступно допустимое число дисков.
+* `The nodes have a time difference of ... ms` — расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций.

@@ -24,6 +24,20 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
+    if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
+        if (AppData()->AuthConfig.GetUseAccessService()
+            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
+            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+            };
+            return entries;
+        }
+    }
+    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+    return emptyEntries;
+}
+
 template <typename TEvent>
 class TGrpcRequestCheckActor
     : public TGRpcRequestProxyHandleMethods
@@ -59,6 +73,7 @@ public:
     }
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
         static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
@@ -68,7 +83,16 @@ public:
             }
         }
         if (!attributes.empty()) {
-            SetEntries({{GetPermissions(), attributes}});
+            entries.emplace_back(GetPermissions(), attributes);
+        }
+
+        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+            const auto& e = GetEntriesForAuthAndCheckRequest(Request_);
+            entries.insert(entries.end(), e.begin(), e.end());
+        }
+
+        if (!entries.empty()) {
+            SetEntries(entries);
         }
     }
 
@@ -438,6 +462,12 @@ private:
     template <ui32 TRpcId>
     void HandleAndDie(TAutoPtr<TEventHandle<TRefreshTokenImpl<TRpcId>>>&) {
         ReplyBackAndDie();
+    }
+
+    void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        GrpcRequestBaseCtx_->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+        PassAway();
     }
 
     template <typename T>

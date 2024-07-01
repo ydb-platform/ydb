@@ -2605,6 +2605,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
+            // empty
+            const TString sql = R"(
+                REPLACE INTO `/Root/ColumnShard1`
+                SELECT * FROM `/Root/ColumnSource` WHERE Col3 == 0
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([])");
+        }
+
+        {
             // Missing Nullable column
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard1`
@@ -3114,29 +3133,26 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
             }
 
-            if (!GetIsOlap()) {
-                {
-                    auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/DataShard` WHERE Col3 == 't';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                }
-                {
-                    auto it = client.StreamExecuteQuery(R"(
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
+            {
+                auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-                    TString output = StreamResultToYson(it);
-                    CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
+            }
 
-                {
-                    auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/DataShard` WHERE Col3 == 'not found';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                }
-
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
@@ -3152,11 +3168,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
-                if (!GetIsOlap()) {
-                    CompareYson(output, R"([[1u;#;["test"]]])");
-                } else {
-                    CompareYson(output, R"([[1u;#;["test"]];[2u;[3];["t"]]])");
-                }
+                CompareYson(output, R"([[1u;#;["test"]]])");
             }
         }
     };
@@ -3196,29 +3208,27 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
             }
 
-            if (!GetIsOlap()) {
-                {
-                    auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 'not found';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-                {
-                    auto it = client.ExecuteQuery(R"(
+            {
+                auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 't';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                }
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            }
 
-                {
-                    auto it = client.StreamExecuteQuery(R"(
+            {
+                auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-                    TString output = StreamResultToYson(it);
-                    CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+                TString output = StreamResultToYson(it);
+                CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
             }
 
             {
@@ -3235,14 +3245,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
-            {
-                auto it = client.StreamExecuteQuery(R"(
+            auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[1];["text"]];[1u;#;["test"]];[2u;[42];["t"]]])");
-            }
         }
     };
 

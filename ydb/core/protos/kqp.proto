@@ -732,6 +732,7 @@ message TKqpTableSinkSettings {
         MODE_UPSERT = 1;
         MODE_INSERT = 2;
         MODE_DELETE = 3;
+        MODE_UPDATE = 4;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;

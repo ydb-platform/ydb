@@ -1,7 +1,7 @@
 name: Postcommits gate
 on:
-  #schedule:
-  #  - cron: "*/5 * * * *"  # Every 5 minutes
+  schedule:
+    - cron: "*/5 * * * *"  # Every 5 minutes
   workflow_dispatch:
 
 jobs:

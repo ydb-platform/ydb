@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -406,7 +407,7 @@ private:
     }
 
     static TString GetPoolKey(const TString& database, const TString& poolId) {
-        return TStringBuilder() << database << "/" << poolId;
+        return CanonizePath(TStringBuilder() << database << "/" << poolId);
     }
 
     TString LogPrefix() const {

@@ -236,7 +236,7 @@ public:
         }
     }
 
-    void PassRequestToWorkloadPool() {
+    void PassRequestToResourcePool() {
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->Database,
             SessionId,
@@ -454,12 +454,7 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId) {
-            PassRequestToWorkloadPool();
-            return;
-        }
-
-        CompileQuery();
+        PassRequestToResourcePool();
     }
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {

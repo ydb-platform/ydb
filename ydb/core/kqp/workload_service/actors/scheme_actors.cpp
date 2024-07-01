@@ -71,6 +71,10 @@ public:
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);  // Used in case of DefaultUserSIDs is empty and AllAuthenticatedUsers is not specified
 
+        if (Event->Get()->UserToken) {
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, Event->Get()->UserToken->GetUserSID());
+        }
+
         auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
         Register(CreatePoolCreatorActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));
     }

@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        WaitPoolHandlersCount(ydb, 1);
+        WaitPoolHandlersCount(ydb, 2);
 
         // Check that pool using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        WaitPoolHandlersCount(ydb, 1);
+        WaitPoolHandlersCount(ydb, 2);
 
         // Check that pool is not using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));

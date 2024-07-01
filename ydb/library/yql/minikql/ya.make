@@ -13,6 +13,7 @@ SRCS(
     mkql_function_metadata.h
     mkql_function_registry.cpp
     mkql_function_registry.h
+    mkql_mem_info.cpp
     mkql_node.cpp
     mkql_node.h
     mkql_node_builder.cpp

@@ -2,6 +2,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
+#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
@@ -20,6 +22,8 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/interconnect.h>
+
+#include <util/string/builder.h>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -670,7 +674,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             exclusiveNodeStats->MutableNodeDomain()->SetSchemeShard(SERVERLESS_DOMAIN_KEY.OwnerId);
             exclusiveNodeStats->MutableNodeDomain()->SetPathId(SERVERLESS_DOMAIN_KEY.LocalPathId);
         }
-        
+
         if (exclusiveDynNodeWithTablet) {
             auto *exclusiveDynNodeWithTabletStats = record.MutableNodeStats()->Add();
             exclusiveDynNodeWithTabletStats->SetNodeId(exclusiveDynNodeWithTablet);
@@ -683,7 +687,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             stateStats->SetCount(1);
         }
     }
-    
+
     Y_UNIT_TEST(ServerlessNodesPage)
     {
         TPortManager tp;
@@ -715,7 +719,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;    
+        size_t sharedDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -796,7 +800,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;    
+        size_t exclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -881,7 +885,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0; 
+        size_t exclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -967,7 +971,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
         size_t exclusiveDynNodeId = 0;
-        size_t secondExclusiveDynNodeId = 0;    
+        size_t secondExclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -1027,5 +1031,143 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "DataShard");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
+    }
+
+    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+        TFakeTicketParserActor()
+            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
+        {}
+
+        STFUNC(StFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+                default:
+                    break;
+            }
+        }
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+            ++AuthorizeTicketRequests;
+
+            if (ev->Get()->Database != "/Root") {
+                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
+                return;
+            }
+
+            if (ev->Get()->Ticket != "test_ydb_token") {
+                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
+                return;
+            }
+
+            bool databaseIdFound = false;
+            bool folderIdFound = false;
+            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
+                for (const std::pair<TString, TString>& attr : entry.Attributes) {
+                    if (attr.first == "database_id") {
+                        databaseIdFound = true;
+                        if (attr.second != "test_database_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
+                            return;
+                        }
+                    } else if (attr.first == "folder_id") {
+                        folderIdFound = true;
+                        if (attr.second != "test_folder_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
+                            return;
+                        }
+                    }
+                }
+            }
+            if (!databaseIdFound) {
+                Fail(ev, "database_id not found");
+                return;
+            }
+            if (!folderIdFound) {
+                Fail(ev, "folder_id not found");
+                return;
+            }
+
+            Success(ev);
+        }
+
+        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
+            ++AuthorizeTicketFails;
+            TEvTicketParser::TError err;
+            err.Retryable = false;
+            err.Message = message ? message : "Test error";
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
+        }
+
+        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            ++AuthorizeTicketSuccesses;
+            NACLib::TUserToken::TUserTokenInitFields args;
+            args.UserSID = "user_name";
+            args.GroupSIDs.push_back("group_name");
+            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        }
+
+        size_t AuthorizeTicketRequests = 0;
+        size_t AuthorizeTicketSuccesses = 0;
+        size_t AuthorizeTicketFails = 0;
+    };
+
+    Y_UNIT_TEST(AuthorizeYdbTokenWithDatabaseAttributes) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true); // authorization is implemented only in async mon
+
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+
+        TFakeTicketParserActor* ticketParser = nullptr;
+        settings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
+            ticketParser = new TFakeTicketParserActor();
+            return ticketParser;
+        };
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        TString requestBody = R"json({
+            "query": "SELECT 42;",
+            "database": "/Root",
+            "action": "execute-script",
+            "syntax": "yql_v1",
+            "stats": "profile"
+        })json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+
+        UNIT_ASSERT(ticketParser);
+        UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketRequests, 1, response);
+        UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketSuccesses, 1, response);
     }
 }

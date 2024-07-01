@@ -153,53 +153,14 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
 }
 
 namespace {
-
-template <class TStringType, class TDataContainer>
-std::shared_ptr<TDataContainer> ExtractColumnsImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TStringType>& columnNames) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columnNames.size());
-    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
-    columns.reserve(columnNames.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& name : columnNames) {
-        int pos = srcSchema->GetFieldIndex(name);
-        if (pos < 0) {
-            return {};
-        }
-        fields.push_back(srcSchema->field(pos));
-        columns.push_back(srcBatch->column(pos));
-    }
-
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::move(fields), std::move(columns), srcBatch->num_rows());
-}
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<TString>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<std::string>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<std::string>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-namespace {
-template <class TDataContainer, class TStringImpl>
+enum class EExtractProblemsPolicy {
+    Null,
+    Verify,
+    Skip
+};
+template <EExtractProblemsPolicy policy, class TDataContainer, class TStringImpl>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TStringImpl>& columnNames, const bool necessaryColumns) {
+    const std::vector<TStringImpl>& columnNames) {
     if (!srcBatch) {
         return srcBatch;
     }
@@ -214,10 +175,16 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        if (necessaryColumns) {
+        if (policy == EExtractProblemsPolicy::Verify) {
             AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
         } else if (pos == -1) {
-            continue;
+            if (policy == EExtractProblemsPolicy::Skip) {
+                continue;
+            } else if (policy == EExtractProblemsPolicy::Null || policy == EExtractProblemsPolicy::Reorder) {
+                return nullptr;
+            } else {
+                AFL_VERIFY(false)("problem", "unexpected policy for non found column on extraction");
+            }
         }
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
@@ -227,34 +194,70 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 }
 }
 
+std::shared_ptr<arrow::RecordBatch> ReorderColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    if (columnNames.size() != srcBatch->num_columns()) {
+        return nullptr;
+    }
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Null>(srcBatch, columnNames);
+}
+
+std::shared_ptr<arrow::RecordBatch> ReorderColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    if (columnNames.size() != srcBatch->num_columns()) {
+        return nullptr;
+    }
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Null>(srcBatch, columnNames);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Null>(srcBatch, columnNames);
+}
+
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Null>(srcBatch, columnNames);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOrNull(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Null>(srcBatch, columnNames);
+}
+
+std::shared_ptr<arrow::Table> ExtractColumnsOrNull(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<std::string>& columnNames) {
+    return ExtractColumnsValidateImpl(srcBatch, columnNames);
+}
+
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Verify>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, true);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Verify>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Skip>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Skip>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<std::string>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Skip>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<std::string>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames, false);
+    return ExtractColumnsValidateImpl<EExtractProblemsPolicy::Skip>(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,

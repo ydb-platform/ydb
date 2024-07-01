@@ -56,17 +56,21 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
 std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsOrNull(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<std::string>& columnNames);
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
+std::shared_ptr<arrow::Table> ExtractColumnsOrNull(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
+std::shared_ptr<arrow::Table> ExtractColumnsOrNull(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<std::string>& columnNames);
 std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
     const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames);
+std::shared_ptr<arrow::RecordBatch> ReorderColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<std::string>& columnNames);
+std::shared_ptr<arrow::RecordBatch> ReorderColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames);
 
 std::vector<TString> ConvertStrings(const std::vector<std::string>& input);

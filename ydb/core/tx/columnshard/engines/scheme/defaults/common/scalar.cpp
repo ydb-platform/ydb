@@ -109,7 +109,7 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromString(const TStr
     NArrow::SwitchType((*dType)->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         if constexpr (arrow::is_primitive_ctype<typename TWrap::T>()) {
-            using CType = TWrap::T::c_type;
+            using CType = typename TWrap::T::c_type;
             using ScalarType = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
             const TMaybe<CType> castResult = TryFromString<CType>(value);
             if (!castResult) {

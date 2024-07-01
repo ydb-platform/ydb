@@ -318,7 +318,7 @@ TKey MakeKeyFromString(const TString& s, const TPartitionId& partition);
 inline
 TString GetTxKey(ui64 txId)
 {
-    return Sprintf("tx_%" PRIu64, txId);
+    return Sprintf("tx_%020" PRIu64, txId);
 }
 
 

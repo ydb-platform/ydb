@@ -9,8 +9,8 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <ydb/library/yql/parser/pg_wrapper/ctors.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
@@ -99,7 +99,7 @@ void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable
     if (shardId) {
         rowItem = NUdf::TUnboxedValuePod(*shardId);
     } else {
-        rowItem = NUdf::TUnboxedValue();
+        rowItem = NUdf::TUnboxedValuePod();
     }
 }
 
@@ -286,6 +286,24 @@ public:
     }
 };
 
+template <class TArrayTypeExt, bool ByVal>
+class TPgElementAccessor {
+public:
+    using TArrayType = TArrayTypeExt;
+    static NYql::NUdf::TUnboxedValuePod ExtractValue(const TArrayType& array, const ui32 rowIndex) {
+        if constexpr (ByVal)
+            return NYql::ScalarValueToPod(array.Value(rowIndex));
+        else
+            return NYql::ScalarValueToPod(NUdf::TStringRef(array.Value(rowIndex)));
+    }
+
+    static void Validate(const TArrayType&) { }
+
+    static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
+        return TFixedWidthStatAccumulator(typeInfo);
+    }
+};
+
 }
 
 template <class TElementAccessor, class TAccessor>
@@ -344,7 +362,6 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
     }
     return statAccumulator.Finish();
 }
-
 
 template <class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
@@ -438,16 +455,21 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         }
         case NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
+                case BOOLOID:
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::BooleanArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT2OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int16Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int32Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::Int64Array, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::FloatArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::DoubleArray, true>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case TEXTOID:
+                case BYTEAARRAYOID:
+                    return WriteColumnValuesFromArrowSpecImpl<TPgElementAccessor<arrow::BinaryArray, false>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 default:
                     break;
             }
@@ -463,15 +485,6 @@ TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
 {
     const auto accessor = [editAccessors, columnsCount](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
         return editAccessors[rowIndex * columnsCount + colIndex];
-    };
-    return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
-}
-
-TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
-{
-    const auto accessor = [&editAccessors](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
-        return editAccessors[rowIndex][colIndex];
     };
     return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
 }
@@ -602,7 +615,7 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& ba
 }
 
 TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment&)
 {
     TBytesStatistics stats;
     TUnboxedValueVector cells;
@@ -663,8 +676,13 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
 }
 
 TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& dataAccessor, TMaybe<ui64> /*shardId*/,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
+    bool initConverters = Converters.empty();
+    if (initConverters) {
+        Converters.resize(Columns.size());
+    }
+
     TBytesStatistics stats;
     auto totalColsCount = TotalColumnsCount + 1;
     auto batches = NArrow::SliceToRecordBatches(dataAccessor.GetFiltered());
@@ -672,7 +690,17 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
+            const auto col = filtered->column(i);
+            if (initConverters) {
+                if (const auto tid = NPg::PgTypeIdFromTypeDesc(ResultColumns[i].Type.GetTypeDesc())) {
+                    Converters[i] = NYql::BuildPgColumnConverter(col->type(), TPgType::Create(tid, env));
+                }
+            }
+
+            if (const auto& conv = Converters[i])
+                batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(conv(col)));
+            else
+                batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(col)));
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});
@@ -696,14 +724,14 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
 }
 
 ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
     // RecordBatch hasn't empty method so check the number of rows
     if (Finished || batch.GetRecordsCount() == 0) {
         return 0;
     }
 
-    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
+    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory, env);
     if (BasicStats) {
         BasicStats->Rows += batch.GetRecordsCount();
         BasicStats->Bytes += stats.DataBytes;

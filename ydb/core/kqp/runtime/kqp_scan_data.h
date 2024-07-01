@@ -13,6 +13,7 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -149,7 +150,7 @@ public:
         }
 
         ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
-        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
+        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, const TTypeEnvironment& env);
 
         bool IsEmpty() const {
             return BatchReader->IsEmpty();
@@ -216,7 +217,7 @@ public:
             }
 
             virtual TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) = 0;
-            virtual TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) = 0;
+            virtual TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, const TTypeEnvironment& env) = 0;
             virtual ui32 FillDataValues(NUdf::TUnboxedValue* const* result) = 0;
             virtual void Clear() = 0;
             virtual bool IsEmpty() const = 0;
@@ -242,7 +243,7 @@ public:
             }
 
             TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
-            TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, const TTypeEnvironment& env) override;
             ui32 FillDataValues(NUdf::TUnboxedValue* const* result) override;
 
             void Clear() override {
@@ -307,7 +308,7 @@ public:
             }
 
             TBytesStatistics AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
-            TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) override;
+            TBytesStatistics AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, const TTypeEnvironment& env) override;
             ui32 FillDataValues(NUdf::TUnboxedValue* const* result) override;
 
             void Clear() override {
@@ -344,6 +345,7 @@ public:
             };
 
             TQueue<TBlockBatch> BlockBatches;
+            TSmallVec<NYql::TColumnConverter> Converters;
         };
 
         std::unique_ptr<IDataBatchReader> BatchReader;

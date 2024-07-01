@@ -170,6 +170,7 @@ namespace NKikimr::NSchemeShard {
             case INT8OID:
             case FLOAT4OID:
             case FLOAT8OID:
+            case TEXTOID:
                 return true;
             default:
                 break;

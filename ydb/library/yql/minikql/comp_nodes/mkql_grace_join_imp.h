@@ -239,7 +239,7 @@ class TTable {
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
 
     // Adds keys to KeysHashTable, return true if added, false if equal key already added
-    inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys);
+    inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf::TUnboxedValue * iColumns);
 
     ui64 TotalPacked = 0; // Total number of packed tuples
     ui64 TotalUnpacked = 0; // Total number of unpacked tuples

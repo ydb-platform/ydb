@@ -4,6 +4,8 @@
 
 #include <util/stream/output.h>
 
+// check double link
+
 namespace NKikimr {
 namespace NSequenceShard {
 

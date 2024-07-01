@@ -292,7 +292,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
 
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, sortingKey));
 
-    auto keyBatch = TColumnOperator::Adapt(batch, sortingKey).DetachResult();
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     auto& keyColumns = keyBatch->columns();
 
     bool same = false;
@@ -352,7 +352,7 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
 
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
               const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = TColumnOperator::Adapt(batch, sortingKey).DetachResult();
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch);
     } else {
@@ -362,7 +362,7 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = TColumnOperator::Adapt(batch, sortingKey).DetachResult();
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch);
     } else {

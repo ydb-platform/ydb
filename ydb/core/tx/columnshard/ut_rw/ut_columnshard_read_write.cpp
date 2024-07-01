@@ -727,7 +727,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         reader.SetReplyColumnIds({1});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, { "timestamp" }));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 1);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -742,7 +742,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         reader.SetReplyColumns({"timestamp", "message"});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, { "timestamp", "message" }));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp", "message" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 2);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1292,7 +1292,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
                 case 1:
                     UNIT_ASSERT(rb);
                     UNIT_ASSERT(rb->num_rows());
-                    Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, { "level", "timestamp" }));
+                    Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "level", "timestamp" })));
                     UNIT_ASSERT(rb->num_columns() == 2);
                     UNIT_ASSERT(DataHas({rb}, {0, 100}, true));
                     break;

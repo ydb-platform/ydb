@@ -115,7 +115,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(const TString& data)
 
 std::shared_ptr<NKikimr::NArrow::TMinMaxSpecialKeys> TMinMaxSpecialKeys::BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const {
     auto newData = NArrow::TColumnOperator().Adapt(Data, schema).DetachResult();
-    return std::make_shared<TMinMaxSpecialKeys>(newData);
+    return std::shared_ptr<TMinMaxSpecialKeys>(new TMinMaxSpecialKeys(newData));
 }
 
 }

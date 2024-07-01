@@ -1,4 +1,5 @@
 #include "catalog.h"
+#include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -1542,6 +1543,31 @@ TNamespaces FillNamespaces() {
     };
 }
 
+struct TTableInfoKeyRaw {
+    const char* Schema;
+    const char* Name;
+};
+
+struct TTableInfoRaw : public TTableInfoKeyRaw {
+    ERelKind Kind;
+    ui32 Oid;
+};
+
+struct TColumnInfoRaw {
+    const char* Schema;
+    const char* TableName;
+    const char* Name;
+    const char* UdtType;
+};
+
+const TTableInfoRaw AllStaticTablesRaw[] = {
+#include "pg_class.generated.h"
+};
+
+const TColumnInfoRaw AllStaticColumnsRaw[] = {
+#include "columns.generated.h"
+};
+
 struct TCatalog {
     TCatalog()
         : ProhibitedProcs({
@@ -1604,14 +1630,22 @@ struct TCatalog {
             "lo_truncate64",
             "lo_close",
             "lo_unlink"
-        }),
-        AllStaticTables({
-#include "pg_class.generated.h"
-        }),
-        AllStaticColumns({
-#include "columns.generated.h"
         })
     {
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
+            const auto& raw = AllStaticTablesRaw[i];
+            AllStaticTables.push_back(
+                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid}
+            );
+        }
+
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticColumnsRaw); ++i) {
+            const auto& raw = AllStaticColumnsRaw[i];
+            AllStaticColumns.push_back(
+                {TString(raw.Schema), TString(raw.TableName), TString(raw.Name), TString(raw.UdtType)}
+            );
+        }
+
         if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
             // grafana migration_log
             AllStaticTables.push_back(

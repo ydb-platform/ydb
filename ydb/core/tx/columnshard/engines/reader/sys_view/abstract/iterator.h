@@ -40,7 +40,7 @@ public:
             if (originalBatch->num_rows() == 0) {
                 continue;
             }
-            auto keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(originalBatch, KeySchema);
+            auto keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Adapt(originalBatch, KeySchema).DetachResult();
             auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
             {

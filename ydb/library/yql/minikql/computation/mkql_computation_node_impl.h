@@ -823,6 +823,9 @@ protected:
     const EValueRepresentation Kind;
 };
 
+[[noreturn]]
+void ThrowNotSupportedImplForClass(const TString& className, const char *func);
+
 template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
 class TComputationValueBase: public TBaseExt
 {
@@ -1067,7 +1070,7 @@ public:
 
 protected:
     [[noreturn]] void ThrowNotSupported(const char* func) const {
-        THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this);
+        ThrowNotSupportedImplForClass(TypeName(*this), func);
     }
 };
 

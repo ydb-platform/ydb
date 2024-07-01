@@ -153,6 +153,30 @@ public:
             NMiniKQL::SerializeTzTimestamp(::FromString<ui64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
             return NYT::TNode(out.Str());
         });
+        Converters.emplace(TCoTzDate32::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzDate32(::FromString<i32>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
+        Converters.emplace(TCoTzDatetime64::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzDatetime64(::FromString<i64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
+        Converters.emplace(TCoTzTimestamp64::CallableName(), [](const TExprNode& node) {
+            TStringBuf tzName = node.Child(0)->Content();
+            TStringBuf valueStr;
+            GetNext(tzName, ',', valueStr);
+            TStringStream out;
+            NMiniKQL::SerializeTzTimestamp64(::FromString<i64>(valueStr), NMiniKQL::GetTimezoneId(tzName), out);
+            return NYT::TNode(out.Str());
+        });
         Converters.emplace(TCoUuid::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(node.Child(0)->Content());
         });

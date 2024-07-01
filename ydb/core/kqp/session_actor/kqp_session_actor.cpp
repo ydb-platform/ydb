@@ -242,7 +242,7 @@ public:
             SessionId,
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken
-        ));
+        ), IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpSessionActor::ExecuteState);
     }
@@ -455,6 +455,13 @@ public:
         QueryState->UpdateTempTablesState(TempTablesState);
 
         PassRequestToResourcePool();
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
+            LOG_I("Failed to deliver request to workload service");
+            CompileQuery();
+        }
     }
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
@@ -2281,6 +2288,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
 
+                hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(NWorkload::TEvContinueRequest, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
@@ -2299,7 +2307,6 @@ public:
                 hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvKqp::TEvSplitResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);

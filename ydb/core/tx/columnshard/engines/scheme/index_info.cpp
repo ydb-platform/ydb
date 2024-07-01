@@ -360,12 +360,12 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);
         AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures(c.first, GetColumnFieldVerified(c.first), DefaultSerializer, operators->GetDefaultOperator(), 
-            NArrow::IsPrimitiveYqlType(c.second.PType), c.first == GetPKFirstColumnId(), nullptr, nullptr)).second);
+            NArrow::IsPrimitiveYqlType(c.second.PType), c.first == GetPKFirstColumnId(), nullptr)).second);
     }
     for (auto&& cId : GetSystemColumnIds()) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
         AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures(cId, GetColumnFieldVerified(cId), DefaultSerializer, operators->GetDefaultOperator(),
-            false, false, IIndexInfo::DefaultColumnWriteValue(cId), IIndexInfo::DefaultColumnReadValue(cId))).second);
+            false, false, IIndexInfo::DefaultColumnValue(cId))).second);
     }
 }
 
@@ -401,17 +401,17 @@ std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::Get
     return CompactionPlannerConstructor;
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultWriteValueVerified(const std::string& colName) const {
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const std::string& colName) const {
     const ui32 columnId = GetColumnIdVerified(colName);
-    return GetColumnDefaultWriteValueVerified(columnId);
+    return GetColumnDefaultValueVerified(columnId);
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultWriteValueVerified(const ui32 columnId) const {
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const ui32 columnId) const {
     auto& features = GetColumnFeaturesVerified(columnId);
-    if (!features.GetDefaultWriteValue() && !IsNullableVerified(columnId)) {
+    if (features.GetDefaultValue().IsEmpty() && !IsNullableVerified(columnId)) {
         return NArrow::DefaultScalar(GetColumnFieldVerified(columnId)->type());
     } else {
-        return features.GetDefaultWriteValue();
+        return features.GetDefaultValue().GetValue();
     }
 }
 

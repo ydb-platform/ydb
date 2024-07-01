@@ -713,11 +713,11 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
 }
 
 TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        auto emptyBatch = NArrow::MakeEmptyBatch(loader->GetExpectedSchema(), NullRowsCount);
-        AFL_VERIFY(emptyBatch->num_columns() == 1);
-        return TDeserializeChunkedArray::TChunk(emptyBatch->column(0));
+        AFL_VERIFY(loader->GetExpectedSchema()->num_fields() == 1);
+        auto col = NArrow::TThreadSimpleArraysCache::Get(loader->GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount);
+        return TDeserializeChunkedArray::TChunk(col);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
@@ -725,9 +725,11 @@ TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeseriali
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
+        AFL_VERIFY(loader.GetExpectedSchema()->num_fields() == 1);
+        return arrow::RecordBatch::Make(loader.GetExpectedSchema(), DefaultRowsCount,
+            { NArrow::TThreadSimpleArraysCache::Get(loader.GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount) });
     } else {
         auto result = loader.Apply(Data);
         if (!result.ok()) {

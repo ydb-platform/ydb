@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -25,8 +26,7 @@ private:
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     YDB_READONLY(bool, NeedMinMax, false);
     YDB_READONLY(bool, IsSorted, false);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultWriteValue);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultReadValue);
+    YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
@@ -35,7 +35,7 @@ public:
 
     TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, 
         const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted,
-        const std::shared_ptr<arrow::Scalar>& defaultWriteValue, const std::shared_ptr<arrow::Scalar>& defaultReadValue);
+        const std::shared_ptr<arrow::Scalar>& defaultValue);
 
     TColumnSaver GetColumnSaver() const {
         NArrow::NTransformation::ITransformer::TPtr transformer = GetSaveTransformer();

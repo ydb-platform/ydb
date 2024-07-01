@@ -17,6 +17,7 @@ private:
 
     NArrow::NSerialization::TSerializerContainer Serializer;
     NArrow::NDictionary::TEncodingDiff DictionaryEncodingDiff;
+    std::optional<TString> DefaultValue;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

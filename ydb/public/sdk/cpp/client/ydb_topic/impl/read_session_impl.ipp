@@ -1514,11 +1514,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
-    TDeferredActions<false>& deferred
+    Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg, TDeferredActions<false>&
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_UNUSED(deferred);
+
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "UpdatePartitionSession " << msg.DebugString());
 
     auto it = PartitionStreams.find(msg.partition_session_id());
     if (it == PartitionStreams.end()) {
@@ -1540,6 +1540,8 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     TDeferredActions<false>& deferred
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StopPartitionSessionRequest " << msg.DebugString());
 
     auto partitionSessionId = msg.partition_session_id();
 

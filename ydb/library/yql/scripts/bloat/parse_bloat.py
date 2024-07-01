@@ -53,7 +53,7 @@ def main():
         for p in sorted(walker.stats.items(), key=lambda p: p[1][0], reverse=True):
             print_stat(f, p)
     with open(pgm + ".by_count.txt","w") as f:
-        for p in sorted(walker.stats.items(), key=lambda p: p[1][0], reverse=True):
+        for p in sorted(walker.stats.items(), key=lambda p: p[1][1], reverse=True):
             print_stat(f, p)
     return 0
 

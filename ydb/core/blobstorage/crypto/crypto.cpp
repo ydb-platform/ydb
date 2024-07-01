@@ -172,7 +172,7 @@ Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertex
         chacha.Encipher(plaintext, ciphertext, len);
     }, *Cypher);
 #else
-    Cypher.Encipher(plaintext, ciphertext, len);
+    Cypher->Encipher(plaintext, ciphertext, len);
 #endif
 }
 

@@ -122,7 +122,7 @@ public:
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
             if (!ParsePostContent(content)) {
-                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content recieved"));
+                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content received"));
             }
         }
         if (Query.empty() && Action != "cancel-query") {

@@ -225,7 +225,7 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app);
 
-        Runtime->SetupMonitoring(Settings->MonitoringPortOffset);
+        Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {

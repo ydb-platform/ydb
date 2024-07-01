@@ -152,7 +152,7 @@ public:
         Y_UNUSED(database);
         Y_UNUSED(userToken);
         auto ptr = TableMetadata->find(table);
-        Y_ABORT_UNLESS(ptr != TableMetadata->end());
+        Y_ENSURE(ptr != TableMetadata->end());
 
         NYql::IKikimrGateway::TTableMetadataResult result;
         result.SetSuccess();
@@ -491,6 +491,8 @@ private:
             Cerr << "Failed to compile query: " << ev->Message << Endl;
             WriteJsonData("-repro.txt", ReplayDetails);
         } else {
+            Y_ENSURE(queryPlan);
+            ev->Plan = *queryPlan;
             std::tie(ev->Status, ev->Message) = CheckQueryPlan(ExtractQueryPlan(*queryPlan));
         }
 
@@ -506,18 +508,18 @@ private:
             NJson::TJsonValue tablemetajson;
             TStringInput in(data.GetStringSafe());
             NJson::ReadJsonTree(&in, &readerConfig, &tablemetajson, false);
-            Y_ABORT_UNLESS(tablemetajson.IsArray());
+            Y_ENSURE(tablemetajson.IsArray());
             for (auto& node : tablemetajson.GetArray()) {
                 NKikimrKqp::TKqpTableMetadataProto proto;
 
                 TString decoded = Base64Decode(node.GetStringRobust());
-                Y_ABORT_UNLESS(proto.ParseFromString(decoded));
+                Y_ENSURE(proto.ParseFromString(decoded));
 
                 NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
                 meta.emplace(proto.GetName(), ptr);
             }
         } else {
-            Y_ABORT_UNLESS(data.IsArray());
+            Y_ENSURE(data.IsArray());
             for (auto& node : data.GetArray()) {
                 NKikimrKqp::TKqpTableMetadataProto proto;
                 NProtobufJson::Json2Proto(node.GetStringRobust(), proto);
@@ -643,7 +645,7 @@ private:
     NJson::TJsonValue ReplayDetails;
 };
 
-IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState, 
+IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
     const NMiniKQL::IFunctionRegistry* functionRegistry)
 {
     return new TReplayCompileActor(moduleResolverState, functionRegistry);

@@ -77,7 +77,7 @@ public:
 
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
         for (; in->IsValid(); in->Next()) {
-            const auto& row = in->GetRow();            
+            const auto& row = in->GetRow();
             NJson::TJsonValue json(NJson::JSON_MAP);
             for (const auto& [key, child]: row.AsMap()) {
                 if (key == "_logfeller_timestamp")
@@ -97,10 +97,28 @@ public:
 
             TString failReason = GetFailReason(status);
 
+            if (failReason == "unspecified") {
+                continue;
+            }
+
             NYT::TNode result;
             result = result("query_id", row["query_id"].AsString());
+
+            result = result("created_at", row["created_at"].AsString());
+            result = result("query_cluster", row["query_cluster"].AsString());
+            result = result("query_database", row["query_database"].AsString());
+
+            result = result("query_plan", row["query_plan"].AsString());
+            result = result("query_syntax", row["query_syntax"].AsString());
+            result = result("query_text", row["query_text"].AsString());
+
+            result = result("query_type", row["query_type"].AsString());
+            result = result("table_metadata", row["table_metadata"].AsString());
+            result = result("version", row["version"].AsString());
+
             result = result("fail_reason", failReason);
             result = result("extra_message", response.Get()->Message);
+            result = result("new_query_plan", response.Get()->Plan);
 
             out->AddRow(result);
         }
@@ -113,9 +131,22 @@ public:
 
 static NYT::TTableSchema OutputSchema() {
     NYT::TTableSchema schema;
-    schema.AddColumn(NYT::TColumnSchema().Name("query_id").Type(NYT::VT_STRING));
     schema.AddColumn(NYT::TColumnSchema().Name("fail_reason").Type(NYT::VT_STRING));
     schema.AddColumn(NYT::TColumnSchema().Name("extra_message").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("new_query_plan").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_id").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("created_at").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_cluster").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_database").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_plan").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_syntax").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("query_text").Type(NYT::VT_STRING));
+
+    schema.AddColumn(NYT::TColumnSchema().Name("query_type").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("table_metadata").Type(NYT::VT_STRING));
+    schema.AddColumn(NYT::TColumnSchema().Name("version").Type(NYT::VT_STRING));
     return schema;
 }
 

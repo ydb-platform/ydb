@@ -132,6 +132,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         {
             configParser.ParseRunOpts(argc, argv);
             configParser.ApplyParsedOptions();
+            configParser.ApplyModuleDefaults(factories);
             return MainRun(runConfig, factories);
         }
         case EDM_ADMIN:

@@ -369,4 +369,10 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 
+void TRunCommandConfigParser::ApplyModuleDefaults(std::shared_ptr<TModuleFactories> factories) {
+    if (factories && factories->ModuleDefaults) {
+        factories->ModuleDefaults(Config);
+    }
+}
+
 } // namespace NKikimr

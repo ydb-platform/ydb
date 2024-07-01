@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config.h"
+#include "factories.h"
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 
@@ -23,6 +24,7 @@ public:
     virtual void SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& opts);
     virtual void ParseConfigFiles(const NLastGetopt::TOptsParseResult& res);
     virtual void ApplyParsedOptions();
+    void ApplyModuleDefaults(std::shared_ptr<TModuleFactories> factories);
 
 protected:
     struct TGlobalOpts {

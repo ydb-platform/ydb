@@ -66,6 +66,7 @@ public:
     explicit TS3Mock(const TSettings& settings = {});
     explicit TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings = {});
     explicit TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings = {});
+    ~TS3Mock();
 
     TClientRequest* CreateClient();
     bool Start();

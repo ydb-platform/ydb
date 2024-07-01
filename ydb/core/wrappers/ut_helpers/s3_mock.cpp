@@ -432,6 +432,8 @@ TS3Mock::TS3Mock(const THashMap<TString, TString>& data, const TSettings& settin
 {
 }
 
+TS3Mock::~TS3Mock() = default;
+
 TClientRequest* TS3Mock::CreateClient() {
     return new TRequest(this);
 }

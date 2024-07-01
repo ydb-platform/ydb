@@ -42,7 +42,7 @@ TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProto(const 
                         return TConclusionStatus::Fail("incorrect sharding column name: " + i);
                     }
                     if (!schema->GetColumns().GetByName(i)->IsKeyColumn()) {
-                        return TConclusionStatus::Fail("sharding column name have to been primary key column: " + i);
+                        return TConclusionStatus::Fail("sharding column name have to be a primary key column: " + i);
                     }
                 }
             }

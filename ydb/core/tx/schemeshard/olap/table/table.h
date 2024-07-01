@@ -36,7 +36,7 @@ public:
     }
 
     const NProtoBuf::RepeatedField<ui64>& GetColumnShards() const {
-        return Description.GetSharding().GetColumnShards(); 
+        return Description.GetSharding().GetColumnShards();
     }
 
     void SetColumnShards(const std::vector<ui64>& columnShards) {

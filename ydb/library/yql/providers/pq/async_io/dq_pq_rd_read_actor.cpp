@@ -122,7 +122,7 @@ private:
 
         enum class ESessionStatus {
             NoSession,
-            Starting,
+            Started,
 
         };
         TActorId RowDispatcherActorId;
@@ -259,7 +259,7 @@ void TDqPqRdReadActor::ProcessState() {
             }
             event->Record.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
             Send(sessionInfo.RowDispatcherActorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-            sessionInfo.Status = SessionInfo::ESessionStatus::Starting;
+            sessionInfo.Status = SessionInfo::ESessionStatus::Started;
         }
     }
 }
@@ -353,8 +353,18 @@ const TDqAsyncStats& TDqPqRdReadActor::GetIngressStats() const {
 
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
+    SRC_LOG_D("PassAway");
 
-    // TODO
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        if (sessionInfo.Status == SessionInfo::ESessionStatus::NoSession) {
+            continue;
+        }
+
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
+        event->Record.MutableSource()->CopyFrom(SourceParams);
+        event->Record.SetPartitionId(partitionId);
+        Send(sessionInfo.RowDispatcherActorId, event.release());
+    }
     TActorBootstrapped<TDqPqRdReadActor>::PassAway();
 }
 

@@ -214,13 +214,15 @@ class BaseTenant(abc.ABC):
             {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
         return result if result is not None else 0
 
-    def wait_worker_count(self, node_index, activity, expected_count, timeout=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def wait_worker_count(self, node_index, activity, expected_count, timeout=yatest_common.plain_or_under_sanitizer(30, 150), exact_match=False):
         deadline = time.time() + timeout
         while True:
             count = self.get_actor_count(node_index, activity)
-            if count >= expected_count:
+            if count == expected_count:
                 break
-            assert time.time() < deadline, "Wait actor count failed"
+            if not exact_match and count > expected_count:
+                break
+            assert time.time() < deadline, f"Waiting actor {activity} count failed"
             time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
         pass
 

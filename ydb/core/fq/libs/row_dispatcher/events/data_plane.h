@@ -17,6 +17,7 @@ struct TEvRowDispatcher {
         EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorChanged,
         EvStartSession,
+        EvStopSession,
         EvSessionData,
 
         EvRowDispatcherRequest,
@@ -25,7 +26,7 @@ struct TEvRowDispatcher {
         EvCoordinatorResult,
 
         EvSessionAddConsumer,
-
+        EvSessionDeleteConsumer,
         EvEnd,
     };
 
@@ -35,11 +36,6 @@ struct TEvRowDispatcher {
         }
         NActors::TActorId CoordinatorActorId;
     };
-
-    // struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
-    //     NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
-    //     TEvStartSession() = default;
-    // };
 
     // struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
     //     NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
@@ -86,6 +82,11 @@ struct TEvRowDispatcher {
         TEvStartSession() = default;
     };
 
+    struct TEvStopSession : public NActors::TEventPB<TEvStopSession,
+        NFq::NRowDispatcherProto::TEvStopSession, EEv::EvStopSession> {
+        TEvStopSession() = default;
+    };
+
     struct TEvSessionData : public NActors::TEventPB<TEvSessionData,
         NFq::NRowDispatcherProto::TEvSessionData, EEv::EvSessionData> {
         TEvSessionData() = default;
@@ -97,6 +98,10 @@ struct TEvRowDispatcher {
         NActors::TActorId ConsumerActorId;
         TMaybe<ui64> Offset;
         ui64 StartingMessageTimestampMs;
+    };
+
+    struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {
+        NActors::TActorId ConsumerActorId;
     };
 };
 

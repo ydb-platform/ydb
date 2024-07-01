@@ -11,6 +11,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
+from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
@@ -108,23 +109,19 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_restoring_with_offset(self, kikimr, client):
+    def test_stop_start(self, kikimr, client):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
         self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
         
-        output_topic1 = "pq_test_pq_read_write_output1"
-        output_topic2 = "pq_test_pq_read_write_output2"
-        create_stream(output_topic1, partitions_count=1)
-        create_read_rule(output_topic1, self.consumer_name)
-
-        create_stream(output_topic2, partitions_count=1)
-        create_read_rule(output_topic2, self.consumer_name)
+        output_topic = "pq_test_pq_read_write_output1"
+        create_stream(output_topic, partitions_count=1)
+        create_read_rule(output_topic, self.consumer_name)
 
         sql1 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
+            INSERT INTO {YDS_CONNECTION}.`{output_topic}`
             SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
 
-        query_id1 = start_yds_query(kikimr, client, sql1)
+        query_id = start_yds_query(kikimr, client, sql1)
 
         data = [
             '{"time" = 101;}',
@@ -133,17 +130,19 @@ class TestPqRowDispatcher(TestYdsBase):
 
         self.write_stream(data)
         expected = data
-        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
         )
-        stop_yds_query(client, query_id1)  # TODO?
+        stop_yds_query(client, query_id)  # TODO?
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
 
-        sql2 = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
-            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
-        query_id2 = start_yds_query(kikimr, client, sql2)
+        client.modify_query(query_id, "continue", sql1,
+                        type=fq.QueryContent.QueryType.STREAMING,
+                        state_load_mode=fq.StateLoadMode.EMPTY,
+                        streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
         data = [
             '{"time" = 103;}',
@@ -152,7 +151,11 @@ class TestPqRowDispatcher(TestYdsBase):
 
         self.write_stream(data)
         expected = data
-        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic) == expected
+
+        stop_yds_query(client, query_id)  # TODO?
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
 
 
 

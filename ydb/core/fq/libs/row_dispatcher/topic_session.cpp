@@ -121,8 +121,10 @@ public:
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr&);
+    void Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr&);
     TString GetSessionId() const;
     void HandleNewEvents();
+    void PassAway() override;
 
 
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
@@ -143,9 +145,11 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
+        hFunc(TEvRowDispatcher::TEvSessionDeleteConsumer, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
     )
 
 };
@@ -180,6 +184,13 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("id " << SelfId());
 }
+
+
+void TTopicSession::PassAway() {
+    LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    NActors::TActorBootstrapped<TTopicSession>::PassAway();
+}
+
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession) {
@@ -218,7 +229,7 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings() const
 
     return NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
-        .ConsumerName(SourceParams.GetConsumerName())
+        .WithoutConsumer()
         .MaxMemoryUsageBytes(BufferSize);
        // .ReadFromTimestamp(StartingMessageTimestamp); // TODO
 }
@@ -476,6 +487,11 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     // CloseSession(); // TODO
     GetReadSession();
     SubscribeOnNextEvent();
+}
+
+void TTopicSession::Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr& ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionDeleteConsumer: " << ev->Get()->ConsumerActorId);
+    // TODO
 }
 
 

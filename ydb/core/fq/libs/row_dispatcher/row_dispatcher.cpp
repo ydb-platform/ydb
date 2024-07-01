@@ -45,8 +45,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     using SessionKey = std::pair<TString, ui32>; // TopicPath / PartitionId
 
+    struct TopicSessionInfo {
+        TSet<TActorId> Consumers;
+    };
+
+
     struct PartitionInfo {
-        TList<TActorId> TopicSessions;
+        TMap<TActorId, TopicSessionInfo> TopicSessions;
     };
 
     TMap<SessionKey, PartitionInfo> Sessions;
@@ -72,7 +77,7 @@ public:
     void Handle(NActors::TEvents::TEvPong::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
-
+    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -85,6 +90,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
 
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
     })
 
 private:
@@ -189,19 +195,54 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 ev->Get()->Record.GetAddBearerToToken())).release());
-        sessions.push_back(actorId);
+        sessions[actorId];
         sessionActorId = actorId;
-    } else  {
-        sessionActorId = sessions.front();
+    } else {
+        sessionActorId = sessions.begin()->first;
     }
 
     //auto sessionActorId = Sessions[key];
 
+    sessions[sessionActorId].Consumers.insert(ev->Sender);
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
     event->ConsumerActorId = ev->Sender;
     event->Offset = readOffset;
     event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
     Send(sessionActorId, event.release());
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+        " partitionId " << ev->Get()->Record.GetPartitionId());
+    SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
+    LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
+    auto& sessionsMap = Sessions[key].TopicSessions;
+    LOG_ROW_DISPATCHER_DEBUG("Sessions count by key " << Sessions.size());
+    if (sessionsMap.empty()) {
+        return;
+    }
+
+    for (auto& [topicSessionActorId, info]: sessionsMap) {
+        for (auto consumerActorId: info.Consumers) {
+            if (consumerActorId != ev->Sender) {
+                continue;
+            }
+
+            auto event = std::make_unique<TEvRowDispatcher::TEvSessionDeleteConsumer>();
+            event->ConsumerActorId = ev->Sender;
+            Send(topicSessionActorId, event.release());
+
+            info.Consumers.erase(ev->Sender);
+            if (info.Consumers.empty()) {
+                Send(topicSessionActorId, new NActors::TEvents::TEvPoisonPill());
+                sessionsMap.erase(topicSessionActorId);
+                if (sessionsMap.empty()) {
+                    Sessions.erase(key);
+                }
+            }
+            return;
+        }
+    }
 }
 
 } // namespace

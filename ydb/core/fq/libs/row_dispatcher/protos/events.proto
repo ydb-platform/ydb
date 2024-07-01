@@ -30,6 +30,11 @@ message TEvStartSession {
     uint64 StartingMessageTimestampMs = 6;
 }
 
+message TEvStopSession {
+    NYql.NPq.NProto.TDqPqTopicSource Source = 1;
+    uint32 PartitionId = 2;
+}
+
 message TEvSessionData {
     repeated string Blob = 1;
     uint32 PartitionId = 2;

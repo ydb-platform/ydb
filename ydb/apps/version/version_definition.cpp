@@ -13,7 +13,7 @@ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurren
         },
         .CanConnectTo = {
             TCompatibilityRuleConstructor{
-                .Application = "nbs"
+                .Application = "nbs",
                 .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 1 },
                 .UpperLimit = TVersionConstructor{ .Year = 24, .Major = 3 },
             }

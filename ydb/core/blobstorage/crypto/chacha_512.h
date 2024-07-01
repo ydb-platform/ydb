@@ -36,21 +36,21 @@ typedef unsigned vec256 __attribute__ ((vector_size (32)));
 #define ROL256_7(x)		XOR256(_mm256_slli_epi32((__m256i)x, 7), _mm256_srli_epi32((__m256i)x,25))
 #define ROL256_12(x)	XOR256(_mm256_slli_epi32((__m256i)x,12), _mm256_srli_epi32((__m256i)x,20))
 #define ROL256_8(x)		(vec256)_mm256_shuffle_epi8((__m256i)x,_mm256_set_epi8(14,13,12,15,	\
-																			   10, 9, 8,11,	\
-																				6, 5, 4, 7,	\
-																				2, 1, 0, 3,	\
-																			   14,13,12,15,	\
-																			   10, 9, 8,11,	\
-																				6, 5, 4, 7,	\
-																				2, 1, 0, 3))
+                                                                               10, 9, 8,11,	\
+                                                                                6, 5, 4, 7,	\
+                                                                                2, 1, 0, 3,	\
+                                                                               14,13,12,15,	\
+                                                                               10, 9, 8,11,	\
+                                                                                6, 5, 4, 7,	\
+                                                                                2, 1, 0, 3))
 #define ROL256_16(x)	(vec256)_mm256_shuffle_epi8((__m256i)x,_mm256_set_epi8(13,12,15,14,	\
-																				9, 8,11,10,	\
-																				5, 4, 7, 6,	\
-																				1, 0, 3, 2,	\
-																			   13,12,15,14,	\
-																			    9, 8,11,10,	\
-																			    5, 4, 7, 6,	\
-																			    1, 0, 3, 2))
+                                                                                9, 8,11,10,	\
+                                                                                5, 4, 7, 6,	\
+                                                                                1, 0, 3, 2,	\
+                                                                               13,12,15,14,	\
+                                                                                9, 8,11,10,	\
+                                                                                5, 4, 7, 6,	\
+                                                                                1, 0, 3, 2))
 #define DQROUND_VECTORS_256(a,b,c,d)						\
     a = ADD256_32(a,b); d = XOR256(d,a); d = ROL256_16(d);	\
     c = ADD256_32(c,d); b = XOR256(b,c); b = ROL256_12(b);	\
@@ -66,7 +66,7 @@ typedef unsigned vec256 __attribute__ ((vector_size (32)));
     STORE256(op + d + 0, XOR256(LOAD256(ip + d + 0), _mm256_permute2x128_si256((__m256i)v0, (__m256i)v1, 0x20)));	\
     STORE256(op + d + 8, XOR256(LOAD256(ip + d + 8), _mm256_permute2x128_si256((__m256i)v2, (__m256i)v3, 0x20)));	\
     STORE256(op + d +16, XOR256(LOAD256(ip + d +16), _mm256_permute2x128_si256((__m256i)v0, (__m256i)v1, 0x31)));	\
-	STORE256(op + d +24, XOR256(LOAD256(ip + d +24), _mm256_permute2x128_si256((__m256i)v2, (__m256i)v3, 0x31)));
+    STORE256(op + d +24, XOR256(LOAD256(ip + d +24), _mm256_permute2x128_si256((__m256i)v2, (__m256i)v3, 0x31)));
 typedef unsigned vec512 __attribute__ ((vector_size (64)));
 typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
 #define ONE_	_mm512_set_epi64(0,1,0,1,0,1,0,1)
@@ -96,26 +96,26 @@ typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
     c = ADD512_32(c,d); b = XOR512(b,c); b = ROL512(b, 7);	\
     b = ROR512_V3(b); c = ROR512_V2(c); d = ROR512_V1(d);
 #define WRITE_XOR_512(ip, op, d, v0, v1, v2, v3)																		\
-	STORE512(op + d + 0, XOR512(LOAD512(ip + d + 0),																	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v3)), 0x0fff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v2)), 0xf0ff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v1)), 0xff0f,	\
-			(__m512i)(v0))))));																							\
-	STORE512(op + d +16, XOR512(LOAD512(ip + d +16),																	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v3)), 0x0fff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v2)), 0xf0ff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v0)), 0xfff0,	\
-			(__m512i)(v1))))));																							\
-	STORE512(op + d +32, XOR512(LOAD512(ip + d +32),																	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v3)), 0x0fff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v1)), 0xff0f,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v0)), 0xfff0,	\
-			(__m512i)(v2))))));																							\
-	STORE512(op + d +48, XOR512(LOAD512(ip + d +48),																	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v2)), 0xf0ff,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v1)), 0xff0f,	\
-			_mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v0)), 0xfff0,	\
-			(__m512i)(v3))))));
+    STORE512(op + d + 0, XOR512(LOAD512(ip + d + 0),																	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v3)), 0x0fff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v2)), 0xf0ff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v1)), 0xff0f,	\
+            (__m512i)(v0))))));																							\
+    STORE512(op + d +16, XOR512(LOAD512(ip + d +16),																	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v3)), 0x0fff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v2)), 0xf0ff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v0)), 0xfff0,	\
+            (__m512i)(v1))))));																							\
+    STORE512(op + d +32, XOR512(LOAD512(ip + d +32),																	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v3)), 0x0fff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v1)), 0xff0f,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v0)), 0xfff0,	\
+            (__m512i)(v2))))));																							\
+    STORE512(op + d +48, XOR512(LOAD512(ip + d +48),																	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(1,0,7,6,5,4,3,2), (__m512i)(v2)), 0xf0ff,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v1)), 0xff0f,	\
+            _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v0)), 0xfff0,	\
+            (__m512i)(v3))))));
 #endif
 
 class ChaCha512
@@ -142,7 +142,7 @@ private:
     void EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len);
 
 #ifdef __AVX512F__
-	vec512 q0_, q1_, q2_, q3_;
+    vec512 q0_, q1_, q2_, q3_;
 #endif
     ui8 rounds_;
 };

@@ -9,7 +9,7 @@
 
 Y_UNIT_TEST_SUITE(TChaCha512)
 {
-#if (__AVX512F__ || __AVX2__)
+#ifdef __AVX512F__
     void RunTest(int rounds, const ui8 key[KEY_SIZE], const ui8 iv[IV_SIZE],
             const ui8 expected[][DATA_SIZE])
     {

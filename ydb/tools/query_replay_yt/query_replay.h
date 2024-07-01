@@ -18,6 +18,7 @@ struct TQueryReplayConfig {
     TString SrcPath;
     TString DstPath;
     ui32 ActorSystemThreadsCount = 5;
+    TVector<TString> UdfFiles;
 
     void ParseConfig(int argc, const char** argv);
 };

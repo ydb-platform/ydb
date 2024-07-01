@@ -1,4 +1,5 @@
 RECURSE(
+    arrow
     mkql
     protobuf
     protobuf_raw

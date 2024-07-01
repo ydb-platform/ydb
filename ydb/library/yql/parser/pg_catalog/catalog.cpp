@@ -13,12 +13,29 @@ namespace NYql::NPg {
 constexpr ui32 FuncMaxArgs = 100;
 constexpr ui32 InvalidOid = 0;
 constexpr ui32 Int2VectorOid = 22;
+constexpr ui32 RegProcOid = 24;
+constexpr ui32 OidOid = 26;
 constexpr ui32 OidVectorOid = 30;
+constexpr ui32 RegProcedureOid = 2202;
+constexpr ui32 RegOperOid = 2203;
+constexpr ui32 RegOperatorOid = 2204;
+constexpr ui32 RegClassOid = 2205;
+constexpr ui32 RegTypeOid = 2206;
 //constexpr ui32 AnyElementOid = 2283;
 //constexpr ui32 AnyNonArrayOid = 2776;
+constexpr ui32 RegConfigOid = 3734;
+constexpr ui32 RegDictionaryOid = 3769;
+constexpr ui32 RegNamespaceOid = 4089;
+constexpr ui32 RegRoleOid = 4096;
 //constexpr ui32 AnyCompatibleOid = 5077;
 //constexpr ui32 AnyCompatibleArrayOid = 5078;
 //constexpr ui32 AnyCompatibleNonArrayOid = 5079;
+
+// See GetCCHashEqFuncs in PG sources
+// https://doxygen.postgresql.org/catcache_8c.html#a8a2dc395011dba02c083bfbf6b87ce6c
+const THashSet<ui32> regClasses({
+    RegProcOid, RegProcedureOid, RegOperOid, RegOperatorOid, RegClassOid, RegTypeOid,
+    RegConfigOid, RegDictionaryOid, RegRoleOid, RegNamespaceOid});
 
 using TOperators = THashMap<ui32, TOperDesc>;
 
@@ -1835,6 +1852,9 @@ struct TCatalog {
         for (auto& [k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
                 auto lookupId = (v.TypeId == VarcharOid ? TextOid : v.TypeId);
+                if (regClasses.contains(lookupId)) {
+                    lookupId = OidOid;
+                }
                 auto btreeOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, lookupId));
                 if (btreeOpClassPtr) {
                     auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), lookupId, lookupId));

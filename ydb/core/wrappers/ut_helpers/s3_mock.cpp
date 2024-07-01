@@ -9,9 +9,24 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+
 namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
+
+struct TAwsApiGuard {
+    TAwsApiGuard() {
+        Aws::InitAPI(Options);
+    }
+
+    ~TAwsApiGuard() {
+        Aws::ShutdownAPI(Options);
+    }
+
+private:
+    Aws::SDKOptions Options;
+};
 
 TS3Mock::TSettings::TSettings()
     : CorruptETags(false)
@@ -389,6 +404,7 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
 }
 
 bool TS3Mock::Start() {
+    AwsApiGuard = MakeHolder<TAwsApiGuard>();
     return HttpServer.Start();
 }
 

@@ -5,6 +5,7 @@ PEERDIR(
     library/cpp/http/server
     library/cpp/xml/document
     library/cpp/cgiparam
+    contrib/libs/aws-sdk-cpp
 )
 
 SRCS(

@@ -48,18 +48,11 @@ struct TEvPrivate {
     };
 
     struct TEvResolvePoolResponse : public NActors::TEventLocal<TEvResolvePoolResponse, EvResolvePoolResponse> {
-        TEvResolvePoolResponse(const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, TEvPlaceRequestIntoPool::TPtr event)
-            : Status(Ydb::StatusIds::SUCCESS)
+        TEvResolvePoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, bool defaultPoolCreated, TEvPlaceRequestIntoPool::TPtr event, NYql::TIssues issues = {})
+            : Status(status)
             , PoolConfig(poolConfig)
             , PathId(pathId)
-            , Event(std::move(event))
-            , Issues({})
-        {}
-
-        TEvResolvePoolResponse(Ydb::StatusIds::StatusCode status, TEvPlaceRequestIntoPool::TPtr event, NYql::TIssues issues)
-            : Status(status)
-            , PoolConfig({})
-            , PathId({})
+            , DefaultPoolCreated(defaultPoolCreated)
             , Event(std::move(event))
             , Issues(std::move(issues))
         {}
@@ -67,6 +60,7 @@ struct TEvPrivate {
         const Ydb::StatusIds::StatusCode Status;
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
+        const bool DefaultPoolCreated;
         TEvPlaceRequestIntoPool::TPtr Event;
         const NYql::TIssues Issues;
     };

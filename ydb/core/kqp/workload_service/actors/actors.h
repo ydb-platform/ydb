@@ -9,7 +9,7 @@ namespace NKikimr::NKqp::NWorkload {
 NActors::IActor* CreatePoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters);
 
 // Fetch pool and create default pool if needed
-NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event);
+NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists);
 
 // Fetch and create pool in scheme shard
 NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken);

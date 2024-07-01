@@ -458,7 +458,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=1
             );
-        )");
+            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
+        );
 
         auto settings = TQueryRunnerSettings().PoolId(poolId).UserSID(userSID);
         auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);

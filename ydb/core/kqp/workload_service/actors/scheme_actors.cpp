@@ -20,13 +20,13 @@ using namespace NActors;
 
 class TPoolResolverActor : public TActorBootstrapped<TPoolResolverActor> {
 public:
-    explicit TPoolResolverActor(TEvPlaceRequestIntoPool::TPtr event)
+    TPoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists)
         : Event(std::move(event))
     {
         if (!Event->Get()->PoolId) {
             Event->Get()->PoolId = NResourcePool::DEFAULT_POOL_ID;
         }
-        CanCreatePool = Event->Get()->PoolId == NResourcePool::DEFAULT_POOL_ID;
+        CanCreatePool = Event->Get()->PoolId == NResourcePool::DEFAULT_POOL_ID && !defaultPoolExists;
     }
 
     void Bootstrap() {
@@ -77,6 +77,7 @@ public:
         }
 
         LOG_D("Successfully created default pool");
+        DefaultPoolCreated = true;
         StartPoolFetchRequest();
     }
 
@@ -93,20 +94,21 @@ private:
     void Reply(NResourcePool::TPoolSettings poolConfig, TPathId pathId) {
         LOG_D("Pool info successfully resolved");
 
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(poolConfig, pathId, std::move(Event)));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(Ydb::StatusIds::SUCCESS, poolConfig, pathId, DefaultPoolCreated, std::move(Event)));
         PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         LOG_W("Failed to resolve pool, " << status << ", issues: " << issues.ToOneLineString());
 
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(status, std::move(Event), std::move(issues)));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(status, {}, {}, DefaultPoolCreated, std::move(Event), std::move(issues)));
         PassAway();
     }
 
 private:
     TEvPlaceRequestIntoPool::TPtr Event;
     bool CanCreatePool = false;
+    bool DefaultPoolCreated = false;
 };
 
 
@@ -139,9 +141,11 @@ public:
                 Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid resource pool id " << PoolId);
                 return;
             case EStatus::AccessDenied:
+                Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << PoolId);
+                return;
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
-                Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << PoolId << " not found");
+                Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << PoolId << " not found or you don't have access permissions");
                 return;
             case EStatus::LookupError:
             case EStatus::TableCreationNotComplete:
@@ -150,12 +154,6 @@ public:
                 }
                 return;
             case EStatus::Ok:
-                if (auto securityObject = result.SecurityObject) {
-                    if (!UserToken || !securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken)) {
-                        Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << PoolId);
-                        return;
-                    }
-                }
                 Reply(result.ResourcePoolInfo);
                 return;
         }
@@ -175,8 +173,9 @@ protected:
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{".resource_pools", PoolId}},
             Database,
-            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})
+            UserToken
         );
+        event->ResultSet[0].Access |= NACLib::SelectRow;
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
@@ -230,6 +229,8 @@ private:
 
 
 class TPoolCreatorActor : public TSchemeActorBase<TPoolCreatorActor> {
+    using TBase = TSchemeActorBase<TPoolCreatorActor>;
+
 public:
     TPoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl)
         : ReplyActorId(replyActorId)
@@ -255,11 +256,18 @@ public:
                     Reply(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid creation status: " << static_cast<NKikimrScheme::EStatus>(ssStatus));
                 }
                 return;
-            case NTxProxy::TResultStatus::ExecInProgress:
-            case NTxProxy::TResultStatus::ProxyShardNotAvailable:
-                if (!ScheduleRetry(TStringBuilder() << "Retry shard unavailable error")) {
-                    Reply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Retry limit exceeded on status: " << static_cast<NKikimrScheme::EStatus>(ssStatus));
+            case NTxProxy::TResultStatus::ExecError:
+                if (ssStatus == NKikimrScheme::EStatus::StatusMultipleModifications || ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
+                    ScheduleRetry(ssStatus, "Retry execution error", true);
+                } else {
+                    Reply(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Execution error: " << static_cast<NKikimrScheme::EStatus>(ssStatus));
                 }
+                return;
+            case NTxProxy::TResultStatus::ExecInProgress:
+                ScheduleRetry(ssStatus, "Retry execution in progress error", true);
+                return;
+            case NTxProxy::TResultStatus::ProxyShardNotAvailable:
+                ScheduleRetry(ssStatus, "Retry shard unavailable error");
                 return;
             default:
                 Reply(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Failed to create resource pool: " << static_cast<NKikimrScheme::EStatus>(ssStatus));
@@ -305,6 +313,13 @@ protected:
     }
 
 private:
+    void ScheduleRetry(ui32 status, const TString& message, bool longDelay = false) {
+        auto ssStatus = static_cast<NKikimrScheme::EStatus>(status);
+        if (!TBase::ScheduleRetry(TStringBuilder() << message << ", status: " << ssStatus, longDelay)) {
+            Reply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Retry limit exceeded on status: " << ssStatus);
+        }
+    }
+
     void BuildCreatePoolRequest(NKikimrSchemeOp::TResourcePoolDescription& poolDescription) {
         poolDescription.SetName(PoolId);
         for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
@@ -350,8 +365,8 @@ private:
 
 }  // anonymous namespace
 
-IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event) {
-    return new TPoolResolverActor(std::move(event));
+IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists) {
+    return new TPoolResolverActor(std::move(event), defaultPoolExists);
 }
 
 IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {

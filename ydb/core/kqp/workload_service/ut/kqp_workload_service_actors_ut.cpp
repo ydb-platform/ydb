@@ -46,6 +46,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         auto ydb = TYdbSetupSettings().Create();
 
         const TString& userSID = "user@test";
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
+            GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
+        ));
+
         auto failedResponse = FetchPool(ydb, ydb->GetSettings().PoolId_, userSID);
         UNIT_ASSERT_VALUES_EQUAL_C(failedResponse->Get()->Status, Ydb::StatusIds::UNAUTHORIZED, failedResponse->Get()->Issues.ToOneLineString());
         UNIT_ASSERT_STRING_CONTAINS(failedResponse->Get()->Issues.ToString(), TStringBuilder() << "You don't have access permissions for resource pool " << ydb->GetSettings().PoolId_);

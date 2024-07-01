@@ -27,7 +27,7 @@ namespace NKikimr::NKqp::NWorkload {
 
 template <typename TDerived>
 class TSchemeActorBase : public NActors::TActorBootstrapped<TDerived> {
-    using TRetryPolicy = IRetryPolicy<>;
+    using TRetryPolicy = IRetryPolicy<bool>;
 
 protected:
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
@@ -62,12 +62,12 @@ protected:
     virtual TString LogPrefix() const = 0;
 
 protected:
-    bool ScheduleRetry(const TString& message) {
+    bool ScheduleRetry(const TString& message, bool longDelay = false) {
         if (!RetryState) {
             RetryState = CreateRetryState();
         }
 
-        if (const auto delay = RetryState->GetNextRetryDelay()) {
+        if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
             Issues.AddIssue(message);
             this->Schedule(*delay, new TEvents::TEvWakeup());
             LOG_W("Scheduled retry for error: " << message);
@@ -80,9 +80,9 @@ protected:
 private:
     static TRetryPolicy::IRetryState::TPtr CreateRetryState() {
         return TRetryPolicy::GetFixedIntervalPolicy(
-                  [](){ return ERetryErrorClass::ShortRetry; }
+                  [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
-                , TDuration::MilliSeconds(300)
+                , TDuration::MilliSeconds(500)
                 , 100
             )->CreateRetryState();
     }

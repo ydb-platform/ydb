@@ -155,7 +155,8 @@ public:
         ev->Get()->UserToken = GetUserToken(ev->Get()->UserToken);
 
         LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
-        Register(CreatePoolResolverActor(std::move(ev)));
+        bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
+        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -215,13 +216,17 @@ public:
 private:
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
         const auto& event = ev->Get()->Event;
+        const TString& database = event->Get()->Database;
+        if (ev->Get()->DefaultPoolCreated) {
+            DatabasesWithDefaultPool.insert(CanonizePath(database));
+        }
+
         const TString& poolId = event->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
-        const TString& database = event->Get()->Database;
         LOG_D("Successfully fetched pool " << poolId << ", Database: " << database << ", SessionId: " << event->Get()->SessionId);
 
         auto poolState = GetPoolState(database, poolId);
@@ -449,6 +454,7 @@ private:
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
     std::unordered_set<TString> PendingHandlers;
 
+    std::unordered_set<TString> DatabasesWithDefaultPool;
     std::unordered_map<TString, TPoolState> PoolIdToState;
 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePools;

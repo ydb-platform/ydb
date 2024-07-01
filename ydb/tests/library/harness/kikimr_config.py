@@ -398,7 +398,11 @@ class KikimrConfigGenerator(object):
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
             if not "local_pg_wire_config" in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config['local_pg_wire_config']['listening_port'] = 5432
+
+            ydb_pg_port=5432
+            if 'YDB_PG_PORT' in os.environ:
+                ydb_pg_port = os.environ['YDB_PG_PORT']
+            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pg_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

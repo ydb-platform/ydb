@@ -53,15 +53,15 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
     Y_ABORT_UNLESS(batch->num_rows());
     Y_ABORT_UNLESS(schema);
 
-    NOlap::NIndexedReader::TSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
-    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> minValue;
-    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> maxValue;
+    NMerger::TRWSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
+    std::optional<NMerger::TCursor> minValue;
+    std::optional<NMerger::TCursor> maxValue;
     while (true) {
-        if (!minValue || minValue->Compare(record) == std::partial_ordering::greater) {
-            minValue = record;
+        if (!minValue || record.Compare(*minValue) == std::partial_ordering::less) {
+            minValue = record.BuildSortingCursor();
         }
-        if (!maxValue || maxValue->Compare(record) == std::partial_ordering::less) {
-            maxValue = record;
+        if (!maxValue || record.Compare(*maxValue) == std::partial_ordering::greater) {
+            maxValue = record.BuildSortingCursor();
         }
         if (!record.NextPosition(1)) {
             break;

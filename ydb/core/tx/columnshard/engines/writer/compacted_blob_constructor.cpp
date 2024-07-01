@@ -22,6 +22,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         for (auto&& b : portionWithBlobs.GetBlobs()) {
             auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), action));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
+            WriteVolume += b.GetSize();
         }
     }
 }
@@ -35,6 +36,12 @@ TCompactedWriteController::~TCompactedWriteController() {
     if (WriteIndexEv && WriteIndexEv->IndexChanges) {
         WriteIndexEv->IndexChanges->AbortEmergency();
     }
+}
+
+}
+
+void TCompactedWriteController::DoAbort(const TString& reason) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "TCompactedWriteController::DoAbort")("reason", reason);
 }
 
 }

@@ -99,7 +99,7 @@ public:
     void InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
-        return Finish.ExtractSortingPosition();
+        return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
     }
     void IncIntervalsCount() {
         ++IntervalsCount;
@@ -155,7 +155,7 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval);
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
+    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
         const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount
     )

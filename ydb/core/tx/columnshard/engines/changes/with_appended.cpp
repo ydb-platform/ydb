@@ -1,4 +1,5 @@
 #include "with_appended.h"
+
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -30,10 +31,28 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
     }
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
-    THashSet<TUnifiedBlobId> blobsDeactivated;
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        for (auto& rec : portionInfo.Records) {
-            blobsDeactivated.insert(rec.BlobRange.BlobId);
+void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    if (self) {
+        for (auto& portionInfo : AppendedPortions) {
+            switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
+                case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
+                    Y_ABORT_UNLESS(false);   // unexpected
+                case NOlap::TPortionMeta::EProduced::INSERTED:
+                    self->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
+                    break;
+                case NOlap::TPortionMeta::EProduced::COMPACTED:
+                    self->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
+                    break;
+                case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
+                    self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
+                    break;
+                case NOlap::TPortionMeta::EProduced::EVICTED:
+                    Y_ABORT("Unexpected evicted case");
+                    break;
+                case NOlap::TPortionMeta::EProduced::INACTIVE:
+                    Y_ABORT("Unexpected inactive case");
+                    break;
+            }
         }
         self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
     }
@@ -130,4 +149,4 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
 }
 
-}
+}   // namespace NKikimr::NOlap

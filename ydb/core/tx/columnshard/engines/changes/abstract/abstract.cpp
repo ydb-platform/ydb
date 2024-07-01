@@ -80,9 +80,10 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    Y_ABORT_UNLESS(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
+    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     Stage = EStage::Aborted;
-    DoOnFinish(self, context);
+    AbortedReason = context.ErrorMessage;
+    OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
@@ -102,10 +103,15 @@ void TColumnEngineChanges::StartEmergency() {
     }
 }
 
-void TColumnEngineChanges::AbortEmergency() {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
-    Stage = EStage::Aborted;
-    OnAbortEmergency();
+void TColumnEngineChanges::AbortEmergency(const TString& reason) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
+    if (Stage == EStage::Aborted) {
+        AbortedReason += "; AnotherReason: " + reason;
+    } else {
+        Stage = EStage::Aborted;
+        AbortedReason = reason;
+        OnAbortEmergency();
+    }
 }
 
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)

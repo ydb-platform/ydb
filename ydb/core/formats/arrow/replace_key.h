@@ -54,6 +54,9 @@ public:
         , Position(position)
     {
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
+        for (auto&& i : *Columns) {
+            Types.emplace_back(i->type_id());
+        }
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
@@ -62,13 +65,16 @@ public:
         , Position(position)
     {
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
+        for (auto&& i : *Columns) {
+            Types.emplace_back(i->type_id());
+        }
     }
 
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
         Y_ABORT_UNLESS(Size() == key.Size());
 
-        for (int i = 0; i < Size(); ++i) {
+        for (ui32 i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
             if (std::is_neq(cmp)) {
                 return false;
@@ -81,7 +87,7 @@ public:
     std::partial_ordering operator <=> (const TReplaceKeyTemplate<T>& key) const {
         Y_ABORT_UNLESS(Size() == key.Size());
 
-        for (int i = 0; i < Size(); ++i) {
+        for (ui32 i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
             if (std::is_neq(cmp)) {
                 return cmp;
@@ -94,7 +100,7 @@ public:
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
         Y_ABORT_UNLESS(Size() == key.Size());
 
-        for (int i = 0; i < Size(); ++i) {
+        for (ui32 i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
             if (std::is_neq(cmp)) {
                 return cmp;
@@ -104,11 +110,11 @@ public:
     }
 
     template<typename T>
-    std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, int size) const {
+    std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, const ui32 size) const {
         Y_ABORT_UNLESS(size <= key.Size());
         Y_ABORT_UNLESS(size <= Size());
 
-        for (int i = 0; i < size; ++i) {
+        for (ui32 i = 0; i < size; ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
             if (std::is_neq(cmp)) {
                 return cmp;
@@ -127,11 +133,13 @@ public:
     template<typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Types[column] == Column(column).type_id());
+        Y_DEBUG_ABORT_UNLESS(Types.size() == Size());
 
-        return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
+        return TComparator::ConcreteTypedCompare<false>(Types[column], Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
-    int Size() const {
+    ui64 Size() const {
         Y_DEBUG_ABORT_UNLESS(Columns);
         return Columns->size();
     }
@@ -163,7 +171,7 @@ public:
 
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-        AFL_VERIFY(Size() && Size() == schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
+        AFL_VERIFY(Size() && Size() == (ui32)schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         const auto& columns = *Columns;
         return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
     }
@@ -217,6 +225,7 @@ public:
 
 private:
     TArrayVecPtr Columns = nullptr;
+    std::vector<arrow::Type::type> Types;
     ui64 Position = 0;
 
     template <bool notNull>

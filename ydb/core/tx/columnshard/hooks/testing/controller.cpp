@@ -6,23 +6,21 @@
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch) {
-        FilteredRecordsCount.Add(batch->num_rows());
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
+    TGuard<TMutex> g(Mutex);
+    if (SharingIds.empty()) {
+        TCheckContext context;
+        CheckInvariants(shard, context);
     }
-    return true;
+    return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
-bool TController::DoOnWriteIndexComplete(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
-    Indexations.Inc();
-    return true;
-}
-
-bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-    if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
-        Compactions.Inc();
+void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
+    TGuard<TMutex> g(Mutex);
+    for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
+        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
-    return true;
-}
-
+//    if (SharingIds.empty()) {
+//        CheckInvariants();
+//    }
 }

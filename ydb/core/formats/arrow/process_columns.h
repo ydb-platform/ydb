@@ -4,6 +4,7 @@
 #include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NArrow {
 
@@ -17,7 +18,7 @@ public:
 private:
     EExtractProblemsPolicy AbsentColumnPolicy = EExtractProblemsPolicy::Verify;
 
-    template <EExtractProblemsPolicy policy, class TDataContainer, class TStringImpl>
+    template <class TDataContainer, class TStringImpl>
     std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
         const std::vector<TStringImpl>& columnNames) {
         std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -63,7 +64,7 @@ private:
             }
         }
 
-        return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(dstSchema->fields(), std::move(columns), srcBatch->num_rows());
+        return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(dstSchema, std::move(columns), srcBatch->num_rows());
     }
 
 public:
@@ -89,14 +90,15 @@ public:
         auto result = ExtractColumnsValidateImpl(incoming, columnNames);
         switch (AbsentColumnPolicy) {
             case EExtractProblemsPolicy::Verify:
-                AFL_VERIFY(result->num_columns() == columnNames.size())("schema", incoming->schema()->ToString())("required", JoinSeq(",", columnNames));
+                AFL_VERIFY((ui32)result->num_columns() == columnNames.size())("schema", incoming->schema()->ToString())("required", JoinSeq(",", columnNames));
                 break;
             case EExtractProblemsPolicy::Null:
-                if (result->num_columns() != columnNames) {
+                if ((ui32)result->num_columns() != columnNames.size()) {
                     return nullptr;
                 }
                 break;
             case EExtractProblemsPolicy::Skip:
+                break;
         }
         return result;
     }
@@ -107,15 +109,15 @@ public:
         AFL_VERIFY(dstSchema);
         switch (AbsentColumnPolicy) {
             case EExtractProblemsPolicy::Null:
-                return AdaptColumnsImpl<EExtractProblemsPolicy::Null>(incoming, dstSchema);
+                return AdaptColumnsImpl(incoming, dstSchema);
             case EExtractProblemsPolicy::Verify:
-                return AdaptColumnsImpl<EExtractProblemsPolicy::Verify>(incoming, dstSchema);
+                return AdaptColumnsImpl(incoming, dstSchema);
             case EExtractProblemsPolicy::Skip:
-                return AdaptColumnsImpl<EExtractProblemsPolicy::Skip>(incoming, dstSchema);
+                return AdaptColumnsImpl(incoming, dstSchema);
         }
     }
 
-    template <class TDataContainer>
+    template <class TDataContainer, class TStringType>
     TConclusion<std::shared_ptr<arrow::RecordBatch>> Reorder(const std::shared_ptr<TDataContainer>& incoming, const std::vector<TStringType>& columnNames) {
         AFL_VERIFY(!!incoming);
         AFL_VERIFY(columnNames.size());

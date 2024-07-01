@@ -30,7 +30,7 @@ def execute_command_with_output(command, timeout=60):
         if process_return_code is not None:
             f_out.flush()
             f_out.seek(0)
-            list_of_lines = list(f_out.readlines())            
+            list_of_lines = list(f_out.readlines())
             list_of_lines = [line.decode("utf-8", errors='replace') for line in list_of_lines]
 
     logger.info("Finished execution command = {}".format(command))

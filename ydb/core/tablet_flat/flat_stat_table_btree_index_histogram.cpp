@@ -24,7 +24,7 @@ enum class ENodeState : ui8 {
 };
 
 class TTableHistogramBuilderBtreeIndex {
-    struct TNodeState : public TIntrusiveListItem<TNodeState> {
+    struct TNodeState {
         const TPart* Part;
         TPageId PageId;
         ui32 Level;
@@ -91,7 +91,7 @@ class TTableHistogramBuilderBtreeIndex {
         }
     };
 
-    struct TNodeEvent {
+    struct TEvent {
         TCellsIterable Key;
         bool IsBegin;
         TNodeState* Node;
@@ -101,28 +101,49 @@ class TTableHistogramBuilderBtreeIndex {
         const TKeyCellDefaults& KeyDefaults;
 
         // returns that a > b
-        bool operator ()(const TNodeEvent& a, const TNodeEvent& b) const noexcept {
-            if (a.Key && b.Key) {
+        bool operator ()(const TEvent& a, const TEvent& b) const noexcept {
+            return Compare(a, b) > 0;
+        }
+
+        i8 Compare(const TEvent& a, const TEvent& b) const noexcept {
+            // events go in order:
+            // - Key = {}, IsBegin = true
+            // - ...
+            // - Key = {'c'}, IsBegin = true
+            // - Key = {'c'}, IsBegin = false
+            // - ...
+            // - Key = {'d'}, IsBegin = true
+            // - Key = {'d'}, IsBegin = false
+            // - ...
+            // - Key = {}, IsBegin = false
+
+            if (a.Key && b.Key) { // compare by keys
                 auto cmp = CompareKeys(a.Key, b.Key, KeyDefaults);
                 if (cmp != 0) {
-                    return cmp > 0;
+                    return cmp;
                 }
-                return GetKind(a) > GetKind(b);
+                // keys are the same, compare by begin flag:
+                return Compare(a.IsBegin ? -1 : 1, b.IsBegin ? -1 : 1);
             }
 
-            return GetCategory(a) > GetCategory(b);
+            // category = -1 for Key = { }, IsBegin = true
+            // category =  0 for Key = {*}, IsBegin = *
+            // category = -1 for Key = { }, IsBegin = false
+            return Compare(GetCategory(a), GetCategory(b));
         }
 
-        i8 GetKind(const TNodeEvent& a) const noexcept {
-            Y_ABORT_UNLESS(a.Key);
-            return a.IsBegin ? 1 : -1; // end first
-        }
-
-        i8 GetCategory(const TNodeEvent& a) const noexcept {
+    private:
+        static i8 GetCategory(const TEvent& a) noexcept {
             if (a.Key) {
                 return 0;
             }
             return a.IsBegin ? -1 : 1;
+        }
+
+        static i8 Compare(i8 a, i8 b) noexcept {
+            if (a < b) return -1;
+            if (a > b) return 1;
+            return 0;
         }
     };
 
@@ -149,7 +170,7 @@ public:
         , Env(env)
         , YieldHandler(yieldHandler)
         , NodeEventKeyGreater{KeyDefaults}
-        , NodeEvents(NodeEventKeyGreater)
+        , FutureEvents(NodeEventKeyGreater)
     {
     }
 
@@ -169,7 +190,7 @@ public:
 
         ready &= BuildIterate(stats);
 
-        NodeEvents.clear();
+        FutureEvents.clear();
         LoadedBTreeNodes.clear();
         LoadedStateNodes.clear();
 
@@ -189,7 +210,7 @@ private:
 
         if (it->BeginRowId() <= node.BeginRowId && node.EndRowId <= it->EndRowId()) {
             // take the node
-            AddNodeEvents(node);
+            AddFutureEvents(node);
             return true;
         }
 
@@ -198,7 +219,7 @@ private:
         if (node.Level == 0) {
             // can't split, decide by node.EndRowId - 1
             if (it->Has(node.EndRowId - 1)) {
-                AddNodeEvents(node);
+                AddFutureEvents(node);
             }
             return true;
         }
@@ -217,84 +238,100 @@ private:
 
     bool BuildIterate(TStats& stats) {
         // The idea is the following:
-        // - we move some key pointer through all parts simultaneously
-        //   keeping all nodes that have current key pointer in opened heap (sorted by size descending)
-        //   all nodes before current key pointer are considered as closed
-        // - we keep an invariant that size of closed and opened nodes <= next requested histogram bucket value
-        //   if it is false, we load opened nodes and split them using current key pointer
+        // - move a key pointer through all parts simultaneously
+        //   keeping all nodes that contain current key pointer in opened heaps (sorted by size descending)
+        //   all nodes that ended before current key pointer are considered as closed
+        // - keep an invariant that size of closed and opened nodes don't exceed next histogram bucket values
+        //   otherwise, load opened nodes
+        // - because histogram is approximate each its value is allowed to be in range
+        //   [next value - gap, next value + gap]
 
-        ui64 nextRowCount = RowCountResolution, closedRowCount = 0, openedRowCount = 0;
-        ui64 nextDataSize = DataSizeResolution, closedDataSize = 0, openedDataSize = 0;
+        // next histogram keys are been looking for:
+        ui64 nextHistogramRowCount = RowCountResolution, nextHistogramDataSize = DataSizeResolution;
+
+        // closed nodes stats:
+        ui64 closedRowCount = 0, closedDataSize = 0;
+
+        // opened nodes stats and heaps:
+        ui64 openedRowCount = 0, openedDataSize = 0;
         TPriorityQueue<TNodeState*, TVector<TNodeState*>, TNodeRowCountLess> openedSortedByRowCount;
         TPriorityQueue<TNodeState*, TVector<TNodeState*>, TNodeDataSizeLess> openedSortedByDataSize;
+
+        // will additionally save list of all nodes that start at current key pointer:
+        TVector<TNodeState*> currentKeyPointerOpens;
         
-        while (NodeEvents) {
+        while (FutureEvents && (nextHistogramRowCount != Max<ui64>() || nextHistogramDataSize != Max<ui64>())) {
             YieldHandler();
 
-            auto event = NodeEvents.top();
-            ui64 rowCount = closedRowCount + openedRowCount / 2; // right before new opens
-            ui64 dataSize = closedDataSize + openedDataSize / 2; // right before new opens
+            auto currentKeyPointer = FutureEvents.top();
+            currentKeyPointerOpens.clear();
 
-            Y_ABORT_UNLESS(NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event), "Should pop top");
-            while (NodeEvents && !NodeEventKeyGreater(NodeEvents.top(), event)) {
-                auto& newEvent = NodeEvents.top();
-                if (newEvent.IsBegin) {
-                    newEvent.Node->Open(openedRowCount, openedDataSize);
-                    openedSortedByRowCount.push(newEvent.Node);
-                    openedSortedByDataSize.push(newEvent.Node);
+            auto processEvent = [&](const TEvent& event) {
+                Y_DEBUG_ABORT_UNLESS(NodeEventKeyGreater.Compare(event, currentKeyPointer) <= 0, "Can't process future events");
+                if (event.IsBegin) {
+                    event.Node->Open(openedRowCount, openedDataSize);
+                    openedSortedByRowCount.push(event.Node);
+                    openedSortedByDataSize.push(event.Node);
                 } else {
-                    newEvent.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
+                    event.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
                 }
-            
-                NodeEvents.pop();
-            }
+            };
 
-            const auto addEvent = [&](TNodeEvent newEvent) {
-                if (NodeEventKeyGreater(newEvent, event)) {
-                    NodeEvents.push(newEvent);
-                } else {
-                    if (newEvent.IsBegin) {
-                        newEvent.Node->Open(openedRowCount, openedDataSize);
-                        openedSortedByRowCount.push(newEvent.Node);
-                        openedSortedByDataSize.push(newEvent.Node);
-                    } else {
-                        newEvent.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
+            // process all events with the same key and type as current key pointer:
+            do {
+                const TEvent& event = FutureEvents.top();
+                processEvent(event);
+                if (event.IsBegin) {
+                    currentKeyPointerOpens.push_back(event.Node);
+                }
+                FutureEvents.pop();
+            } while (FutureEvents && NodeEventKeyGreater.Compare(FutureEvents.top(), currentKeyPointer) == 0);
+
+            const auto addEvent = [&](TEvent event) {
+                auto cmp = NodeEventKeyGreater(event, currentKeyPointer);
+                if (cmp <= 0) { // event happened
+                    processEvent(event);
+                    if (cmp == 0) {
+                        currentKeyPointerOpens.push_back(event.Node);
                     }
+                } else { // event didn't happen yet
+                    FutureEvents.push(event);
                 }
             };
-
-            const auto addNode = [&](TNodeState& child) {
-                TNodeEvent childBegin{child.BeginKey, true, &child};
-                TNodeEvent childEnd{child.EndKey, false, &child};
-
-                addEvent(childBegin);
-                addEvent(childEnd);
+            const auto addNode = [&](TNodeState& node) {
+                addEvent(TEvent{node.BeginKey, true, &node});
+                addEvent(TEvent{node.EndKey, false, &node});
             };
 
-            // we search value in interval [nextRowCount - RowCountResolutionGap, nextRowCount + RowCountResolutionGap]
-            while (nextRowCount != Max<ui64>() && closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap && openedSortedByRowCount) {
+            // may safely skip current key pointer and go further only if at the next iteration
+            // sizes of closed and opened nodes don't exceed next histogram bucket values (plus their gaps)
+            // otherwise, load opened nodes right now
+            // in that case, next level nodes will be converted to begin and end events and then 
+            // either processed or been postponed to future events according to current key pointer position
+            while (nextHistogramRowCount != Max<ui64>() && closedRowCount + openedRowCount > nextHistogramRowCount + RowCountResolutionGap && openedSortedByRowCount) {
                 auto node = openedSortedByRowCount.top();
                 openedSortedByRowCount.pop();
 
                 if (node->State != ENodeState::Opened) {
+                    // may have already closed or ignored nodes in the heap, just skip them
                     Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
 
                 if (node->Level) {
                     node->Ignore(openedRowCount, openedDataSize);
+                    
                     if (!TryLoadNode(*node, addNode)) {
                         return false;
                     }
                 } // else: leaf nodes will be closed later
             }
-
-            // we search value in interval [nextDataSize - DataSizeResolutionGap, nextDataSize + DataSizeResolutionGap]
-            while (nextDataSize != Max<ui64>() && closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
+            while (nextHistogramDataSize != Max<ui64>() && closedDataSize + openedDataSize > nextHistogramDataSize + DataSizeResolutionGap && openedSortedByDataSize) {
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
 
                 if (node->State != ENodeState::Opened) {
+                    // may have already closed or ignored nodes in the heap, just skip them
                     Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
@@ -307,34 +344,45 @@ private:
                 } // else: leaf nodes will be closed later
             }
 
-            if (!event.IsBegin) { // add only newly closed nodes
-                rowCount = closedRowCount + openedRowCount / 2;
-                dataSize = closedDataSize + openedDataSize / 2;
-            }
-            rowCount = Min(rowCount, stats.RowCount);
-            dataSize = Min(dataSize, stats.DataSize.Size);
-
-            if (event.Key) {
-                if (nextRowCount != Max<ui64>()) {
-                    if (closedRowCount + openedRowCount > nextRowCount + RowCountResolutionGap || closedRowCount > nextRowCount - RowCountResolutionGap) {
-                        if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < rowCount) {
-                            AddKey(stats.RowCountHistogram, event.Key, rowCount);
-                            nextRowCount = Max(rowCount + 1, nextRowCount + RowCountResolution);
-                            if (nextRowCount + RowCountResolutionGap > stats.RowCount) {
-                                nextRowCount = Max<ui64>();
-                                if (nextDataSize == Max<ui64>()) break;
+            // add current key pointer if we either:
+            // - failed to split opened nodes and may exceed next histogram bucket values (plus their gaps)
+            // - have enough closed nodes (more than next histogram bucket values (minus their gaps))
+            // current key pointer value ignores all nodes that start at current key pointer, subtract them
+            if (currentKeyPointer.Key) {
+                if (nextHistogramRowCount != Max<ui64>()) {
+                    if (closedRowCount + openedRowCount > nextHistogramRowCount + RowCountResolutionGap || closedRowCount > nextHistogramRowCount - RowCountResolutionGap) {
+                        ui64 currentKeyRowCountOpens = 0;
+                        for (auto* node : currentKeyPointerOpens) {
+                            if (node->State == ENodeState::Opened) {
+                                currentKeyRowCountOpens += node->GetRowCount();
+                            }
+                        }
+                        Y_ABORT_UNLESS(currentKeyRowCountOpens <= openedRowCount);
+                        ui64 currentKeyPointerRowCount = closedRowCount + openedRowCount - currentKeyRowCountOpens;
+                        if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < currentKeyPointerRowCount) {
+                            AddKey(stats.RowCountHistogram, currentKeyPointer.Key, currentKeyPointerRowCount);
+                            nextHistogramRowCount = Max(currentKeyPointerRowCount + 1, nextHistogramRowCount + RowCountResolution);
+                            if (nextHistogramRowCount + RowCountResolutionGap > stats.RowCount) {
+                                nextHistogramRowCount = Max<ui64>();
                             }
                         }
                     }
                 }
-                if (nextDataSize != Max<ui64>()) {
-                    if (closedDataSize + openedDataSize > nextDataSize + DataSizeResolutionGap || closedDataSize > nextDataSize - DataSizeResolutionGap) {
-                        if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < dataSize) {
-                            AddKey(stats.DataSizeHistogram, event.Key, dataSize);
-                            nextDataSize = Max(dataSize + 1, nextDataSize + DataSizeResolution);
-                            if (nextDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
-                                nextDataSize = Max<ui64>();
-                                if (nextRowCount == Max<ui64>()) break;
+                if (nextHistogramDataSize != Max<ui64>()) {
+                    if (closedDataSize + openedDataSize > nextHistogramDataSize + DataSizeResolutionGap || closedDataSize > nextHistogramDataSize - DataSizeResolutionGap) {
+                        ui64 currentKeyDataSizeOpens = 0;
+                        for (auto* node : currentKeyPointerOpens) {
+                            if (node->State == ENodeState::Opened) {
+                                currentKeyDataSizeOpens += node->GetDataSize();
+                            }
+                        }
+                        Y_ABORT_UNLESS(currentKeyDataSizeOpens <= openedDataSize);
+                        ui64 currentKeyPointerDataSize = closedDataSize + openedDataSize - currentKeyDataSizeOpens;
+                        if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < currentKeyPointerDataSize) {
+                            AddKey(stats.DataSizeHistogram, currentKeyPointer.Key, currentKeyPointerDataSize);
+                            nextHistogramDataSize = Max(currentKeyPointerDataSize + 1, nextHistogramDataSize + DataSizeResolution);
+                            if (nextHistogramDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
+                                nextHistogramDataSize = Max<ui64>();
                             }
                         }
                     }
@@ -346,23 +394,23 @@ private:
     }
 
     void AddKey(THistogram& histogram, TCellsIterable key, ui64 value) {
-        TVector<TCell> splitKeyCells;
+        TVector<TCell> keyCells;
 
-        // Add columns that are present in the part
+        // add columns that are present in the part:
         auto iter = key.Iter();
         for (TPos pos : xrange(iter.Count())) {
             Y_UNUSED(pos);
-            splitKeyCells.push_back(iter.Next());
+            keyCells.push_back(iter.Next());
         }
 
-        // Extend with default values if needed
-        for (TPos index = splitKeyCells.size(); index < KeyDefaults.Defs.size(); ++index) {
-            splitKeyCells.push_back(KeyDefaults.Defs[index]);
+        // extend with default values if needed:
+        for (TPos index = keyCells.size(); index < KeyDefaults.Defs.size(); ++index) {
+            keyCells.push_back(KeyDefaults.Defs[index]);
         }
 
-        TString serializedSplitKey = TSerializedCellVec::Serialize(splitKeyCells);
+        TString serializedKey = TSerializedCellVec::Serialize(keyCells);
 
-        histogram.push_back({serializedSplitKey, value});
+        histogram.push_back({serializedKey, value});
     }
 
     bool TryLoadNode(const TNodeState& parent, const auto& addNode) {
@@ -392,9 +440,9 @@ private:
         return true;
     }
 
-    void AddNodeEvents(TNodeState& node) {
-        NodeEvents.push(TNodeEvent{node.BeginKey, true, &node});
-        NodeEvents.push(TNodeEvent{node.EndKey, false, &node});
+    void AddFutureEvents(TNodeState& node) {
+        FutureEvents.push(TEvent{node.BeginKey, true, &node});
+        FutureEvents.push(TEvent{node.EndKey, false, &node});
     }
     
 private:
@@ -424,10 +472,10 @@ private:
     ui64 RowCountResolutionGap, DataSizeResolutionGap;
     IPages* const Env;
     TBuildStatsYieldHandler YieldHandler;
-    TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
-    TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
+    TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable references
+    TDeque<TNodeState> LoadedStateNodes; // keep nodes to use their references
     TNodeEventKeyGreater NodeEventKeyGreater;
-    TPriorityQueue<TNodeEvent, TVector<TNodeEvent>, TNodeEventKeyGreater> NodeEvents;
+    TPriorityQueue<TEvent, TVector<TEvent>, TNodeEventKeyGreater> FutureEvents;
 };
 
 }

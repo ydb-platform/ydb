@@ -437,6 +437,7 @@ public:
             }
 
             srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+            srcDesc.SetParallelRequestsPerNode(State_->Configuration->ParallelRequestsPerNode.Get().GetOrElse(0));
 
 #if defined(_linux_) || defined(_darwin_)
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/public/purecalc/common/interface.h>
+#include <arrow/compute/kernel.h>
 
 namespace NYql {
 namespace NPureCalc {
@@ -69,6 +70,36 @@ public:
     explicit TArrowOutputSpec(const NYT::TNode& schema);
     const NYT::TNode& GetSchema() const override;
     static constexpr bool AcceptsBlocks = true;
+};
+
+template <>
+struct TInputSpecTraits<TArrowInputSpec> {
+    static const constexpr bool IsPartial = false;
+
+    static const constexpr bool SupportPullListMode = true;
+
+    using TInputItemType = arrow::compute::ExecBatch*;
+    using IInputStream = IStream<TInputItemType>;
+
+    static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
+        IInputStream*);
+    static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
+        THolder<IInputStream>);
+};
+
+template <>
+struct TOutputSpecTraits<TArrowOutputSpec> {
+    static const constexpr bool IsPartial = false;
+
+    static const constexpr bool SupportPullListMode = true;
+
+    using TOutputItemType = arrow::compute::ExecBatch*;
+    using IOutputStream = IStream<TOutputItemType>;
+    using TPullListReturnType = THolder<IOutputStream>;
+
+    static const constexpr TOutputItemType StreamSentinel = nullptr;
+
+    static TPullListReturnType ConvertPullListWorkerToOutputType(const TArrowOutputSpec&, TWorkerHolder<IPullListWorker>);
 };
 
 } // namespace NPureCalc

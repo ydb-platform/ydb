@@ -564,11 +564,11 @@ public:
     }
 
     void DoAddNotNull(TBlockItem value) {
-        this->PlaceItem(std::bit_cast<NYql::NDecimal::TInt128>(value));
+        this->PlaceItem(value.GetInt128());
     }
 
     void DoAddNotNull(TInputBuffer& input) {
-        this->DoAdd(std::bit_cast<TBlockItem>(input.PopNumber<NYql::NDecimal::TInt128>()));
+        this->DoAdd(TBlockItem(input.PopNumber<NYql::NDecimal::TInt128>()));
     }
 
     void DoAddNotNull(TBlockItem value, size_t count) {

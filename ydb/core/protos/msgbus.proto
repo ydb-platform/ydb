@@ -717,6 +717,8 @@ message TTestShardControlRequest {
         repeated TTimeInterval WritePeriods = 7; // time between two events
         repeated TTimeInterval RestartPeriods = 8; // time between automatic restarts
         optional uint32 PatchRequestsFractionPPM = 12;
+        optional uint32 PutTraceFractionPPM = 13;
+        optional uint32 PutTraceVerbosity = 14 [default = 15];
     }
 
     optional uint64 TabletId = 1;

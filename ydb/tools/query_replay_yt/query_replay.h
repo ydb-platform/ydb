@@ -18,6 +18,7 @@ struct TQueryReplayConfig {
     TString SrcPath;
     TString DstPath;
     ui32 ActorSystemThreadsCount = 5;
+    TVector<TString> UdfFiles;
 
     void ParseConfig(int argc, const char** argv);
 };
@@ -62,6 +63,7 @@ struct TQueryReplayEvents {
         bool Success;
         TCheckQueryPlanStatus Status = Unspecified;
         TString Message;
+        TString Plan;
 
         TEvCompileResponse(bool success)
             : Success(success)

@@ -12,8 +12,8 @@ namespace {
         return predicate;
     }
 
-    NYql::TColumnStatistics BuildTimestampStats(const TInstant& from, const TInstant& to) {
-        NYql::TColumnStatistics statistics;
+    NYql::NGenericPushDown::TColumnStatistics BuildTimestampStats(const TInstant& from, const TInstant& to) {
+        NYql::NGenericPushDown::TColumnStatistics statistics;
         statistics.ColumnType.set_type_id(::Ydb::Type::TIMESTAMP);
         statistics.Timestamp.ConstructInPlace();
         statistics.Timestamp->lowValue = from;
@@ -25,17 +25,17 @@ namespace {
 
 Y_UNIT_TEST_SUITE(MatchPredicate) {
     Y_UNIT_TEST(EmptyMatch) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::TColumnStatistics>{}, NYql::NConnector::NApi::TPredicate{}));
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{}, NYql::NConnector::NApi::TPredicate{}));
     }
 
     Y_UNIT_TEST(EmptyWhere) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::TColumnStatistics>{{{"col1", NYql::TColumnStatistics{}},
-                                                                           {"col2", NYql::TColumnStatistics{}}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", NYql::NGenericPushDown::TColumnStatistics{}},
+                                                                                             {"col2", NYql::NGenericPushDown::TColumnStatistics{}}}},
                                    NYql::NConnector::NApi::TPredicate{}));
     }
 
     Y_UNIT_TEST(Between) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
                                    BuildPredicate(
                                        R"proto(
                                 between {
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
     }
 
     Y_UNIT_TEST(Less) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
                                    BuildPredicate(
                                        R"proto(
                                 comparison {
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
     }
 
     Y_UNIT_TEST(NotLess) {
-        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-02T00:00:00Z"), TInstant::ParseIso8601("2024-03-02T23:59:59Z"))}}},
+        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-02T00:00:00Z"), TInstant::ParseIso8601("2024-03-02T23:59:59Z"))}}},
                                     BuildPredicate(
                                         R"proto(
                                     comparison {
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
     }
 
     Y_UNIT_TEST(RightColumn) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
                                    BuildPredicate(
                                        R"proto(
                                 comparison {

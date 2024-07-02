@@ -1,4 +1,4 @@
-#include "slice_builder.h"
+#include "batch_builder/builder.h"
 #include "write.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>

@@ -5,6 +5,10 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+void ThrowNotSupportedImplForClass(const TString& className, const char *func) {
+    THROW yexception() << "Unsupported access to '" << func << "' method of: " << className;
+} 
+
 template <class IComputationNodeInterface>
 void TRefCountedComputationNode<IComputationNodeInterface>::Ref() {
     ++Refs_;

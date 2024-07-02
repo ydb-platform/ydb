@@ -6,13 +6,13 @@
 
 namespace {
 
-TMaybe<NYql::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
+TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
     switch (physicalType) {
         case parquet::Type::type::INT32: {
             const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
-            NYql::TTimestampColumnStatsData stats;
+            NYql::NGenericPushDown::TTimestampColumnStatsData stats;
             stats.lowValue = TInstant::Days(minValue);
             stats.highValue = TInstant::Days(maxValue);
             return stats;
@@ -21,7 +21,7 @@ TMaybe<NYql::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type ph
             const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
-            NYql::TTimestampColumnStatsData stats;
+            NYql::NGenericPushDown::TTimestampColumnStatsData stats;
             stats.lowValue = TInstant::Days(minValue);
             stats.highValue = TInstant::Days(maxValue);
             return stats;
@@ -37,7 +37,7 @@ TMaybe<NYql::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type ph
     }
 }
 
-TMaybe<NYql::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::TimestampLogicalType* typestampLogicalType, parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
+TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::TimestampLogicalType* typestampLogicalType, parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
     int64_t multiplier = 1;
     switch (typestampLogicalType->time_unit()) {
         case parquet::LogicalType::TimeUnit::unit::UNKNOWN:
@@ -54,7 +54,7 @@ TMaybe<NYql::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::Ti
             const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
-            NYql::TTimestampColumnStatsData stats;
+            NYql::NGenericPushDown::TTimestampColumnStatsData stats;
             stats.lowValue = TInstant::FromValue(minValue * multiplier);
             stats.highValue = TInstant::FromValue(maxValue * multiplier);
             return stats;
@@ -63,7 +63,7 @@ TMaybe<NYql::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::Ti
             const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
-            NYql::TTimestampColumnStatsData stats;
+            NYql::NGenericPushDown::TTimestampColumnStatsData stats;
             stats.lowValue = TInstant::FromValue(minValue * multiplier);
             stats.highValue = TInstant::FromValue(maxValue * multiplier);
             return stats;
@@ -79,8 +79,8 @@ TMaybe<NYql::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::Ti
     }
 }
 
-NYql::TColumnStatistics MakeTimestampStatistics(const TString& name, ::Ydb::Type::PrimitiveTypeId type, const TMaybe<NYql::TTimestampColumnStatsData>& statistics) {
-    NYql::TColumnStatistics columnStatistics;
+NYql::NGenericPushDown::TColumnStatistics MakeTimestampStatistics(const TString& name, ::Ydb::Type::PrimitiveTypeId type, const TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData>& statistics) {
+    NYql::NGenericPushDown::TColumnStatistics columnStatistics;
     columnStatistics.ColumnName = name;
     columnStatistics.ColumnType.set_type_id(type);
     columnStatistics.Timestamp = statistics;
@@ -88,7 +88,7 @@ NYql::TColumnStatistics MakeTimestampStatistics(const TString& name, ::Ydb::Type
 }
 
 bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {
-    TMap<TString, NYql::TColumnStatistics> columns;
+    TMap<TString, NYql::NGenericPushDown::TColumnStatistics> columns;
     for (int i = 0; i < rowGroupMetadata->schema()->num_columns(); i++) {
         auto columnChunkMetadata = rowGroupMetadata->ColumnChunk(i);
         if (!columnChunkMetadata->is_stats_set()) {
@@ -132,7 +132,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
             break;
         }
     }
-    return NYql::MatchPredicate(columns, predicate);
+    return NYql::NGenericPushDown::MatchPredicate(columns, predicate);
 }
 
 TVector<ui64> MatchedRowGroupsImpl(parquet::FileMetaData* fileMetadata, const NYql::NConnector::NApi::TPredicate& predicate) {

@@ -2,7 +2,7 @@
 #include "blobs_action/transaction/tx_write.h"
 #include "blobs_action/transaction/tx_draft.h"
 #include "counters/columnshard.h"
-#include "operations/slice_builder.h"
+#include "operations/batch_builder/builder.h"
 #include "operations/write_data.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>

@@ -12606,6 +12606,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_pg-reflection_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-regoids]": [
+        {
+            "checksum": "eab738419cb09d84413280147d5ebbe2",
+            "size": 3386,
+            "uri": "https://{canondata_backend}/1942415/fef0599b6207585cd5b6635353bbb33968e87399/resource.tar.gz#test_sql2yql.test_pg-regoids_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_agg]": [
         {
             "checksum": "41e072bb19014620fde3d72b6c54bf1b",

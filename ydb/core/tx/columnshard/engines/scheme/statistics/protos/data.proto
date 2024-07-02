@@ -37,6 +37,10 @@ message TVariabilityConstructor {
     optional string ColumnName = 3;
 }
 
+message TCountMinSketchConstructor {
+    optional string ColumnName = 3;
+}
+
 message TConstructorContainer {
     optional string Name = 1;
 
@@ -44,6 +48,7 @@ message TConstructorContainer {
     oneof Implementation {
         TMaxConstructor Max = 41;
         TVariabilityConstructor Variability = 42;
+        TCountMinSketchConstructor CountMinSketch = 43;
     }
 }
 
@@ -55,6 +60,10 @@ message TVariabilityOperator {
     optional uint32 EntityId = 1;
 }
 
+message TCountMinSketchOperator {
+    optional uint32 EntityId = 1;
+}
+
 message TOperatorContainer {
     optional string Name = 1;
 
@@ -62,5 +71,6 @@ message TOperatorContainer {
     oneof Implementation {
         TMaxOperator Max = 41;
         TVariabilityOperator Variability = 42;
+        TCountMinSketchOperator CountMinSketch = 43;
     }
 }

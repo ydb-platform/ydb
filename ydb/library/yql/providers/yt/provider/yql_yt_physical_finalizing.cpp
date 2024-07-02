@@ -75,34 +75,15 @@ public:
         TParentsMap parentsMap;
         GatherParents(*input, parentsMap);
 
-        auto getParentCallables = [&parentsMap](const TExprNode& node) -> std::vector<const TExprNode*> {
-            std::vector<const TExprNode*> res, lst;
-            if (auto it = parentsMap.find(&node); it != parentsMap.end()) {
-                for (auto n: it->second) {
-                    (n->IsCallable() ? &res : &lst)->push_back(n);
-                }
-            }
-            while (!lst.empty()) {
-                std::vector<const TExprNode*> tmp;
-                tmp.reserve(lst.size());
-                for (auto n: lst) {
-                    if (auto it = parentsMap.find(n); it != parentsMap.end()) {
-                        for (auto p: it->second) {
-                            (p->IsCallable() ? &res : &tmp)->push_back(p);
-                        }
-                    }
-                }
-                lst = std::move(tmp);
-            }
-            return res;
-        };
-
+        TNodeSet visitedOutParents;
+        std::vector<const TExprNode*> outs;
         VisitExpr(input, [&](const TExprNode::TPtr& node)->bool {
             if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
                 auto op = maybeOp.Cast();
                 for (auto section: op.Input()) {
                     for (auto path: section.Paths()) {
                         if (auto maybeOutput = path.Table().Maybe<TYtOutput>()) {
+                            visitedOutParents.insert(path.Raw());
                             auto out = maybeOutput.Cast();
                             storeDep(out, op.Raw(), section.Raw(), path.Raw());
                             if (enableChunkCombining) {
@@ -117,6 +98,7 @@ public:
                 for (auto section: read.Input()) {
                     for (auto path: section.Paths()) {
                         if (auto maybeOutput = path.Table().Maybe<TYtOutput>()) {
+                            visitedOutParents.insert(path.Raw());
                             auto out = maybeOutput.Cast();
                             storeDep(out, read.Raw(), section.Raw(), path.Raw());
                             if (enableChunkCombining) {
@@ -126,16 +108,15 @@ public:
                     }
                 }
             }
-            else if (auto maybeOutput = TMaybeNode<TYtOutput>(node)) {
-                auto out = maybeOutput.Cast();
-                for (auto c: getParentCallables(*node)) {
-                    if (!TYtPath::Match(c)) {
-                        storeDep(out, c, nullptr, nullptr);
-                        if (enableChunkCombining && (TYtTableContent::Match(c) || TResWriteBase::Match(c) || TYtStatOut::Match(c))) {
-                            CollectForCombine(out, toCombine, neverCombine);
-                        }
-                    }
+            else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+                auto publish = maybePublish.Cast();
+                visitedOutParents.insert(publish.Input().Raw());
+                for (auto out: publish.Input()) {
+                    storeDep(out, publish.Raw(), nullptr, nullptr);
                 }
+            }
+            else if (auto maybeOutput = TMaybeNode<TYtOutput>(node)) {
+                outs.push_back(node.Get());
             }
             else if (auto maybeLeft = TMaybeNode<TCoLeft>(node)) {
                 if (auto maybeOp = maybeLeft.Input().Maybe<TYtOutputOpBase>()) {
@@ -153,6 +134,30 @@ public:
 
             return true;
         });
+
+        for (auto out: outs) {
+            std::vector<const TExprNode*> readers;
+            if (auto it = parentsMap.find(out); it != parentsMap.end()) {
+                std::copy_if(it->second.begin(), it->second.end(),
+                    std::back_inserter(readers),
+                    [&visitedOutParents](auto n) {
+                        return !visitedOutParents.contains(n);
+                    }
+                );
+            }
+
+            if (!readers.empty()) {
+                std::stable_sort(readers.begin(), readers.end(), [](auto l, auto r) { return l->UniqueId() < r->UniqueId(); });
+                for (auto n: readers) {
+                    YQL_ENSURE(!TYtPath::Match(n)); // All YtPath usages must be gathered in previous VisitExpr
+                    storeDep(TYtOutput(out), n, nullptr, nullptr);
+                    if (enableChunkCombining && (TYtTableContent::Match(n) || TResWriteBase::Match(n) || TYtStatOut::Match(n))) {
+                        CollectForCombine(TYtOutput(out), toCombine, neverCombine);
+                    }
+                }
+            }
+        }
+
         YQL_ENSURE(opDeps.size() == opDepsOrder.size());
 
         const auto disableOptimizers = State_->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());

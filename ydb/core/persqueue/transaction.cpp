@@ -4,8 +4,14 @@
 
 namespace NKikimr::NPQ {
 
-TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
-    TDistributedTransaction()
+TDistributedTransaction::TDistributedTransaction(ui64 tabletId) :
+    TabletId(tabletId)
+{
+}
+
+TDistributedTransaction::TDistributedTransaction(ui64 tabletId,
+                                                 const NKikimrPQ::TTransaction& tx) :
+    TDistributedTransaction(tabletId)
 {
     Kind = tx.GetKind();
     if (tx.HasStep()) {
@@ -49,6 +55,13 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     if (tx.HasWriteId()) {
         WriteId = tx.GetWriteId();
     }
+}
+
+TString TDistributedTransaction::LogPrefix() const
+{
+    TStringBuilder sb;
+    sb << "[PQ: " << TabletId << ", TxId: " << TxId << "] ";
+    return sb;
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)

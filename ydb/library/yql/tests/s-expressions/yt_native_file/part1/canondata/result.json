@@ -3397,9 +3397,9 @@
     ],
     "test.test[ManyYamrOperations-MapThenGroup-Debug]": [
         {
-            "checksum": "42ba70138efd5a10cee2dab660c0a695",
-            "size": 2633,
-            "uri": "https://{canondata_backend}/1777230/3ec562adcd87d17cdd220e67d30659d9da9f43fa/resource.tar.gz#test.test_ManyYamrOperations-MapThenGroup-Debug_/opt.yql"
+            "checksum": "301414470493887010fa6343531049e0",
+            "size": 2697,
+            "uri": "https://{canondata_backend}/1942415/12a2dacb07dc29f55584337e69ed66896c98ebaa/resource.tar.gz#test.test_ManyYamrOperations-MapThenGroup-Debug_/opt.yql"
         },
         {
             "checksum": "b76766c42ccc5c2e43c256633a657c17",
@@ -3530,9 +3530,9 @@
     ],
     "test.test[Optimizers-CountDistinctOpt-Debug]": [
         {
-            "checksum": "21342176ac302bc76e3d83e1e1570f25",
-            "size": 2224,
-            "uri": "https://{canondata_backend}/1937424/5aaef6185f6dbb6dae3f6611a9233617900a4bbf/resource.tar.gz#test.test_Optimizers-CountDistinctOpt-Debug_/opt.yql"
+            "checksum": "599dd74a13f07df47f17ffefd48a6b6a",
+            "size": 2278,
+            "uri": "https://{canondata_backend}/1889210/07bd85aceb2dc337ce28ed960c6a8f1cc43db898/resource.tar.gz#test.test_Optimizers-CountDistinctOpt-Debug_/opt.yql"
         },
         {
             "checksum": "43dc094b9ebeb149f20920844665c229",

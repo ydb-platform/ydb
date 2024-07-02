@@ -4726,9 +4726,9 @@
     ],
     "test.test[Optimizers-CountDistinct-Debug]": [
         {
-            "checksum": "6cd83d7e7828401944b0bd6a18b0ab41",
-            "size": 2189,
-            "uri": "https://{canondata_backend}/1937027/03894f212a82d0f1566a4858eacaae1817e2d4ba/resource.tar.gz#test.test_Optimizers-CountDistinct-Debug_/opt.yql"
+            "checksum": "e924d1bace974181e7d2a91142fc4399",
+            "size": 2243,
+            "uri": "https://{canondata_backend}/1784826/e29b9d97ec36c0fb0be690916aa17fd1dfae7a86/resource.tar.gz#test.test_Optimizers-CountDistinct-Debug_/opt.yql"
         },
         {
             "checksum": "dc362f4fa97f3e3ad82a52481f2c78ac",
@@ -5176,9 +5176,9 @@
     ],
     "test.test[Scheme-PartitionByValueAndMap-Debug]": [
         {
-            "checksum": "e8fae229272815df6f993f5b59d02810",
-            "size": 2909,
-            "uri": "https://{canondata_backend}/1903885/d45299f081ff72cbcf3f0e1a1f8fba33e4d5b0c2/resource.tar.gz#test.test_Scheme-PartitionByValueAndMap-Debug_/opt.yql"
+            "checksum": "a07a1e7b9a8780b3c0bc87ef2195e983",
+            "size": 2979,
+            "uri": "https://{canondata_backend}/1937429/516dcab687be954cccc22035f349c2969ff35ebb/resource.tar.gz#test.test_Scheme-PartitionByValueAndMap-Debug_/opt.yql"
         },
         {
             "checksum": "56875ce859e56a8ee49a02a2a3eea6ca",
@@ -5279,9 +5279,9 @@
     ],
     "test.test[SingleYamrOperation-EnumerateInsideReduce-Debug]": [
         {
-            "checksum": "41f7faae9239f474f0c3f4fa9d93135b",
-            "size": 2044,
-            "uri": "https://{canondata_backend}/1925842/fc5ed2cd723535760526f509cc186349095a298d/resource.tar.gz#test.test_SingleYamrOperation-EnumerateInsideReduce-Debug_/opt.yql"
+            "checksum": "a69ebf23c283eb869f7154cfe29b07bd",
+            "size": 2114,
+            "uri": "https://{canondata_backend}/1814674/845605381ee888fc1fec37b3c84b15f1d011cb09/resource.tar.gz#test.test_SingleYamrOperation-EnumerateInsideReduce-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",

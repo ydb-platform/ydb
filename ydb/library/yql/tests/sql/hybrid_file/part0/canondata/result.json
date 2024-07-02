@@ -2339,9 +2339,9 @@
     ],
     "test.test[produce-process_streaming_count-default.txt-Debug]": [
         {
-            "checksum": "4995adf0a0f9b9f72b5de290addfafd1",
-            "size": 2918,
-            "uri": "https://{canondata_backend}/1880306/5d2fb97b23cd70975bc5d744391981f9d5595c04/resource.tar.gz#test.test_produce-process_streaming_count-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f5a06f6620ba5ab1934b75215c9188e3",
+            "size": 2966,
+            "uri": "https://{canondata_backend}/1942415/5b26f4b648a9df1479bbbc97e8ae2c11afb1c858/resource.tar.gz#test.test_produce-process_streaming_count-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-process_streaming_count-default.txt-Plan]": [

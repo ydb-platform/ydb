@@ -2109,8 +2109,8 @@ public:
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
                 return;
             }
-  
-            i64 rowSize = serializedRow->size();
+
+            i64 rowSize = serializedRow->size() + AdditionalRowSize;
             if (SizeLimit && ResultSet.rows_size() && ResultSetSize + rowSize > SizeLimit) {
                 CancelFetchQuery();
                 return;
@@ -2121,11 +2121,17 @@ public:
                 return;
             }
 
-            ResultSetSize += rowSize;
             if (!ResultSet.add_rows()->ParseFromString(*serializedRow)) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
                 return;
             }
+
+            // Initialize AdditionalRowSize
+            if (ResultSet.rows_size() == 1) {
+                AdditionalRowSize = static_cast<i64>(ResultSet.ByteSizeLong()) - ResultSetSize - rowSize;
+                rowSize += AdditionalRowSize;
+            }
+            ResultSetSize += rowSize;
         }
 
         if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
@@ -2161,6 +2167,7 @@ private:
     const TInstant Deadline;
 
     i64 ResultSetSize = 0;
+    i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;
     bool HasMoreResults = false;
 };

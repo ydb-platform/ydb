@@ -394,8 +394,6 @@ public:
             case EOperatingMode::ProcessSpilled:
                 return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
-                // std::fill_n(Tongue, KeyAndStateType->GetElementsCount(), NUdf::TUnboxedValuePod());
-                BufferForKeyAndState.resize(KeyWidth);
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
@@ -410,6 +408,8 @@ public:
 
                 if (InputStatus == EFetchResult::Finish) return FlushSpillingBuffersAndWait();
 
+                // Prepare buffer for reading new key
+                BufferForKeyAndState.resize(KeyWidth);
                 return false;
             }
         }
@@ -443,9 +443,9 @@ public:
             Throat = bucket.InMemoryProcessingState->Throat;
             return bucket.InMemoryProcessingState->TasteIt();
         }
-
+        
+        // Corresponding bucket is spilled, we don't need a key anymore, full input will be spilled
         BufferForKeyAndState.resize(0);
-
         IsImmediateProcessingAvaliable = false;
         TryToSpillRawData(bucket, bucketId);
         

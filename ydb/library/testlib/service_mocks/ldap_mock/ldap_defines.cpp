@@ -23,7 +23,7 @@ bool checkFilters(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRequ
             return false;
         }
     }
-    if (f1.nestedFilters.size() != f2.nestedFilters.size()) {
+    if (f1.NestedFilters.size() != f2.NestedFilters.size()) {
         return false;
     }
     return true;
@@ -33,12 +33,12 @@ bool TraverseFilter(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRe
     if (!checkFilters(f1, f2)) {
         return false;
     }
-    std::queue<TSearchRequestInfo::TSearchFilter> q1;
-    for (const auto& filter : f1.nestedFilters) {
+    std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q1;
+    for (const auto& filter : f1.NestedFilters) {
         q1.push(filter);
     }
-    std::queue<TSearchRequestInfo::TSearchFilter> q2;
-    for (const auto& filter : f2.nestedFilters) {
+    std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q2;
+    for (const auto& filter : f2.NestedFilters) {
         q2.push(filter);
     }
     while (!q1.empty() && !q2.empty()) {
@@ -46,13 +46,13 @@ bool TraverseFilter(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRe
         q1.pop();
         const auto filterQ2 = q2.front();
         q2.pop();
-        if (!checkFilters(filterQ1, filterQ2)) {
+        if (!checkFilters(*filterQ1, *filterQ2)) {
             return false;
         }
-        for (const auto& filter : filterQ1.nestedFilters) {
+        for (const auto& filter : filterQ1->NestedFilters) {
             q1.push(filter);
         }
-        for (const auto& filter : filterQ2.nestedFilters) {
+        for (const auto& filter : filterQ2->NestedFilters) {
             q2.push(filter);
         }
     }

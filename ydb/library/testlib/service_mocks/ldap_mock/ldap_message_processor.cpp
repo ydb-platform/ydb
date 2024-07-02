@@ -318,6 +318,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     });
 
     if (it == responses.end()) {
+        Cerr << "+++ it == responses.end()" << Endl;
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
@@ -430,8 +431,8 @@ void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSe
 void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
     const size_t limit = ReadBytes + lengthFilter;
     while (ReadBytes < limit) {
-        filter->nestedFilters.push_back(ProcessFilter());
-        Cerr << "+++LdapMock: filter: " << filter->nestedFilters.back().Attribute << ", " << filter->nestedFilters.back().Value << Endl;
+        filter->NestedFilters.push_back(std::make_shared<TSearchRequestInfo::TSearchFilter>(ProcessFilter()));
+        Cerr << "+++LdapMock: filter: " << filter->NestedFilters.back()->Attribute << ", " << filter->NestedFilters.back()->Value << Endl;
     }
 }
 

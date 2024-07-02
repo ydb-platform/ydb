@@ -187,20 +187,34 @@ TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString
 class TCorrectLdapResponse {
 public:
     static std::vector<TString> Groups;
+    static std::vector<TString> ManagerGroups;
+    static std::vector<TString> DevelopersGroups;
+    static std::vector<TString> PeopleGroups;
     static LdapMock::TLdapMockResponses GetResponses(const TString& login, const TString& groupAttribute = "memberOf");
 };
 
 std::vector<TString> TCorrectLdapResponse::Groups {
-    "ou=groups,dc=search,dc=yandex,dc=net",
+    "cn=managerOfProject1,cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+    "cn=project1,cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net"
+};
+
+std::vector<TString> TCorrectLdapResponse::ManagerGroups {
+    "cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+};
+
+std::vector<TString> TCorrectLdapResponse::DevelopersGroups {
+    "cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+};
+
+std::vector<TString> TCorrectLdapResponse::PeopleGroups {
     "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
-    "cn=developers,ou=groups,dc=search,dc=yandex,dc=net"
 };
 
 LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& login, const TString& groupAttribute) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
-    LdapMock::TSearchRequestInfo fetchGroupsSearchRequestInfo {
+    LdapMock::TSearchRequestInfo fetchUserGroupsSearchRequestInfo {
         {
             .BaseDn = "dc=search,dc=yandex,dc=net",
             .Scope = 2,
@@ -210,20 +224,109 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
         }
     };
 
-    std::vector<LdapMock::TSearchEntry> fetchGroupsSearchResponseEntries {
+    std::vector<LdapMock::TSearchEntry> fetchUserGroupsSearchResponseEntries {
         {
             .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
             .AttributeList = {
                                 {groupAttribute, TCorrectLdapResponse::Groups}
                             }
+        },
+    };
+
+    LdapMock::TSearchResponseInfo fetchUserGroupsSearchResponseInfo {
+        .ResponseEntries = fetchUserGroupsSearchResponseEntries,
+        .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+    };
+    responses.SearchResponses.push_back({fetchUserGroupsSearchRequestInfo, fetchUserGroupsSearchResponseInfo});
+
+    std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> managerOfProject1 = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
+    managerOfProject1->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
+    managerOfProject1->Attribute = "entryDn";
+    managerOfProject1->Value = "cn=managerOfProject1,cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net";
+
+    std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> developersOfProject1 = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
+    managerOfProject1->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
+    managerOfProject1->Attribute = "entryDn";
+    managerOfProject1->Value = "cn=project1,cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net";
+
+    std::vector<std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter>> nestedGroups = {
+        managerOfProject1,
+        developersOfProject1
+    };
+    LdapMock::TSearchRequestInfo fetchManagersAndDevelopersGroupsSearchRequestInfo {
+        {
+            .BaseDn = "dc=search,dc=yandex,dc=net",
+            .Scope = 2,
+            .DerefAliases = 0,
+            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_OR, .NestedFilters = nestedGroups},
+            .Attributes = {groupAttribute}
         }
     };
 
-    LdapMock::TSearchResponseInfo fetchGroupsSearchResponseInfo {
-        .ResponseEntries = fetchGroupsSearchResponseEntries,
+    std::vector<LdapMock::TSearchEntry> fetchManagersAndDevelopersGroupsSearchResponseEntries {
+        {
+            .Dn = "cn=managerOfProject1,cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            .AttributeList = {
+                {groupAttribute, TCorrectLdapResponse::ManagerGroups}
+            }
+        },
+        {
+            .Dn = "cn=project1,cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            .AttributeList = {
+                {groupAttribute, TCorrectLdapResponse::DevelopersGroups}
+            }
+        },
+    };
+
+    LdapMock::TSearchResponseInfo fetchManagersAndDevelopersGroupsSearchResponseInfo {
+        .ResponseEntries = fetchManagersAndDevelopersGroupsSearchResponseEntries,
         .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
     };
-    responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
+    responses.SearchResponses.push_back({fetchManagersAndDevelopersGroupsSearchRequestInfo, fetchManagersAndDevelopersGroupsSearchResponseInfo});
+
+    std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> people1 = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
+    people1->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
+    people1->Attribute = "entryDn";
+    people1->Value = "cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net";
+
+    std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> people2 = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
+    people2->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
+    people2->Attribute = "entryDn";
+    people2->Value = "cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net";
+
+    std::vector<std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter>> peopleNestedGroups = {
+        people1, people2
+    };
+    LdapMock::TSearchRequestInfo fetchPeopleGroupsSearchRequestInfo {
+        {
+            .BaseDn = "dc=search,dc=yandex,dc=net",
+            .Scope = 2,
+            .DerefAliases = 0,
+            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_OR, .NestedFilters = peopleNestedGroups},
+            .Attributes = {groupAttribute}
+        }
+    };
+
+    std::vector<LdapMock::TSearchEntry> fetchPeopleGroupsSearchResponseEntries {
+        {
+            .Dn = "cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            .AttributeList = {
+                {groupAttribute, TCorrectLdapResponse::PeopleGroups}
+            }
+        },
+        {
+            .Dn = "cn=managers,cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            .AttributeList = {
+                {groupAttribute, TCorrectLdapResponse::PeopleGroups}
+            }
+        }
+    };
+
+    LdapMock::TSearchResponseInfo fetchPeopleGroupsSearchResponseInfo {
+        .ResponseEntries = fetchPeopleGroupsSearchResponseEntries,
+        .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+    };
+    responses.SearchResponses.push_back({fetchPeopleGroupsSearchRequestInfo, fetchPeopleGroupsSearchResponseInfo});
     return responses;
 }
 

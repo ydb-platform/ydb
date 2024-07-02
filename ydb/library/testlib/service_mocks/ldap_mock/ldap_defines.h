@@ -81,7 +81,7 @@ struct TSearchRequestInfo {
         TString MatchingRule;
         bool DnAttributes;
 
-        std::vector<TSearchFilter> nestedFilters;
+        std::vector<std::shared_ptr<TSearchFilter>> NestedFilters;
     };
 
     struct TInitializeList {

@@ -36,6 +36,19 @@ struct TAvgState {
     ui64 Count_ = 0;
 };
 
+template<typename T>
+double ToDouble(T t) {
+    return double(t);
+}
+
+double ToDouble(arrow::Decimal128 t) {
+    return t.ToDouble(15);
+}
+
+double ToDouble(arrow::BasicDecimal128 t) {
+    return arrow::Decimal128(t).ToDouble(15);
+}
+
 template <bool IsNullable, typename TSum>
 class TSumColumnBuilder : public IAggColumnBuilder {
 public:
@@ -377,7 +390,7 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                typedState->Sum_ += double((filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value);
+                typedState->Sum_ += ToDouble((filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value);
                 typedState->Count_ += batchLength;
             }
         } else {
@@ -483,7 +496,7 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                typedState->Sum_ += double(datum.scalar_as<TInScalar>().value);
+                typedState->Sum_ += ToDouble(datum.scalar_as<TInScalar>().value);
                 typedState->Count_ += 1;
             }
         } else {
@@ -751,6 +764,7 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
     case NUdf::EDataSlot::Uint32:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, ui32>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Interval:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, i64>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Uint64:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, ui64>>(filterColumn, argColumn, avgRetType);
@@ -758,6 +772,8 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, float>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Double:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, double>>(filterColumn, argColumn, avgRetType);
+    case NUdf::EDataSlot::Decimal:
+        return std::make_unique<TPreparedAvgBlockAggregator<TTag, NYql::NDecimal::TInt128>>(filterColumn, argColumn, avgRetType);
     default:
         throw yexception() << "Unsupported AVG input type";
     }

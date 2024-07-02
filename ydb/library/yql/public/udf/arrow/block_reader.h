@@ -660,8 +660,9 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
         case NUdf::EDataSlot::TzTimestamp64:
             return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
-        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Decimal:
+            return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }

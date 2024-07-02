@@ -141,6 +141,12 @@ struct TPrimitiveDataType<NYql::NUdf::TUtf8> {
     using TScalarResult = arrow::StringScalar;
 };
 
+template<>
+struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
+    using TResult = arrow::Decimal128Type;
+    using TScalarResult = arrow::Decimal128Scalar;
+};
+
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {
     return arrow::Datum(std::make_shared<typename TPrimitiveDataType<T>::TScalarResult>(value));

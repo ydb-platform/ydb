@@ -1602,6 +1602,12 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
     if (!slot) {
         return false;
     }
+    if (slot == NUdf::EDataSlot::Decimal) {
+        auto* decimalType = static_cast<TDataDecimalType*>(unpacked);
+        auto [precision, scale] = decimalType->GetParams();
+        type = arrow::decimal128(precision, scale);
+        return true;
+    }
 
     return ConvertArrowType(*slot, type);
 }
@@ -2478,7 +2484,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }
         case NUdf::EDataSlot::Decimal: {
-            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+            return sizeof(arrow::BasicDecimal128);
         }
         case NUdf::EDataSlot::DyNumber: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);

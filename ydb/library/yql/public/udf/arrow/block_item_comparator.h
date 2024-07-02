@@ -133,6 +133,28 @@ public:
     }
 };
 
+template <bool Nullable>
+class TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable> : public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable>, Nullable> {
+public:
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetInt128();
+        auto r = rhs.GetInt128();
+        return (l > r) - (l < r);
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetInt128();
+        auto r = rhs.GetInt128();
+        return l == r;
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetInt128();
+        auto r = rhs.GetInt128();
+        return l < r;
+    }
+};
+
 template <typename TStringType, bool Nullable>
 class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
 public:

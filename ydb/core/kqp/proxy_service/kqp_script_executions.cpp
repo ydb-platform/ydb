@@ -2110,8 +2110,8 @@ public:
                 return;
             }
 
-            i64 rowSize = serializedRow->size() + AdditionalRowSize;
-            if (SizeLimit && ResultSet.rows_size() && ResultSetSize + rowSize > SizeLimit) {
+            i64 rowSize = serializedRow->size();
+            if (SizeLimit && ResultSet.rows_size() && ResultSetSize + rowSize + AdditionalRowSize > SizeLimit) {
                 CancelFetchQuery();
                 return;
             }
@@ -2130,8 +2130,8 @@ public:
             // Initialize AdditionalRowSize
             if (ResultSet.rows_size() == 1) {
                 AdditionalRowSize = static_cast<i64>(ResultSet.ByteSizeLong()) - ResultSetSize;
-                ResultSetSize += AdditionalRowSize;
             }
+            ResultSetSize += AdditionalRowSize;
         }
 
         if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {

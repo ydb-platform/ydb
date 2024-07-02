@@ -918,6 +918,10 @@ public:
         return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
     }
 
+    bool EnrichDate32(i32 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
+        return false; // TODO
+    }
+
     static const TDateTable& Instance() {
         return *HugeSingleton<TDateTable>();
     }

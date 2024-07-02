@@ -2829,9 +2829,9 @@
     ],
     "test.test[window-win_func_lead_lag_opt--Debug]": [
         {
-            "checksum": "1d4a8c7598787edcdcae9cf2b539c991",
-            "size": 8994,
-            "uri": "https://{canondata_backend}/1871102/597d6ee930787f14a7fd3507c37be2e17e206201/resource.tar.gz#test.test_window-win_func_lead_lag_opt--Debug_/opt.yql_patched"
+            "checksum": "d17ac1a71ef0aa12ca924f496ff1cbf1",
+            "size": 9063,
+            "uri": "https://{canondata_backend}/1942671/e4607b99ae7f4e7b30412ee7a9c84a28608e2619/resource.tar.gz#test.test_window-win_func_lead_lag_opt--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_lead_lag_opt--Plan]": [

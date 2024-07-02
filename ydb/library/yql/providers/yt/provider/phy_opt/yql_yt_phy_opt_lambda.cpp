@@ -28,6 +28,11 @@ TCoLambda TYtPhysicalOptProposalTransformer::MakeJobLambda<false>(TCoLambda lamb
                         .Input("flow")
                     .Build()
                 .Build()
+                .FreeArgs()
+                    .Add<TCoDependsOn>()
+                        .Input("flow")
+                    .Build()
+                .Build()
             .Build()
         .Done();
     } else {
@@ -54,6 +59,11 @@ TCoLambda TYtPhysicalOptProposalTransformer::MakeJobLambda<true>(TCoLambda lambd
                     .Apply(lambda)
                     .With<TCoForwardList>(0)
                         .Stream("flow")
+                    .Build()
+                .Build()
+                .FreeArgs()
+                    .Add<TCoDependsOn>()
+                        .Input("flow")
                     .Build()
                 .Build()
             .Build()

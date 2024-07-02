@@ -4489,9 +4489,9 @@
     ],
     "test.test[SingleYamrOperation-program27-Debug]": [
         {
-            "checksum": "69564739df109ef98f80a68fc014bcc5",
-            "size": 1906,
-            "uri": "https://{canondata_backend}/1899731/97315b87699bde5d163b178a478f1489b129c828/resource.tar.gz#test.test_SingleYamrOperation-program27-Debug_/opt.yql"
+            "checksum": "589b11cf0c531d8ea6ac5f2631ac5201",
+            "size": 1970,
+            "uri": "https://{canondata_backend}/1784826/55f6e0008bba5146f35558235e8c31629794d5a5/resource.tar.gz#test.test_SingleYamrOperation-program27-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",
@@ -4525,9 +4525,9 @@
     ],
     "test.test[SingleYamrOperation-program29-Debug]": [
         {
-            "checksum": "1bf142f75e08cadb46bceaeaa7cd81ed",
-            "size": 2019,
-            "uri": "https://{canondata_backend}/1899731/97315b87699bde5d163b178a478f1489b129c828/resource.tar.gz#test.test_SingleYamrOperation-program29-Debug_/opt.yql"
+            "checksum": "5844af0f3e765ad58fe6cb25a30a14cd",
+            "size": 2083,
+            "uri": "https://{canondata_backend}/1937429/f5516c8b1183521547473158c4017ac38bf0f6a3/resource.tar.gz#test.test_SingleYamrOperation-program29-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",

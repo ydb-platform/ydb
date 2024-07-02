@@ -3397,9 +3397,9 @@
     ],
     "test.test[ManyYamrOperations-MapThenGroup-Debug]": [
         {
-            "checksum": "42ba70138efd5a10cee2dab660c0a695",
-            "size": 2633,
-            "uri": "https://{canondata_backend}/1777230/3ec562adcd87d17cdd220e67d30659d9da9f43fa/resource.tar.gz#test.test_ManyYamrOperations-MapThenGroup-Debug_/opt.yql"
+            "checksum": "301414470493887010fa6343531049e0",
+            "size": 2697,
+            "uri": "https://{canondata_backend}/1942415/12a2dacb07dc29f55584337e69ed66896c98ebaa/resource.tar.gz#test.test_ManyYamrOperations-MapThenGroup-Debug_/opt.yql"
         },
         {
             "checksum": "b76766c42ccc5c2e43c256633a657c17",

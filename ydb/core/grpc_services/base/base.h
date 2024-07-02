@@ -1661,6 +1661,21 @@ public:
         }
     }
 
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override {
+        Y_UNUSED(code);
+        if (reason) {
+            IssueManager.RaiseIssue(NYql::TIssue{reason});
+        }
+        if (details) {
+            IssueManager.RaiseIssue(NYql::TIssue{details});
+        }
+        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    }
+
+    void ReplyUnavaliable() override {
+        ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) override {
         IssueManager.RaiseIssue(issue);
     }
@@ -1669,19 +1684,12 @@ public:
         IssueManager.RaiseIssues(issues);
     }
 
-    TVector<TStringBuf> FindClientCertPropertyValues() const override {
-        return {};
-    }
-
     void StartTracing(NWilson::TSpan&& span) override {
         Span = std::move(span);
     }
-    void FinishSpan() override {
-        Span.End();
-    }
 
-    bool* IsTracingDecided() override {
-        return nullptr;
+    void LegacyFinishSpan() override {
+        Span.End();
     }
 
     bool Validate(TString& /*error*/) override {
@@ -1694,6 +1702,10 @@ public:
 
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
+    }
+
+    bool HasClientCapability(const TString&) const override {
+        return false;
     }
 
     void UseDatabase(const TString& database) override {
@@ -1774,6 +1786,10 @@ public:
         return str;
     }
 
+    const TString& GetInternalRequestType() const final {
+        return GetRequestName();
+    }
+
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
         return RlPath;
     }
@@ -1782,6 +1798,13 @@ public:
         return deadline;
     }
 
+    bool GetDiskQuotaExceeded() const override {
+        return false;
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return {};
+    }
 
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};

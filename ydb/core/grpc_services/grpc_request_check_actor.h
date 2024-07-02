@@ -451,9 +451,9 @@ private:
     }
 
     void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
-        GrpcRequestBaseCtx_->FinishSpan();
+        GrpcRequestBaseCtx_->LegacyFinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
-        PassAway();
+        TBase::PassAway();
     }
 
     template <typename T>

@@ -123,7 +123,7 @@ private:
     }
 
     void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
-        ev->Get()->FinishSpan();
+        ev->Get()->LegacyFinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 

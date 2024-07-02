@@ -1131,7 +1131,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
 
         TFakeTicketParserActor* ticketParser = nullptr;
-        settings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
+        settings.CreateTicketParser = [&](const NKikimrProto::TAuthConfig&) -> IActor* {
             ticketParser = new TFakeTicketParserActor();
             return ticketParser;
         };

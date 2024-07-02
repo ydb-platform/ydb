@@ -255,7 +255,41 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
     return result;
 }
 
+void FillVectorIndexColumns(NKikimrSchemeOp::TTableDescription& result) {
+    {
+        auto levelColumn = result.AddColumns();
+        levelColumn->SetName(NTableVectorIndex::LevelColumn);
+        levelColumn->SetType("Uint8");
+        levelColumn->SetTypeId(NScheme::NTypeIds::Uint8);
+        levelColumn->SetId(0);
+    }
+    {
+        auto idColumn = result.AddColumns();
+        idColumn->SetName(NTableVectorIndex::IdColumn);
+        idColumn->SetType("Uint32");
+        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetId(1);
+    }
+    {
+        auto centroidColumn = result.AddColumns();
+        centroidColumn->SetName(NTableVectorIndex::CentroidColumn);
+        centroidColumn->SetType("String");
+        centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetId(2);
+    }
+    {
+        auto idsColumn = result.AddColumns();
+        idsColumn->SetName(NTableVectorIndex::IdsColumn);
+        idsColumn->SetType("String");
+        idsColumn->SetTypeId(NScheme::NTypeIds::String);
+        idsColumn->SetId(3);
+    }
+    result.AddKeyColumnNames(NTableVectorIndex::LevelColumn);
+    result.AddKeyColumnNames(NTableVectorIndex::IdColumn);
+}
+
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NKikimrSchemeOp::EIndexType indexType,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
@@ -273,6 +307,11 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     }
 
     *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableInfo, indexTableDesc);
+
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        FillVectorIndexColumns(result);
+        return result;
+    }
 
     //Columns and KeyColumnNames order is really important
     //the order of implTableColumns.Keys is the right one
@@ -321,6 +360,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NKikimrSchemeOp::EIndexType indexType,
     const NKikimrSchemeOp::TTableDescription &baseTableDescr,
     const TTableColumns &implTableColumns,
     const NKikimrSchemeOp::TTableDescription &indexTableDesc)
@@ -338,6 +378,11 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     }
 
     *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableDescr, indexTableDesc);
+
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        FillVectorIndexColumns(result);
+        return result;
+    }
 
     //Columns and KeyColumnNames order is really important
     //the order of implTableColumns.Keys is the right one
@@ -512,11 +557,15 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
 }
 
 bool IsCompatibleKeyTypes(
+    const NKikimrSchemeOp::EIndexType indexType,
     const TColumnTypes& baseTableColumnTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
     TString& explain)
 {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector)
+        return true;
+
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
 

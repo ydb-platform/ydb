@@ -2365,7 +2365,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_ABORT_UNLESS(alterData->IndexKeys.size());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+        Y_ABORT_UNLESS(alterData->IndexDataColumns.empty() || config.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector);
+
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+            alterData->VectorIndexDescription = config.GetVectorIndexDescription();
+        }
 
         return result;
     }
@@ -2378,6 +2384,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     TVector<TString> IndexDataColumns;
 
     TTableIndexInfo::TPtr AlterData = nullptr;
+
+    NKikimrSchemeOp::TVectorIndexDescription VectorIndexDescription;
 };
 
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {

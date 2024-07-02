@@ -23,6 +23,10 @@ struct TQueryReplayConfig {
     void ParseConfig(int argc, const char** argv);
 };
 
+namespace NYql {
+    class IHTTPGateway;
+}
+
 using namespace NActors;
 
 THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools = 1);
@@ -46,6 +50,7 @@ struct TQueryReplayEvents {
         ExtraWriting,
         WriteColumnsMismatch,
         UncategorizedPlanMismatch,
+        MissingTableMetadata,
         Unspecified,
     };
 
@@ -73,4 +78,4 @@ struct TQueryReplayEvents {
 };
 
 NActors::IActor* CreateQueryCompiler(TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> moduleResolverState,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway);

@@ -35,10 +35,11 @@ static bool IsIntegerType(NScheme::TTypeInfo type) {
 }
 
 TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeInfo> &keyColumnTypes) {
+    // Note: actually its histogram keys count, not buckets count
     ui64 bucketsCount = histogram.BucketsSize();
-    ui64 idxLo = bucketsCount * 0.33;
-    ui64 idxMed = bucketsCount * 0.5;
-    ui64 idxHi = bucketsCount * 0.66;
+    ui64 idxLo = bucketsCount / 3;
+    ui64 idxMed = bucketsCount / 2;
+    ui64 idxHi = bucketsCount * 2 / 3;
 
     TSerializedCellVec keyLo(histogram.GetBuckets(idxLo).GetKey());
     TSerializedCellVec keyMed(histogram.GetBuckets(idxMed).GetKey());
@@ -302,7 +303,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
                     << " for pathId " << tableId
                     << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
                     << " dataSize " << dataSize
-                    << " rowCount " << rowCount);
+                    << " rowCount " << rowCount
+                    << " dataSizeHistogram buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize());
 
     if (!Self->Tables.contains(tableId))
         return true;
@@ -353,6 +355,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     } else {
         // Choose number of parts and split boundaries
         const auto& histogram = rec.GetTableStats().GetDataSizeHistogram();
+        // TODO: split with 1 key in histogram when no FlatIndex
         if (histogram.BucketsSize() < 2) {
             return true;
         }

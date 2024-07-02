@@ -72,11 +72,11 @@ message TEvWrite {
     optional uint32 WritePartId = 9 [default = 0];
     optional uint32 GranuleShardingVersion = 10;
     enum EModificationType {
-        UPSERT = 1;
-        INSERT = 2;
-        UPDATE = 3;
-        REPLACE = 4;
-        DELETE = 5;
+        OPERATION_UPSERT = 1;
+        OPERATION_INSERT = 2;
+        OPERATION_UPDATE = 3;
+        OPERATION_REPLACE = 4;
+        OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
 

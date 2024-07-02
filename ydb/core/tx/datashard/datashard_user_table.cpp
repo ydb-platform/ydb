@@ -67,11 +67,12 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
-    if (TableIndexes.contains(addIndexPathId)) {
+    auto it = TableIndexes.lower_bound(addIndexPathId);
+    if (it != TableIndexes.end() && it->first == addIndexPathId) {
         return;
     }
 
-    TableIndexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
+    TableIndexes.emplace_hint(it, addIndexPathId, TTableIndex(indexDesc, Columns));
     AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -93,15 +94,13 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
-    for (auto it = schema.MutableTableIndexes()->begin(); it != schema.MutableTableIndexes()->end(); ++it) {
-        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
-            continue;
+    auto& indexes = *schema.MutableTableIndexes();
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            it->SetState(state);
+            SetSchema(schema);
+            return;
         }
-
-        it->SetState(state);
-        SetSchema(schema);
-
-        return;
     }
 
     Y_ABORT("unreachable");
@@ -119,15 +118,13 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
-    for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) {
-        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
-            continue;
+    auto& indexes = *schema.MutableTableIndexes();
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            indexes.erase(it);
+            SetSchema(schema);
+            return;
         }
-
-        schema.MutableTableIndexes()->erase(it);
-        SetSchema(schema);
-
-        return;
     }
 
     Y_ABORT("unreachable");

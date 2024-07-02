@@ -64,6 +64,7 @@ public:
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
         const bool MayRunTasksLocally = false;
+        const TString SchedulerGroup = "";
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -128,6 +129,7 @@ private:
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     const bool MayRunTasksLocally;
+    TString SchedulerGroup;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

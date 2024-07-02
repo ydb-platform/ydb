@@ -6,6 +6,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -107,7 +109,7 @@ public:
         const NYql::NDq::TComputeRuntimeSettings& settings,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena, const TString& serializedGUCSettings,
         TComputeStagesWithScan& computeStages, ui64 outputChunkMaxSize, std::shared_ptr<IKqpNodeState> state,
-        NKikimr::NKqp::NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks) = 0;
+        NKikimr::NKqp::NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks, TComputeActorSchedulingOptions schedulingOptions) = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

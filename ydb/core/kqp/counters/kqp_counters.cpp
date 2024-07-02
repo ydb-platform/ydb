@@ -8,7 +8,6 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <ydb/library/actors/core/log.h>
-
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
@@ -826,6 +825,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     FullScansExecuted = KqpGroup->GetCounter("FullScans", true);
+
+    SchedulerThrottled = KqpGroup->GetCounter("NodeScheduler/ThrottledUs", true);
+    SchedulerCapacity = KqpGroup->GetCounter("NodeScheduler/Capacity");
+    ComputeActorExecutions = KqpGroup->GetHistogram("NodeScheduler/BatchUs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

@@ -153,10 +153,6 @@ public:
         }
     }
 
-    void DoBootstrap() {
-        //ScheduleReniceWakeup();
-    }
-
     STFUNC(BaseStateFuncBody) {
         try {
             switch (ev->GetTypeRewrite()) {

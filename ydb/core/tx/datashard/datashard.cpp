@@ -1739,8 +1739,8 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(newPathId.OwnerId);
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
-        newTableInfo->Indexes[newPathId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
+        newTableInfo->TableIndexes[newPathId] = newTableInfo->TableIndexes[prevPathId];
+        newTableInfo->TableIndexes.erase(prevPathId);
     }
     newTableInfo->SetSchema(schema);
 
@@ -1792,7 +1792,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 
     if (move.GetReMapIndex().HasReplacedPathId()) {
         const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
-        newTableInfo->Indexes.erase(oldPathId);
+        newTableInfo->TableIndexes.erase(oldPathId);
 
         size_t id = 0;
         bool found = false;
@@ -1827,12 +1827,12 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(remapNewId.OwnerId);
         indexDesc.SetLocalPathId(remapNewId.LocalPathId);
 
-        newTableInfo->Indexes[remapNewId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
+        newTableInfo->TableIndexes[remapNewId] = newTableInfo->TableIndexes[prevPathId];
+        newTableInfo->TableIndexes.erase(prevPathId);
 
         Y_ABORT_UNLESS(move.GetReMapIndex().HasDstName());
         indexDesc.SetName(dstIndexName);
-        newTableInfo->Indexes[remapNewId].Name = dstIndexName;
+        newTableInfo->TableIndexes[remapNewId].Name = dstIndexName;
     }
 
     newTableInfo->SetSchema(schema);

@@ -46,7 +46,7 @@ public:
 
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
-            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
+            const auto& indexes = userTables.at(pathId.LocalPathId)->TableIndexes;
             auto it = indexes.find(indexPathId);
             if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));

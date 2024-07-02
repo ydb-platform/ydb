@@ -395,7 +395,20 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     bool IsBackup = false;
 
-    TMap<TPathId, TTableIndex> Indexes;
+    TMap<TPathId, TTableIndex> TableIndexes;
+
+    template <typename TCallback>
+    void ForEachAsyncIndex(TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        for (const auto& [pathId, index] : TableIndexes) {
+            if (index.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+                callback(pathId, index);
+            }
+        }
+    }
+
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;

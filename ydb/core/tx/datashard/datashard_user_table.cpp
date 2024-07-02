@@ -67,11 +67,11 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
-    if (Indexes.contains(addIndexPathId)) {
+    if (TableIndexes.contains(addIndexPathId)) {
         return;
     }
 
-    Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
+    TableIndexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
     AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -82,8 +82,8 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
 }
 
 void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state) {
-    auto it = Indexes.find(indexPathId);
-    if (it == Indexes.end()) {
+    auto it = TableIndexes.find(indexPathId);
+    if (it == TableIndexes.end()) {
         return;
     }
 
@@ -108,13 +108,13 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
 }
 
 void TUserTable::DropIndex(const TPathId& indexPathId) {
-    auto it = Indexes.find(indexPathId);
-    if (it == Indexes.end()) {
+    auto it = TableIndexes.find(indexPathId);
+    if (it == TableIndexes.end()) {
         return;
     }
 
     AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync);
-    Indexes.erase(it);
+    TableIndexes.erase(it);
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -319,7 +319,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
         Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
-        Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
+        TableIndexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
         AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
     }
 

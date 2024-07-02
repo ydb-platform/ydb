@@ -5614,7 +5614,7 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
 
     TTenants tenants(server);
     tenants.Run(tenantPath, 1);
-    
+
     TString table = Sprintf("%s/table", tenantPath.c_str());
     ExecSQL(server, sender, Sprintf(R"(
                 CREATE TABLE `%s` (
@@ -5652,7 +5652,7 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     ExecSQL(server, sender, Sprintf(R"(
                 UPSERT INTO `%s` (Key, Value) VALUES (2u, "Bar");
             )", table.c_str()
-        ), true, Ydb::StatusIds::UNAVAILABLE
+        ), true, Ydb::StatusIds::PRECONDITION_FAILED
     );
     auto schemeEntry = Navigate(runtime, sender, tenantPath, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath)->ResultSet.at(0);
     UNIT_ASSERT_C(schemeEntry.DomainDescription, schemeEntry.ToString());

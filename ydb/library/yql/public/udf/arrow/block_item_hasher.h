@@ -53,7 +53,7 @@ template <bool Nullable>
 class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable> : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
-        return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(std::bit_cast<NYql::NDecimal::TInt128>(value)));
+        return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(value.GetInt128()));
     }
 };
 

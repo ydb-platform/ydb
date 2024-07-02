@@ -49,7 +49,7 @@ public:
                 return {};
             }
         }
-        return NUdf::TUnboxedValuePod(std::bit_cast<NYql::NDecimal::TInt128>(item));
+        return NUdf::TUnboxedValuePod(item.GetInt128());
     }
 
     TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
@@ -58,7 +58,7 @@ public:
                 return {};
             }
         }
-        return std::bit_cast<TBlockItem>(value.GetInt128());
+        return TBlockItem(value.GetInt128());
     }
 };
 

@@ -109,14 +109,6 @@ public:
 };
 
 template<bool Nullable>
-class TFixedSizeBlockReader<NYql::NDecimal::TInt128, Nullable> : public TFixedSizeBlockReaderBase<NYql::NDecimal::TInt128, Nullable, TFixedSizeBlockReader<NYql::NDecimal::TInt128, Nullable>> {
-public:
-    TBlockItem MakeBlockItem(const NYql::NDecimal::TInt128& item) const {
-        return std::bit_cast<TBlockItem>(item);
-    }
-};
-
-template<bool Nullable>
 class TResourceBlockReader : public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
 public:
     TBlockItem MakeBlockItem(const TUnboxedValuePod& pod) const {

@@ -9,7 +9,7 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
     if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
         if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
-            InFlightLimit *= 2;
+            InFlightLimit = std::max<ui32>(MaxInFlight, InFlightLimit * 2);
             ZeroCount = 0;
         }
     } else {
@@ -96,7 +96,17 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
-    InFlightLimit = Context->GetReadMetadata()->Limit ? 1 : Max<ui32>();
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
+        MaxInFlight = 256;
+    } else {
+        MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
+    }
+
+    if (Context->GetReadMetadata()->Limit) {
+        InFlightLimit = 1;
+    } else {
+        InFlightLimit = MaxInFlight;
+    }
     while (sources.size()) {
         auto source = sources.front();
         BorderPoints[source->GetStart()].AddStart(source);

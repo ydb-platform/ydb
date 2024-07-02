@@ -13,6 +13,7 @@ using IArrowIStream = typename TInputSpecTraits<TArrowInputSpec>::IInputStream;
 using InputItemType = typename TInputSpecTraits<TArrowInputSpec>::TInputItemType;
 using OutputItemType = typename TOutputSpecTraits<TArrowOutputSpec>::TOutputItemType;
 using PullListReturnType = typename TOutputSpecTraits<TArrowOutputSpec>::TPullListReturnType;
+using PullStreamReturnType = typename TOutputSpecTraits<TArrowOutputSpec>::TPullStreamReturnType;
 
 namespace {
 
@@ -223,6 +224,40 @@ public:
     }
 };
 
+
+/**
+ * Arrow input stream for unboxed value streams.
+ */
+class TArrowStreamImpl final: public IStream<OutputItemType> {
+protected:
+    TWorkerHolder<IPullStreamWorker> WorkerHolder_;
+    TArrowOutputConverter Converter_;
+
+public:
+    explicit TArrowStreamImpl(const TArrowOutputSpec& outputSpec, TWorkerHolder<IPullStreamWorker> worker)
+        : WorkerHolder_(std::move(worker))
+        , Converter_(outputSpec, WorkerHolder_.Get())
+    {
+    }
+
+    OutputItemType Fetch() override {
+        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
+
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            TUnboxedValue value;
+
+            auto status = WorkerHolder_->GetOutput().Fetch(value);
+            YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
+
+            if (status == EFetchStatus::Finish) {
+                return TOutputSpecTraits<TArrowOutputSpec>::StreamSentinel;
+            }
+
+            return Converter_.DoConvert(value);
+        }
+    }
+};
+
 } // namespace
 
 
@@ -257,6 +292,27 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
 }
 
 
+void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+    const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
+    IArrowIStream* stream
+) {
+    with_lock(worker->GetScopedAlloc()) {
+        worker->SetInput(worker->GetGraph().GetHolderFactory()
+            .Create<TArrowListValue>(inputSpec, MakeHolder<TArrowIStreamImpl>(stream), worker), 0);
+    }
+}
+
+void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+    const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
+    THolder<IArrowIStream> stream
+) {
+    with_lock(worker->GetScopedAlloc()) {
+        worker->SetInput(worker->GetGraph().GetHolderFactory()
+            .Create<TArrowListValue>(inputSpec, std::move(stream), worker), 0);
+    }
+}
+
+
 TArrowOutputSpec::TArrowOutputSpec(const NYT::TNode& schema)
     : Schema_(schema)
 {
@@ -271,4 +327,10 @@ PullListReturnType TOutputSpecTraits<TArrowOutputSpec>::ConvertPullListWorkerToO
     const TArrowOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker
 ) {
     return MakeHolder<TArrowListImpl>(outputSpec, std::move(worker));
+}
+
+PullStreamReturnType TOutputSpecTraits<TArrowOutputSpec>::ConvertPullStreamWorkerToOutputType(
+    const TArrowOutputSpec& outputSpec, TWorkerHolder<IPullStreamWorker> worker
+) {
+    return MakeHolder<TArrowStreamImpl>(outputSpec, std::move(worker));
 }

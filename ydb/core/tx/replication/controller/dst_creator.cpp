@@ -165,6 +165,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         Ydb::Table::CreateTableRequest scheme;
         result.GetTableDescription().SerializeTo(scheme);
+        // Disable index support until other replicator code be ready to process index replication
+        scheme.mutable_indexes()->Clear();
 
         Ydb::StatusIds::StatusCode status;
         TString error;

@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST(WithIntermediateDir) {
         Basic("/Root/Dir/Replicated");
     }
-
+/*
     Y_UNIT_TEST(WithSyncIndex) {
         WithSyncIndex("/Root/Replicated");
     }
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST(WithSyncIndexWithIntermediateDir) {
         WithSyncIndex("/Root/Dir/Replicated");
     }
-
+*/
 
     Y_UNIT_TEST(SameOwner) {
         TEnv env;

@@ -30,7 +30,10 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnaphotTxId());  //TODO: fix spelling error in flat_scheme_op.proto first
         op->SetBuildIndexId(config.GetBuildIndexId());
-        op->MutableOutcome()->MutableApply();
+        if (!indexName.empty()) {
+            TPath index = table.Child(indexName);
+            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableApply()->MutableIndexPathId());
+        }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }

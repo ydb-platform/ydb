@@ -37,17 +37,18 @@ public:
         Y_ABORT_UNLESS(version);
 
         TUserTable::TPtr tableInfo;
-        if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
+        if (params.HasOutcome() && params.GetOutcome().HasApply()) {
+            const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetApply().GetIndexPathId());
+
+            tableInfo = DataShard.AlterTableSwitchIndexState(ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady);
+        } else if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
+            const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetCancel().GetIndexPathId());
+
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
-            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
-
-            const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetCancel().GetIndexPathId());
-            auto it = indexes.find(indexPathId);
-
-            if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
+            userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&] (const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
-            }
+            });
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
@@ -66,7 +67,7 @@ public:
         Y_ABORT_UNLESS(step != 0);
 
         if (DataShard.GetBuildIndexManager().Contains(params.GetBuildIndexId())) {
-            auto  record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId());
+            auto record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId());
             DataShard.CancelScan(tableInfo->LocalTid, record.ScanId);
             DataShard.GetBuildIndexManager().Drop(params.GetBuildIndexId());
         }

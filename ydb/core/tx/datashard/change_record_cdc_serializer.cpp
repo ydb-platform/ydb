@@ -372,6 +372,7 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
                 for (const auto& [_, index] : schema->Indexes) {
                     Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
                     if (index.KeyColumnIds.at(0) == tag) {
+                        Y_ABORT_UNLESS(index.Type == TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync);
                         indexed = true;
                         break;
                     }

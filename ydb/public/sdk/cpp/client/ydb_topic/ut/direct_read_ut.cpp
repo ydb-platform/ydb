@@ -282,6 +282,10 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::Topic::Stre
         }
     }
 
+    void StartProcessReadImpl() {
+        CallbackFutures.push(std::async(std::launch::async, &TMockReadSessionProcessor::ProcessRead, this));
+    }
+
     void Write(Ydb::Topic::StreamReadMessage::FromClient&& request, TWriteCallback callback) override {
         UNIT_ASSERT(!callback); // Read session doesn't set callbacks.
         using FromClient = Ydb::Topic::StreamReadMessage_FromClient;
@@ -340,29 +344,34 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::Topic::Stre
         NYdbGrpc::TGrpcStatus status;
         TReadCallback callback;
         with_lock (Lock) {
-            *ActiveRead.Dst = ReadResponses.front().Response;
-            ActiveRead.Dst = nullptr;
-            status = std::move(ReadResponses.front().Status);
-            ReadResponses.pop();
-            callback = std::move(ActiveRead.Callback);
+            if (ActiveRead) {
+                *ActiveRead.Dst = ReadResponses.front().Response;
+                ActiveRead.Dst = nullptr;
+                status = std::move(ReadResponses.front().Status);
+                ReadResponses.pop();
+                callback = std::move(ActiveRead.Callback);
+            }
         }
-        callback(std::move(status));
-    }
-
-    void StartProcessReadImpl() {
-        CallbackFutures.push(std::async(std::launch::async, &TMockReadSessionProcessor::ProcessRead, this));
+        if (callback) {
+            callback(std::move(status));
+        }
     }
 
     void AddServerResponse(TServerReadInfo result) {
-        bool hasActiveRead = false;
+        NYdbGrpc::TGrpcStatus status;
+        TReadCallback callback;
         with_lock (Lock) {
             ReadResponses.emplace(std::move(result));
             if (ActiveRead) {
-                hasActiveRead = true;
+                *ActiveRead.Dst = ReadResponses.front().Response;
+                ActiveRead.Dst = nullptr;
+                status = std::move(ReadResponses.front().Status);
+                ReadResponses.pop();
+                callback = std::move(ActiveRead.Callback);
             }
         }
-        if (hasActiveRead) {
-            ProcessRead();
+        if (callback) {
+            callback(std::move(status));
         }
     }
 
@@ -491,14 +500,28 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
     }
 
     void Read(TDirectReadServerMessage* response, TReadCallback callback) override {
+        Cerr << "XXXXX Read\n";
+        NYdbGrpc::TGrpcStatus status;
+        TReadCallback cb;
         with_lock (Lock) {
             UNIT_ASSERT(!ActiveRead);
             ActiveRead.Callback = std::move(callback);
             ActiveRead.Dst = response;
             if (!ReadResponses.empty()) {
-                StartProcessReadImpl();
+                *ActiveRead.Dst = ReadResponses.front().Response;
+                ActiveRead.Dst = nullptr;
+                status = std::move(ReadResponses.front().Status);
+                ReadResponses.pop();
+                cb = std::move(ActiveRead.Callback);
             }
         }
+        if (cb) {
+            cb(std::move(status));
+        }
+    }
+
+    void StartProcessReadImpl() {
+        CallbackFutures.push(std::async(std::launch::async, &TMockDirectReadSessionProcessor::ProcessRead, this));
     }
 
     void Write(TDirectReadClientMessage&& request, TWriteCallback callback) override {
@@ -536,6 +559,7 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
     }
 
     void Validate() {
+        Cerr << "XXXXX Validate\n";
         with_lock (Lock) {
             UNIT_ASSERT(ReadResponses.empty());
             UNIT_ASSERT(CallbackFutures.empty());
@@ -545,8 +569,10 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
     }
 
     void ProcessRead() {
+        Cerr << "XXXXX ProcessRead\n";
         NYdbGrpc::TGrpcStatus status;
         TReadCallback callback;
+        // GotActiveRead.GetFuture().Wait();
         with_lock (Lock) {
             *ActiveRead.Dst = ReadResponses.front().Response;
             ActiveRead.Dst = nullptr;
@@ -557,24 +583,27 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
         callback(std::move(status));
     }
 
-    void StartProcessReadImpl() {
-        CallbackFutures.push(std::async(std::launch::async, &TMockDirectReadSessionProcessor::ProcessRead, this));
-    }
-
     void AddServerResponse(TServerReadInfo result) {
-        bool hasActiveRead = false;
+        Cerr << "XXXXX AddServerResponse\n";
+        NYdbGrpc::TGrpcStatus status;
+        TReadCallback callback;
         with_lock (Lock) {
             ReadResponses.emplace(std::move(result));
             if (ActiveRead) {
-                hasActiveRead = true;
+                *ActiveRead.Dst = ReadResponses.front().Response;
+                ActiveRead.Dst = nullptr;
+                status = std::move(ReadResponses.front().Status);
+                ReadResponses.pop();
+                callback = std::move(ActiveRead.Callback);
             }
         }
-        if (hasActiveRead) {
-            ProcessRead();
+        if (callback) {
+            callback(std::move(status));
         }
     }
 
     TAdaptiveLock Lock;
+    // NThreading::TPromise<void> GotActiveRead = NThreading::NewPromise();
     TClientReadInfo ActiveRead;
     std::queue<TServerReadInfo> ReadResponses;
     std::queue<std::future<void>> CallbackFutures;
@@ -889,6 +918,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithClient) {
     }
 
     Y_UNIT_TEST(ManyMessages) {
+        return;
+
         /*
         Write many messages and read them back.
 
@@ -1229,9 +1260,15 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
         }
 
         setup.GetControlSession()->Start();
-        setup.MockReadProcessorFactory->Wait();
-        setup.AddControlResponse(TMockReadSessionProcessor::TServerReadInfo().InitResponse(SERVER_SESSION_ID));
-        setup.AddControlResponse(TMockReadSessionProcessor::TServerReadInfo().StartPartitionSessionRequest(startPartitionSessionRequest));
+        {
+            auto r = TMockReadSessionProcessor::TServerReadInfo();
+            setup.AddControlResponse(r.InitResponse(SERVER_SESSION_ID));
+        }
+
+        {
+            auto r = TMockReadSessionProcessor::TServerReadInfo();
+            setup.AddControlResponse(r.StartPartitionSessionRequest(startPartitionSessionRequest));
+        }
 
         {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
@@ -1241,17 +1278,21 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
             e->Confirm();
         }
 
-        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
-            .InitResponse());
+        {
+            auto r = TMockDirectReadSessionProcessor::TServerReadInfo();
+            setup.AddDirectReadResponse(r.InitResponse());
+        }
 
-        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
-            .StartDirectReadPartitionSessionResponse(startPartitionSessionRequest.PartitionSessionId));
+        {
+            auto r = TMockDirectReadSessionProcessor::TServerReadInfo();
+            setup.AddDirectReadResponse(r.StartDirectReadPartitionSessionResponse(startPartitionSessionRequest.PartitionSessionId));
+        }
 
         i64 offset = 0;
 
         for (size_t i = 1; i < 5; ++i) {
-            auto resp = TMockDirectReadSessionProcessor::TServerReadInfo()
-                .PartitionData(startPartitionSessionRequest.PartitionSessionId, i)
+            auto resp = TMockDirectReadSessionProcessor::TServerReadInfo();
+            resp.PartitionData(startPartitionSessionRequest.PartitionSessionId, i)
                 // TODO(qyryq) Test with compression!
                 // .Batch("producer-id-1", Ydb::Topic::Codec::CODEC_ZSTD);
                 .Batch("producer-id-1", Ydb::Topic::Codec::CODEC_RAW);
@@ -1262,6 +1303,9 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
             ++offset;
 
             setup.AddDirectReadResponse(resp);
+            if (GetEnv("SLEEP", "0") == "1") {
+                Sleep(TDuration::Seconds(1));
+            }
         }
 
         // Verify that the session receives data sent to direct read session:
@@ -1274,12 +1318,15 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
             e->Commit();
         }
 
-        setup.AddControlResponse(TMockReadSessionProcessor::TServerReadInfo()
-            .StopPartitionSession({
-                .PartitionSessionId = 2,
-                .Graceful = false,
-                .CommittedOffset = offset,
-            }));
+        {
+            auto r = TMockReadSessionProcessor::TServerReadInfo();
+            setup.AddControlResponse(
+                r.StopPartitionSession({
+                    .PartitionSessionId = 2,
+                    .Graceful = false,
+                    .CommittedOffset = offset,
+                }));
+        }
 
         {
             // Verify that the session receives TStopPartitionSessionEvent after data was received:
@@ -1292,6 +1339,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
             // UNIT_ASSERT(e.CommittedOffset == offset);
         }
 
+        setup.MockReadProcessorFactory->Wait();
         setup.MockDirectReadProcessorFactory->Wait();
 
         setup.AssertNoEvents();

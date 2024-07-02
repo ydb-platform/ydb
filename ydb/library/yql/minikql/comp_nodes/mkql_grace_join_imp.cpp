@@ -439,8 +439,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         //  hash nulls-bitmap keyInt[] KeyIHash[] strSize| [strPos | strs] slotIdx
         //  \---------------------------------------slotSize ---------------------/
         // bit0 of nulls bitmap denotes key-with-nulls
-        // strSize only present if HasKeyStrCol || HasKeyIntCol
-        // strPos is only present if (HasKeyStrCol || hasKeyKeyICol) && strSize + headerSize >= slotSize
+        // strSize only present if HasKeyStrCol || HasKeyICol
+        // strPos is only present if (HasKeyStrCol || HasKeyICol) && strSize + headerSize >= slotSize
         // slotSize, slotIdx and strPos is only for hashtable (table2)
         
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {

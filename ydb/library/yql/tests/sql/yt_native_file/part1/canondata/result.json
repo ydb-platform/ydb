@@ -354,9 +354,9 @@
     ],
     "test.test[aggregate-aggregate_distinct_list-default.txt-Debug]": [
         {
-            "checksum": "9de8e4299c9e45e38d19d843157ab7d8",
-            "size": 10701,
-            "uri": "https://{canondata_backend}/1925821/b6fb8650b96bf92ad00f11e9dddc18e853b46472/resource.tar.gz#test.test_aggregate-aggregate_distinct_list-default.txt-Debug_/opt.yql"
+            "checksum": "bd2bce06ebbe87a3fdbf0fd1a960279b",
+            "size": 10760,
+            "uri": "https://{canondata_backend}/1936273/318c81fba2c945f4ecb5dbe283b01bd7e128e509/resource.tar.gz#test.test_aggregate-aggregate_distinct_list-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-aggregate_distinct_list-default.txt-Plan]": [
@@ -2977,9 +2977,9 @@
     ],
     "test.test[window-full/aggregations_compact--Debug]": [
         {
-            "checksum": "1c0e342712e1c99cfcec58f1fb45a1d9",
-            "size": 8800,
-            "uri": "https://{canondata_backend}/1784826/bc8219a2be29dbaa9a569eb878ef2b778f3ec45e/resource.tar.gz#test.test_window-full_aggregations_compact--Debug_/opt.yql"
+            "checksum": "c4aafc62f1ff71b87f670970a7081d0a",
+            "size": 8834,
+            "uri": "https://{canondata_backend}/1936273/318c81fba2c945f4ecb5dbe283b01bd7e128e509/resource.tar.gz#test.test_window-full_aggregations_compact--Debug_/opt.yql"
         }
     ],
     "test.test[window-full/aggregations_compact--Plan]": [
@@ -2998,9 +2998,9 @@
     ],
     "test.test[window-full/leadlag--Debug]": [
         {
-            "checksum": "8f9fcbe61c8d7ae3c78ed5816ca37859",
-            "size": 6084,
-            "uri": "https://{canondata_backend}/1937001/6359973ccbec6a57e3a04fc33c488277266b7260/resource.tar.gz#test.test_window-full_leadlag--Debug_/opt.yql"
+            "checksum": "e4e56b2dd23f417ba38340006d4f7db1",
+            "size": 6116,
+            "uri": "https://{canondata_backend}/1936273/318c81fba2c945f4ecb5dbe283b01bd7e128e509/resource.tar.gz#test.test_window-full_leadlag--Debug_/opt.yql"
         }
     ],
     "test.test[window-full/leadlag--Plan]": [

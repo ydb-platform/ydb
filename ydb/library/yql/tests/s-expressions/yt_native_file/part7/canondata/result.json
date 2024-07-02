@@ -3759,9 +3759,9 @@
     ],
     "test.test[Optimizers-TakeLimitAfterGroup-Debug]": [
         {
-            "checksum": "01d5bb186730058f0708da49736ea208",
-            "size": 2332,
-            "uri": "https://{canondata_backend}/1689644/6b2bac693b49370fd7090b0c5932003915e2b90f/resource.tar.gz#test.test_Optimizers-TakeLimitAfterGroup-Debug_/opt.yql"
+            "checksum": "987830817848b86ca96f60409e73c23e",
+            "size": 2402,
+            "uri": "https://{canondata_backend}/1936997/ccc5825c63155ebb51154dba041cc2e7465a40b0/resource.tar.gz#test.test_Optimizers-TakeLimitAfterGroup-Debug_/opt.yql"
         },
         {
             "checksum": "7bcd0d6a72201c9cb2d0198874ed32a6",
@@ -3930,9 +3930,9 @@
     ],
     "test.test[Scheme-PartitionByTuple-Debug]": [
         {
-            "checksum": "3426bc9a8f3ddb07fe406d5115931e52",
-            "size": 1992,
-            "uri": "https://{canondata_backend}/212715/44bdabaff89ef65a8e0c6749e8dfc5802b2940d8/resource.tar.gz#test.test_Scheme-PartitionByTuple-Debug_/opt.yql"
+            "checksum": "1a6ee1d540643ba8506c46f6b2520cd2",
+            "size": 2062,
+            "uri": "https://{canondata_backend}/1936997/17cc3c114b735c998363ebdd8086def1861f4d24/resource.tar.gz#test.test_Scheme-PartitionByTuple-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",

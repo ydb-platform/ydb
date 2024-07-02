@@ -4740,9 +4740,9 @@
     ],
     "test.test[Udf-Percentiles-Debug]": [
         {
-            "checksum": "5f126fef43bd6a495734b500eb03a114",
-            "size": 3626,
-            "uri": "https://{canondata_backend}/1931696/bc41b2574e6b7552b66a58a52e05367d9e207675/resource.tar.gz#test.test_Udf-Percentiles-Debug_/opt.yql"
+            "checksum": "9508c50fbf0bedced6d7a785edca6c50",
+            "size": 3704,
+            "uri": "https://{canondata_backend}/1817427/9aab9b9a465270794038218aa17a708f494461ea/resource.tar.gz#test.test_Udf-Percentiles-Debug_/opt.yql"
         },
         {
             "checksum": "15fbb3c8033a19be1cd45b0a5c77ad37",

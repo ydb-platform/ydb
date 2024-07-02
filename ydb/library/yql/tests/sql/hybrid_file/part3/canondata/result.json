@@ -855,9 +855,9 @@
     ],
     "test.test[column_order-winfunc-default.txt-Debug]": [
         {
-            "checksum": "95c63718cf4c092438db8ecd54e7a8d1",
-            "size": 4562,
-            "uri": "https://{canondata_backend}/1889210/9f0ba7bc92451aa4a498112bc8c2e703011101c2/resource.tar.gz#test.test_column_order-winfunc-default.txt-Debug_/opt.yql_patched"
+            "checksum": "6b4566594674675c6d225ddde782d60b",
+            "size": 4594,
+            "uri": "https://{canondata_backend}/1880306/5a95521c84a4cb8286aaf87c7cc708a550521ebf/resource.tar.gz#test.test_column_order-winfunc-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-winfunc-default.txt-Plan]": [
@@ -1765,9 +1765,9 @@
     ],
     "test.test[optimizers-combinebykey_fields_subset_range--Debug]": [
         {
-            "checksum": "85477913380b3e2ff8481a507b1b6dd0",
-            "size": 3977,
-            "uri": "https://{canondata_backend}/1946324/6791f68008dc53dae9d993a8174f52df8db03441/resource.tar.gz#test.test_optimizers-combinebykey_fields_subset_range--Debug_/opt.yql_patched"
+            "checksum": "dd0ead56a308f766f0df5754cc053c06",
+            "size": 4025,
+            "uri": "https://{canondata_backend}/1880306/5a95521c84a4cb8286aaf87c7cc708a550521ebf/resource.tar.gz#test.test_optimizers-combinebykey_fields_subset_range--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-combinebykey_fields_subset_range--Plan]": [
@@ -3053,9 +3053,9 @@
     ],
     "test.test[window-full/aggregations_leadlag_compact--Debug]": [
         {
-            "checksum": "1849ea01f5b7e6d9e5072a5faf03bb87",
-            "size": 8965,
-            "uri": "https://{canondata_backend}/1889210/9f0ba7bc92451aa4a498112bc8c2e703011101c2/resource.tar.gz#test.test_window-full_aggregations_leadlag_compact--Debug_/opt.yql_patched"
+            "checksum": "d91b7fc2721c1e548cdd8c640aed5d7d",
+            "size": 8999,
+            "uri": "https://{canondata_backend}/1817427/d7d3f1e61738ea87fcd3efca1630aefe5b70739d/resource.tar.gz#test.test_window-full_aggregations_leadlag_compact--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-full/aggregations_leadlag_compact--Plan]": [

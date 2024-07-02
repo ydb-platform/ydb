@@ -24,19 +24,29 @@ public:
         if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
             return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"));
         }
+
         const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        } else if (params.Has("database_path")) {
-            Database = params.Get("database_path");
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
-        }
 
         if (params.Has("path")) {
             Request.set_path(params.Get("path"));
         } else {
             return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required"));
+        }
+
+        if (params.Has("database")) {
+            Database = params.Get("database");
+        } else if (params.Has("database_path")) {
+            Database = params.Get("database_path");
+        } else if (params.Has("path")) {
+            auto path = SplitPath(params.Get("path"));
+            if (path.size() > 2) {
+              path.resize(2);
+              Database = "/" + JoinPath(path);
+            }
+        }
+
+        if (Database.empty()) {
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
         }
 
         if (params.Has("include_stats")) {

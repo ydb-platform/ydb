@@ -102,3 +102,34 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
         }
     }
 }
+
+
+Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
+    Y_UNIT_TEST(TestSingleInput) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePullStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                "SELECT * FROM Input",
+                ETranslationMode::SQL
+            );
+
+            TVector<arrow::compute::ExecBatch> items = {MakeBatch()};
+
+            auto stream = program->Apply(MakeHolder<ExecBatchStreamImpl>(items));
+
+            arrow::compute::ExecBatch* batch;
+
+            UNIT_ASSERT(batch = stream->Fetch());
+            AssertBatch(batch);
+            UNIT_ASSERT(!stream->Fetch());
+        }
+    }
+}

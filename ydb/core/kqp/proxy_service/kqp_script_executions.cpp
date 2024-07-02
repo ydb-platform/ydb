@@ -2121,6 +2121,7 @@ public:
                 return;
             }
 
+            ResultSetSize += rowSize;
             if (!ResultSet.add_rows()->ParseFromString(*serializedRow)) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
                 return;
@@ -2128,10 +2129,9 @@ public:
 
             // Initialize AdditionalRowSize
             if (ResultSet.rows_size() == 1) {
-                AdditionalRowSize = static_cast<i64>(ResultSet.ByteSizeLong()) - ResultSetSize - rowSize;
-                rowSize += AdditionalRowSize;
+                AdditionalRowSize = static_cast<i64>(ResultSet.ByteSizeLong()) - ResultSetSize;
+                ResultSetSize += AdditionalRowSize;
             }
-            ResultSetSize += rowSize;
         }
 
         if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {

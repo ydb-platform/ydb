@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/workload/abstract/workload_query_generator.h>
 #include <ydb/library/accessor/accessor.h>
 #include <util/generic/deque.h>
 #include <util/generic/map.h>
@@ -18,8 +19,7 @@ public:
 
 public:
     TGeneratorStateProcessor(const TFsPath& path, bool clear);
-    void AddPortion(const TString& source, ui64 from, ui64 size);
-    void FinishPortions();
+    void FinishPortion(const TString& source, ui64 from, ui64 size);
     YDB_READONLY_DEF(TState, State);
 
 private:
@@ -37,12 +37,6 @@ private:
         TMap<ui64, TThreadSourceState> ThreadsState;
     };
 
-    struct TInProcessPortion {
-        TString Source;
-        ui64 From;
-        ui64 Size;
-    };
-
 private:
     void Load();
     void Save() const;
@@ -52,7 +46,25 @@ private:
     TFsPath TmpPath;
     TMap<TString, TSourceStateImpl> StateImpl;
     TAdaptiveLock Lock;
-    Y_THREAD(TVector<TInProcessPortion>) InProcess;
+};
+
+class TDataPortionWithState: public IBulkDataGenerator::TDataPortion {
+public:
+    template<class T>
+    TDataPortionWithState(TGeneratorStateProcessor* stateProcessor, const TString& table, T&& data, ui64 position, ui64 size)
+        : TDataPortion(table, std::move(data), size)
+        , Position(position)
+        , StateProcessor(stateProcessor)
+    {}
+
+    virtual void SetSendResult(const NYdb::TStatus& status) {
+        if (StateProcessor && status.IsSuccess()) {
+            StateProcessor->FinishPortion(GetTable(), Position, GetSize());
+        }
+    }
+private:
+    ui64 Position;
+    TGeneratorStateProcessor* StateProcessor;
 };
 
 }

@@ -132,7 +132,7 @@ namespace {
         void TryProcessResults() {
             if (auto [batch, partsLeft] = Reader.TryGetResults(); batch.has_value()) {
                 Stats.PartsRead += batch->size();
-                SendParts(*batch);
+                SendParts(std::move(*batch));
 
                 // notify about job quant completion
                 Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID, partsLeft));
@@ -149,30 +149,58 @@ namespace {
             TryProcessResults();
         }
 
-        void SendParts(const TVector<TPart>& batch) {
+        void SendParts(TVector<TPart> batch) {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
 
-            for (const auto& part: batch) {
+            THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vDiskToEv;
+            for (auto& part: batch) {
                 auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
-                    const auto& data = part.PartsData[i];
+                    auto& data = part.PartsData[i];
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Sending"), (LogoBlobId, key.ToString()),
-                        (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
 
-                    auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
-                    auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
-                        key, data, vDiskId,
-                        true, nullptr,
-                        TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
-                    );
-                    TReplQuoter::QuoteMessage(
-                        Ctx->VCtx->ReplNodeRequestQuoter,
-                        std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
-                        data.size()
-                    );
+                    if (Ctx->HugeBlobCtx->IsHugeBlob(GInfo->GetTopology().GType, part.Key)) {
+                        auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
+                        auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
+                            key, data, vDiskId,
+                            true, nullptr,
+                            TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
+                        );
+                        TReplQuoter::QuoteMessage(
+                            Ctx->VCtx->ReplNodeRequestQuoter,
+                            std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
+                            data.size()
+                        );
+                    } else {
+                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
+                            (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
+
+                        auto& ev = vDiskToEv[vDiskId];
+                        if (!ev) {
+                            ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
+                        }
+
+                        ev->AddVPut(key, TRcBuf(data), nullptr, {}, NWilson::TTraceId());
+                    }
+
                 }
+            }
+
+            for (auto& [vDiskId, ev]: vDiskToEv) {
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Send multiput"), (VDisk, vDiskId.ToString()));
+
+                ui32 blobsSize = 0;
+                for (const auto& item: ev->Record.GetItems()) {
+                    blobsSize += item.GetBuffer().size();
+                }
+
+                auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
+                TReplQuoter::QuoteMessage(
+                    Ctx->VCtx->ReplNodeRequestQuoter,
+                    std::make_unique<IEventHandle>(queue, SelfId(), ev.release()),
+                    blobsSize
+                );
             }
         }
 
@@ -185,6 +213,20 @@ namespace {
             }
             ++Ctx->MonGroup.SentOnMain();
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
+        }
+
+        void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr ev) {
+            const auto& items = ev->Get()->Record.GetItems();
+            Stats.PartsSent += items.size();
+            for (const auto& item: items) {
+                if (item.GetStatus() != NKikimrProto::OK) {
+                    ++Stats.PartsSentUnsuccsesfull;
+                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "Put failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                    continue;
+                }
+                ++Ctx->MonGroup.SentOnMain();
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "Put done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+            }
         }
 
         void PassAway() override {
@@ -200,6 +242,7 @@ namespace {
             cFunc(NActors::TEvents::TEvWakeup::EventType, ScheduleJobQuant)
             hFunc(NPDisk::TEvChunkReadResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
+            hFunc(TEvBlobStorage::TEvVMultiPutResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
 
             hFunc(TEvVGenerationChange, Handle)

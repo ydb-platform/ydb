@@ -133,7 +133,7 @@ int TLdapRequestProcessor::ExtractMessageId() {
 
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
     unsigned char protocolOp = GetByte();
-
+    Cerr << "+++ protocolOp: " << static_cast<int>(protocolOp) << Endl;
     switch (protocolOp) {
         case EProtocolOp::BIND_OP_REQUEST: {
             return ProcessBindRequest(responses.BindResponses);
@@ -293,6 +293,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     requestInfo.TypesOnly = GetByte();
 
     requestInfo.Filter = ProcessFilter();
+    Cerr << "+++LdapMock: filter: " << requestInfo.Filter.Attribute << ", " << requestInfo.Filter.Value << Endl;
 
     // Extract Attributes
     elementType = GetByte();
@@ -348,7 +349,9 @@ TSearchRequestInfo::TSearchFilter TLdapRequestProcessor::ProcessFilter() {
             return filter;
         }
         case EFilterType::LDAP_FILTER_OR: {
-            FillFilter(EFilterType::LDAP_FILTER_OR, "or");
+            // FillFilter(EFilterType::LDAP_FILTER_OR, "or");
+            filter.Type = EFilterType::LDAP_FILTER_OR;
+            ProcessFilterOr(&filter, filterLength);
             return filter;
         }
         case EFilterType::LDAP_FILTER_NOT: {
@@ -381,7 +384,8 @@ TSearchRequestInfo::TSearchFilter TLdapRequestProcessor::ProcessFilter() {
             return filter;
         }
         case EFilterType::LDAP_FILTER_EXT: {
-            FillFilter(EFilterType::LDAP_FILTER_EXT, "ext");
+            filter.Type = EFilterType::LDAP_FILTER_EXT;
+            ProcessFilterExtensibleMatch(&filter);
             return filter;
         }
     }
@@ -398,6 +402,36 @@ void TLdapRequestProcessor::ProcessFilterEquality(TSearchRequestInfo::TSearchFil
     elementType = GetByte();
     if (elementType == EElementType::STRING) {
         filter->Value = GetString();
+    }
+}
+
+void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter) {
+    unsigned char elementType = GetByte();
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_OID) {
+        filter->MatchingRule = GetString();
+    }
+
+    elementType = GetByte();
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_TYPE) {
+        filter->Attribute = GetString();
+    }
+
+    elementType = GetByte();
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_VALUE) {
+        filter->Value = GetString();
+    }
+
+    elementType = GetByte();
+    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_DNATTRS) {
+        filter->DnAttributes = GetByte();
+    }
+}
+
+void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
+    const size_t limit = ReadBytes + lengthFilter;
+    while (ReadBytes < limit) {
+        filter->nestedFilters.push_back(ProcessFilter());
+        Cerr << "+++LdapMock: filter: " << filter->nestedFilters.back().Attribute << ", " << filter->nestedFilters.back().Value << Endl;
     }
 }
 

@@ -39,6 +39,13 @@ enum EFilterType {
     LDAP_FILTER_EXT = 0xA9,
 };
 
+enum EExtendedFilterType {
+    LDAP_FILTER_EXT_OID = 0x81U,
+    LDAP_FILTER_EXT_TYPE = 0x82U,
+    LDAP_FILTER_EXT_VALUE = 0x83U,
+    LDAP_FILTER_EXT_DNATTRS = 0x84U,
+};
+
 enum EElementType {
     BOOL = 0x01,
     STRING = 0x04,
@@ -46,7 +53,9 @@ enum EElementType {
     ENUMERATED = 0x0A,
     SEQUENCE = 0x30,
     SET = 0x31,
+    FILTER_EXT_OID = 0x81,
 };
+
 
 struct TBindRequestInfo {
     struct TInitializeList {
@@ -69,6 +78,10 @@ struct TSearchRequestInfo {
         EFilterType Type;
         TString Attribute;
         TString Value;
+        TString MatchingRule;
+        bool DnAttributes;
+
+        std::vector<TSearchFilter> nestedFilters;
     };
 
     struct TInitializeList {

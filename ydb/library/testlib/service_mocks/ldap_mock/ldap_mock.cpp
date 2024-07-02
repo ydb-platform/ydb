@@ -20,6 +20,7 @@ namespace {
             return TLdapResponse();
         }
         int messageId = requestProcessor.ExtractMessageId();
+        Cerr << "+++: " << messageId << Endl;
         std::vector<TLdapRequestProcessor::TProtocolOpData> operationData = requestProcessor.Process(responses);
         return TLdapResponse(messageId, operationData);
     }

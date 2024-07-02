@@ -404,12 +404,12 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
         PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
     }
 
-    if (partitionInfo.HasFromBound()) {
-        FromBound_ = TString(partitionInfo.GetFromBound());
+    if (partitionInfo.has_from_bound()) {
+        FromBound_ = TString(partitionInfo.from_bound());
     }
 
-    if (partitionInfo.HasToBound()) {
-        ToBound_ = TString(partitionInfo.GetToBound());
+    if (partitionInfo.has_to_bound()) {
+        ToBound_ = TString(partitionInfo.to_bound());
     }
 }
 

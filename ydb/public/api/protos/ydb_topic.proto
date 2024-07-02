@@ -1089,9 +1089,9 @@ message DescribeTopicResult {
         PartitionLocation partition_location = 6;
 
         // Inclusive left border. Emptiness means -inf.
-        optional bytes FromBound = 7;
+        optional bytes from_bound = 7;
         // Exclusive right border. Emptiness means +inf.
-        optional bytes ToBound = 8;
+        optional bytes to_bound = 8;
     }
 
     message TopicStats {

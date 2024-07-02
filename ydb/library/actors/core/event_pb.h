@@ -183,10 +183,8 @@ namespace NActors {
             return Record.GetTypeName();
         }
 
-        TString ToString() const override {            
-            TStringStream ss;
-            ss << ToStringHeader() << " " << Record.ShortDebugString();
-            return ss.Str();
+        TString ToString() const override {
+            return TString() + ToStringHeader() + " " + Record.ShortDebugString();
         }
 
         bool IsSerializable() const override {

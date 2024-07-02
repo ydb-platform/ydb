@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_log.h>
+#include <queue>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
 
@@ -144,6 +145,16 @@ private:
         if (ber) {
             NKikimrLdap::BerFree(ber, 0);
         }
+        if (!groupsDn.empty()) {
+            std::vector<TString> groups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
+            if (groups.empty()) {
+                TraverseTree(ld, groupsDn);
+            }
+        }
+        Cerr << "+++ After TraverseTree" << Endl;
+        for (const auto& group: groupsDn) {
+            Cerr << "+++: " << group << Endl;
+        }
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
         Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, groupsDn));
@@ -230,6 +241,10 @@ private:
             }
         }
 
+        // ldap debug
+        // int dl = 0x0001;
+        // NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
+
         return {};
     }
 
@@ -288,6 +303,86 @@ private:
         }
         response.SearchMessage = searchMessage;
         return response;
+    }
+
+    std::vector<TString> TryToGetGroupsUseMatchingRuleInChain(LDAP* ld, LDAPMessage* entry) const {
+        static const TString matchingRuleInChain = "1.2.840.113556.1.4.1941"; // Only Active Directory supports
+        TStringBuilder filter;
+        filter << "(member:" << matchingRuleInChain << ":=" << NKikimrLdap::GetDn(ld, entry) << ')';
+        LDAPMessage* searchMessage = nullptr;
+        Cerr << "+++AD filter: " << filter << Endl;
+        int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
+        if (!NKikimrLdap::IsSuccess(result)) {
+            return {};
+        }
+        const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
+        Cerr << "+++ AD count entries: " << countEntries << Endl;
+        if (countEntries < 1) {
+            NKikimrLdap::MsgFree(searchMessage);
+            return {};
+        }
+        std::vector<TString> groups;
+        groups.reserve(countEntries);
+        for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
+            groups.push_back(NKikimrLdap::GetDn(ld, groupEntry));
+        }
+        NKikimrLdap::MsgFree(searchMessage);
+        return groups;
+    }
+
+    void TraverseTree(LDAP* ld, std::vector<TString>& groups) {
+        Cerr << "+++ TraverseTree" << Endl;
+        std::unordered_set<TString> viewedGroups(groups.cbegin(), groups.cend());
+        std::queue<TString> queue;
+        for (const auto& group : groups) {
+            queue.push(group);
+        }
+        while (!queue.empty()) {
+            Cerr << "+++ !queue.empty" << Endl;
+            TStringBuilder filter;
+            filter << "(|";
+            filter << "(entryDn=" << queue.front() << ')';
+            queue.pop();
+            while (!queue.empty()) {
+                filter << "(entryDn=" << queue.front() << ')';
+                queue.pop();
+            }
+            filter << ')';
+            LDAPMessage* searchMessage = nullptr;
+            Cerr << "+++Filter: " << filter << Endl;
+            int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
+            if (!NKikimrLdap::IsSuccess(result)) {
+                return;
+            }
+            const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
+            Cerr << "+++ CountEntries: " << countEntries << Endl;
+            if (countEntries < 1) {
+                NKikimrLdap::MsgFree(searchMessage);
+                return;
+            }
+            for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
+                BerElement* ber = nullptr;
+                std::vector<TString> foundGroups;
+                char* attribute = NKikimrLdap::FirstAttribute(ld, groupEntry, &ber);
+                if (attribute != nullptr) {
+                    foundGroups = NKikimrLdap::GetAllValuesOfAttribute(ld, groupEntry, attribute);
+                    NKikimrLdap::MemFree(attribute);
+                }
+                if (ber) {
+                    NKikimrLdap::BerFree(ber, 0);
+                }
+                Cerr << "+++FoundGroups:" << Endl;
+                for (const auto& newGroup : foundGroups) {
+                    Cerr << "+++G: " << newGroup << Endl;
+                    if (!viewedGroups.contains(newGroup)) {
+                        viewedGroups.insert(newGroup);
+                        queue.push(newGroup);
+                        groups.push_back(newGroup);
+                    }
+                }
+            }
+            NKikimrLdap::MsgFree(searchMessage);
+        }
     }
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {

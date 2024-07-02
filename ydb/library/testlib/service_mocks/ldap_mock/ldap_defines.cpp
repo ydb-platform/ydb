@@ -1,6 +1,64 @@
+#include <queue>
 #include "ldap_defines.h"
 
 namespace LdapMock {
+
+namespace {
+
+bool checkFilters(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRequestInfo::TSearchFilter& f2) {
+    if (f1.Type != f2.Type) {
+        return false;
+    }
+    if (f1.Attribute != f2.Attribute) {
+        return false;
+    }
+    if (f1.Value != f2.Value) {
+        return false;
+    }
+    if (f1.Type == EFilterType::LDAP_FILTER_EXT) {
+        if (f1.MatchingRule != f2.MatchingRule) {
+            return false;
+        }
+        if (f1.DnAttributes != f2.DnAttributes) {
+            return false;
+        }
+    }
+    if (f1.nestedFilters.size() != f2.nestedFilters.size()) {
+        return false;
+    }
+    return true;
+}
+
+bool TraverseFilter(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRequestInfo::TSearchFilter& f2) {
+    if (!checkFilters(f1, f2)) {
+        return false;
+    }
+    std::queue<TSearchRequestInfo::TSearchFilter> q1;
+    for (const auto& filter : f1.nestedFilters) {
+        q1.push(filter);
+    }
+    std::queue<TSearchRequestInfo::TSearchFilter> q2;
+    for (const auto& filter : f2.nestedFilters) {
+        q2.push(filter);
+    }
+    while (!q1.empty() && !q2.empty()) {
+        const auto filterQ1 = q1.front();
+        q1.pop();
+        const auto filterQ2 = q2.front();
+        q2.pop();
+        if (!checkFilters(filterQ1, filterQ2)) {
+            return false;
+        }
+        for (const auto& filter : filterQ1.nestedFilters) {
+            q1.push(filter);
+        }
+        for (const auto& filter : filterQ2.nestedFilters) {
+            q2.push(filter);
+        }
+    }
+    return true;
+}
+} // namespace
 
 TBindRequestInfo::TBindRequestInfo(const TString& login, const TString& password)
     : Login(login)
@@ -53,13 +111,7 @@ bool TSearchRequestInfo::operator==(const TSearchRequestInfo& otherRequest) cons
     }
     const auto& filter = this->Filter;
     const auto& expectedFilter = otherRequest.Filter;
-    if (filter.Type != expectedFilter.Type) {
-        return false;
-    }
-    if (filter.Attribute != expectedFilter.Attribute) {
-        return false;
-    }
-    if (filter.Value != expectedFilter.Value) {
+    if (!TraverseFilter(filter, expectedFilter)) {
         return false;
     }
     if (this->Attributes != otherRequest.Attributes) {

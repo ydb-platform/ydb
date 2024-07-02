@@ -32,7 +32,7 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TS3ExternalStorage: public IExternalStorageOperator, TS3User {
+class TS3ExternalStorage: public IExternalStorageOperator {
 private:
     THolder<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;

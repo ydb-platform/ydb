@@ -32,6 +32,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     library/cpp/getopt
     ydb/library/grpc/client
     library/cpp/regex/pcre

@@ -2245,6 +2245,37 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
+    Y_UNIT_TEST(ErrorQueryReplay1) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result1 = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/thermostat` (
+                date Timestamp,
+                humidity Uint32,
+                id String,
+                temperature Double,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result1.IsSuccess(), result1.GetIssues().ToString());
+
+        {
+            auto scanQ = db.StreamExecuteScanQuery(R"(
+
+SELECT humidity
+FROM thermostat
+WHERE temperature!=0 ORDER BY date DESC LIMIT 1
+
+            )").GetValueSync();
+            UNIT_ASSERT_C(scanQ.IsSuccess(), scanQ.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(scanQ));
+        }
+
+    }
+
     Y_UNIT_TEST(StreamLookupByPkPrefix) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

@@ -48,6 +48,8 @@ bool TBuildSlicesTask::DoExecute() {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
         ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
         return true;
+    } else {
+        OriginalBatch = reorderConclusion.DetachResult();
     }
     if (!OriginalBatch->schema()->Equals(indexSchema)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())

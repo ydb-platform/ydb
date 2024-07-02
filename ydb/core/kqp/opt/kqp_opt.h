@@ -24,6 +24,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     const NYql::TKikimrConfiguration::TPtr Config;
     const TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     const TIntrusivePtr<NYql::TKikimrTablesData> Tables;
+    int NJoins;
+    int NEquiJoins;
 
     bool IsDataQuery() const {
         return QueryCtx->Type == NYql::EKikimrQueryType::Dml;

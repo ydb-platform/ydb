@@ -394,7 +394,8 @@ public:
             case EOperatingMode::ProcessSpilled:
                 return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
-                std::fill_n(Tongue, KeyAndStateType->GetElementsCount(), NUdf::TUnboxedValuePod());
+                // std::fill_n(Tongue, KeyAndStateType->GetElementsCount(), NUdf::TUnboxedValuePod());
+                BufferForKeyAndState.resize(KeyWidth);
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
@@ -443,8 +444,9 @@ public:
             return bucket.InMemoryProcessingState->TasteIt();
         }
 
-        IsImmediateProcessingAvaliable = false;
+        BufferForKeyAndState.resize(0);
 
+        IsImmediateProcessingAvaliable = false;
         TryToSpillRawData(bucket, bucketId);
         
         return false;
@@ -455,6 +457,7 @@ public:
             //jumping into unsafe world, refusing ownership
             static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
         }
+        BufferForKeyAndState.resize(0);
     }
 
     // Copies data from WideFields to local and tries to spill it using suitable bucket.
@@ -697,6 +700,7 @@ private:
             case EOperatingMode::ProcessSpilled: {
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+                BufferForKeyAndState.resize(0);
                 break;
             }
 

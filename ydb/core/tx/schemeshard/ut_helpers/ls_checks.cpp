@@ -830,6 +830,13 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc VectorIndexDescription(Ydb::Table::GlobalVectorIndex_Type type) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetType(), type);
+    };
+}
+
+
 TCheckFunc SequenceName(const TString& name) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetName(), name);

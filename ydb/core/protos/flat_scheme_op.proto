@@ -13,6 +13,7 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
@@ -973,6 +974,7 @@ enum EIndexType {
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
+    EIndexTypeGlobalVector = 4;
 }
 
 enum EIndexState {
@@ -984,6 +986,12 @@ enum EIndexState {
 
 message TExplicitPartitions {
     repeated TSplitBoundary SplitBoundary = 1;
+}
+
+message TVectorIndexDescription {
+    optional Ydb.Table.GlobalVectorIndex.Type Type = 1;
+    optional Ydb.Table.GlobalVectorIndex.Distance Distance = 2;
+    optional Ydb.Table.GlobalVectorIndex.Quantization Quantization = 3;
 }
 
 message TIndexDescription {
@@ -1009,6 +1017,8 @@ message TIndexDescription {
         TExplicitPartitions ExplicitPartitions = 11;
     }
     optional TPartitioningPolicy PartitioningPolicy = 12;
+
+    optional TVectorIndexDescription VectorIndexDescription = 13;
 }
 
 message TIndexCreationConfig {
@@ -1018,6 +1028,7 @@ message TIndexCreationConfig {
     optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
+    optional TVectorIndexDescription VectorIndexDescription = 7;
 }
 
 message TIndexAlteringConfig {
@@ -1851,6 +1862,7 @@ enum EPathSubType {
     EPathSubTypeSyncIndexImplTable = 1;
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
+    EPathSubTypeVectorIndexImplTable = 4;
 }
 
 enum EPathState {

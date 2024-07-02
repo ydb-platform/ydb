@@ -121,10 +121,16 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
         auto indexInfo = Self->Indexes.at(pathId);
 
         switch (indexInfo->Type) {
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            return TPathElement::EPathSubType::EPathSubTypeAsyncIndexImplTable;
-        default:
-            return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                return TPathElement::EPathSubType::EPathSubTypeAsyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalVector:
+                return TPathElement::EPathSubType::EPathSubTypeVectorIndexImplTable;
+            default:
+                Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
+                return TPathElement::EPathSubType::EPathSubTypeEmpty;
         }
     } else if (parentPath.IsCdcStream()) {
         return TPathElement::EPathSubType::EPathSubTypeStreamImpl;
@@ -1244,6 +1250,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     ) {
         *entry.MutableExplicitPartitions()->MutableSplitBoundary() = explicitPartitions;
     }
+
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVector) {
+        auto& vectorIndexDescription = *entry.MutableVectorIndexDescription();
+        vectorIndexDescription.SetType(indexInfo->VectorIndexDescription.GetType());
+    }
+    
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

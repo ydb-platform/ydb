@@ -53,7 +53,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
             .SetKqpSettings({})
-            .SetS3ActorsFactory(std::move(s3ActorsFactory));
+            .SetS3ActorsFactory(std::move(s3ActorsFactory))
+            .SetWithSampleTables(false);
 
         settings = settings.SetAppConfig(appConfig.value());
 

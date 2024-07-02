@@ -14,9 +14,6 @@
 #include <array>
 #include <span>
 
-// enable only when patch with this macro was successfully deployed
-#define USE_EXTENDED_PAYLOAD_FORMAT 0
-
 namespace NActorsProto {
     class TActorId;
 } // NActorsProto
@@ -187,9 +184,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            TStringStream ss;
-            ss << ToStringHeader() << " " << Record.ShortDebugString();
-            return ss.Str();
+            return TString() + ToStringHeader() + " " + Record.ShortDebugString();
         }
 
         bool IsSerializable() const override {

@@ -1,5 +1,8 @@
 #include "event_pb.h"
 
+// enable only when patch with this macro was successfully deployed
+#define USE_EXTENDED_PAYLOAD_FORMAT 0
+
 namespace NActors {
     bool TRopeStream::Next(const void** data, int* size) {
         *data = Iter.ContiguousData();
@@ -415,7 +418,9 @@ namespace NActors {
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
                 info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
 
-#ifndef NDEBUG
+#ifdef NDEBUG
+                Y_UNUSED(totalPayloadSize);
+#else
                 size_t total = 0;
                 for (const auto& section : info.Sections) {
                     total += section.Size;

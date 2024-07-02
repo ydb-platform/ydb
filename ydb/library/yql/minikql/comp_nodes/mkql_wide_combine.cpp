@@ -335,11 +335,18 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
 
         EBucketState BucketState = EBucketState::InMemory;
     };
-public:
+
     enum class EOperatingMode {
         InMemory,
         Spilling,
         ProcessSpilled
+    };
+
+public:
+    enum class ETasteResult: ui8 {
+        Init,
+        Update,
+        Skip
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo, size_t wideFieldsIndex,
@@ -415,21 +422,19 @@ public:
         }
     }
 
-    bool TasteIt() {
-        IsImmediateProcessingAvaliable = true;
-
+    ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
             Throat = InMemoryProcessingState.Throat;
             Tongue = InMemoryProcessingState.Tongue;
-            return isNew;
+            return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
             Tongue = SpilledBuckets.front().InMemoryProcessingState->Tongue;
-            return isNew;
+            return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
         MKQL_ENSURE(!BufferForKeyAndState.empty(), "Internal logic error");
@@ -441,15 +446,14 @@ public:
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             MoveKeyToBucket(bucket);
             Throat = bucket.InMemoryProcessingState->Throat;
-            return bucket.InMemoryProcessingState->TasteIt();
+            return bucket.InMemoryProcessingState->TasteIt()? ETasteResult::Init : ETasteResult::Update;
         }
         
         // Corresponding bucket is spilled, we don't need a key anymore, full input will be spilled
         BufferForKeyAndState.resize(0);
-        IsImmediateProcessingAvaliable = false;
         TryToSpillRawData(bucket, bucketId);
         
-        return false;
+        return ETasteResult::Skip;
     }
 
     void MoveKeyToBucket(TSpilledBucket& bucket) {
@@ -722,9 +726,6 @@ public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
-    // This value is set during TasteIt call. Used for spilling.
-    // False if the corresponding bucket is already spilled and processing is unavaliable at the moment.
-    bool IsImmediateProcessingAvaliable = true;
 
 private:
     ui64 NextBucketToSpill = 0;
@@ -1243,11 +1244,9 @@ public:
         , AllowSpilling(allowSpilling)
     {}
 
-
-    // MARK: DoCalculate
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
-            MakeSpillingSupportState(ctx, state, AllowSpilling);
+            MakeSpillingSupportState(ctx, state);
         } 
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
@@ -1275,9 +1274,15 @@ public:
                 if (ptr->IsProcessingRequired()) {
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
 
-                    bool isNew = ptr->TasteIt();
-                    if (ptr->IsImmediateProcessingAvaliable) {
-                        Nodes.ProcessItem(ctx, isNew ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                    switch(ptr->TasteIt()) {
+                        case TSpillingSupportState::ETasteResult::Init:
+                            Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                            break;
+                        case TSpillingSupportState::ETasteResult::Update:
+                            Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                            break;
+                        case TSpillingSupportState::ETasteResult::Skip:
+                            break;
                     }
                     continue;
                 }
@@ -1533,14 +1538,14 @@ private:
 #endif
     }
 
-    void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, bool allowSpilling) const {
+    void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TSpillingSupportState>(WideFieldsIndex,
             UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),
             TMyValueHasher(KeyTypes),
             TMyValueEqual(KeyTypes),
-            allowSpilling,
+            AllowSpilling,
             ctx
         );
     }

@@ -830,6 +830,19 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc VectorIndexDescription(Ydb::Table::GlobalVectorIndex_IndexType indexType, 
+                                  Ydb::Table::GlobalVectorIndex_Distance distance, 
+                                  Ydb::Table::GlobalVectorIndex_Similarity similarity, 
+                                  Ydb::Table::GlobalVectorIndex_VectorType vectorType) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetIndexType(), indexType);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetDistance(), distance);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetSimilarity(), similarity);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetVectorType(), vectorType);
+    };
+}
+
+
 TCheckFunc SequenceName(const TString& name) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetName(), name);

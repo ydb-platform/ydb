@@ -13,6 +13,7 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
@@ -973,6 +974,7 @@ enum EIndexType {
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
+    EIndexTypeGlobalVector = 4;
 }
 
 enum EIndexState {
@@ -980,6 +982,15 @@ enum EIndexState {
     EIndexStateReady = 1;
     EIndexStateNotReady = 2;
     EIndexStateWriteOnly = 3;
+}
+
+message TVectorIndexDescription {
+    optional Ydb.Table.GlobalVectorIndex.IndexType IndexType = 1;
+    oneof DistanceSimilarity {
+        Ydb.Table.GlobalVectorIndex.Distance Distance = 2;
+        Ydb.Table.GlobalVectorIndex.Similarity Similarity = 3;
+    }
+    optional Ydb.Table.GlobalVectorIndex.VectorType VectorType = 4;
 }
 
 message TIndexDescription {
@@ -1000,6 +1011,10 @@ message TIndexDescription {
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
     repeated TTableDescription IndexImplTableDescriptions = 10;
+
+    oneof SpecializedIndexDescription {
+        TVectorIndexDescription VectorIndexDescription = 11;
+    }
 }
 
 message TIndexCreationConfig {
@@ -1009,6 +1024,9 @@ message TIndexCreationConfig {
     repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
+    oneof SpecializedIndexDescription {
+        TVectorIndexDescription VectorIndexDescription = 7;
+    }
 }
 
 message TIndexAlteringConfig {
@@ -1849,6 +1867,7 @@ enum EPathSubType {
     EPathSubTypeSyncIndexImplTable = 1;
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
+    EPathSubTypeVectorIndexImplTable = 4;
 }
 
 enum EPathState {

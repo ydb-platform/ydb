@@ -16,13 +16,23 @@ TVector<TString>::const_iterator IsUniq(const TVector<TString>& names) {
 namespace NKikimr {
 namespace NTableIndex {
 
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index) {
+TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
     {
         TString explain;
-        Y_ABORT_UNLESS(IsCompatibleIndex(table, index, explain), "explain is %s", explain.c_str());
+        Y_ABORT_UNLESS(IsCompatibleIndex(indexType, table, index, explain), "explain is %s", explain.c_str());
     }
 
     TTableColumns result;
+
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        result.Keys.push_back(NTableVectorIndex::LevelColumn);
+        result.Keys.push_back(NTableVectorIndex::IdColumn);
+        result.Columns.insert(NTableVectorIndex::LevelColumn);
+        result.Columns.insert(NTableVectorIndex::IdColumn);
+        result.Columns.insert(NTableVectorIndex::CentroidColumn);
+        result.Columns.insert(NTableVectorIndex::IdsColumn);
+        return result;
+    }
 
     for (const auto& ik: index.KeyColumns) {
         result.Keys.push_back(ik);
@@ -43,7 +53,7 @@ TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexC
     return result;
 }
 
-bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, TString& explain) {
+bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
     {
         auto brokenAt = IsUniq(table.Keys);
         if (brokenAt != table.Keys.end()) {
@@ -71,6 +81,17 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
         }
     }
 
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        if (index.KeyColumns.size() != 1) {
+            explain = "Only single key column is supported for vector index";
+            return false;
+        }
+        if (index.DataColumns.size() != 0) {
+            explain = "Data columns are not supported for vector index";
+            return false;
+        }
+    }
+
     THashSet<TString> indexKeys;
 
     for (const auto& tableKeyName: table.Keys) {
@@ -93,10 +114,12 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
         }
     }
 
-    if (index.KeyColumns == table.Keys) {
-        explain = TStringBuilder()
-            << "table and index keys are the same";
-        return false;
+    if (indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        if (index.KeyColumns == table.Keys) {
+            explain = TStringBuilder()
+                      << "table and index keys are the same";
+            return false;
+        }
     }
 
     for (const auto& dataName: index.DataColumns) {

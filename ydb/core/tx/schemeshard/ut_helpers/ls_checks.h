@@ -138,6 +138,11 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
+    
+    TCheckFunc VectorIndexDescription(Ydb::Table::GlobalVectorIndex_IndexType indexType, 
+                                      Ydb::Table::GlobalVectorIndex_Distance distance,
+                                      Ydb::Table::GlobalVectorIndex_Similarity similarity, 
+                                      Ydb::Table::GlobalVectorIndex_VectorType vectorType);
 
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);

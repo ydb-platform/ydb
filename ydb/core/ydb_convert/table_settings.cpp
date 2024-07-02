@@ -442,6 +442,12 @@ bool FillIndexTablePartitioning(
         }
         break;
 
+    case Ydb::Table::TableIndex::kGlobalVectorIndex:
+        if (!fillIndexPartitioning(index.global_vector_index().settings())) {
+            return false;
+        }
+        break;
+
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
       break;
     }

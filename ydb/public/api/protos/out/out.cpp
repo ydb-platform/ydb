@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/stream/output.h>
 
@@ -28,4 +29,20 @@ Y_DECLARE_OUT_SPEC(, Ydb::Export::ExportProgress::Progress, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, Ydb::Import::ImportProgress::Progress, stream, value) {
     stream << Ydb::Import::ImportProgress_Progress_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::IndexType, stream, value) {
+    stream << Ydb::Table::GlobalVectorIndex::IndexType_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::Distance, stream, value) {
+    stream << Ydb::Table::GlobalVectorIndex::Distance_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::Similarity, stream, value) {
+    stream << Ydb::Table::GlobalVectorIndex::Similarity_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::VectorType, stream, value) {
+    stream << Ydb::Table::GlobalVectorIndex::VectorType_Name(value);
 }

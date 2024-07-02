@@ -117,7 +117,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         // This description provided by user to override partition policy
         const auto& userIndexDesc = indexDesc.GetIndexImplTableDescriptions(0);
-        indexImplTableDescription = CalcImplTableDesc(tableInfo, implTableColumns, userIndexDesc);
+        indexImplTableDescription = CalcImplTableDesc(indexDesc.GetType(), tableInfo, implTableColumns, userIndexDesc);
 
         indexImplTableDescription.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         indexImplTableDescription.MutablePartitionConfig()->SetShadowData(true);

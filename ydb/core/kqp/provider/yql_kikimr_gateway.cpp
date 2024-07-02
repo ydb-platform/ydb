@@ -116,6 +116,7 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
         const auto& index = tableMetadata->Indexes[i];
         auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
         NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
+                    TIndexDescription::ConvertIndexType(index.Type), 
                     tableColumns,
                     NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
 

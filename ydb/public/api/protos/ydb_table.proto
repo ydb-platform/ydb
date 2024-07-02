@@ -71,6 +71,43 @@ message GlobalUniqueIndex {
     GlobalIndexSettings settings = 1;
 }
 
+message GlobalVectorIndex {
+    optional GlobalIndexSettings settings = 1;
+
+    enum IndexType {
+        INDEX_TYPE_UNSPECIFIED = 0;
+        INDEX_TYPE_KMEANS_TREE  = 1;
+    }
+
+    enum Distance {
+        DISTANCE_UNSPECIFIED = 0;
+        DISTANCE_COSINE = 1;
+        DISTANCE_MANHATTAN = 2;
+        DISTANCE_EUCLIDEAN = 3;
+    }
+
+    enum Similarity {
+        SIMILARITY_UNSPECIFIED = 0;
+        SIMILARITY_COSINE = 1;
+        SIMILARITY_INNER_PRODUCT = 2;
+    }   
+
+    enum VectorType {
+        VECTOR_TYPE_UNSPECIFIED = 0;
+        VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_UINT8 = 2;
+        VECTOR_TYPE_INT8 = 3;
+        VECTOR_TYPE_BIT = 4;
+    }
+
+    IndexType indexType = 2;
+    oneof distance_similarity {
+        Distance distance = 3;
+        Similarity similarity = 4;
+    }
+    VectorType vectorType = 5;
+}
+
 // Represent secondary index
 message TableIndex {
     // Name of index
@@ -82,6 +119,7 @@ message TableIndex {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
+       GlobalVectorIndex global_vector_index = 7;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -105,6 +143,7 @@ message TableIndexDescription {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
+       GlobalVectorIndex global_vector_index = 9;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

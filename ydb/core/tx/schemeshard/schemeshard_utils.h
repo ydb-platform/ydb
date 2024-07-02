@@ -137,14 +137,17 @@ public:
 namespace NTableIndex {
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NKikimrSchemeOp::EIndexType indexType,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NKikimrSchemeOp::EIndexType indexType,
     const NKikimrSchemeOp::TTableDescription& baseTableDesc,
     const NTableIndex::TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+);
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -164,6 +167,7 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
 
 bool IsCompatibleKeyTypes(
+    const NKikimrSchemeOp::EIndexType indexType, 
     const TColumnTypes& baseTableColumnsTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
@@ -183,25 +187,50 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-        status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-        error = "It is not allowed to create index with data column";
-        return false;
+    if (!indexKeys.DataColumns.empty()) {
+        if (!AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
+            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+            error = "It is not allowed to create index with data column";
+            return false;
+        }
+        if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+            error = "It is not allowed to create vector index with data column";
+            return false;
+        }
     }
 
-    if (!IsCompatibleIndex(baseTableColumns, indexKeys, error)) {
+    if (!IsCompatibleIndex(indexDesc.GetType(), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }
 
-    TColumnTypes columnsTypes;
-    if (!ExtractTypes(tableDesc, columnsTypes, error)) {
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }
 
-    implTableColumns = CalcTableImplDescription(baseTableColumns, indexKeys);
-    if (!IsCompatibleKeyTypes(columnsTypes, implTableColumns, uniformTable, error)) {
+    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+        if (indexKeys.KeyColumns.size() != 1) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = "Only single column is supported for vector index";
+            return false;
+        }
+
+        const TString& indexColumnName = indexKeys.KeyColumns[0];
+        Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
+        auto typeInfo = baseColumnTypes.at(indexColumnName);
+
+        if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            return false;
+        }
+    }
+
+    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
+    if (!IsCompatibleKeyTypes(indexDesc.GetType(), baseColumnTypes, implTableColumns, uniformTable, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }

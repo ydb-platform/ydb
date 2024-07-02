@@ -880,6 +880,9 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions()
             );
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector:
+            *index->mutable_global_vector_index() = Ydb::Table::GlobalVectorIndex();
+            break;
         default:
             break;
         };
@@ -944,6 +947,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalVectorIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector);
             break;
 
         default:

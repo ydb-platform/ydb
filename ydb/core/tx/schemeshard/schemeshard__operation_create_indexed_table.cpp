@@ -254,7 +254,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 // This description provided by user to override partition policy
                 userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
             }
-            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc);
+            indexImplTableDescription = CalcImplTableDesc(indexDescription.GetType(), baseTableDescription, implTableColumns, userIndexDesc);
 
             result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));
         }

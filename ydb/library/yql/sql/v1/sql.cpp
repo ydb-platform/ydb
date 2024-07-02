@@ -171,12 +171,11 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
     }
 }
 
-TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules,
-    TVector<NYql::TStmtParseInfo>* stmtParseInfo)
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TIssues& issues,
+    NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo)
 {
     TVector<TAstParseResult> result;
     const TString queryName = "query";
-    TIssues issues;
 
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(settings.AnsiLexer);

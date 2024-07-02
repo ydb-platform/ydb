@@ -1739,9 +1739,9 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(newPathId.OwnerId);
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
-        auto node = newTableInfo->TableIndexes.extract(prevPathId);
+        auto node = newTableInfo->Indexes.extract(prevPathId);
         node.key() = newPathId;
-        newTableInfo->TableIndexes.insert(std::move(node));
+        newTableInfo->Indexes.insert(std::move(node));
     }
     newTableInfo->SetSchema(schema);
 
@@ -1793,7 +1793,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 
     if (move.GetReMapIndex().HasReplacedPathId()) {
         const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
-        newTableInfo->TableIndexes.erase(oldPathId);
+        newTableInfo->Indexes.erase(oldPathId);
 
         auto& indexes = *schema.MutableTableIndexes();
         for (auto it = indexes.begin(); it != indexes.end(); ++it) {
@@ -1821,9 +1821,9 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetLocalPathId(remapNewId.LocalPathId);
 
 
-        auto node = newTableInfo->TableIndexes.extract(prevPathId);
+        auto node = newTableInfo->Indexes.extract(prevPathId);
         node.key() = remapNewId;
-        auto it = newTableInfo->TableIndexes.insert(std::move(node)).position;
+        auto it = newTableInfo->Indexes.insert(std::move(node)).position;
 
         Y_ABORT_UNLESS(move.GetReMapIndex().HasDstName());
         indexDesc.SetName(dstIndexName);

@@ -395,15 +395,15 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     bool IsBackup = false;
 
-    TMap<TPathId, TTableIndex> TableIndexes;
+    TMap<TPathId, TTableIndex> Indexes;
 
     template <typename TCallback>
     void ForAsyncIndex(const TPathId& pathId, TCallback&& callback) const {
         if (AsyncIndexCount == 0) {
             return;
         }
-        auto it = TableIndexes.find(pathId);
-        if (it != TableIndexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+        auto it = Indexes.find(pathId);
+        if (it != Indexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
             callback(it->second);
         }
     }
@@ -413,7 +413,7 @@ struct TUserTable : public TThrRefBase {
         if (AsyncIndexCount == 0) {
             return;
         }
-        for (const auto& [pathId, index] : TableIndexes) {
+        for (const auto& [pathId, index] : Indexes) {
             if (index.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
                 callback(pathId, index);
             }

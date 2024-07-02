@@ -398,6 +398,17 @@ struct TUserTable : public TThrRefBase {
     TMap<TPathId, TTableIndex> TableIndexes;
 
     template <typename TCallback>
+    void ForAsyncIndex(const TPathId& pathId, TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        auto it = TableIndexes.find(pathId);
+        if (it != TableIndexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+            callback(it->second);
+        }
+    }
+
+    template <typename TCallback>
     void ForEachAsyncIndex(TCallback&& callback) const {
         if (AsyncIndexCount == 0) {
             return;

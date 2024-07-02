@@ -2484,7 +2484,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }
         case NUdf::EDataSlot::Decimal: {
-            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+            return sizeof(arrow::BasicDecimal128);
         }
         case NUdf::EDataSlot::DyNumber: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);

@@ -627,28 +627,6 @@ private:
     std::shared_ptr<TMockRetryPolicy> Policy;
 };
 
-class TMockConnections : public IQueueClientContextProvider, public IInternalClient {
-public:
-
-    MOCK_METHOD(void, ScheduleCallback, (TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr), (override));
-
-public:
-
-    IQueueClientContextPtr CreateContext() override { return {}; }
-
-    NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState>) override { return {}; }
-    void AddPeriodicTask(TPeriodicCb&&, TDuration) override {}
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels([[maybe_unused]] const std::vector<std::string>& endpoints) override {}
-#endif
-    TBalancingSettings GetBalancingSettings() const override  { return {}; }
-    bool StartStatCollecting(::NMonitoring::IMetricRegistry*) override { return false; }
-    ::NMonitoring::TMetricRegistry* GetMetricRegistry() override { return nullptr; }
-    const TLog& GetLog() const override { return Log; }
-private:
-    TLog Log;
-};
-
 // Class for testing read session impl with mocks.
 class TDirectReadSessionImplTestSetup {
 public:
@@ -708,7 +686,6 @@ public:
     std::shared_ptr<TMockRetryPolicy> MockRetryPolicy = std::make_shared<TMockRetryPolicy>();
     std::shared_ptr<TMockReadProcessorFactory> MockReadProcessorFactory = std::make_shared<TMockReadProcessorFactory>();
     std::shared_ptr<TMockDirectReadProcessorFactory> MockDirectReadProcessorFactory = std::make_shared<TMockDirectReadProcessorFactory>();
-    std::shared_ptr<TMockConnections> MockConnections = std::make_shared<TMockConnections>();
     TIntrusivePtr<TMockReadSessionProcessor> MockReadProcessor = MakeIntrusive<TMockReadSessionProcessor>();
     TIntrusivePtr<TMockDirectReadSessionProcessor> MockDirectReadProcessor = MakeIntrusive<TMockDirectReadSessionProcessor>();
 
@@ -825,7 +802,7 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
             "client-session-id-1",
             "",
             Log,
-            MockConnections,
+            TSingleClusterReadSessionImpl<false>::TScheduleCallbackFunc {},
             MockReadProcessorFactory,
             GetEventsQueue(),
             FakeContext,

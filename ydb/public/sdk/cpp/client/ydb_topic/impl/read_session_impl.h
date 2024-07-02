@@ -1088,6 +1088,7 @@ public:
     using IProcessorFactory = IReadSessionConnectionProcessorFactory<UseMigrationProtocol>;
     using IProcessorFactoryPtr = std::shared_ptr<IProcessorFactory>;
     using IProcessor = IProcessorFactory::IProcessor;
+    using TScheduleCallbackFunc = std::function<void(TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr)>;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSessionControlCallbacks;
@@ -1098,7 +1099,7 @@ public:
         const TString& sessionId,
         const TString& clusterName,
         const TLog& log,
-        std::shared_ptr<IInternalClient> connections,
+        TScheduleCallbackFunc scheduleCallbackFunc,
         IProcessorFactoryPtr connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -1327,9 +1328,9 @@ private:
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
 
-    // Currently needed for scheduling callbacks in direct read sessions
+    // Currently needed only for scheduling callbacks in direct read sessions
     // to retry sending StartDirectReadPartitionSession requests after temporary errors.
-    std::shared_ptr<IInternalClient> Connections;
+    TScheduleCallbackFunc ScheduleCallbackFunc;
 
     IProcessorFactoryPtr ConnectionFactory;
     IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;

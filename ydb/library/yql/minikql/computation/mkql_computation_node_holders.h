@@ -1069,7 +1069,7 @@ public: //unavailable getters may be eliminated at compile time, but it'd make c
     }
 private:
     TKeyTypes KeyTypes;
-    bool IsTuple;
+    bool IsTuple = false;
     
     //unsused pointers may be eliminated at compile time, but it'd make code much less readable
     NUdf::IEquate::TPtr Equate;

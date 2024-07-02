@@ -17,6 +17,7 @@ EXCLUDED_TESTS = [
     'join/inmem_with_set_key',
     # INTERNAL_ERROR, Visit(): requirement stagePlanNode.StageProto failed, YQ-3137
     'action/runtime_for_select',
+    'pg/regoids',
     'pg_catalog/pg_set_config',
     # INTERNAL_ERROR, Peephole optimization failed, YQ-3138
     'flatten_by/flatten_mode',

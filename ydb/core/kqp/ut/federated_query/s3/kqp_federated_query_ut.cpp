@@ -1774,6 +1774,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeFile) {
+        ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 65_MB, 500000);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithThinFile) {
         ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
     }
 }

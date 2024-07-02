@@ -274,7 +274,15 @@ void PrintTo(const TColumnarStatistics& statistics, std::ostream* os)
         << "ChunkRowCount: "
         << ::testing::PrintToString(statistics.ChunkRowCount) << "\n"
         << "LegacyChunkRowCount: "
-        << ::testing::PrintToString(statistics.LegacyChunkRowCount);
+        << ::testing::PrintToString(statistics.LegacyChunkRowCount) << "\n"
+        << "ColumnHyperLogLogDigests: [\n";
+
+    for (const auto& hyperLogLog : statistics.ColumnHyperLogLogDigests) {
+        *os << "    ";
+        *os << ToString(hyperLogLog);
+        *os << "\n";
+    }
+    *os << "]\n";
 }
 
 NTableChunkFormat::NProto::TSegmentMeta CreateSimpleSegmentMeta()

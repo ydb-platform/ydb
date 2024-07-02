@@ -1,0 +1,17 @@
+package NYT.NProto;
+
+option java_package = "tech.ytsaurus";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message THyperLogLog
+{
+    // Use uint32 for 8-bit integers. It is protobuf's most narrow int type.
+    // Register values will still use one byte on the wire, because of varint encoding.
+    repeated uint32 registers = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

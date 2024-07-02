@@ -4,9 +4,29 @@
 #include "hyperloglog_bias.h"
 #include "farm_hash.h"
 
+#include <yt/yt_proto/yt/core/misc/proto/hyperloglog.pb.h>
+
 #include <cmath>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <int Precision>
+class THyperLogLog;
+
+template <int Precision>
+void FormatValue(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf format);
+
+template <int Precision>
+void ToProto(
+    NProto::THyperLogLog* protoHyperLogLog,
+    const THyperLogLog<Precision>& hyperloglog);
+
+template <int Precision>
+void FromProto(
+    THyperLogLog<Precision>* hyperloglog,
+    const NProto::THyperLogLog& protoHyperLogLog);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,7 +48,19 @@ public:
 
     static ui64 EstimateCardinality(const std::vector<ui64>& values);
 
+    bool operator==(const THyperLogLog<Precision>& other) const = default;
+
 private:
+    friend void ToProto<Precision>(
+        NProto::THyperLogLog* protoHyperLogLog,
+        const THyperLogLog<Precision>& hyperloglog);
+
+    friend void FromProto<Precision>(
+        THyperLogLog<Precision>* hyperloglog,
+        const NProto::THyperLogLog& protoHyperLogLog);
+
+    friend void FormatValue<Precision>(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf format);
+
     static constexpr ui64 RegisterCount = (ui64)1 << Precision;
     static constexpr ui64 PrecisionMask = RegisterCount - 1;
     static constexpr double Threshold = NDetail::Thresholds[Precision - 4];
@@ -132,6 +164,32 @@ ui64 THyperLogLog<Precision>::EstimateCardinality(const std::vector<ui64>& value
         state.Add(v);
     }
     return state.EstimateCardinality();
+}
+
+template <int Precision>
+void ToProto(
+    NProto::THyperLogLog* protoHyperLogLog,
+    const THyperLogLog<Precision>& hyperloglog)
+{
+    ToProto(protoHyperLogLog->mutable_registers(), hyperloglog.ZeroCounts_);
+}
+
+template <int Precision>
+void FromProto(
+    THyperLogLog<Precision>* hyperloglog,
+    const NProto::THyperLogLog& protoHyperLogLog)
+{
+    YT_VERIFY(protoHyperLogLog.registers_size() == std::ssize(hyperloglog->ZeroCounts_));
+    // FromProto() template supports vectors but not ranges, so copy underlying values directly.
+    std::copy(protoHyperLogLog.registers().begin(), protoHyperLogLog.registers().end(), hyperloglog->ZeroCounts_.begin());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <int Precision>
+void FormatValue(TStringBuilderBase* builder, const THyperLogLog<Precision>& value, TStringBuf /*format*/)
+{
+    builder->AppendFormat("%v", std::span<const ui8>(value.ZeroCounts_));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/hyperloglog.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,6 +29,14 @@ struct TNamedColumnarStatistics
 
     TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
 };
+
+typedef THyperLogLog<
+    // Use 2^10=1024 registers
+    //
+    // NOTE(orlovorlov) Experiments with random data demonstrated <10% error with P=10.
+    //
+    /* Precision = */ 10
+> TColumnarHyperLogLogDigest;
 
 //! TColumnarStatistics stores per-column statistics of data stored in a chunk/table.
 struct TColumnarStatistics
@@ -65,10 +75,13 @@ struct TColumnarStatistics
     //! Can be missing only if the cluster version is 23.1 or older.
     std::optional<i64> LegacyChunkRowCount = 0;
 
+    //! Per-column HyperLogLog digest to approximate number of unique values in the column.
+    std::vector<TColumnarHyperLogLogDigest> ColumnHyperLogLogDigests;
+
     TColumnarStatistics& operator+=(const TColumnarStatistics& other);
     bool operator==(const TColumnarStatistics& other) const = default;
 
-    static TColumnarStatistics MakeEmpty(int columnCount, bool hasValueStatistics = true);
+    static TColumnarStatistics MakeEmpty(int columnCount, bool hasValueStatistics = true, bool HasHyperLogLogDigests = true);
     static TColumnarStatistics MakeLegacy(int columnCount, i64 legacyChunkDataWeight, i64 legacyChunkRowCount);
 
     TLightweightColumnarStatistics MakeLightweightStatistics() const;
@@ -77,12 +90,17 @@ struct TColumnarStatistics
 
     //! Checks if there are minimum, maximum, and non-null value statistics.
     bool HasValueStatistics() const;
+    bool HasHyperLogLogDigests() const;
+
     //! Clears minimum, maximum, and non-null value statistics.
     void ClearValueStatistics();
 
     int GetColumnCount() const;
 
-    void Resize(int columnCount, bool keepValueStatistics = true);
+    //! Changes column count.
+    //! Existing value statistics are kept or erased depending on now keepValueStatistics/keepHyperLogLogDigests flags are set.
+    //! keepHyperLogLogDigests only has effect when keepValueStatistics set to true.
+    void Resize(int columnCount, bool keepValueStatistics = true, bool keepHyperLogLogDigests = true);
 
     void Update(TRange<TUnversionedRow> rows);
     void Update(TRange<TVersionedRow> rows);

@@ -163,7 +163,6 @@ public:
     ui64 ReadId;
     TPathId PathId;
     std::vector<NTable::TTag> Columns;
-    std::vector<NTable::TTag> KeyColumns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
     ui64 LockId = 0;
@@ -212,7 +211,7 @@ public:
     ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey;
-    bool LastProcessedKeyErased = false;
+    bool LastProcessedKeyErasedOrMissing = false;
 
     // Orbit used for tracking progress
     NLWTrace::TOrbit Orbit;

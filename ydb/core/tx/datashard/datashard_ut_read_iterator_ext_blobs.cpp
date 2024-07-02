@@ -81,8 +81,6 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             Runtime = Server->GetRuntime();
 
             Sender = Runtime->AllocateEdgeActor();
-
-            Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         
             InitRoot(Server, Sender);
             
@@ -257,77 +255,95 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
     }
 
     Y_UNIT_TEST(ExtBlobsWithCompactingMiddleRows) {
-        Node node(true);
+        std::unordered_map<int, ReadIteratorCounter> expectedResults;
+        expectedResults[1] = {1, 7, 7, 18};
+        expectedResults[2] = {1, 8, 7, 16};
+        expectedResults[3] = {1, 7, 6, 14};
+        expectedResults[4] = {1, 8, 6, 12};
+        expectedResults[5] = {1, 4, 2, 10};
 
-        auto server = node.Server;
-        auto& runtime = *node.Runtime;
-        auto& sender = node.Sender;
-        auto shard1 = node.Shard;
-        auto tableId1 = node.TableId;
+        // We write 20 rows, some of them are compacted, then we write some more rows "before" and "after" and read all of them
+        // The quantity of rows before, in the middle and after is different for each test. For example the first one is
+        // 1 row before, 18 rows in the middle and 1 row after.
+        for (int test = 1; test < 6; test++) {
+            int compactedPart = 20 - (test * 2);
 
-        TString largeValue(1_MB, 'L');
+            Node node(true);
 
-        for (int i = 0; i < 10; i++) {
-            TString chunkNum = ToString(5 + i);
-            TString query = R"___(
-                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+            auto server = node.Server;
+            auto& runtime = *node.Runtime;
+            auto& sender = node.Sender;
+            auto shard1 = node.Shard;
+            auto tableId1 = node.TableId;
+
+            TString largeValue(1_MB, 'L');
+
+            for (int i = 0; i < compactedPart; i++) {
+                TString chunkNum = ToString(test + i);
+
+                TString query = R"___(
+                    UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+                
+                ExecSQL(server, sender, query);    
+            }
+
+            {
+                Cerr << "... waiting for stats after upsert" << Endl;
+                auto stats = WaitTableStats(runtime, shard1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), compactedPart);
+            }
+
+            CompactTable(runtime, shard1, tableId1, false);
+
+            {
+                Cerr << "... waiting for stats after compaction" << Endl;
+                auto stats = WaitTableStats(runtime, shard1, 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), compactedPart);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
+            }
+
+            for (int i = 0; i < test; i++) {
+                TString chunkNum = ToString(i);
+
+                TString query = R"___(
+                    UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+                
+                ExecSQL(server, sender, query);    
+            }
+
+            for (int i = compactedPart + test; i < 20; i++) {
+                TString chunkNum = ToString(i);
+
+                TString query = R"___(
+                    UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+                
+                ExecSQL(server, sender, query);    
+            }
+
+            auto iteratorCounter = SetupReadIteratorObserver(runtime);
+
+            auto readFuture = KqpSimpleSend(runtime, R"(SELECT blob_id, chunk_num, data0
+                    FROM `/Root/table-1`
+                    WHERE
+                        blob_id = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") AND
+                        chunk_num >= 0
+                    ORDER BY blob_id, chunk_num ASC
+                    LIMIT 100;)");
+
+            ValidateReadResult(runtime, std::move(readFuture), 20);
+
+            auto& expectedResult = expectedResults[test];
+
+            UNIT_ASSERT_EQUAL(iteratorCounter->Reads, expectedResult.Reads);
+            UNIT_ASSERT_EQUAL(iteratorCounter->Continues, expectedResult.Continues);
+            UNIT_ASSERT_EQUAL(iteratorCounter->EvGets, expectedResult.EvGets);
+            UNIT_ASSERT_EQUAL(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested);
         }
-
-        {
-            Cerr << "... waiting for stats after upsert" << Endl;
-            auto stats = WaitTableStats(runtime, shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
-        }
-
-        CompactTable(runtime, shard1, tableId1, false);
-
-        {
-            Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
-        }
-
-        for (int i = 0; i < 5; i++) {
-            TString chunkNum = ToString(i);
-            TString query = R"___(
-                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
-        }
-
-        for (int i = 15; i < 20; i++) {
-            TString chunkNum = ToString(i);
-            TString query = R"___(
-                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
-        }
-
-        auto iteratorCounter = SetupReadIteratorObserver(runtime);
-
-        auto readFuture = KqpSimpleSend(runtime, R"(SELECT blob_id, chunk_num, data0
-                FROM `/Root/table-1`
-                WHERE
-                    blob_id = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") AND
-                    chunk_num >= 0
-                ORDER BY blob_id, chunk_num ASC
-                LIMIT 100;)");
-
-        ValidateReadResult(runtime, std::move(readFuture), 20);
-
-        UNIT_ASSERT_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_EQUAL(iteratorCounter->Continues, 4);
-        UNIT_ASSERT_EQUAL(iteratorCounter->EvGets, 2);
-        UNIT_ASSERT_EQUAL(iteratorCounter->BlobsRequested, 10);
     }
 
     Y_UNIT_TEST(ExtBlobsEmptyTable) {

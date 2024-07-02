@@ -1322,7 +1322,7 @@ namespace NTable {
                         of next iterator alteration method invocation. This is
                         why here direct array of TGlobId is used.
                     */
-                    row.AddMissingExternalBlobSize(Part->GetLargeObjectSize(op, ref));
+                    row.AddMissingExternalBlobSize(Part->GetPageSize(op, ref));
 
                     op = TCellOp((blob.Need && !IgnoreMissingExternalBlobs) ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
@@ -1374,7 +1374,7 @@ namespace NTable {
         ui8 SkipMainVersion : 1;
         ui8 SkipEraseVersion : 1;
 
-        bool IgnoreMissingExternalBlobs : 1;
+        ui8 IgnoreMissingExternalBlobs : 1;
     };
 
     class TRunIter final {

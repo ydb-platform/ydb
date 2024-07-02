@@ -122,8 +122,8 @@ namespace NTable {
             }
         }
 
-        void AddMissingExternalBlobSize(ui32 externalBlobSize) noexcept {
-            MissingExternalBlobsSize_ += externalBlobSize;
+        void AddMissingExternalBlobSize(ui64 externalBlobSize) noexcept {
+            MissingExternalBlobsSize_ += Max<ui64>(1, externalBlobSize);
         }
 
         TArrayRef<const TCell> operator*() const noexcept

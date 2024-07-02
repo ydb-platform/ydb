@@ -52,7 +52,7 @@ namespace NTest {
             return Store->GetPageSize(groupId.Index, pageId);
         }
 
-        ui64 GetLargeObjectSize(ELargeObj lob, ui64 ref) const override
+        ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
         {
             Y_UNUSED(lob);
             Y_UNUSED(ref);

@@ -274,7 +274,7 @@ class TReader {
 
     ui32 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
-    bool LastProcessedKeyErased = false;
+    bool LastProcessedKeyErasedOrMissing = false;
 
     ui64 RowsRead = 0;
     ui64 RowsProcessed = 0;
@@ -332,7 +332,7 @@ public:
         if (Y_UNLIKELY(FirstUnprocessedQuery == State.FirstUnprocessedQuery && State.LastProcessedKey)) {
             if (!State.Reverse) {
                 keyFromCells = TSerializedCellVec(State.LastProcessedKey);
-                fromInclusive = State.LastProcessedKeyErased;
+                fromInclusive = State.LastProcessedKeyErasedOrMissing;
 
                 keyToCells = range.To;
                 toInclusive = range.ToInclusive;
@@ -342,7 +342,7 @@ public:
                 fromInclusive = range.FromInclusive;
 
                 keyToCells = TSerializedCellVec(State.LastProcessedKey);
-                toInclusive = State.LastProcessedKeyErased;
+                toInclusive = State.LastProcessedKeyErasedOrMissing;
             }
         } else {
             keyFromCells = range.From;
@@ -731,7 +731,7 @@ public:
         state.TotalRows += RowsRead;
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
-        state.LastProcessedKeyErased = LastProcessedKeyErased;
+        state.LastProcessedKeyErasedOrMissing = LastProcessedKeyErasedOrMissing;
         if (sentResult) {
             state.ConsumeSeqNo(RowsRead, BytesInResult);
         }
@@ -756,40 +756,22 @@ private:
         return true;
     }
 
-    bool OutOfQuota() const {
-        return RowsRead >= State.Quota.Rows ||
-            BlockBuilder.Bytes() >= State.Quota.Bytes||
-            BytesInResult >= State.Quota.Bytes;
-    }
-
-    bool OutOfQuota(ui64 precharged, ui64 bytesPrecharged) const {
-        return (RowsRead + precharged) >= State.Quota.Rows ||
-            BlockBuilder.Bytes() + bytesPrecharged >= State.Quota.Bytes||
+    bool OutOfQuota(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) const {
+        return RowsRead + prechargedCount >= State.Quota.Rows ||
+            BlockBuilder.Bytes() + bytesPrecharged >= State.Quota.Bytes ||
             BytesInResult + bytesPrecharged >= State.Quota.Bytes;
     }
 
-    bool HasMaxRowsInResult() const {
-        return RowsRead >= State.MaxRowsInResult;
+    bool HasMaxRowsInResult(ui64 prechargedCount = 0) const {
+        return RowsRead + prechargedCount >= State.MaxRowsInResult;
     }
 
-    bool HasMaxRowsInResult(ui64 precharged) const {
-        return RowsRead + precharged >= State.MaxRowsInResult;
-    }
-
-    bool ReachedTotalRowsLimit() const {
+    bool ReachedTotalRowsLimit(ui64 prechargedCount = 0) const {
         if (State.TotalRowsLimit == Max<ui64>()) {
             return false;
         }
 
-        return State.TotalRows + RowsRead >= State.TotalRowsLimit;
-    }
-
-    bool ReachedTotalRowsLimit(ui64 precharged) const {
-        if (State.TotalRowsLimit == Max<ui64>()) {
-            return false;
-        }
-
-        return State.TotalRows + RowsRead + precharged >= State.TotalRowsLimit;
+        return State.TotalRows + RowsRead + prechargedCount >= State.TotalRowsLimit;
     }
 
     ui64 GetTotalRowsLeft() const {
@@ -805,20 +787,12 @@ private:
         return State.TotalRowsLimit - State.TotalRows - RowsRead;
     }
 
-    bool ShouldStop() {
+    bool ShouldStop(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) {
         if (!CanResume()) {
             return false;
         }
 
-        return OutOfQuota() || HasMaxRowsInResult() || ShouldStopByElapsedTime();
-    }
-
-    bool ShouldStopPrecharging(ui64 precharged, ui64 bytesPrecharged) {
-        if (!CanResume()) {
-            return false;
-        }
-
-        return OutOfQuota(precharged, bytesPrecharged) || HasMaxRowsInResult(precharged) || ShouldStopByElapsedTime();
+        return OutOfQuota(prechargedCount, bytesPrecharged) || HasMaxRowsInResult(prechargedCount) || ShouldStopByElapsedTime();
     }
 
     ui64 GetRowsLeft() {
@@ -872,7 +846,7 @@ private:
 
         bool advanced = false;
 
-        bool precharging = false;
+        bool hasMissingExternalBlobs = false;
         ui32 prechargedCount = 0;
         ui64 prechargedSize = 0;
 
@@ -887,33 +861,20 @@ private:
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            if (!precharging) {
-                if (iter->Row().MissingExternalBlobsSize() == 0) {
+            if (!hasMissingExternalBlobs) {
+                if (iter->Row().MissingExternalBlobsSize() != 0) {
                     lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
                     lastKeyState = iter->GetKeyState();
-                } else {
-                    precharging = true;
-                } 
+                    hasMissingExternalBlobs = true;
+                }
             }
 
-            if (precharging) {
+            if (hasMissingExternalBlobs) {
                 prechargedCount++;
                 prechargedSize += iter->Row().MissingExternalBlobsSize();
+                prechargedSize += EstimateSize(rowValues.Cells());
 
-                auto cells = rowValues.Cells();
-                size_t cellsSize = cells.size();
-
-                size_t size = sizeof(TCell) * cellsSize;
-                for (auto& cell : cells) {
-                    if (!cell.IsNull() && !cell.IsInline()) {
-                        const size_t cellSize = cell.Size();
-                        size += AlignUp(cellSize);
-                    }
-                }
-
-                prechargedSize += size;
-
-                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStopPrecharging(prechargedCount, prechargedSize)) {
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedSize)) {
                     break;
                 }
 
@@ -937,9 +898,14 @@ private:
 
             if (ShouldStop()) {
                 LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
-                LastProcessedKeyErased = false;
+                LastProcessedKeyErasedOrMissing = false;
                 return EReadStatus::StoppedByLimit;
             }
+        }
+
+        if (!lastKey) {
+            lastKey = TSerializedCellVec::Serialize(iter->GetKey().Cells());
+            lastKeyState = iter->GetKeyState();
         }
 
         // Note: when stopping due to page faults after an erased row we will
@@ -950,16 +916,16 @@ private:
         // row). When there are not enough rows we would prefer restarting in
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && ((iter->Last() == NTable::EReady::Page) || precharging)) {
+        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && (iter->Last() == NTable::EReady::Page || hasMissingExternalBlobs)) {
             LastProcessedKey = lastKey;
-            LastProcessedKeyErased = lastKeyState == NTable::ERowOp::Erase;
+            LastProcessedKeyErasedOrMissing = lastKeyState == NTable::ERowOp::Erase || hasMissingExternalBlobs;
             advanced = true;
         } else {
             LastProcessedKey.clear();
         }
 
         // last iteration to Page or Gone might also have deleted or invisible rows
-        if (advanced || (iter->Last() != NTable::EReady::Page && !precharging)) {
+        if (advanced || (iter->Last() != NTable::EReady::Page && !hasMissingExternalBlobs)) {
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
@@ -969,7 +935,7 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page || precharging) {
+        if (iter->Last() == NTable::EReady::Page || hasMissingExternalBlobs) {
             return EReadStatus::NeedData;
         }
 

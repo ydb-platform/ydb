@@ -1317,8 +1317,6 @@ namespace NTable {
                 } else {
                     Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
-                    row.AddMissingExternalBlobSize(Part->GetPageSize(op, ref));
-
                     op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
                     /* Have to preserve reference to memory with TGlobId until

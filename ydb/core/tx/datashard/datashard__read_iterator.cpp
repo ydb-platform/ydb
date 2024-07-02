@@ -380,10 +380,10 @@ public:
 
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), ctx, txc.Env);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), ctx, txc.Env);
         }
 
         if (result == EReadStatus::NeedData && !(RowsProcessed && CanResume())) {
@@ -841,7 +841,7 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
+    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx, IExecuting& env) {
         Y_UNUSED(ctx);
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
@@ -862,14 +862,14 @@ private:
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            if (!hasMissingExternalBlobs && iter->Row().MissingExternalBlobsSize()) {
+            if (!hasMissingExternalBlobs && env.MissingExternalBlobsSize()) {
                 lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
                 hasMissingExternalBlobs = true;
             }
 
             if (hasMissingExternalBlobs) {
                 prechargedCount++;
-                prechargedSize += iter->Row().MissingExternalBlobsSize();
+                prechargedSize += env.MissingExternalBlobsSize();
                 prechargedSize += EstimateSize(rowValues.Cells());
 
                 if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedSize)) {

@@ -29,7 +29,13 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return { !ReadMissingReferences, Lookup(partStore->Locate(lob, ref), ref) };
+            const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
+
+            if (!page) {
+                MissingExternalBlobsSize_ += part->GetPageSize(lob, ref);
+            }
+
+            return { !ReadMissingReferences, page };
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
@@ -42,12 +48,19 @@ namespace NTabletFlatExecutor {
     public:
         TPrivatePageCache& Cache;
 
-        void EnableReadMissingReferences() {
+        void EnableReadMissingReferences() noexcept {
             ReadMissingReferences = true;
+        }
+
+        ui64 MissingExternalBlobsSize() const noexcept
+        { 
+            return MissingExternalBlobsSize_;
         }
 
     private:
         bool ReadMissingReferences = false;
+
+        ui64 MissingExternalBlobsSize_ = 0;
         
         const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
         {
@@ -193,9 +206,14 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
-        void EnableReadMissingReferences() override
+        void EnableReadMissingReferences() noexcept override
         {
             TPageCollectionReadEnv::EnableReadMissingReferences();
+        }
+
+        ui64 MissingExternalBlobsSize() const noexcept override
+        {
+            return TPageCollectionReadEnv::MissingExternalBlobsSize();
         }
     protected:
         NTable::TDatabase& DB;

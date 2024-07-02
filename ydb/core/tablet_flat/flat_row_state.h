@@ -30,13 +30,11 @@ namespace NTable {
             Left_ = cellDefaults.size();
             State.assign(Left_, { });
             Cells.assign(cellDefaults.begin(), cellDefaults.end());
-            MissingExternalBlobsSize_ = 0;
         }
 
         ui32 Need() const noexcept { return Need_; }
         ui32 Left() const noexcept { return Left_; }
         TPos Size() const noexcept { return Cells.size(); }
-        ui64 MissingExternalBlobsSize() const noexcept { return MissingExternalBlobsSize_; }
 
         bool operator==(ERowOp rop) const noexcept
         {
@@ -122,10 +120,6 @@ namespace NTable {
             }
         }
 
-        void AddMissingExternalBlobSize(ui64 externalBlobSize) noexcept {
-            MissingExternalBlobsSize_ += Max<ui64>(1, externalBlobSize);
-        }
-
         TArrayRef<const TCell> operator*() const noexcept
         {
             return Cells;
@@ -159,7 +153,6 @@ namespace NTable {
         ui32 Left_ = 0;     /* Cells with unknown state */
         TStackVec<TCellOp, 64> State;
         TSmallVec<TCell> Cells;
-        ui64 MissingExternalBlobsSize_ = 0;
     };
 
 }

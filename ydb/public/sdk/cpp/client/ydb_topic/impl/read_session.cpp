@@ -86,7 +86,9 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         "",
 
         Log,
-        Connections,
+        TSingleClusterReadSessionImpl<false>::TScheduleCallbackFunc([this](TDuration delay, std::function<void(bool)> cb, NYdbGrpc::IQueueClientContextPtr) {
+            Connections->ScheduleCallback(delay, cb);
+        }),
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,

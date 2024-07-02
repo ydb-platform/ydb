@@ -231,7 +231,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     const TString& sessionId,
     const TString& clusterName,
     const TLog& log,
-    std::shared_ptr<IInternalClient> connections,
+    TScheduleCallbackFunc scheduleCallbackFunc,
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -246,7 +246,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     , Log(log)
     , NextPartitionStreamId(partitionStreamIdStart)
     , PartitionStreamIdStep(partitionStreamIdStep)
-    , Connections(connections)
+    , ScheduleCallbackFunc(scheduleCallbackFunc)
     , ConnectionFactory(std::move(connectionFactory))
     , DirectReadProcessorFactory(std::move(directReadProcessorFactory))
     , EventsQueue(std::move(eventsQueue))
@@ -1374,7 +1374,8 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
 
 template <>
 inline void TSingleClusterReadSessionImpl<false>::ScheduleCallback(TDuration timeout, std::function<void(bool)> callback) {
-    Connections->ScheduleCallback(timeout, callback, nullptr);
+    // TODO(qyryq) Pass context ptr?
+    ScheduleCallbackFunc(timeout, callback, nullptr);
 }
 
 template <>

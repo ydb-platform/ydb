@@ -204,7 +204,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
             SessionId,
             clusterName,
             Log,
-            Connections,
+            TSingleClusterReadSessionImpl::TScheduleCallbackFunc{},  // Used only by ydb_topic for direct read.
             subclient->CreateReadSessionConnectionProcessorFactory(),
             EventsQueue,
             context,

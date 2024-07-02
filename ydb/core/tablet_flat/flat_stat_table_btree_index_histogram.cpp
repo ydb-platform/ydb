@@ -16,10 +16,12 @@ using TCellsIter = TBtreeIndexNode::TCellsIter;
 
 const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
 
-const ui8 INITIAL_STATE = 0;
-const ui8 OPENED_STATE = 1;
-const ui8 CLOSED_STATE = 2;
-const ui8 IGNORED_STATE = 3;
+enum class ENodeState : ui8 {
+    Initial,
+    Opened,
+    Closed,
+    Ignored,
+};
 
 class TTableHistogramBuilderBtreeIndex {
     struct TNodeState : public TIntrusiveListItem<TNodeState> {
@@ -29,7 +31,7 @@ class TTableHistogramBuilderBtreeIndex {
         TRowId BeginRowId, EndRowId;
         ui64 BeginDataSize, EndDataSize;
         TCellsIterable BeginKey, EndKey;
-        ui8 State = 0;
+        ENodeState State = ENodeState::Initial;
 
         TNodeState(const TPart* part, TPageId pageId, ui32 level, TRowId beginRowId, TRowId endRowId, TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
             : Part(part)
@@ -53,18 +55,18 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
         void Open(ui64& openedRowCount, ui64& openedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == INITIAL_STATE);
+            Y_ABORT_UNLESS(State == ENodeState::Initial);
             
-            State = OPENED_STATE;
+            State = ENodeState::Opened;
             openedRowCount += GetRowCount();
             openedDataSize += GetDataSize();
         }
 
         void Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == OPENED_STATE || State == IGNORED_STATE);
+            Y_ABORT_UNLESS(State == ENodeState::Opened || State == ENodeState::Ignored);
 
-            if (State == OPENED_STATE) {
-                State = CLOSED_STATE;
+            if (State == ENodeState::Opened) {
+                State = ENodeState::Closed;
                 ui64 rowCount = GetRowCount();
                 ui64 dataSize = GetDataSize();
                 Y_ABORT_UNLESS(openedRowCount >= rowCount);
@@ -77,9 +79,9 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
         void Ignore(ui64& openedRowCount, ui64& openedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == OPENED_STATE);
+            Y_ABORT_UNLESS(State == ENodeState::Opened);
             
-            State = IGNORED_STATE;
+            State = ENodeState::Ignored;
             ui64 rowCount = GetRowCount();
             ui64 dataSize = GetDataSize();
             Y_ABORT_UNLESS(openedRowCount >= rowCount);
@@ -274,8 +276,8 @@ private:
                 auto node = openedSortedByRowCount.top();
                 openedSortedByRowCount.pop();
 
-                if (node->State != OPENED_STATE) {
-                    Y_ABORT_UNLESS(node->State == CLOSED_STATE || node->State == IGNORED_STATE);
+                if (node->State != ENodeState::Opened) {
+                    Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
 
@@ -292,8 +294,8 @@ private:
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
 
-                if (node->State != OPENED_STATE) {
-                    Y_ABORT_UNLESS(node->State == CLOSED_STATE || node->State == IGNORED_STATE);
+                if (node->State != ENodeState::Opened) {
+                    Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
 

@@ -47,10 +47,10 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
     Metadata_.ExecStats = TExecStats(std::move(*metadata.mutable_exec_stats()));
 
     Metadata_.ResultSetsMeta.reserve(metadata.result_sets_meta_size());
-    for (const auto& result_set_meta : metadata.result_sets_meta()) {
+    for (const auto& resultSetMeta : metadata.result_sets_meta()) {
         std::vector<TColumn> columns;
-        columns.reserve(result_set_meta.columns_size());
-        for (const auto& column : result_set_meta.columns()) {
+        columns.reserve(resultSetMeta.columns_size());
+        for (const auto& column : resultSetMeta.columns()) {
             columns.emplace_back(column.name(), column.type());
         }
         Metadata_.ResultSetsMeta.emplace_back(std::move(columns)); 

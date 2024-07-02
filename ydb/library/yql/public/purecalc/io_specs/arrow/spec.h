@@ -1,6 +1,75 @@
 #pragma once
 
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 namespace NYql {
 namespace NPureCalc {
+
+/**
+ * Processing mode for working with Apache Arrow batches inputs.
+ *
+ * In this mode purecalc accept pointers to abstract Arrow ExecBatches and
+ * processes them. All Datums in batches should respect the given YT schema
+ * (the one you pass to the constructor of the input spec).
+ *
+ * All working modes are implemented. In pull list and pull stream modes a
+ * program would accept a pointer to a single stream object or vector of
+ * pointers of stream objects of Arrow ExecBatch pointers. In push mode, a
+ * program will return a consumer of pointers to Arrow ExecBatch.
+ *
+ * The program synopsis follows:
+ *
+ * @code
+ * ... TPullListProgram::Apply(IStream<arrow::compute::ExecBatch*>*);
+ * ... TPullListProgram::Apply(TVector<IStream<arrow::compute::ExecBatch*>*>);
+ * ... TPullStreamProgram::Apply(IStream<arrow::compute::ExecBatch*>*);
+ * ... TPullStreamProgram::Apply(TVector<IStream<arrow::compute::ExecBatch*>*>);
+ * TConsumer<arrow::compute::ExecBatch*> TPushStreamProgram::Apply(...);
+ * @endcode
+ */
+
+class TArrowInputSpec: public TInputSpecBase {
+private:
+    const TVector<NYT::TNode> Schemas_;
+
+public:
+    explicit TArrowInputSpec(const TVector<NYT::TNode>& schemas);
+    const TVector<NYT::TNode>& GetSchemas() const override;
+    static constexpr bool ProvidesBlocks = true;
+};
+
+/**
+ * Processing mode for working with Apache Arrow batches outputs.
+ *
+ * In this mode purecalc yields pointers to abstract Arrow ExecBatches. All
+ * Datums in generated batches respects the given YT schema.
+ *
+ * Note that one should not expect that the returned pointer will be valid
+ * forever; in can (and will) become outdated once a new output is
+ * requested/pushed.
+ *
+ * All working modes are implemented. In pull stream and pull list modes a
+ * program will return a pointer to a stream of pointers to Arrow ExecBatches.
+ * In push mode, it will accept a single consumer of pointers to Arrow ExecBatch.
+ *
+ * The program synopsis follows:
+ *
+ * @code
+ * IStream<arrow::compute::ExecBatch*> TPullStreamProgram::Apply(...);
+ * IStream<arrow::compute::ExecBatch*> TPullListProgram::Apply(...);
+ * ... TPushStreamProgram::Apply(TConsumer<arrow::compute::ExecBatch*>);
+ * @endcode
+ */
+
+class TArrowOutputSpec: public TOutputSpecBase {
+private:
+    const NYT::TNode Schema_;
+
+public:
+    explicit TArrowOutputSpec(const NYT::TNode& schema);
+    const NYT::TNode& GetSchema() const override;
+    static constexpr bool AcceptsBlocks = true;
+};
+
 } // namespace NPureCalc
 } // namespace NYql

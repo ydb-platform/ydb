@@ -276,7 +276,7 @@ public:
             const auto fullTableId = TTableId(self->GetPathOwnerId(), tableId);
 
             for (const auto& [indexPathId, indexInfo] : tableInfo->Indexes) {
-                if (indexInfo.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
+                if (indexInfo.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
                     continue;
                 }
 

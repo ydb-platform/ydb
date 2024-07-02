@@ -81,7 +81,7 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
     Y_ABORT_UNLESS(it != DataShard.GetUserTables().end());
     {
         for (const auto& [indexPathId, indexInfo] : it->second->Indexes) {
-            if (indexInfo.Type == TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
+            if (indexInfo.Type == TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
                 RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             }
         }

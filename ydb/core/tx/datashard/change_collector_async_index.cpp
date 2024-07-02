@@ -106,7 +106,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) { return op.Tag; });
 
     for (const auto& [pathId, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
+        if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
             continue;
         }
 
@@ -203,7 +203,7 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
     TCachedTagsBuilder builder;
 
     for (const auto& [_, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
+        if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
             continue;
         }
 

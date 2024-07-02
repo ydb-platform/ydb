@@ -38,15 +38,19 @@ def test(case):
 
     if header.startswith('--ignore'):
         pytest.skip(header)
+    elif header.startswith('--sanitizer ignore address'):
+        if yatest.common.context.sanitize == 'address':
+            pytest.skip(header)
+    elif header.startswith('--sanitizer ignore memory'):
+        if yatest.common.context.sanitize == 'memory':
+            pytest.skip(header)
+    elif header.startswith('--sanitizer ignore thread'):
+        if yatest.common.context.sanitize == 'thread':
+            pytest.skip(header)
+    elif header.startswith('--sanitizer ignore undefined'):
+        if yatest.common.context.sanitize == 'undefined':
+            pytest.skip(header)
     elif header.startswith('--sanitizer ignore') and yatest.common.context.sanitize is not None:
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore address') and yatest.common.context.sanitize == 'address':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore memory') and yatest.common.context.sanitize == 'memory':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore thread') and yatest.common.context.sanitize == 'thread':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore undefined') and yatest.common.context.sanitize == 'undefined':
         pytest.skip(header)
     elif header.startswith('--canonize ast'):
         canonize_ast = True

@@ -10,7 +10,7 @@
 {% if select_command == "SELECT STREAM" %}
 * [SELECT STREAM](select_stream.md)
 {% endif %}
-* [CREATE TABLE](create_table.md)
+* [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
 {% if feature_map_tables %}

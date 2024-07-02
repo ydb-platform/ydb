@@ -13,7 +13,7 @@ items:
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
-- { name: CREATE TABLE,                 href: create_table.md }
+- { name: CREATE TABLE,                 include: { mode: link, path: create_table/toc_p.yaml } }
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }

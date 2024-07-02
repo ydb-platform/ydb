@@ -304,7 +304,7 @@ class TCurrentTraceContextGuard
 public:
     explicit TCurrentTraceContextGuard(
         TTraceContextPtr traceContext,
-        TSourceLocation location = FROM_HERE);
+        TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
     ~TCurrentTraceContextGuard();
 
@@ -324,7 +324,7 @@ private:
 class TNullTraceContextGuard
 {
 public:
-    TNullTraceContextGuard(TSourceLocation location = FROM_HERE);
+    TNullTraceContextGuard(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TNullTraceContextGuard(TNullTraceContextGuard&& other);
     ~TNullTraceContextGuard();
 

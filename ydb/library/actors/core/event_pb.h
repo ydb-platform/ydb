@@ -146,6 +146,11 @@ namespace NActors {
     };
 
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
+    static constexpr char ExtendedPayloadMarker = 0x06;
+    static constexpr char PayloadMarker = 0x07;
+
+    void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
+    size_t SerializeNumber(size_t num, char *buffer);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -204,57 +209,7 @@ namespace NActors {
             }
             return result;
         }
-
-private: 
-        static void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
-        {
-                // check marker
-                if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {
-                    Y_ABORT("invalid event");
-                }
-
-                const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes
-
-                auto fetchRope = [&](size_t len) {
-                    TRope::TConstIterator begin = iter;
-                    iter += len;
-                    size -= len;
-                    payload.emplace_back(begin, iter);
-                    totalPayloadSize += len;
-                };
-
-                // skip marker
-                iter += 1;
-                --size;
-                // parse number of payload ropes
-                size_t numRopes = DeserializeNumber(iter, size);
-                if (numRopes == Max<size_t>()) {
-                    Y_ABORT("invalid event");
-                }
-                TStackVec<size_t, 16> ropeLens;
-                if (dataIsSeparate) {
-                    ropeLens.reserve(numRopes);
-
-                }
-                while (numRopes--) {
-                    // parse length of the rope
-                    const size_t len = DeserializeNumber(iter, size);
-                    if (len == Max<size_t>() || size < len) {
-                        Y_ABORT("invalid event len# %zu size# %" PRIu64, len, size);
-                    }
-                    // extract the rope
-                    if (dataIsSeparate) {
-                        ropeLens.push_back(len);
-                    } else {
-                        fetchRope(len);
-                    }
-                }
-                for (size_t len : ropeLens) {
-                    fetchRope(len);
-                }
-        }
-public: 
-
+        
         static IEventBase* Load(TEventSerializedData *input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
@@ -450,56 +405,7 @@ public:
     protected:
         mutable size_t CachedByteSize = 0;
 
-        static constexpr char ExtendedPayloadMarker = 0x06;
-        static constexpr char PayloadMarker = 0x07;
         static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
-
-        static size_t SerializeNumber(size_t num, char *buffer) {
-            char *begin = buffer;
-            do {
-                *buffer++ = (num & 0x7F) | (num >= 128 ? 0x80 : 0x00);
-                num >>= 7;
-            } while (num);
-            return buffer - begin;
-        }
-
-        static size_t DeserializeNumber(const char **ptr, const char *end) {
-            const char *p = *ptr;
-            size_t res = 0;
-            size_t offset = 0;
-            for (;;) {
-                if (p == end) {
-                    return Max<size_t>();
-                }
-                const char byte = *p++;
-                res |= (static_cast<size_t>(byte) & 0x7F) << offset;
-                offset += 7;
-                if (!(byte & 0x80)) {
-                    break;
-                }
-            }
-            *ptr = p;
-            return res;
-        }
-
-        static size_t DeserializeNumber(TRope::TConstIterator& iter, ui64& size) {
-            size_t res = 0;
-            size_t offset = 0;
-            for (;;) {
-                if (!iter.Valid()) {
-                    return Max<size_t>();
-                }
-                const char byte = *iter.ContiguousData();
-                iter += 1;
-                --size;
-                res |= (static_cast<size_t>(byte) & 0x7F) << offset;
-                offset += 7;
-                if (!(byte & 0x80)) {
-                    break;
-                }
-            }
-            return res;
-        }
     };
 
     // Protobuf record not using arena

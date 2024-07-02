@@ -81,6 +81,7 @@ namespace NKikimr {
         using TBase::Next;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
 
@@ -104,6 +105,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -126,6 +128,7 @@ namespace NKikimr {
         using TBase::Next;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -148,6 +151,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
 } // NKikimr

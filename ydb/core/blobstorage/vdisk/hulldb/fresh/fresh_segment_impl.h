@@ -333,6 +333,11 @@ namespace NKikimr {
             }
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
         TKey GetCurKey() const {
             return It.GetValue().Key;
         }
@@ -631,6 +636,7 @@ namespace NKikimr {
         using TBase::Next;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>
@@ -655,6 +661,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>

@@ -290,11 +290,11 @@ private:
             }
             Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-            ctx.Send(Sender, Response.Release());
             ctx.Send(
                 MakePQDReadCacheServiceActorId(),
                 new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)
             );
+            ctx.Send(Sender, Response.Release());
         } else {
             ctx.Send(Sender, Response.Release());
         }

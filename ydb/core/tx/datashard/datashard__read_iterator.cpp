@@ -850,7 +850,7 @@ private:
 
         bool hasMissingExternalBlobs = false;
         ui32 prechargedCount = 0;
-        ui64 prechargedSize = 0;
+        ui64 prechargedRowsSize = 0; // Without referenced blobs (external, outer)
 
         TString lastKey;
 
@@ -869,10 +869,9 @@ private:
 
             if (hasMissingExternalBlobs) {
                 prechargedCount++;
-                prechargedSize += env.MissingExternalBlobsSize();
-                prechargedSize += EstimateSize(rowValues.Cells());
+                prechargedRowsSize += EstimateSize(rowValues.Cells());
 
-                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedSize)) {
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedRowsSize + env.MissingExternalBlobsSize())) {
                     break;
                 }
 

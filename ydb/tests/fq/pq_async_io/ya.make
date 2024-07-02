@@ -18,7 +18,7 @@ PEERDIR(
     ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/sql
     ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
+    ydb/public/sdk/cpp/client/ydb_topic
     ydb/library/yql/minikql/comp_nodes/llvm14
 )
 

@@ -48,8 +48,10 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
-    AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
-    AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
+    if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
+        AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
+        AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
+    }
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MapFieldsSubset));
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(ReduceFieldsSubset));
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MultiMapFieldsSubset));
@@ -65,7 +67,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, &TYtSort::Match, HNDL(TopSort));
     AddHandler(1, &TYtWithUserJobsOpBase::Match, HNDL(EmbedLimit));
     AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
-    AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
+    if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
+        AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
+    }
 
     AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
     AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));

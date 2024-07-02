@@ -282,7 +282,8 @@ public:
             }
         }
 
-        if (!disableOptimizers.contains("FuseMultiOutsWithOuterMaps")) {
+        if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS) &&
+            !disableOptimizers.contains("FuseMultiOutsWithOuterMaps")) {
             status = FuseMultiOutsWithOuterMaps(input, output, opDeps, lefts, hasWorldDeps, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;

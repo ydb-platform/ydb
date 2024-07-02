@@ -37,7 +37,7 @@ public:
             Database = params.Get("database");
         } else if (params.Has("database_path")) {
             Database = params.Get("database_path");
-        } else if (params.Has("path")) {
+        } else {
             auto path = SplitPath(params.Get("path"));
             if (path.size() > 2) {
               path.resize(2);

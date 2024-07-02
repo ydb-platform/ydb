@@ -386,6 +386,14 @@ public:
         return Connections_->CreateContext();
     }
 
+    void CollectRetryStatAsync(EStatus status) {
+        Y_UNUSED(status);
+    }
+
+    void CollectRetryStatSync(EStatus status) {
+        Y_UNUSED(status);
+    }
+
 private:
     const TTopicClientSettings Settings;
     TAdaptiveLock Lock;

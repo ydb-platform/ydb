@@ -1,5 +1,3 @@
-#pragma once
-
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
 
@@ -432,7 +430,7 @@ private:
 
 }
 
-inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     TTableHistogramBuilderBtreeIndex builder(subset, rowCountResolution, dataSizeResolution, env, yieldHandler);
 
     if (!builder.Build(stats)) {

@@ -2851,6 +2851,7 @@ struct TBuiltinFuncData {
             {"byteat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2) },
             {"startswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)},
             {"endswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)},
+            {"contains", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StringContains", 2, 2)},
 
             // Numeric builtins
             {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) },

@@ -9,6 +9,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 namespace NFq {
 
@@ -53,7 +54,7 @@ TPublicStat GetPublicStat(const TString& statistics);
 
 struct IPlanStatProcessor {
     virtual ~IPlanStatProcessor() = default;
-    virtual Ydb::Query::StatsMode GetStatsMode() = 0;
+    virtual NYdb::NQuery::EStatsMode GetStatsMode() = 0;
     virtual TString ConvertPlan(const TString& plan) = 0;
     virtual TString GetPlanVisualization(const TString& plan) = 0;
     virtual TString GetQueryStat(const TString& plan, double& cpuUsage) = 0;
@@ -67,12 +68,12 @@ class PingTaskRequestBuilder {
 public:
     PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor);
     Fq::Private::PingTaskRequest Build(
-        const Ydb::TableStats::QueryStats& queryStats, 
+        const NYdb::NQuery::TExecStats& queryStats, 
         const NYql::TIssues& issues, 
         std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus = std::nullopt,
         std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode = std::nullopt
     );
-    Fq::Private::PingTaskRequest Build(const Ydb::TableStats::QueryStats& queryStats);
+    Fq::Private::PingTaskRequest Build(const NYdb::NQuery::TExecStats& queryStats);
     Fq::Private::PingTaskRequest Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs);
     NYql::TIssues Issues;
     double CpuUsage = 0.0;

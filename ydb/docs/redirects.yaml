@@ -294,6 +294,15 @@ common:
   - from: /reference/ydb-cli/export_import/tools_restore.md
     to: /reference/ydb-cli/export-import/tools-restore.md
 
+
+# YQL syntax redirects
+  - from: /yql/reference/syntax/alter_table.md
+    to: /yql/reference/syntax/alter_table/index.md
+  - from: /yql/reference/syntax/select.md
+    to: /yql/reference/syntax/select/index.md
+  - from: /yql/reference/syntax/create_table.md
+    to: /yql/reference/syntax/create_table/index.md    
+
 ru:
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md

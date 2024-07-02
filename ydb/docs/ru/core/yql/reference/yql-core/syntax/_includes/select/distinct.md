@@ -1,6 +1,4 @@
-
-
-## DISTINCT {#distinct}
+# DISTINCT
 
 Выбор уникальных строк.
 

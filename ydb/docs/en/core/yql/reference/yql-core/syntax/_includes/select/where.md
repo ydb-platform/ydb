@@ -1,6 +1,6 @@
-## WHERE {#where}
+# WHERE
 
-Filtering rows in the `SELECT`  result based on a condition.
+Filtering rows in the `SELECT`  result based on a condition in {% if backend_name == "YDB" %}row-oriented or column-oriented{% else %} tables{% endif %}.
 
 **Example**
 

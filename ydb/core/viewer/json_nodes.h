@@ -694,8 +694,8 @@ public:
     }
 
     static double GetLoadAverage(const NKikimrWhiteboard::TSystemStateInfo& sysInfo) {
-        if (sysInfo.LoadAverageSize() > 0) {
-            return sysInfo.GetLoadAverage(0);
+        if (sysInfo.LoadAverageSize() > 0 && sysInfo.GetNumberOfCpus() > 0) {
+            return sysInfo.GetLoadAverage(0) * 100 / sysInfo.GetNumberOfCpus();
         }
         return 0;
     }

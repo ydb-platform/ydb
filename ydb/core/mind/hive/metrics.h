@@ -14,5 +14,7 @@ struct TTabletMetricsAggregates {
     TMetricsMaximum MaximumNetwork;
 };
 
+using TMetricsMaximumUsage = NMetrics::TMaximumValueVariableWindowDouble;
+
 }
 }

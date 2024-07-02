@@ -1,11 +1,11 @@
 #pragma once
 
 #include "sql_translation.h"
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 class TSqlSelect: public TSqlTranslation {
 public:

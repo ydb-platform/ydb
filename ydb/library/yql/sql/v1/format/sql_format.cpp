@@ -6,7 +6,7 @@
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -22,7 +22,7 @@ namespace NSQLFormat {
 
 namespace {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
@@ -359,8 +359,8 @@ private:
     void VisitUnaryCasualSubexpr(const TRule_unary_casual_subexpr& msg) {
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
-            switch (b.Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+            switch (b.GetBlock1().Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                 invoke = true;
                 break;
             }
@@ -385,8 +385,8 @@ private:
     void VisitInUnaryCasualSubexpr(const TRule_in_unary_casual_subexpr& msg) {
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
-            switch (b.Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+            switch (b.GetBlock1().Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                 invoke = true;
                 break;
             }
@@ -2964,7 +2964,7 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
 
 THashSet<TString> GetKeywords() {
     TString grammar;
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    Y_ENSURE(NResource::FindExact("SQLv4.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;
     Split(grammar, "\n", lines);

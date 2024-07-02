@@ -2,7 +2,7 @@
 #include "sql_call_expr.h"
 #include "sql_select.h"
 #include "sql_values.h"
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Lexer.h>
 #include <ydb/library/yql/utils/utf8.h>
 #include <util/charset/wide.h>
 #include <util/string/ascii.h>
@@ -10,9 +10,9 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
+using NALPDefault::SQLv4Lexer;
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 TNodePtr TSqlExpression::Build(const TRule_expr& node) {
         // expr:
@@ -561,7 +561,7 @@ TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& nod
         }
         case TRule_json_case_handler::kAltJsonCaseHandler3:
             mode = EJsonValueHandlerMode::DefaultValue;
-            return Build(node.GetAlt_json_case_handler3().GetBlock1().GetRule_expr2());
+            return Build(node.GetAlt_json_case_handler3().GetRule_expr2());
         case TRule_json_case_handler::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
@@ -718,7 +718,7 @@ EJsonQueryWrap TSqlExpression::JsonQueryWrapper(const TRule_json_query& node) {
     }
 
     // WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY? - wrapping depends on 2nd token. Default is UNCONDITIONAL
-    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2().GetBlock1();
+    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2();
     if (!withWrapperRule.HasBlock2()) {
         return EJsonQueryWrap::Wrap;
     }
@@ -838,13 +838,13 @@ TNodePtr MatchRecognizeVarAccess(TTranslation& ctx, const TString& var, const TR
     return BuildMatchRecognizeVarAccess(TPosition{}, var, column, theSameVar);
 }
 
-TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2 block) {
+TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
     switch (block.GetAltCase()) {
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt1:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1:
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt2:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2:
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt3:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3:
             switch (block.GetAlt3().GetRule_an_id_or_type1().GetAltCase()) {
                 case TRule_an_id_or_type::kAltAnIdOrType1: {
                     const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
@@ -869,7 +869,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                     break;
             }
             break;
-        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
     return TNodePtr{};
@@ -932,14 +932,15 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     bool isColumnRef = !expr;
     bool isFirstElem = true;
 
-    for (auto& b : suffix.GetBlock1()) {
+    for (auto& _b : suffix.GetBlock1()) {
+        auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt1: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
             // key_expr
             // onlyDots = false;
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
             // invoke_expr - cannot be a column, function name
             if (isFirstElem) {
                 isColumnRef = false;
@@ -948,20 +949,20 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             // onlyDots = false;
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // In case of MATCH_RECOGNIZE lambdas
             // X.Y is treated as Var.Column access
             if (isColumnRef && EColumnRefState::MatchRecognize == Ctx.GetColumnReferenceState()) {
                 if (auto rowPatternVarAccess = RowPatternVarAccess(
                     name,
-                    b.GetAlt3().GetBlock1().GetBlock2())
+                    b.GetAlt3().GetBlock2())
                 ) {
                     return rowPatternVarAccess;
                 }
             }
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1008,9 +1009,10 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     }
 
     TPosition pos(Ctx.Pos());
-    for (auto& b : suffix.GetBlock1()) {
+    for (auto& _b : suffix.GetBlock1()) {
+        auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt1: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
             // key_expr
             auto keyExpr = KeyExpr(b.GetAlt1().GetRule_key_expr1());
             if (!keyExpr) {
@@ -1029,7 +1031,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             ids.clear();
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
             // invoke_expr - cannot be a column, function name
             TSqlCallExpr call(Ctx, Mode);
             if (isFirstElem && !name.Empty()) {
@@ -1055,15 +1057,15 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // dot
             if (lastExpr) {
                 ids.push_back(lastExpr);
             }
 
-            auto bb = b.GetAlt3().GetBlock1().GetBlock2();
+            auto bb = b.GetAlt3().GetBlock2();
             switch (bb.Alt_case()) {
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt1: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1: {
                     TString named;
                     if (!NamedNodeImpl(bb.GetAlt1().GetRule_bind_parameter1(), named, *this)) {
                         return nullptr;
@@ -1077,16 +1079,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                     ids.back().Expr = namedNode;
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt2: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2: {
                     const TString str(Token(bb.GetAlt2().GetToken1()));
                     ids.push_back(str);
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt3: {
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3: {
                     ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
                     break;
                 }
-                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
+                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
                     Y_ABORT("You should change implementation according to grammar changes");
             }
 
@@ -1097,7 +1099,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
             break;
         }
-        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
+        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1175,9 +1177,9 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     TColumnRefScope scope(Ctx, EColumnRefState::Deny);
     scope.SetNoColumnErrContext("in lambda function");
     if (bodyBlock.GetBlock2().HasAlt1()) {
-        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt1().GetBlock1().GetRule_expr2(), exprSeq);
+        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt1().GetRule_expr2(), exprSeq);
     } else {
-        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt2().GetBlock1().GetRule_lambda_body2(), exprSeq);
+        ret = SqlLambdaExprBody(Ctx, bodyBlock.GetBlock2().GetAlt2().GetRule_lambda_body2(), exprSeq);
     }
 
     TVector<TString> argNames;
@@ -1631,10 +1633,10 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             Token(token);
             TPosition pos(Ctx.Pos());
             switch (token.GetId()) {
-                case SQLv1LexerTokens::TOKEN_NOT: opName = "Not"; break;
-                case SQLv1LexerTokens::TOKEN_PLUS: opName = "Plus"; break;
-                case SQLv1LexerTokens::TOKEN_MINUS: opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
-                case SQLv1LexerTokens::TOKEN_TILDA: opName = "BitNot"; break;
+                case SQLv4Lexer::TNOT: opName = "Not"; break;
+                case SQLv4Lexer::TPLUS: opName = "Plus"; break;
+                case SQLv4Lexer::TMINUS: opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
+                case SQLv4Lexer::TTILDA: opName = "BitNot"; break;
                 default:
                     Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
                     Error() << "Unsupported unary operation: " << token.GetValue();
@@ -1905,7 +1907,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() && alt.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_SYMMETRIC;
+                const bool symmetric = alt.HasBlock3() && alt.GetBlock3().GetToken1().GetId() == SQLv4Lexer::TSYMMETRIC;
                 const bool negation = alt.HasBlock1();
                 TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
                 TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
@@ -2032,35 +2034,35 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
         switch (tokenId) {
-            case SQLv1LexerTokens::TOKEN_LESS:
+            case SQLv4Lexer::TLESS:
                 Ctx.IncrementMonCounter("sql_binary_operations", "Less");
                 opName = "<";
                 break;
-            case SQLv1LexerTokens::TOKEN_LESS_OR_EQ:
+            case SQLv4Lexer::TLESS_OR_EQ:
                 opName = "<=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
                 break;
-            case SQLv1LexerTokens::TOKEN_GREATER:
+            case SQLv4Lexer::TGREATER:
                 opName = ">";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
                 break;
-            case SQLv1LexerTokens::TOKEN_GREATER_OR_EQ:
+            case SQLv4Lexer::TGREATER_OR_EQ:
                 opName = ">=";
                 Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
                 break;
-            case SQLv1LexerTokens::TOKEN_PLUS:
+            case SQLv4Lexer::TPLUS:
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
                 break;
-            case SQLv1LexerTokens::TOKEN_MINUS:
+            case SQLv4Lexer::TMINUS:
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
                 break;
-            case SQLv1LexerTokens::TOKEN_ASTERISK:
+            case SQLv4Lexer::TASTERISK:
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
                 break;
-            case SQLv1LexerTokens::TOKEN_SLASH:
+            case SQLv4Lexer::TSLASH:
                 opName = "/MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
@@ -2069,7 +2071,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                     opName = "CheckedDiv";
                 }
                 break;
-            case SQLv1LexerTokens::TOKEN_PERCENT:
+            case SQLv4Lexer::TPERCENT:
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
                 break;
@@ -2097,7 +2099,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_SHIFT_LEFT) {
+                if (tokenId != SQLv4Lexer::TSHIFT_LEFT) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2113,7 +2115,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_ROT_LEFT) {
+                if (tokenId != SQLv4Lexer::TROT_LEFT) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2129,7 +2131,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_AMPERSAND) {
+                if (tokenId != SQLv4Lexer::TAMPERSAND) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2140,7 +2142,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_PIPE) {
+                if (tokenId != SQLv4Lexer::TPIPE) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2151,7 +2153,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_CARET) {
+                if (tokenId != SQLv4Lexer::TCARET) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2181,7 +2183,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_EQUALS) {
+                if (tokenId != SQLv4Lexer::TEQUALS) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2192,7 +2194,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_EQUALS2) {
+                if (tokenId != SQLv4Lexer::TEQUALS2) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2203,7 +2205,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS) {
+                if (tokenId != SQLv4Lexer::TNOT_EQUALS) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2214,7 +2216,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if (tokenId != SQLv1LexerTokens::TOKEN_NOT_EQUALS2) {
+                if (tokenId != SQLv4Lexer::TNOT_EQUALS2) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }

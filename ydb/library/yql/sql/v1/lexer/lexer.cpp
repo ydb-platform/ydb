@@ -9,13 +9,6 @@
 #include <util/system/mutex.h>
 #endif
 
-namespace NALPDefault {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
-
-namespace NALPAnsi {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
 
 namespace NSQLTranslationV1 {
 
@@ -41,10 +34,10 @@ public:
 #endif
         NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
         if (Ansi) {
-            NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
+            NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv4Lexer> tokensCollector(query, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
         } else {
-            NProtoAST::TLexerTokensCollector<NALPDefault::SQLv1Lexer> tokensCollector(query, (const char**)NALPDefault::SQLv1ParserTokenNames, queryName);
+            NProtoAST::TLexerTokensCollector<NALPDefault::SQLv4Lexer> tokensCollector(query, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
         }
 

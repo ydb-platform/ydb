@@ -76,13 +76,13 @@ struct TMPMCRingQueueV3 {
         }
     };
 
-    NThreading::TPadded<std::atomic_uint64_t> Tail{0};
-    NThreading::TPadded<std::atomic_uint64_t> Head{0};
-    NThreading::TPadded<TArrayHolder<std::atomic_uint64_t>> Buffer;
+    NThreading::TPadded<std::atomic<ui64>> Tail{0};
+    NThreading::TPadded<std::atomic<ui64>> Head{0};
+    NThreading::TPadded<TArrayHolder<std::atomic<ui64>>> Buffer;
     NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OvertakenQueue;
-    NThreading::TPadded<std::atomic_uint64_t> ReadRevolvingCounter{0};
-    NThreading::TPadded<std::atomic_uint64_t> WriteRevolvingCounter{0};
-    NThreading::TPadded<std::atomic_uint64_t> OvertakenSlots{0};
+    NThreading::TPadded<std::atomic<ui64>> ReadRevolvingCounter{0};
+    NThreading::TPadded<std::atomic<ui64>> WriteRevolvingCounter{0};
+    NThreading::TPadded<std::atomic<ui64>> OvertakenSlots{0};
 
     static constexpr ui32 ConvertIdx(ui32 idx) {
         idx = idx % MaxSize;
@@ -109,7 +109,7 @@ struct TMPMCRingQueueV3 {
     }
 
     TMPMCRingQueueV3()
-        : Buffer(new std::atomic_uint64_t[MaxSize])
+        : Buffer(new std::atomic<ui64>[MaxSize])
     {
         for (ui32 idx = 0; idx < MaxSize; ++idx) {
             Buffer[idx] = TSlot::MakeEmpty(0);
@@ -125,7 +125,7 @@ struct TMPMCRingQueueV3 {
             OBSERVE(AfterReserveSlotInFastPush);
 
             ui64 slotIdx = ConvertIdx(currentTail);
-            std::atomic_uint64_t &currentSlot = Buffer[slotIdx];
+            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
             TSlot slot;
             ui64 expected = TSlot::MakeEmpty(0);
             do {
@@ -157,7 +157,7 @@ struct TMPMCRingQueueV3 {
     std::optional<ui32> TryPopFromOvertakenSlots() {
         ui32 el = OvertakenQueue.Pop(ReadRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
         if (el) {
-            std::atomic_uint64_t &currentSlot = Buffer[el - 1];
+            std::atomic<ui64> &currentSlot = Buffer[el - 1];
             ui64 expected = currentSlot.load(std::memory_order_acquire);
             TSlot slot = TSlot::Recognise(expected);
             ui64 generation = Head.load(std::memory_order_acquire) / MaxSize;
@@ -182,7 +182,7 @@ struct TMPMCRingQueueV3 {
         return OvertakenQueue.Push(slotIdx + 1, WriteRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
     }
 
-    std::optional<ui32> InvalidateSlot(std::atomic_uint64_t &currentSlot, ui64 generation) {
+    std::optional<ui32> InvalidateSlot(std::atomic<ui64> &currentSlot, ui64 generation) {
         ui64 expected = currentSlot.load(std::memory_order_acquire);
         TSlot slot = TSlot::Recognise(expected);
         while (!slot.IsEmpty || slot.Generation <= generation) {
@@ -228,7 +228,7 @@ struct TMPMCRingQueueV3 {
             ui32 generation = currentHead / MaxSize;
 
             ui64 slotIdx = ConvertIdx(currentHead);
-            std::atomic_uint64_t &currentSlot = Buffer[slotIdx];
+            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
 
             ui64 expected = currentSlot.load(std::memory_order_relaxed);
             TSlot slot = TSlot::Recognise(expected);

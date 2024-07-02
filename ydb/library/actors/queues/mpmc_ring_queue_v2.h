@@ -62,9 +62,9 @@ struct TMPMCRingQueueV2 {
 
     static constexpr ui64 PushStopBit = 1ull << 63;
     static constexpr ui64 HasOvertakenSlotsBit = 1ull << 63;
-    NThreading::TPadded<std::atomic_uint64_t> Tail{0};
-    NThreading::TPadded<std::atomic_uint64_t> Head{0};
-    NThreading::TPadded<TArrayHolder<std::atomic_uint64_t>> Buffer;
+    NThreading::TPadded<std::atomic<ui64>> Tail{0};
+    NThreading::TPadded<std::atomic<ui64>> Head{0};
+    NThreading::TPadded<TArrayHolder<std::atomic<ui64>>> Buffer;
     static constexpr ui64 OvertakenBufferSizeBits = 6;
     NThreading::TPadded<TMPMCBitMapBuffer> OvertakenBuffer;
     ui64 LocalGeneration = 0;
@@ -94,7 +94,7 @@ struct TMPMCRingQueueV2 {
     }
 
     TMPMCRingQueueV2()
-        : Buffer(new std::atomic_uint64_t[MaxSize])
+        : Buffer(new std::atomic<ui64>[MaxSize])
         , OvertakenBuffer(OvertakenBufferSizeBits)
     {
         for (ui32 idx = 0; idx < MaxSize; ++idx) {
@@ -126,7 +126,7 @@ struct TMPMCRingQueueV2 {
             ui64 generation = currentTail / MaxSize;
             OBSERVE(AfterReserveSlotInFastPush);
 
-            std::atomic_uint64_t &currentSlot = Buffer[ConvertIdx(currentTail)];
+            std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
             TSlot slot;
             ui64 expected = TSlot::MakeEmpty(generation);
             do {
@@ -157,7 +157,7 @@ struct TMPMCRingQueueV2 {
         // Cerr << "realHead: " << realHead << Endl;
         // Cerr << "generation: " << generation << Endl;
         OvertakenBuffer.Find(realHead, [&](ui64 idx) {
-            std::atomic_uint64_t &realCurrentSlot = Buffer[idx];
+            std::atomic<ui64> &realCurrentSlot = Buffer[idx];
             ui64 realValue = realCurrentSlot.load(std::memory_order_acquire);
             TSlot realSlot = TSlot::Recognise(realValue);
             if (!realSlot.IsEmpty) {
@@ -172,7 +172,7 @@ struct TMPMCRingQueueV2 {
         return result;
     }
 
-    std::optional<ui32> InvalidateSlot(std::atomic_uint64_t &currentSlot, ui64 generation) {
+    std::optional<ui32> InvalidateSlot(std::atomic<ui64> &currentSlot, ui64 generation) {
         ui64 expected = currentSlot.load(std::memory_order_acquire);
         TSlot slot = TSlot::Recognise(expected);
         while (!slot.IsEmpty || slot.Generation <= generation) {
@@ -212,7 +212,7 @@ struct TMPMCRingQueueV2 {
             ui32 generation = currentHead / MaxSize;
 
             ui64 slotIdx = ConvertIdx(currentHead);
-            std::atomic_uint64_t &currentSlot = Buffer[slotIdx];
+            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
 
             ui64 expected = currentSlot.load(std::memory_order_relaxed);
             TSlot slot = TSlot::Recognise(expected);

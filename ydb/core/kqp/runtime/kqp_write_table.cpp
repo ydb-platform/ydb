@@ -18,7 +18,8 @@ namespace NKqp {
 
 namespace {
 
-constexpr ui64 MaxBatchBytes = 8_MB;
+constexpr ui64 DataShardMaxOperationBytes = 8_MB;
+constexpr ui64 ColumnShardMaxOperationBytes = 8_MB;
 constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
@@ -289,7 +290,7 @@ public:
     }
 
     void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force) {
-        while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= MaxBatchBytes || force)) {
+        while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= ColumnShardMaxOperationBytes || force)) {
             std::vector<TRecordBatchPtr> toPrepare;
             i64 toPrepareSize = 0;
             while (!unpreparedBatch.Batches.empty()) {
@@ -309,7 +310,7 @@ public:
                 for (i64 index = 0; index < batch->num_rows(); ++index) {
                     i64 nextRowSize = rowCalculator.GetRowBytesSize(index);
 
-                    if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
+                    if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
                         YQL_ENSURE(index > 0);
 
                         toPrepare.push_back(batch->Slice(0, index));
@@ -497,7 +498,7 @@ public:
         if (batcherIter == std::end(Batchers)) {
             Batchers.emplace(
                 shardIter->ShardId,
-                TCellsBatcher(Columns.size(), MaxBatchBytes));
+                TCellsBatcher(Columns.size(), DataShardMaxOperationBytes));
         }
 
         Memory += Batchers.at(shardIter->ShardId).AddRow(row);

@@ -24,8 +24,8 @@
 
 namespace {
     constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
-    constexpr i64 kMemoryLimitPerMessage = 48_MB;
-    constexpr i64 kMaxBatchesPerMessage = 1;
+    constexpr i64 kMemoryLimitPerMessage = 64_MB;
+    constexpr i64 kMaxBatchesPerMessage = 8;
 
     struct TWriteActorBackoffSettings {
         TDuration StartRetryDelay = TDuration::MilliSeconds(250);

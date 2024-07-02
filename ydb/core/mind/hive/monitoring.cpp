@@ -356,8 +356,7 @@ public:
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr><th>NodeId</th><th>Local</th><th>Domains</th><th>TabletsScheduled</th><th>TabletsRunning</th>"
-               "<th>Values</th><th>Total</th><th>Total</th><th>Maximum</th><th>VolatileState</th><th>Location</th>"
-               "<th>LastAlive</th><th>Restarts</th>"
+               "<th>Values</th><th>Total</th><th>Total</th><th>Maximum</th><th>VolatileState</th><th>Location</th><th>LastAlive</th><th>Restarts</th>"
             << "</tr>";
         out << "</thead>";
         out << "<tbody>";

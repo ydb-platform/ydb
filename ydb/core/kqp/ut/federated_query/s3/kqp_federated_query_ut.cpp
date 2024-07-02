@@ -1865,15 +1865,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSource) {
-        const TString externalDataSourceName = "/Root/external_data_source";
-        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString externalDataSourceName = "external_data_source";
+        const TString externalTableName = "test_binding_resolve";
 
         auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
-        const TString oltpTable = "/Root/DestinationOltp";
+        const TString oltpTable = "DestinationOltp";
         {
             const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "Root";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1892,9 +1893,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        const TString olapTable = "/Root/DestinationOlap";
+        const TString olapTable = "DestinationOlap";
         {
             const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "Root";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1918,15 +1920,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalTable) {
-        const TString externalDataSourceName = "/Root/external_data_source";
-        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString externalDataSourceName = "external_data_source";
+        const TString externalTableName = "test_binding_resolve";
 
         auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
-        const TString oltpTable = "/Root/DestinationOltp";
+        const TString oltpTable = "DestinationOltp";
         {
             const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "Root";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1939,9 +1942,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        const TString olapTable = "/Root/DestinationOlap";
+        const TString olapTable = "DestinationOlap";
         {
             const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "Root";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )

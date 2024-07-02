@@ -1,7 +1,6 @@
 #pragma once
 #include <ydb/library/actors/core/log.h>
 #include "ticket_parser_log.h"
-#include "ldap_auth_provider.h"
 #include "ticket_parser_settings.h"
 
 #include <ydb/core/base/appdata.h>
@@ -10,6 +9,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/security/certificate_check/cert_check.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/digest/md5/md5.h>
@@ -20,16 +20,10 @@
 #include <ydb/library/ycloud/impl/service_account_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/grpc_service_cache.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/ticket_parser.h>
 #include <ydb/library/security/util.h>
 #include <util/string/vector.h>
 #include <util/generic/queue.h>
 #include "ticket_parser_log.h"
-#include "ldap_auth_provider.h"
 #include <util/stream/file.h>
 
 namespace NKikimr {

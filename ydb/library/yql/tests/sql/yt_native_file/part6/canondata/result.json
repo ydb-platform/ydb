@@ -2570,9 +2570,9 @@
     ],
     "test.test[simple_columns-no_simple_columns_tablerow-default.txt-Debug]": [
         {
-            "checksum": "5f76070a5055a3753f2eb7c30523b6a9",
+            "checksum": "f9628e2364f39a4a6c11ab7035d50a14",
             "size": 3098,
-            "uri": "https://{canondata_backend}/1903885/92ceeb504c559a0d792d6ad65fd836d3de5d5654/resource.tar.gz#test.test_simple_columns-no_simple_columns_tablerow-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1942173/0b7f91a02e290af4931d8c656adb3646b4ace154/resource.tar.gz#test.test_simple_columns-no_simple_columns_tablerow-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[simple_columns-no_simple_columns_tablerow-default.txt-Plan]": [

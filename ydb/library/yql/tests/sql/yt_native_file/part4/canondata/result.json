@@ -1178,9 +1178,9 @@
     ],
     "test.test[json-json_exists/example--Debug]": [
         {
-            "checksum": "932d3223b5ed945a89e631e10bc08c80",
+            "checksum": "e5e5e36c86cf040fd4d06930a747c7ce",
             "size": 5653,
-            "uri": "https://{canondata_backend}/1689644/d44d95f45899fdab5e5358b444eb60b407010265/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1942100/62a89db87841f2c801ddaeaba839ccdf5171250d/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql"
         }
     ],
     "test.test[json-json_exists/example--Plan]": [

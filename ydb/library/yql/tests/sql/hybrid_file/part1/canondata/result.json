@@ -617,9 +617,9 @@
     ],
     "test.test[blocks-interval_add_interval_scalar--Debug]": [
         {
-            "checksum": "d23c34d3cfe1fe27cb545454660cf237",
+            "checksum": "faedfa60c55d634c2212d01783e0c679",
             "size": 3158,
-            "uri": "https://{canondata_backend}/1689644/d478ac0614336fbd287d0edaf8b540ccc9bd2c35/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937424/be6de2a45c0e092d8da0f5c04670601e603a4d75/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-interval_add_interval_scalar--Plan]": [
@@ -729,9 +729,9 @@
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Debug]": [
         {
-            "checksum": "6522b9ccc751d8fdec93fd51fca097af",
+            "checksum": "3ad96bbf621b45ad18f5e2016dde411d",
             "size": 5602,
-            "uri": "https://{canondata_backend}/1871102/597d6ee930787f14a7fd3507c37be2e17e206201/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937424/be6de2a45c0e092d8da0f5c04670601e603a4d75/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Plan]": [
@@ -1415,9 +1415,9 @@
     ],
     "test.test[json-json_exists/example--Debug]": [
         {
-            "checksum": "6a6f7728be7e284b633fcf1dcfb4b291",
+            "checksum": "d514ab7d5d9e625ad76fe54ca1d7b198",
             "size": 5738,
-            "uri": "https://{canondata_backend}/1871102/597d6ee930787f14a7fd3507c37be2e17e206201/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937424/be6de2a45c0e092d8da0f5c04670601e603a4d75/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql_patched"
         }
     ],
     "test.test[json-json_exists/example--Plan]": [

@@ -1,7 +1,5 @@
 #include "kqp_write_table.h"
 
-#include <deque>
-#include <vector>
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <ydb/core/engine/mkql_keys.h>
@@ -11,6 +9,7 @@
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr {
@@ -170,6 +169,140 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
     return keyColumnTypes;
 }
 
+struct TRowWithData {
+    TVector<TCell> Cells;
+    NUdf::TStringValue Data;
+};
+
+class TRowBuilder {
+private:
+    struct TCellInfo {
+        NScheme::TTypeInfo Type;
+        NUdf::TUnboxedValuePod Value;
+        TString PgBinaryValue;
+    };
+
+public:
+    explicit TRowBuilder(size_t size)
+        : CellsInfo(size) {
+    }
+
+    TRowBuilder& AddCell(
+            const size_t index,
+            const NScheme::TTypeInfo type,
+            const NUdf::TUnboxedValuePod& value,
+            const i32 typmod = -1) {
+        CellsInfo[index].Type = type;
+        CellsInfo[index].Value = value;
+
+        if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            const auto typeDesc = type.GetTypeDesc();
+            if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
+                TMaybe<TString> err;
+                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
+                if (err) {
+                    ythrow yexception() << "PgValueCoerce error: " << *err;
+                }
+            } else {
+                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(typeDesc));
+            }
+        }
+        return *this;
+    }
+
+    size_t DataSize() const {
+        size_t result = 0;
+        for (const auto& cellInfo : CellsInfo) {
+            result += GetCellSize(cellInfo);
+        }
+        return result;
+    }
+
+    TRowWithData Build() {
+        TVector<TCell> cells;
+        cells.reserve(CellsInfo.size());
+        const auto size = DataSize();
+        auto data = Allocate(size);
+        char* ptr = data.Data();
+
+        for (const auto& cellInfo : CellsInfo) {
+            cells.push_back(BuildCell(cellInfo, ptr));
+        }
+
+        AFL_ENSURE(ptr == data.Data() + size);
+
+        Clear();
+
+        return TRowWithData {
+            .Cells = std::move(cells),
+            .Data = std::move(data),
+        };
+    }
+
+    void Clear() {
+        CellsInfo.clear();
+    }
+
+private:
+    TCell BuildCell(const TCellInfo& cellInfo, char*& dataPtr) {
+        if (!cellInfo.Value) {
+            return TCell();
+        }
+
+        switch(cellInfo.Type.GetTypeId()) {
+    #define MAKE_PRIMITIVE_TYPE_CELL_CASE(type, layout) \
+        case NUdf::TDataType<type>::Id: return NMiniKQL::MakeCell<layout>(cellInfo.Value);
+            KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL_CASE)
+        case NUdf::TDataType<NUdf::TDecimal>::Id:
+            {
+                auto intValue = cellInfo.Value.GetInt128();
+                constexpr auto valueSize = sizeof(intValue);
+
+                char* initialPtr = dataPtr;
+                std::memcpy(initialPtr, reinterpret_cast<const char*>(&intValue), valueSize);
+                dataPtr += valueSize;
+                return TCell(initialPtr, valueSize);
+            }
+        }
+
+        const auto ref = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg
+            ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
+            : cellInfo.Value.AsStringRef();
+
+        char* initialPtr = dataPtr;
+        std::memcpy(initialPtr, ref.Data(), ref.Size());
+        dataPtr += ref.Size();
+        return TCell(initialPtr, ref.Size());
+    }
+
+    size_t GetCellSize(const TCellInfo& cellInfo) const {
+        if (!cellInfo.Value) {
+            return 0;
+        }
+
+        switch(cellInfo.Type.GetTypeId()) {
+    #define MAKE_PRIMITIVE_TYPE_CELL_CASE_SIZE(type, layout) \
+        case NUdf::TDataType<type>::Id:
+            KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL_CASE_SIZE)
+            return 0;
+        case NUdf::TDataType<NUdf::TDecimal>::Id:
+            return sizeof(cellInfo.Value.GetInt128());
+        }
+
+        if (cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            return cellInfo.PgBinaryValue.size();
+        }
+        return cellInfo.Value.AsStringRef().Size();
+    }
+
+    NUdf::TStringValue Allocate(size_t size) {
+        Y_DEBUG_ABORT_UNLESS(NMiniKQL::TlsAllocState);
+        return NUdf::TStringValue(size);
+    }
+
+    TVector<TCellInfo> CellsInfo;
+};
+
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
@@ -242,16 +375,16 @@ public:
             return;
         }
 
-        TVector<TCell> cells(Columns.size());
+        Y_UNUSED(TypeEnv);
+
+        TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
+            TRowBuilder rowBuilder(Columns.size());
             for (size_t index = 0; index < Columns.size(); ++index) {
-                cells[WriteIndex[index]] = MakeCell(
-                    Columns[index].PType,
-                    row.GetElement(index),
-                    TypeEnv,
-                    /* copy */ false);
+                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
             }
-            BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
+            auto rowWithData = rowBuilder.Build();
+            BatchBuilder.AddRow(TConstArrayRef<TCell>{rowWithData.Cells.begin(), rowWithData.Cells.end()});
         });
 
         FlushUnsharded(false);

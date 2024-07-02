@@ -85,9 +85,9 @@ void TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::Append
     const auto path = Owner.GetFullTableName(tdefs[TableNum].name);
     if (Builder) {
         Builder->EndList();
-        result.push_back(MakeIntrusive<TDataPortion>(path, Builder->Build(), Count));
+        result.push_back(MakeIntrusive<TDataPortionWithState>(Owner.Owner.StateProcessor.Get(), path, Builder->Build(), Start, Count));
     } else if (Csv) {
-        result.push_back(MakeIntrusive<TDataPortion>(path, TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::TsvFormatString), Count));
+        result.push_back(MakeIntrusive<TDataPortionWithState>(Owner.Owner.StateProcessor.Get(), path, TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::TsvFormatString), Start, Count));
     }
 }
 
@@ -103,9 +103,6 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(co
 {}
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
-    if (Owner.StateProcessor) {
-        Owner.StateProcessor->FinishPortions();
-    }
     TDataPortions result;
     if (TableSize == 0) {
         return result;
@@ -132,9 +129,6 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWo
         }
         ctxs.front().SetCount(count);
         ctxs.front().SetStart((tdefs[TableNum].base * Owner.GetScale() / Owner.GetProcessCount()) * Owner.GetProcessIndex() + Generated + 1);
-        if (Owner.StateProcessor) {
-            Owner.StateProcessor->AddPortion(TString(GetName()), Generated, count);
-        }
         Generated += count;
     }
     GenerateRows(ctxs);

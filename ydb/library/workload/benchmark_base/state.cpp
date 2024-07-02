@@ -25,17 +25,9 @@ TGeneratorStateProcessor::TGeneratorStateProcessor(const TFsPath& path, bool cle
     }
 }
 
-void TGeneratorStateProcessor::AddPortion(const TString& source, ui64 from, ui64 size) {
-    InProcess.Get().emplace_back(TInProcessPortion{source, from, size});
-}
-
-void TGeneratorStateProcessor::FinishPortions() {
-    bool needSave = false;
+void TGeneratorStateProcessor::FinishPortion(const TString& source, ui64 from, ui64 size) {
     auto g = Guard(Lock);
-    for (const auto& p: InProcess.Get()) {
-        needSave |= StateImpl[p.Source].FinishPortion(p.From, p.Size, State[p.Source].Position);
-    }
-    InProcess.Get().clear();
+    bool needSave = StateImpl[source].FinishPortion(from, size, State[source].Position);
     if (needSave) {
         Save();
     }

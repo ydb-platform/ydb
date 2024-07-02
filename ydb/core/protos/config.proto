@@ -1466,6 +1466,11 @@ message THiveConfig {
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
+    optional double MinPeriodBetweenRecommendation = 75 [default = 5]; // seconds
+    optional uint64 ScaleOutWindowSize = 76 [default = 5]; // buckets
+    optional uint64 ScaleInWindowSize = 77 [default = 15]; // buckets
+    optional uint64 NodeMetricsWindowSize = 78 [default = 900000]; // milliseconds
+    optional double RecommenderThresholdMargin = 79 [default = 0.2]; // percent
 }
 
 message TBlobCacheConfig {

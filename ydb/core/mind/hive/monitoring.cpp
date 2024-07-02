@@ -835,6 +835,11 @@ public:
         UpdateConfig(db, "MinStorageScatterToBalance", configUpdates);
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
+        UpdateConfig(db, "MinPeriodBetweenRecommendation", configUpdates);
+        UpdateConfig(db, "ScaleOutWindowSize", configUpdates);
+        UpdateConfig(db, "ScaleInWindowSize", configUpdates);
+        UpdateConfig(db, "NodeMetricsWindowSize", configUpdates);
+        UpdateConfig(db, "RecommenderThresholdMargin", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1181,6 +1186,11 @@ public:
         ShowConfig(out, "MinGroupUsageToBalance");
         ShowConfig(out, "StorageBalancerInflight");
         ShowConfigForBalancerIgnoreTabletTypes(out);
+        ShowConfig(out, "MinPeriodBetweenRecommendation");
+        ShowConfig(out, "ScaleOutWindowSize");
+        ShowConfig(out, "ScaleInWindowSize");
+        ShowConfig(out, "NodeMetricsWindowSize");
+        ShowConfig(out, "RecommenderThresholdMargin");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";

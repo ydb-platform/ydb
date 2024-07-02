@@ -1136,7 +1136,7 @@ void TTable::ShrinkBucket(ui64 bucket) {
 
 void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
-        TableBucketsSpillers.emplace_back(spiller, 5_MB);
+        TableBucketsSpillers.emplace_back(spiller, 1_MB);
     }
 }
 
@@ -1162,7 +1162,7 @@ bool TTable::TryToReduceMemoryAndWait() {
         }
     }
 
-    if (!largestBucketSize) return false;
+    if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 

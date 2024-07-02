@@ -142,7 +142,7 @@ public:
 #ifdef _win32_
             ui32 loadFlags = 0;
 #else
-            ui32 loadFlags = RTLD_GLOBAL | ((flags & NUdf::IRegistrator::TFlags::TypesOnly) ? RTLD_LAZY : RTLD_NOW);
+            ui32 loadFlags = RTLD_LOCAL | ((flags & NUdf::IRegistrator::TFlags::TypesOnly) ? RTLD_LAZY : RTLD_NOW);
 #endif
             TPathSplit absPathSplit(libraryPath);
             TString absPath = libraryPath;

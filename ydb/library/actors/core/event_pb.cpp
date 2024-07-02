@@ -250,6 +250,78 @@ namespace NActors {
         return res;
     }
 
+    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
+        // serialize payload first
+        if (payload) {
+            void *data;
+            int size = 0;
+            auto append = [&](const char *p, size_t len) {
+                while (len) {
+                    if (size) {
+                        const size_t numBytesToCopy = std::min<size_t>(size, len);
+                        memcpy(data, p, numBytesToCopy);
+                        data = static_cast<char*>(data) + numBytesToCopy;
+                        size -= numBytesToCopy;
+                        p += numBytesToCopy;
+                        len -= numBytesToCopy;
+                    } else if (!chunker->Next(&data, &size)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            auto appendNumber = [&](size_t number) {
+                char buf[MaxNumberBytes];
+                return append(buf, SerializeNumber(number, buf));
+            };
+
+#if USE_EXTENDED_PAYLOAD_FORMAT
+            char marker = ExtendedPayloadMarker;
+            append(&marker, 1);
+            if (!appendNumber(payload.size())) {
+                return false;
+            }
+            for (const TRope& rope : payload) {
+                if (!appendNumber(rope.GetSize())) {
+                    return false;
+                }
+            }
+            if (size) {
+                chunker->BackUp(std::exchange(size, 0));
+            }
+            for (const TRope& rope : payload) {
+                if (!chunker->WriteRope(&rope)) {
+                    return false;
+                }
+            }
+#else
+            char marker = PayloadMarker;
+            append(&marker, 1);
+            if (!appendNumber(payload.size())) {
+                return false;
+            }
+            for (const TRope& rope : payload) {
+                if (!appendNumber(rope.GetSize())) {
+                    return false;
+                }
+                if (rope) {
+                    if (size) {
+                        chunker->BackUp(std::exchange(size, 0));
+                    }
+                    if (!chunker->WriteRope(&rope)) {
+                        return false;
+                    }
+                }
+            }
+            if (size) {
+                chunker->BackUp(size);
+            }
+#endif
+        }
+
+        return true;
+    }
+
 
     void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
     {
@@ -298,4 +370,62 @@ namespace NActors {
             fetchRope(len);
         }
     }
+
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize) {
+        // TODO: calc totalPayloadSize via payload? 
+        ssize_t result = recordSize;
+        if (result >= 0 && payload) {
+            ++result; // marker
+            char buf[MaxNumberBytes];
+            result += SerializeNumber(payload.size(), buf);
+            for (const TRope& rope : payload) {
+                result += SerializeNumber(rope.GetSize(), buf);
+            }
+            result += totalPayloadSize;
+        }
+        return result;
+    }
+
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize) {
+            TEventSerializationInfo info;
+            info.IsExtendedFormat = static_cast<bool>(payload);
+
+            if (allowExternalDataChannel) {
+                if (payload) {
+                    char temp[MaxNumberBytes];
+#if USE_EXTENDED_PAYLOAD_FORMAT
+                    size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
+                    for (const TRope& rope : payload) {
+                        headerLen += SerializeNumber(rope.size(), temp);
+                    }
+                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
+                    for (const TRope& rope : payload) {
+                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
+                    }
+#else
+                    info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(payload.size(), temp), 0, 0, true}); // payload marker and rope count
+                    for (const TRope& rope : payload) {
+                        const size_t ropeSize = rope.GetSize();
+                        info.Sections.back().Size += SerializeNumber(ropeSize, temp);
+                        info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0, false}); // data as a separate section
+                    }
+#endif
+                }
+
+                const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
+                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
+
+#ifndef NDEBUG
+                size_t total = 0;
+                for (const auto& section : info.Sections) {
+                    total += section.Size;
+                }
+                size_t serialized = CalculateSerializedSizeImpl(payload, totalPayloadSize, recordSize);
+                Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd payload.size# %zu", total,
+                    serialized, byteSize, payload.size());
+#endif
+            }
+
+            return info;
+        }
 }

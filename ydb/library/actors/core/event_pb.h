@@ -148,9 +148,13 @@ namespace NActors {
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
     static constexpr char ExtendedPayloadMarker = 0x06;
     static constexpr char PayloadMarker = 0x07;
+    static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 
     void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     size_t SerializeNumber(size_t num, char *buffer);
+    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -193,21 +197,13 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            return SerializeToArcadiaStreamImpl(chunker, TString());
+            if (!SerializeToArcadiaStreamImpl(chunker, Payload)) 
+                return false;
+            return Record.SerializeToZeroCopyStream(chunker);
         }
 
         ui32 CalculateSerializedSize() const override {
-            ssize_t result = Record.ByteSize();
-            if (result >= 0 && Payload) {
-                ++result; // marker
-                char buf[MaxNumberBytes];
-                result += SerializeNumber(Payload.size(), buf);
-                for (const TRope& rope : Payload) {
-                    result += SerializeNumber(rope.GetSize(), buf);
-                }
-                result += TotalPayloadSize;
-            }
-            return result;
+            return CalculateSerializedSizeImpl(Payload, GetTotalPayloadSize(), Record.ByteSize());
         }
         
         static IEventBase* Load(TEventSerializedData *input) {
@@ -248,7 +244,7 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(0);
+            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayloadFull(), GetTotalPayloadSize(), Record.ByteSize());
         }
 
         bool AllowExternalDataChannel() const {
@@ -273,6 +269,10 @@ namespace NActors {
             return Payload[id];
         }
 
+        const TVector<TRope>& GetPayloadFull() const {
+            return Payload;
+        }
+
         ui32 GetPayloadCount() const {
             return Payload.size();
         }
@@ -280,132 +280,14 @@ namespace NActors {
         void StripPayload() {
             Payload.clear();
             TotalPayloadSize = 0;
-        }
+        } 
 
-    protected:
-        TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize) const {
-            TEventSerializationInfo info;
-            info.IsExtendedFormat = static_cast<bool>(Payload);
-
-            if (static_cast<const TEv&>(*this).AllowExternalDataChannel()) {
-                if (Payload) {
-                    char temp[MaxNumberBytes];
-#if USE_EXTENDED_PAYLOAD_FORMAT
-                    size_t headerLen = 1 + SerializeNumber(Payload.size(), temp);
-                    for (const TRope& rope : Payload) {
-                        headerLen += SerializeNumber(rope.size(), temp);
-                    }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
-                    for (const TRope& rope : Payload) {
-                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
-                    }
-#else
-                    info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(Payload.size(), temp), 0, 0, true}); // payload marker and rope count
-                    for (const TRope& rope : Payload) {
-                        const size_t ropeSize = rope.GetSize();
-                        info.Sections.back().Size += SerializeNumber(ropeSize, temp);
-                        info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0, false}); // data as a separate section
-                    }
-#endif
-                }
-
-                const size_t byteSize = Max<ssize_t>(0, Record.ByteSize()) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
-
-#ifndef NDEBUG
-                size_t total = 0;
-                for (const auto& section : info.Sections) {
-                    total += section.Size;
-                }
-                size_t serialized = CalculateSerializedSize();
-                Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
-                    serialized, byteSize, Payload.size());
-#endif
-            }
-
-            return info;
-        }
-
-        bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TString& preserialized) const {
-            // serialize payload first
-            if (Payload) {
-                void *data;
-                int size = 0;
-                auto append = [&](const char *p, size_t len) {
-                    while (len) {
-                        if (size) {
-                            const size_t numBytesToCopy = std::min<size_t>(size, len);
-                            memcpy(data, p, numBytesToCopy);
-                            data = static_cast<char*>(data) + numBytesToCopy;
-                            size -= numBytesToCopy;
-                            p += numBytesToCopy;
-                            len -= numBytesToCopy;
-                        } else if (!chunker->Next(&data, &size)) {
-                            return false;
-                        }
-                    }
-                    return true;
-                };
-                auto appendNumber = [&](size_t number) {
-                    char buf[MaxNumberBytes];
-                    return append(buf, SerializeNumber(number, buf));
-                };
-
-#if USE_EXTENDED_PAYLOAD_FORMAT
-                char marker = ExtendedPayloadMarker;
-                append(&marker, 1);
-                if (!appendNumber(Payload.size())) {
-                    return false;
-                }
-                for (const TRope& rope : Payload) {
-                    if (!appendNumber(rope.GetSize())) {
-                        return false;
-                    }
-                }
-                if (size) {
-                    chunker->BackUp(std::exchange(size, 0));
-                }
-                for (const TRope& rope : Payload) {
-                    if (!chunker->WriteRope(&rope)) {
-                        return false;
-                    }
-                }
-#else
-                char marker = PayloadMarker;
-                append(&marker, 1);
-                if (!appendNumber(Payload.size())) {
-                    return false;
-                }
-                for (const TRope& rope : Payload) {
-                    if (!appendNumber(rope.GetSize())) {
-                        return false;
-                    }
-                    if (rope) {
-                        if (size) {
-                            chunker->BackUp(std::exchange(size, 0));
-                        }
-                        if (!chunker->WriteRope(&rope)) {
-                            return false;
-                        }
-                    }
-                }
-                if (size) {
-                    chunker->BackUp(size);
-                }
-#endif
-            }
-
-            if (preserialized && !chunker->WriteString(&preserialized)) {
-                return false;
-            }
-
-            return Record.SerializeToZeroCopyStream(chunker);
+        size_t GetTotalPayloadSize() const {
+            return TotalPayloadSize;
         }
 
     protected:
         mutable size_t CachedByteSize = 0;
-
-        static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
     };
 
     // Protobuf record not using arena
@@ -539,7 +421,15 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            return TBase::SerializeToArcadiaStreamImpl(chunker, PreSerializedData);
+            if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayloadFull())) 
+                return false;
+            
+            if (PreSerializedData && !chunker->WriteString(&PreSerializedData)) {
+                return false;
+            }
+
+            return Record.SerializeToZeroCopyStream(chunker);
+            
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -555,7 +445,7 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo() const override {
-            return TBase::CreateSerializationInfoImpl(PreSerializedData.size());
+            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayloadFull(), TBase::GetTotalPayloadSize(), Record.ByteSize());
         }
     };
 

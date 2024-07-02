@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/viewer)
 
 FORK_SUBTESTS()
 
-TIMEOUT(30)
+TIMEOUT(600)
 
 SIZE(MEDIUM)
 

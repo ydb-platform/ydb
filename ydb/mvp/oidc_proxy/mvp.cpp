@@ -228,6 +228,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
+    OpenIdConnectSettings.AuthRequest = oidc["auth_request"].as<std::string>("");
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -320,6 +321,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
+    }
+
+    if (!OpenIdConnectSettings.AuthRequest) {
+        OpenIdConnectSettings.AuthRequest = "/oauth/token";
     }
 
     if (mlock) {

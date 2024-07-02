@@ -15,11 +15,16 @@ struct TOpenIdConnectSettings {
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
+    TString AuthRequest;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
 
     TString GetAuthorizationString() const {
         return Base64Encode(CLIENT_ID + ":" + ClientSecret);
+    }
+
+    TString GetAuthRequestEndpoint(const TString& address = "") const {
+        return (address.empty() ? AuthorizationServerAddress : address) + AuthRequest;
     }
 };
 

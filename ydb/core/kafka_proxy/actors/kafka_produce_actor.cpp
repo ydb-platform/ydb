@@ -1,6 +1,5 @@
 #include "kafka_produce_actor.h"
-#include "../kafka_metrics.h"
-
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 

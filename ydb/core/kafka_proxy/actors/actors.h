@@ -7,7 +7,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
-#include "../kafka_messages.h"
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 
 namespace NKafka {
 

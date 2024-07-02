@@ -14,8 +14,8 @@
 #include <array>
 #include <span>
 
-// enable only when patch with this macro was successfully deployed
-#define USE_EXTENDED_PAYLOAD_FORMAT 0
+// Jul 2024: delete this macro after ~6 months
+#define USE_EXTENDED_PAYLOAD_FORMAT 1
 
 namespace NActorsProto {
     class TActorId;

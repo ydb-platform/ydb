@@ -317,7 +317,7 @@ public:
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
-                node.MaximumCPU.InitializeFrom(nodeRowset.GetValueOrDefault<Schema::Node::MaximumCPU>());
+                node.MaximumCPUUsage.InitializeFrom(nodeRowset.GetValueOrDefault<Schema::Node::MaximumCPUUsage>());
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();

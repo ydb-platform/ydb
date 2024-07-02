@@ -194,11 +194,11 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<9, NScheme::NTypeIds::String> { using Type = NActorsInterconnect::TNodeLocation; };
         struct Name : Column<10, NScheme::NTypeIds::String> {};
         struct BecomeUpOnRestart : Column<11, NScheme::NTypeIds::Bool> {};
-        struct MaximumCPU : Column<12, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
+        struct MaximumCPUUsage : Column<12, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueDouble; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain,
-                                      DrainInitiators, Location, Name, BecomeUpOnRestart, MaximumCPU>;
+                                      DrainInitiators, Location, Name, BecomeUpOnRestart, MaximumCPUUsage>;
     };
 
     struct TabletCategory : Table<6> {

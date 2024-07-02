@@ -491,9 +491,11 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
 
         TInstant now = TActivationContext::Now();
         if (totalResourceUsage.HasCPU()) {
-            MaximumCPU.SetValue(totalResourceUsage.GetCPU(), now);
+            auto maxCPU = std::get<NMetrics::EResource::CPU>(ResourceMaximumValues);
+            double cpuUsage = maxCPU > 0 ? totalResourceUsage.GetCPU() / static_cast<double>(maxCPU) : 0;
+            MaximumCPUUsage.SetValue(cpuUsage, now);
         } else {
-            MaximumCPU.AdvanceTime(now);
+            MaximumCPUUsage.AdvanceTime(now);
         }
     }
     if (metrics.HasTotalNodeUsage()) {

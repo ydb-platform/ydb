@@ -389,10 +389,10 @@ protected:
     TType MaximumValue = {};
 };
 
-class TMaximumValueVariableWindowUI64 : public NKikimrMetricsProto::TMaximumValueUI64 {
+template<typename TProto>
+class TMaximumValueVariableWindow : public TProto {
 public:
-    using TType = ui64;
-    using TProto = NKikimrMetricsProto::TMaximumValueUI64;
+    using TType = decltype(TProto::default_instance().GetValues(0));
 
     void SetValue(TType value, TInstant now = TInstant::Now()) {
         if (TProto::GetAllTimeMaximum() > 0 || MaximumValue > 0) { // ignoring initial value
@@ -469,6 +469,9 @@ protected:
     size_t BucketCount = 24;
     TDuration BucketDuration = TDuration::Hours(1);
 };
+
+using TMaximumValueVariableWindowUI64 = TMaximumValueVariableWindow<NKikimrMetricsProto::TMaximumValueUI64>;
+using TMaximumValueVariableWindowDouble = TMaximumValueVariableWindow<NKikimrMetricsProto::TMaximumValueDouble>;
 
 } // NMetrics
 } // NKikimr

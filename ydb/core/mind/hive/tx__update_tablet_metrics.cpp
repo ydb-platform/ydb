@@ -64,7 +64,7 @@ public:
                        << " accumulated to "
                        << node->ResourceTotalValues);
             db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Statistics>(node->Statistics);
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::MaximumCPU>(node->MaximumCPU);
+            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::MaximumCPUUsage>(node->MaximumCPUUsage);
         }
         return true;
     }

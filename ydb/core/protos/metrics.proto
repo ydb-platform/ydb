@@ -5,3 +5,9 @@ message TMaximumValueUI64 {
     repeated uint64 Values = 2;
     optional uint64 AllTimeMaximum = 3;
 }
+
+message TMaximumValueDouble {
+    optional uint64 LastBucketStartTime = 1;
+    repeated double Values = 2;
+    optional double AllTimeMaximum = 3;
+}

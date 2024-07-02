@@ -90,7 +90,7 @@ public:
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
     TString Name;
-    TMetricsMaximum MaximumCPU;
+    TMetricsMaximumUsage MaximumCPUUsage;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

@@ -357,7 +357,7 @@ public:
         out << "<thead>";
         out << "<tr><th>NodeId</th><th>Local</th><th>Domains</th><th>TabletsScheduled</th><th>TabletsRunning</th>"
                "<th>Values</th><th>Total</th><th>Total</th><th>Maximum</th><th>VolatileState</th><th>Location</th>"
-               "<th>LastAlive</th><th>Restarts</th><th>MaximumCPU</th>"
+               "<th>LastAlive</th><th>Restarts</th>"
             << "</tr>";
         out << "</thead>";
         out << "<tbody>";
@@ -382,7 +382,6 @@ public:
             out << "<td>" << GetLocationString(x.Location) << "</td>";
             out << "<td>" << TInstant::MilliSeconds(x.Statistics.GetLastAliveTimestamp()).ToStringUpToSeconds() << "</td>";
             out << "<td>" << x.Statistics.RestartTimestampSize() << "</td>";
-            out << "<td>" << x.MaximumCPU.ShortDebugString() << "</td>";
             out << "</tr>";
         }
         out << "</tbody>";

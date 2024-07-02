@@ -772,7 +772,7 @@ namespace NTable {
         using TCells = NPage::TCells;
         using TGroupId = NPage::TGroupId;
 
-        TPartIter(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env, bool ignoreMissingExternalBlobs = false)
+        TPartIter(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
             : Part(part)
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
@@ -781,7 +781,6 @@ namespace NTable {
             , SkipMainDeltas(0)
             , SkipMainVersion(false)
             , SkipEraseVersion(false)
-            , IgnoreMissingExternalBlobs(ignoreMissingExternalBlobs)
         {
             Groups.reserve(Pinout.AltGroups().size());
             GroupRemap.resize(Part->Scheme->Groups.size(), Max<ui32>());
@@ -1318,14 +1317,14 @@ namespace NTable {
                 } else {
                     Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
+                    row.AddMissingExternalBlobSize(Part->GetPageSize(op, ref));
+
+                    op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
+
                     /* Have to preserve reference to memory with TGlobId until
                         of next iterator alteration method invocation. This is
                         why here direct array of TGlobId is used.
                     */
-                    row.AddMissingExternalBlobSize(Part->GetPageSize(op, ref));
-
-                    op = TCellOp((blob.Need && !IgnoreMissingExternalBlobs) ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
-
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {
@@ -1373,21 +1372,18 @@ namespace NTable {
         ui32 SkipMainDeltas = 0;
         ui8 SkipMainVersion : 1;
         ui8 SkipEraseVersion : 1;
-
-        ui8 IgnoreMissingExternalBlobs : 1;
     };
 
     class TRunIter final {
     public:
         using TCells = NPage::TCells;
 
-        TRunIter(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env, bool ignoreMissingExternalBlobs)
+        TRunIter(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
             : Run(run)
             , Tags(tags)
             , KeyCellDefaults(std::move(keyDefaults))
             , Env(env)
             , Current(Run.end())
-            , IgnoreMissingExternalBlobs(ignoreMissingExternalBlobs)
         {
             Y_DEBUG_ABORT_UNLESS(!Run.empty(), "Cannot iterate over an empty run");
         }
@@ -1707,7 +1703,7 @@ namespace NTable {
                 CurrentIt = std::move(it->second);
                 Cache.erase(it);
             } else {
-                CurrentIt = MakeHolder<TPartIter>(part, Tags, KeyCellDefaults, Env, IgnoreMissingExternalBlobs);
+                CurrentIt = MakeHolder<TPartIter>(part, Tags, KeyCellDefaults, Env);
             }
             CurrentIt->SetBounds(Current->Slice);
         }
@@ -1760,7 +1756,6 @@ namespace NTable {
         TRun::const_iterator Current;
         THolder<TPartIter> CurrentIt;
         THashMap<const TPart*, THolder<TPartIter>> Cache;
-        bool IgnoreMissingExternalBlobs;
     };
 
 }

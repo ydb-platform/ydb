@@ -139,13 +139,11 @@ public:
     TAutoPtr<TTableIter> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr,
-            bool ignoreMissingExternalBlobs = false) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
     TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr,
-            bool ignoreMissingExternalBlobs = false) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
     EReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
                   ui64 flg, TRowVersion snapshot, TDeque<TPartIter>& tempIterators,
                   TSelectStats& stats,

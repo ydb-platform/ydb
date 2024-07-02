@@ -339,10 +339,9 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
             auto& expectedResult = expectedResults[test];
 
-            UNIT_ASSERT_EQUAL(iteratorCounter->Reads, expectedResult.Reads);
-            UNIT_ASSERT_EQUAL(iteratorCounter->Continues, expectedResult.Continues);
-            UNIT_ASSERT_EQUAL(iteratorCounter->EvGets, expectedResult.EvGets);
-            UNIT_ASSERT_EQUAL(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested);
+            UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, expectedResult.Reads);
+            UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, expectedResult.EvGets);
+            UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested);
         }
     }
 

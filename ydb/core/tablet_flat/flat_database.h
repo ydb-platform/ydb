@@ -104,13 +104,11 @@ public:
     TAutoPtr<TTableIter> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr,
-            bool ignoreMissingExternalBlobs = false) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
     TAutoPtr<TTableReverseIter> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr,
-            bool ignoreMissingExternalBlobs = false) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     template<class TIteratorType>
     TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags,

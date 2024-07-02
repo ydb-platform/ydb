@@ -389,7 +389,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv, false));
+                        MakeHolder<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }

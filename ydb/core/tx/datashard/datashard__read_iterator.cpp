@@ -376,11 +376,13 @@ public:
 
         EReadStatus result;
 
+        txc.Env.EnableReadMissingReferences();
+
         if (!reverse) {
-            auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver(), true);
+            auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
             result = IterateRange(iter.Get(), ctx);
         } else {
-            auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver(), true);
+            auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
             result = IterateRange(iter.Get(), ctx);
         }
 
@@ -851,7 +853,6 @@ private:
         ui64 prechargedSize = 0;
 
         TString lastKey;
-        NTable::ERowOp lastKeyState;
 
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             advanced = true;
@@ -861,12 +862,9 @@ private:
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            if (!hasMissingExternalBlobs) {
-                if (iter->Row().MissingExternalBlobsSize() != 0) {
-                    lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
-                    lastKeyState = iter->GetKeyState();
-                    hasMissingExternalBlobs = true;
-                }
+            if (!hasMissingExternalBlobs && iter->Row().MissingExternalBlobsSize()) {
+                lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                hasMissingExternalBlobs = true;
             }
 
             if (hasMissingExternalBlobs) {
@@ -905,7 +903,6 @@ private:
 
         if (!lastKey) {
             lastKey = TSerializedCellVec::Serialize(iter->GetKey().Cells());
-            lastKeyState = iter->GetKeyState();
         }
 
         // Note: when stopping due to page faults after an erased row we will
@@ -918,7 +915,7 @@ private:
         // we will not update stats and will not update RowsProcessed.
         if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && (iter->Last() == NTable::EReady::Page || hasMissingExternalBlobs)) {
             LastProcessedKey = lastKey;
-            LastProcessedKeyErasedOrMissing = lastKeyState == NTable::ERowOp::Erase || hasMissingExternalBlobs;
+            LastProcessedKeyErasedOrMissing = iter->GetKeyState() == NTable::ERowOp::Erase || hasMissingExternalBlobs;
             advanced = true;
         } else {
             LastProcessedKey.clear();

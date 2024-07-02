@@ -68,11 +68,11 @@ struct TTableBucket {
 
     std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
-    KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
  };
 
  struct TTableBucketStats {
+    KeysHashTable AnyHashTable;      // Hash table to process join only for unique keys (any join attribute)
     ui64 TuplesNum = 0;             // Total number of tuples in bucket
     ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
     ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.

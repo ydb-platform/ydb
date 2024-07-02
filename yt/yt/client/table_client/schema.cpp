@@ -749,7 +749,7 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGCompatarorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable() const
 {
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {

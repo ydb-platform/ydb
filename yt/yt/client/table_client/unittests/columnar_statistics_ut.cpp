@@ -22,46 +22,6 @@ std::vector<TUnversionedRow> CaptureRows(TRowBufferPtr rowBuffer, const std::vec
     return result;
 }
 
-void UpdateValueHll(TUnversionedValue value, std::vector<TColumnarHyperLogLogDigest>* hll)
-{
-    if (value.Type == EValueType::Null) {
-        return;
-    }
-    auto fingerprint = TBitwiseUnversionedValueHash()(value);
-    hll->at(value.Id).Add(fingerprint);
-}
-
-std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TUnversionedRow>& rows) {
-    std::vector<TColumnarHyperLogLogDigest> result;
-    if (rows.empty()) {
-        return result;
-    }
-    result.resize(rows[0].GetCount());
-    for (const auto& row : rows) {
-        for (auto value : row) {
-            UpdateValueHll(value, &result);
-        }
-    }
-    return result;
-}
-
-std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TVersionedRow>& rows) {
-    std::vector<TColumnarHyperLogLogDigest> result;
-    if (rows.empty()) {
-        return result;
-    }
-    result.resize(rows[0].GetKeyCount() + rows[0].GetValueCount());
-    for (const auto& row : rows) {
-        for (auto value : row.Keys()) {
-            UpdateValueHll(value, &result);
-        }
-        for (auto value : row.Values()) {
-            UpdateValueHll(value, &result);
-        }
-    }
-    return result;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TUpdateColumnarStatisticsTest, EmptyStruct)
@@ -103,7 +63,6 @@ TEST(TUpdateColumnarStatisticsTest, EmptyStruct)
         .ColumnNonNullValueCounts = {2, 3, 3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -127,7 +86,6 @@ TEST(TUpdateColumnarStatisticsTest, InitializedStruct)
         .ColumnNonNullValueCounts = {5, 10, 50, 3},
         .ChunkRowCount = 50,
         .LegacyChunkRowCount = 3,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}}
     };
 
     auto rowBuffer = New<TRowBuffer>();
@@ -165,7 +123,6 @@ TEST(TUpdateColumnarStatisticsTest, InitializedStruct)
         .ColumnNonNullValueCounts = {7, 12, 52, 5},
         .ChunkRowCount = 52,
         .LegacyChunkRowCount = 3,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -199,7 +156,6 @@ TEST(TUpdateColumnarStatisticsTest, DefaultStruct)
         .ColumnNonNullValueCounts = {1, 1, 1},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -233,273 +189,8 @@ TEST(TUpdateColumnarStatisticsTest, StructSizeLessThanRowSize)
         .ColumnNonNullValueCounts = {1, 1, 1},
         .ChunkRowCount = 1,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
-}
-
-TEST(TUpdateColumnarStatisticsTest, ResizeNoHll)
-{
-    TColumnarStatistics original{
-        .ColumnDataWeights = {8, 4, 8},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-        },
-        .ColumnNonNullValueCounts = {1, 1, 1},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-    };
-
-    auto statistics = original;
-    statistics.Resize(4, true /* keep value statistics and hll */);
-
-    TColumnarStatistics expected{
-        .ColumnDataWeights = {8, 4, 8, 0},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnNonNullValueCounts = {1, 1, 1, 0},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-    };
-
-    EXPECT_TRUE(statistics.HasValueStatistics());
-    EXPECT_FALSE(statistics.HasHyperLogLogDigests());
-    EXPECT_TRUE(statistics.ColumnHyperLogLogDigests.empty());
-    EXPECT_EQ(statistics, expected);
-
-    // Clears out min/max/not null counts.
-    statistics.Resize(4, false /* keep value statistics */);
-
-    TColumnarStatistics expectedClear{
-        .ColumnDataWeights = {8, 4, 8, 0},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-    };
-    EXPECT_EQ(statistics, expectedClear);
-}
-
-TEST(TUpdateColumnarStatisticsTest, ResizeHll)
-{
-    auto rowBuffer = New<TRowBuffer>();
-    auto rows = CaptureRows(rowBuffer, {
-        {
-            MakeUnversionedInt64Value(12, 0),
-            MakeUnversionedStringValue("buzz", 1),
-            MakeUnversionedDoubleValue(1e70, 2),
-        },
-    });
-
-    auto statistics = TColumnarStatistics::MakeEmpty(1);
-    statistics.Update(rows);
-
-    auto expectedHll = ComputeHll(rows);
-    expectedHll.push_back({});
-    TColumnarStatistics expected{
-        .ColumnDataWeights = {8, 4, 8, 0},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnNonNullValueCounts = {1, 1, 1, 0},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = expectedHll
-    };
-
-    statistics.Resize(4, true /* keep value statistics and hll */);
-    EXPECT_EQ(statistics, expected);
-
-    statistics.Resize(4, true /* keep value statistics */, false /* keep hll */);
-    TColumnarStatistics expectedNoHll{
-        .ColumnDataWeights = {8, 4, 8, 0},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(1e70),
-            MakeUnversionedNullValue()
-        },
-        .ColumnNonNullValueCounts = {1, 1, 1, 0},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = {}
-    };
-    EXPECT_EQ(statistics, expectedNoHll);
-
-    statistics.Resize(4, false /* keep value statistics/hll */);
-
-    TColumnarStatistics expectedClear{
-        .ColumnDataWeights = {8, 4, 8, 0},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-    };
-    EXPECT_EQ(statistics, expectedClear);
-}
-
-TEST(TUpdateColumnarStatisticsTest, CombineHllAndNoHll)
-{
-    auto rowBuffer = New<TRowBuffer>();
-    auto rows1 = CaptureRows(rowBuffer, {
-        {
-            MakeUnversionedInt64Value(12, 0),
-            MakeUnversionedStringValue("buzz", 1),
-            MakeUnversionedDoubleValue(1e70, 2),
-        },
-        {
-            MakeUnversionedInt64Value(-7338, 0),
-            MakeUnversionedStringValue("foo", 1),
-            MakeUnversionedDoubleValue(-0.16, 2),
-        },
-    });
-
-    auto statistics1 = TColumnarStatistics::MakeEmpty(3);
-    statistics1.Update(rows1);
-    auto expectedHll1 = ComputeHll(rows1);
-
-    TColumnarStatistics expected1{
-        .ColumnDataWeights = {16, 7, 16},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(-7338),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(-0.16),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("foo"),
-            MakeUnversionedDoubleValue(1e70),
-        },
-        .ColumnNonNullValueCounts = {2, 2, 2},
-        .ChunkRowCount = 2,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = expectedHll1
-    };
-
-    EXPECT_EQ(statistics1, expected1);
-
-    auto rows2 = CaptureRows(rowBuffer, {
-        {
-            MakeUnversionedNullValue(0),
-            MakeUnversionedStringValue("chyt", 1),
-            MakeUnversionedDoubleValue(-15.0, 2),
-        },
-    });
-
-    auto statistics2 = TColumnarStatistics::MakeEmpty(3, true /* keep value statistics */, false /* keep hll */);
-    EXPECT_TRUE(statistics2.HasValueStatistics());
-    EXPECT_FALSE(statistics2.HasHyperLogLogDigests());
-    statistics2.Update(rows2);
-
-    TColumnarStatistics expected2{
-        .ColumnDataWeights = {0, 4, 8},
-        .ColumnMinValues = {
-            MakeUnversionedNullValue(),
-            MakeUnversionedStringValue("chyt"),
-            MakeUnversionedDoubleValue(-15.0),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedNullValue(),
-            MakeUnversionedStringValue("chyt"),
-            MakeUnversionedDoubleValue(-15.0),
-        },
-        .ColumnNonNullValueCounts = {0, 1, 1},
-        .ChunkRowCount = 1,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = {}
-    };
-
-    EXPECT_EQ(statistics2, expected2);
-
-    auto statistics3 = statistics1;
-    statistics3 += statistics2;
-
-    // statistics2 does not have hyperloglog, hence it does not change going statistics1
-    // to statistics3.
-    TColumnarStatistics expected3{
-        .ColumnDataWeights = {16, 11, 24},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(-7338),
-            MakeUnversionedStringValue("buzz"),
-            MakeUnversionedDoubleValue(-15.0),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(12),
-            MakeUnversionedStringValue("foo"),
-            MakeUnversionedDoubleValue(1e70),
-        },
-        .ColumnNonNullValueCounts = {2, 3, 3},
-        .ChunkRowCount = 3,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = {},
-    };
-
-    EXPECT_EQ(statistics3, expected3);
-
-    auto rows4 = CaptureRows(rowBuffer, {
-        {
-            MakeUnversionedInt64Value(200),
-            MakeUnversionedStringValue("booboo", 1),
-            MakeUnversionedDoubleValue(-std::numeric_limits<double>::infinity(), 2),
-        },
-    });
-    statistics2.Update(rows4);
-
-    auto statistics4 = statistics1;
-    statistics4.Update(rows4);
-    std::vector<TUnversionedRow> rowsCombined(rows1);
-    std::copy(rows4.begin(), rows4.end(), std::back_inserter(rowsCombined));
-    auto expectedHll4 = ComputeHll(rowsCombined);
-
-    // statistics1 includes column hyperloglog, and updating it with more rows changes
-    // hyperloglog values.
-    TColumnarStatistics expected4{
-        .ColumnDataWeights = {24, 13, 24},
-        .ColumnMinValues = {
-            MakeUnversionedInt64Value(-7338),
-            MakeUnversionedStringValue("booboo"),
-            MakeUnversionedDoubleValue(-std::numeric_limits<double>::infinity()),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedInt64Value(200),
-            MakeUnversionedStringValue("foo"),
-            MakeUnversionedDoubleValue(1e70),
-        },
-        .ColumnNonNullValueCounts = {3, 3, 3},
-        .ChunkRowCount = 3,
-        .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = expectedHll4
-    };
-
-    EXPECT_EQ(statistics4, expected4);
 }
 
 TEST(TUpdateColumnarStatisticsTest, NoValueStatistics)
@@ -612,7 +303,6 @@ TEST(TUpdateColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnNonNullValueCounts = {3},
         .ChunkRowCount = 3,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -653,7 +343,6 @@ TEST(TUpdateColumnarStatisticsTest, VersionedRow)
         .ColumnNonNullValueCounts = {2, 3, 2},
         .ChunkRowCount = 2,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = ComputeHll(rows)
     };
     EXPECT_EQ(statistics, expected);
 }
@@ -680,7 +369,6 @@ TEST(TMergeColumnarStatisticsTest, EmptyAndNonEmpty)
         .ColumnNonNullValueCounts = {5, 10, 50, 3},
         .ChunkRowCount = 50,
         .LegacyChunkRowCount = 5,
-        .ColumnHyperLogLogDigests = {{},{},{},{}}
     };
     lhs += rhs;
     EXPECT_EQ(lhs, rhs);
@@ -705,7 +393,6 @@ TEST(TMergeColumnarStatisticsTest, NonEmptyAndEmpty)
         .ColumnNonNullValueCounts = {5, 10, 50, 3},
         .ChunkRowCount = 50,
         .LegacyChunkRowCount = 5,
-        .ColumnHyperLogLogDigests = {{},{},{},{}}
     };
     auto rhs = TColumnarStatistics::MakeEmpty(4);
     auto oldLhs = lhs;
@@ -738,7 +425,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .ColumnNonNullValueCounts = {8, 5, 10, 8, 3, 9, 0},
         .ChunkRowCount = 10,
         .LegacyChunkRowCount = 2,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}, {}, {}, {}}
     };
 
     TColumnarStatistics rhs{
@@ -764,7 +450,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .ColumnNonNullValueCounts = {12, 7, 10, 10, 2, 8, 0},
         .ChunkRowCount = 12,
         .LegacyChunkRowCount = 3,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}, {}, {}, {}}
     };
 
     lhs += rhs;
@@ -792,7 +477,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypes)
         .ColumnNonNullValueCounts = {20, 12, 20, 18, 5, 17, 0},
         .ChunkRowCount = 22,
         .LegacyChunkRowCount = 5,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}, {}, {}, {}}
     };
     EXPECT_EQ(lhs, expected);
 }
@@ -805,7 +489,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnMaxValues = {MakeUnversionedBooleanValue(false)},
         .ColumnNonNullValueCounts = {20},
         .ChunkRowCount = 20,
-        .ColumnHyperLogLogDigests = {{}},
     };
 
     TColumnarStatistics rhs{
@@ -814,7 +497,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnMaxValues = {MakeUnversionedStringValue("pick")},
         .ColumnNonNullValueCounts = {13},
         .ChunkRowCount = 13,
-        .ColumnHyperLogLogDigests = {{}},
     };
 
     lhs += rhs;
@@ -826,7 +508,6 @@ TEST(TMergeColumnarStatisticsTest, DifferentTypesInOneColumn)
         .ColumnNonNullValueCounts = {33},
         .ChunkRowCount = 33,
         .LegacyChunkRowCount = 0,
-        .ColumnHyperLogLogDigests = {{}},
     };
     EXPECT_EQ(lhs, expected);
 }
@@ -909,7 +590,6 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .ColumnNonNullValueCounts = {8, 5, 10, 8, 3, 9, 0},
         .ChunkRowCount = 10,
         .LegacyChunkRowCount = 2,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}, {}, {}, {}}
     };
     auto nameTable = TNameTable::FromKeyColumns({"buzz", "off", "taken", "sec", "list", "size", "friend"});
     std::vector<TColumnStableName> stableNames = {
@@ -944,41 +624,8 @@ TEST(TColumnarStatisticsColumnSelectionTest, ColumnSelect)
         .ColumnNonNullValueCounts = {0, 10, 8, 0, 3, 0},
         .ChunkRowCount = 10,
         .LegacyChunkRowCount = 2,
-        .ColumnHyperLogLogDigests = {{}, {}, {}, {}, {}, {}}
     };
     EXPECT_EQ(selectedStatistics, expected);
-
-    auto statisticsNoHll = statistics;
-    statisticsNoHll.ColumnHyperLogLogDigests.clear();
-    EXPECT_TRUE(statisticsNoHll.HasValueStatistics());
-    EXPECT_FALSE(statisticsNoHll.HasHyperLogLogDigests());
-
-    auto selectedStatisticsNoHll = statisticsNoHll.SelectByColumnNames(nameTable, stableNames);
-
-    TColumnarStatistics expectedNoHll{
-        .ColumnDataWeights = {0, 10, 64, 0, 100, 0},
-        .ColumnMinValues = {
-            MakeUnversionedNullValue(),
-            MakeUnversionedBooleanValue(true),
-            MakeUnversionedInt64Value(-10),
-            MakeUnversionedNullValue(),
-            MakeUnversionedSentinelValue(EValueType::Min),
-            MakeUnversionedNullValue(),
-        },
-        .ColumnMaxValues = {
-            MakeUnversionedNullValue(),
-            MakeUnversionedBooleanValue(true),
-            MakeUnversionedInt64Value(20),
-            MakeUnversionedNullValue(),
-            MakeUnversionedSentinelValue(EValueType::Max),
-            MakeUnversionedNullValue(),
-        },
-        .ColumnNonNullValueCounts = {0, 10, 8, 0, 3, 0},
-        .ChunkRowCount = 10,
-        .LegacyChunkRowCount = 2,
-        .ColumnHyperLogLogDigests = {}
-    };
-    EXPECT_EQ(selectedStatisticsNoHll, expectedNoHll);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

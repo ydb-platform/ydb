@@ -2,7 +2,6 @@ package NYT.NTableClient.NProto;
 
 import "yt_proto/yt/client/table_chunk_format/proto/column_meta.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
-import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -264,10 +263,6 @@ message TColumnarStatisticsExt
 
     // Total number of rows in a chunk.
     optional int64 chunk_row_count = 7;
-
-    // Per-column hyperloglog digest to approximate number of unique values
-    repeated NYT.NProto.THyperLogLog column_hyperloglog_digests = 9;
-
     // This field is reserved for consistency with TColumnarStatistics message. It has never been used.
     reserved 8;
 }

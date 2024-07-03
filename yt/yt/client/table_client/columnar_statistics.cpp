@@ -94,17 +94,6 @@ void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows
         return;
     }
 
-    if (statistics.HasHyperLogLogDigests()) {
-        for (const auto& values : rows) {
-            for (const auto& value : values) {
-                if (value.Type != EValueType::Null) {
-                    auto fingerprint = TBitwiseUnversionedValueHash()(value);
-                    statistics.ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
-                }
-            }
-        }
-    }
-
     // Vectors for precalculation of minimum and maximum values from rows that we are adding.
     std::vector<TUnversionedValue> minValues(maxId + 1, NullUnversionedValue);
     std::vector<TUnversionedValue> maxValues(maxId + 1, NullUnversionedValue);
@@ -180,7 +169,6 @@ TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& 
     if (!other.HasValueStatistics()) {
         ClearValueStatistics();
     } else if (HasValueStatistics()) {
-        bool mergeHyperLogLog = HasHyperLogLogDigests() && other.HasHyperLogLogDigests();
         for (int index = 0; index < GetColumnCount(); ++index) {
 
             if (other.ColumnMinValues[index] != NullUnversionedValue &&
@@ -195,23 +183,16 @@ TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& 
                 ColumnMaxValues[index] = other.ColumnMaxValues[index];
             }
 
-            if (mergeHyperLogLog) {
-                ColumnHyperLogLogDigests[index].Merge(other.ColumnHyperLogLogDigests[index]);
-            } else {
-                ColumnHyperLogLogDigests.clear();
-            }
-
             ColumnNonNullValueCounts[index] += other.ColumnNonNullValueCounts[index];
         }
     }
-
     return *this;
 }
 
-TColumnarStatistics TColumnarStatistics::MakeEmpty(int columnCount, bool hasValueStatistics, bool hasHyperLogLogDigests)
+TColumnarStatistics TColumnarStatistics::MakeEmpty(int columnCount, bool hasValueStatistics)
 {
     TColumnarStatistics result;
-    result.Resize(columnCount, hasValueStatistics, hasHyperLogLogDigests);
+    result.Resize(columnCount, hasValueStatistics);
     return result;
 }
 
@@ -253,18 +234,11 @@ bool TColumnarStatistics::HasValueStatistics() const
     return GetColumnCount() == 0 || !ColumnMinValues.empty();
 }
 
-bool TColumnarStatistics::HasHyperLogLogDigests() const
-{
-    return GetColumnCount() == 0 || !ColumnHyperLogLogDigests.empty();
-}
-
-
 void TColumnarStatistics::ClearValueStatistics()
 {
     ColumnMinValues.clear();
     ColumnMaxValues.clear();
     ColumnNonNullValueCounts.clear();
-    ColumnHyperLogLogDigests.clear();
 }
 
 int TColumnarStatistics::GetColumnCount() const
@@ -272,10 +246,9 @@ int TColumnarStatistics::GetColumnCount() const
     return ColumnDataWeights.size();
 }
 
-void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics, bool keepHyperLogLogDigests)
+void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics)
 {
     keepValueStatistics &= HasValueStatistics();
-    keepHyperLogLogDigests &= (keepValueStatistics && HasHyperLogLogDigests());
 
     ColumnDataWeights.resize(columnCount, 0);
 
@@ -283,12 +256,6 @@ void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics, bool
         ColumnMinValues.resize(columnCount, NullUnversionedValue);
         ColumnMaxValues.resize(columnCount, NullUnversionedValue);
         ColumnNonNullValueCounts.resize(columnCount, 0);
-
-        if (keepHyperLogLogDigests) {
-            ColumnHyperLogLogDigests.resize(columnCount);
-        } else {
-            ColumnHyperLogLogDigests.clear();
-        }
     } else {
         ClearValueStatistics();
     }
@@ -331,7 +298,7 @@ void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
 
 TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr& nameTable, const std::vector<TColumnStableName>& columnStableNames) const
 {
-    auto result = MakeEmpty(columnStableNames.size(), HasValueStatistics(), HasHyperLogLogDigests());
+    auto result = MakeEmpty(columnStableNames.size(), HasValueStatistics());
 
     for (const auto& [columnIndex, columnName] : Enumerate(columnStableNames)) {
         if (auto id = nameTable->FindId(columnName.Underlying()); id && *id < GetColumnCount()) {
@@ -341,10 +308,6 @@ TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr
                 result.ColumnMinValues[columnIndex] = ColumnMinValues[*id];
                 result.ColumnMaxValues[columnIndex] = ColumnMaxValues[*id];
                 result.ColumnNonNullValueCounts[columnIndex] = ColumnNonNullValueCounts[*id];
-
-                if (HasHyperLogLogDigests()) {
-                    result.ColumnHyperLogLogDigests[columnIndex] = ColumnHyperLogLogDigests[*id];
-                }
             }
         }
     }

@@ -78,9 +78,11 @@ struct TInputSpecTraits<TArrowInputSpec> {
 
     static const constexpr bool SupportPullListMode = true;
     static const constexpr bool SupportPullStreamMode = true;
+    static const constexpr bool SupportPushStreamMode = true;
 
     using TInputItemType = arrow::compute::ExecBatch*;
     using IInputStream = IStream<TInputItemType>;
+    using TConsumerType = THolder<IConsumer<TInputItemType>>;
 
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
         IInputStream*);
@@ -91,6 +93,8 @@ struct TInputSpecTraits<TArrowInputSpec> {
         IInputStream*);
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
         THolder<IInputStream>);
+
+    static TConsumerType MakeConsumer(const TArrowInputSpec&, TWorkerHolder<IPushStreamWorker>);
 };
 
 template <>
@@ -99,6 +103,7 @@ struct TOutputSpecTraits<TArrowOutputSpec> {
 
     static const constexpr bool SupportPullListMode = true;
     static const constexpr bool SupportPullStreamMode = true;
+    static const constexpr bool SupportPushStreamMode = true;
 
     using TOutputItemType = arrow::compute::ExecBatch*;
     using IOutputStream = IStream<TOutputItemType>;
@@ -109,6 +114,7 @@ struct TOutputSpecTraits<TArrowOutputSpec> {
 
     static TPullListReturnType ConvertPullListWorkerToOutputType(const TArrowOutputSpec&, TWorkerHolder<IPullListWorker>);
     static TPullStreamReturnType ConvertPullStreamWorkerToOutputType(const TArrowOutputSpec&, TWorkerHolder<IPullStreamWorker>);
+    static void SetConsumerToWorker(const TArrowOutputSpec&, IPushStreamWorker*, THolder<IConsumer<TOutputItemType>>);
 };
 
 } // namespace NPureCalc

@@ -14,6 +14,7 @@ using InputItemType = typename TInputSpecTraits<TArrowInputSpec>::TInputItemType
 using OutputItemType = typename TOutputSpecTraits<TArrowOutputSpec>::TOutputItemType;
 using PullListReturnType = typename TOutputSpecTraits<TArrowOutputSpec>::TPullListReturnType;
 using PullStreamReturnType = typename TOutputSpecTraits<TArrowOutputSpec>::TPullStreamReturnType;
+using ConsumerType = typename TInputSpecTraits<TArrowInputSpec>::TConsumerType;
 
 namespace {
 
@@ -258,6 +259,85 @@ public:
     }
 };
 
+
+/**
+ * Consumer which converts Datums to unboxed values and relays them to the
+ * worker. Used as a return value of the push processor's Process function.
+ */
+class TArrowConsumerImpl final: public IConsumer<arrow::compute::ExecBatch*> {
+private:
+    TWorkerHolder<IPushStreamWorker> WorkerHolder_;
+    TArrowInputConverter Converter_;
+
+public:
+    explicit TArrowConsumerImpl(
+        const TArrowInputSpec& inputSpec,
+        TWorkerHolder<IPushStreamWorker> worker
+    )
+        : WorkerHolder_(std::move(worker))
+        , Converter_(inputSpec, WorkerHolder_.Get())
+    {
+    }
+
+    void OnObject(arrow::compute::ExecBatch* batch) override {
+        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
+
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            TUnboxedValue result;
+            Converter_.DoConvert(batch, result);
+            WorkerHolder_->Push(std::move(result));
+        }
+    }
+
+    void OnFinish() override {
+        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
+
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            WorkerHolder_->OnFinish();
+        }
+    }
+};
+
+
+/**
+ * Push relay used to convert generated unboxed value to a Datum and push it to
+ * the user's consumer.
+ */
+class TArrowPushRelayImpl: public IConsumer<const TUnboxedValue*> {
+private:
+    THolder<IConsumer<OutputItemType>> Underlying_;
+    IWorker* Worker_;
+    TArrowOutputConverter Converter_;
+
+public:
+    TArrowPushRelayImpl(
+        const TArrowOutputSpec& outputSpec,
+        IPushStreamWorker* worker,
+        THolder<IConsumer<OutputItemType>> underlying
+    )
+        : Underlying_(std::move(underlying))
+        , Worker_(worker)
+        , Converter_(outputSpec, Worker_)
+    {
+    }
+
+    // XXX: If you've read a comment in the TArrowListValue's destructor, you
+    // may be wondering why don't we do the same trick here. Well, that's
+    // because in push mode, consumer is destroyed before acquiring scoped alloc
+    // and destroying computation graph.
+
+    void OnObject(const TUnboxedValue* value) override {
+        OutputItemType message = Converter_.DoConvert(*value);
+        auto unguard = Unguard(Worker_->GetScopedAlloc());
+        Underlying_->OnObject(message);
+    }
+
+    void OnFinish() override {
+        auto unguard = Unguard(Worker_->GetScopedAlloc());
+        Underlying_->OnFinish();
+    }
+};
+
 } // namespace
 
 
@@ -313,6 +393,13 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
 }
 
 
+ConsumerType TInputSpecTraits<TArrowInputSpec>::MakeConsumer(
+    const TArrowInputSpec& inputSpec, TWorkerHolder<IPushStreamWorker> worker
+) {
+    return MakeHolder<TArrowConsumerImpl>(inputSpec, std::move(worker));
+}
+
+
 TArrowOutputSpec::TArrowOutputSpec(const NYT::TNode& schema)
     : Schema_(schema)
 {
@@ -333,4 +420,11 @@ PullStreamReturnType TOutputSpecTraits<TArrowOutputSpec>::ConvertPullStreamWorke
     const TArrowOutputSpec& outputSpec, TWorkerHolder<IPullStreamWorker> worker
 ) {
     return MakeHolder<TArrowStreamImpl>(outputSpec, std::move(worker));
+}
+
+void TOutputSpecTraits<TArrowOutputSpec>::SetConsumerToWorker(
+    const TArrowOutputSpec& outputSpec, IPushStreamWorker* worker,
+    THolder<IConsumer<TOutputItemType>> consumer
+) {
+    worker->SetConsumer(MakeHolder<TArrowPushRelayImpl>(outputSpec, worker, std::move(consumer)));
 }

@@ -116,7 +116,8 @@ public:
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings() const;
     NYdb::NTopic::IReadSession& GetReadSession();
     void SubscribeOnNextEvent();
-    void SendData();
+    void ParseData();
+    void SendData(const TVector<TString>& values);
     void CloseSession();
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
@@ -181,6 +182,7 @@ TTopicSession::TTopicSession(
         for (auto v : values) {
             LOG_ROW_DISPATCHER_DEBUG("parser " << v);
         }
+        SendData(values);
         })
 {
    // Alloc.DisableStrictAllocationCheck();
@@ -259,7 +261,7 @@ void TTopicSession::Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvPqEventsReady");
     HandleNewEvents();
     SubscribeOnNextEvent();
-    SendData();
+    ParseData();
 }
 
 void TTopicSession::HandleNewEvents() {
@@ -448,12 +450,28 @@ TString TTopicSession::GetSessionId() const {
     return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
 }
 
-void TTopicSession::SendData() {
-    LOG_ROW_DISPATCHER_DEBUG("SendData: " );
+void TTopicSession::ParseData() {
+    LOG_ROW_DISPATCHER_DEBUG("ParseData: " );
     if (ReadyBuffer.empty()) {
         return;
     }
     auto& readyBatch = ReadyBuffer.front();
+    for (const auto& value : readyBatch.Data) {
+        Parser.Push(value);
+    }
+    ReadyBuffer.pop();
+}
+
+
+void TTopicSession::SendData(const TVector<TString>& values) {
+    LOG_ROW_DISPATCHER_DEBUG("SendData: " );
+    
+    NFq::NRowDispatcherProto::TEvJson json;
+    TStringStream str;
+    for (const auto& v : values) {
+        str << v << " ";
+        json.AddValue(v);
+    }
 
     for (auto& [actorId, info] : Consumers) {
      //   LOG_ROW_DISPATCHER_DEBUG("Consumers.LastSendedMessage " << info.LastSendedMessage);
@@ -462,21 +480,17 @@ void TTopicSession::SendData() {
         event->Record.SetPartitionId(PartitionId);
        // ui64 offset = readyBatch.FirstOffset;
     
-        for (const auto& value : readyBatch.Data) {
-            Parser.Push(value);
-            event->Record.AddBlob(value);
-        }
-        event->Record.SetLastOffset(readyBatch.LastOffset);
+        event->Record.AddJson()->CopyFrom(json);
+        
+        //event->Record.SetLastOffset(readyBatch.LastOffset);
 
-        LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId << " size " <<  event->Record.BlobSize());
+        LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
 
         
         //info.LastSendedMessage = offset;
         Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
-    ReadyBuffer.pop();
 }
-
 
 void TTopicSession::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);

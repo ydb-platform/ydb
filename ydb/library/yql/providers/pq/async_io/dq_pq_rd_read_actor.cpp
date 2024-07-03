@@ -508,11 +508,17 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
 
     auto& sessionInfo = Sessions[partitionId];
-    SRC_LOG_D("TEvSessionData, size " << ev->Get()->Record.BlobSize());
+   // SRC_LOG_D("TEvSessionData, size " << ev->Get()->Record.BlobSize());
     SRC_LOG_D("TEvSessionData, last offset " << ev->Get()->Record.GetLastOffset());
-    for (const auto& blob : ev->Get()->Record.GetBlob()) {
-        SRC_LOG_D("data: " << blob);
-        sessionInfo.Data.emplace_back(blob);
+    for (const auto& json : ev->Get()->Record.GetJson()) {
+
+        TStringStream str;
+        for (const auto& value : json.GetValue()) {
+            SRC_LOG_D("value: " << value);
+            str << value << " ";
+        }
+
+        sessionInfo.Data.emplace_back(str.Str());
         //sessionInfo.Data.push_back(blob);
     }
     sessionInfo.LastOffset = ev->Get()->Record.GetLastOffset();

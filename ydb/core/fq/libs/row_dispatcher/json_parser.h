@@ -106,10 +106,9 @@ public:
     {}
 
     void OnObject(NYT::TNode* parsedRecord) override {
-        std::cerr << "  OnObjectOnObjectOnObjectOnObject" <<  std::endl;
         TVector<TString> result;
         for (const auto& field : parsedRecord->AsMap()) {
-            std::cerr << "  out: " << field.first << ": " << field.second.AsString() << std::endl;
+            result.push_back(field.second.AsString());
         }
         Callback(result);
     }

@@ -35,8 +35,12 @@ message TEvStopSession {
     uint32 PartitionId = 2;
 }
 
+message TEvJson {
+    repeated string Value = 1;
+}
+
 message TEvSessionData {
-    repeated string Blob = 1;
+    repeated TEvJson Json = 1;
     uint32 PartitionId = 2;
     uint64 LastOffset = 3;
 }

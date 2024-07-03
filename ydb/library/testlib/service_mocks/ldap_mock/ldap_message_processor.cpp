@@ -299,6 +299,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     elementType = GetByte();
     if (elementType != EElementType::SEQUENCE) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "+++ type is not sequence" << Endl;
         return {responseOpData};
     }
     length = GetLength();
@@ -307,6 +308,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
             responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "+++ Cannot get attributes" << Endl;
             return {responseOpData};
         }
         requestInfo.Attributes.push_back(GetString());
@@ -386,7 +388,7 @@ TSearchRequestInfo::TSearchFilter TLdapRequestProcessor::ProcessFilter() {
         }
         case EFilterType::LDAP_FILTER_EXT: {
             filter.Type = EFilterType::LDAP_FILTER_EXT;
-            ProcessFilterExtensibleMatch(&filter);
+            ProcessFilterExtensibleMatch(&filter, filterLength);
             return filter;
         }
     }
@@ -406,25 +408,41 @@ void TLdapRequestProcessor::ProcessFilterEquality(TSearchRequestInfo::TSearchFil
     }
 }
 
-void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter) {
+void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
+    const size_t limit = ReadBytes + lengthFilter;
+    size_t lastCheckedField = 0;
     unsigned char elementType = GetByte();
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_OID) {
         filter->MatchingRule = GetString();
+        lastCheckedField = 1;
     }
 
-    elementType = GetByte();
+    if (lastCheckedField == 1) {
+        if (limit > ReadBytes) {
+            elementType = GetByte();
+        }
+    }
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_TYPE) {
         filter->Attribute = GetString();
+        lastCheckedField = 2;
     }
 
-    elementType = GetByte();
+    if (lastCheckedField == 2) {
+        if (limit > ReadBytes) {
+            elementType = GetByte();
+        }
+    }
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_VALUE) {
         filter->Value = GetString();
     }
 
-    elementType = GetByte();
-    if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_DNATTRS) {
-        filter->DnAttributes = GetByte();
+    if (limit > ReadBytes) {
+        elementType = GetByte();
+        if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_DNATTRS) {
+            size_t length = GetLength();
+            Y_UNUSED(length);
+            filter->DnAttributes = GetByte();
+        }
     }
 }
 

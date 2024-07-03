@@ -30,7 +30,7 @@ private:
     std::vector<TProtocolOpData> ProcessExtendedRequest();
     TSearchRequestInfo::TSearchFilter ProcessFilter();
     void ProcessFilterEquality(TSearchRequestInfo::TSearchFilter* filter);
-    void ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter);
+    void ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter);
     void ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter);
 
 private:

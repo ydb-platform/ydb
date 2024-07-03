@@ -188,6 +188,7 @@ namespace {
             ? tableName
             : (TStringBuilder()
                 << CanonizePath(AppData()->TenantName)
+                << sessionCtx->GetDatabase()
                 << "/.tmp/sessions/"
                 << sessionCtx->GetSessionId()
                 << CanonizePath(tmpTableName));

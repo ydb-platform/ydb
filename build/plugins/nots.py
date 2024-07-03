@@ -1,14 +1,36 @@
 import os
 
+import _dart_fields as df
 import ymake
 import ytest
-from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
+from _dart_fields import (
+    create_dart_record,
+    _create_pm,
+)
+from _common import rootrel_arc_src, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+
+
+TS_TEST_FIELDS_BASE = (
+    df.BinaryPath.value4,
+    df.BuildFolderPath.value,
+    df.ForkMode.value2,
+    df.NodejsRootVarName.value,
+    df.ScriptRelPath.value2,
+    df.SourceFolderPath.value,
+    df.SplitFactor.value2,
+    df.TestData.value7,
+    df.TestedProjectName.value7,
+    df.TestEnv.value,
+    df.TestName.value,
+    df.TestRecipes.value,
+    df.TestTimeout.value3,
+)
 
 
 class PluginLogger(object):
@@ -90,26 +112,6 @@ def _build_cmd_input_paths(paths, hide=False, disable_include_processor=False):
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
 
     return _build_directives("input", [hide_part, disable_ip_part], paths)
-
-
-def _create_pm(unit):
-    from lib.nots.package_manager import manager
-
-    sources_path = unit.path()
-    module_path = unit.get("MODDIR")
-    if unit.get("TS_TEST_FOR"):
-        sources_path = unit.get("TS_TEST_FOR_DIR")
-        module_path = unit.get("TS_TEST_FOR_PATH")
-
-    return manager(
-        sources_path=unit.resolve(sources_path),
-        build_root="$B",
-        build_path=unit.path().replace("$S", "$B", 1),
-        contribs_path=unit.get("NPM_CONTRIBS_PATH"),
-        nodejs_bin_path=None,
-        script_path=None,
-        module_path=module_path,
-    )
 
 
 def _create_erm_json(unit):
@@ -252,7 +254,7 @@ def on_ts_configure(unit):
         _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
     _setup_eslint(unit)
-    _setup_tsc_typecheck(unit, tsconfig_paths)
+    _setup_tsc_typecheck(unit)
 
 
 @_with_report_configure_error
@@ -309,29 +311,6 @@ def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
     __set_append(unit, "TS_INPUT_FILES", [os.path.join(target_path, f) for f in filtered_files])
 
 
-def _get_ts_test_data_dirs(unit):
-    return sorted(
-        set(
-            [
-                os.path.dirname(rootrel_arc_src(p, unit))
-                for p in (ytest.get_values_list(unit, "_TS_TEST_DATA_VALUE") or [])
-            ]
-        )
-    )
-
-
-def _resolve_config_path(unit, test_runner, rel_to):
-    config_path = unit.get("ESLINT_CONFIG_PATH") if test_runner == "eslint" else unit.get("TS_TEST_CONFIG_PATH")
-    arc_config_path = unit.resolve_arc_path(config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    if not abs_config_path:
-        raise Exception("{} config not found: {}".format(test_runner, config_path))
-
-    unit.onsrcs([arc_config_path])
-    abs_rel_to = unit.resolve(unit.resolve_arc_path(unit.get(rel_to)))
-    return os.path.relpath(abs_config_path, start=abs_rel_to)
-
-
 def _is_tests_enabled(unit):
     if unit.get("TIDY") == "yes":
         return False
@@ -339,87 +318,272 @@ def _is_tests_enabled(unit):
     return True
 
 
-def _get_test_runner_handlers():
-    return {
-        "jest": _add_jest_ts_test,
-        "hermione": _add_hermione_ts_test,
-        "playwright": _add_playwright_ts_test,
-    }
-
-
-def _add_jest_ts_test(unit, test_runner, test_files, deps, test_record):
-    test_record.update(
-        {
-            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
-        }
+@df.with_fields(
+    TS_TEST_FIELDS_BASE
+    + (
+        df.Size.value2,
+        df.Tag.value2,
+        df.Requirements.value4,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
     )
-    _add_test(unit, test_runner, test_files, deps, test_record)
+)
+def _add_jest_ts_test(fields, unit, default_config, node_modules_filename):
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
+
+    for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
+
+    # for_mod_path = unit.get("TS_TEST_FOR_PATH")
+    unit.onpeerdir([for_mod_path])
+    unit.on_setup_extract_node_modules_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
+
+    test_runner = 'jest'
+
+    unit.set(["TS_TEST_NM", os.path.join("$(BUILD_ROOT)", for_mod_path, node_modules_filename)])
+
+    config_path = unit.get("TS_TEST_CONFIG_PATH")
+    if not config_path:
+        config_path = os.path.join(for_mod_path, default_config)
+        unit.set(["TS_TEST_CONFIG_PATH", config_path])
+
+    test_files = df.TestFiles.value6(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
+        ymake.report_configure_error("No tests found")
+        return
+
+    from lib.nots.package_manager import constants
+
+    def sort_uniq(text):
+        return sorted(set(text))
+
+    deps = df.CustomDependencies.value5(unit, (), {})[df.CustomDependencies.KEY].split()
+
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_runner} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+
+    dart_record = create_dart_record(fields, unit, flat_args, {})
+    dart_record[df.TestFiles.KEY] = test_files
+    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+    dart_record[df.TsTestForPath.KEY] = for_mod_path
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
 
 
-def _add_hermione_ts_test(unit, test_runner, test_files, deps, test_record):
-    test_tags = sorted(set(["ya:fat", "ya:external", "ya:noretries"] + ytest.get_values_list(unit, "TEST_TAGS_VALUE")))
-    test_requirements = sorted(set(["network:full"] + ytest.get_values_list(unit, "TEST_REQUIREMENTS_VALUE")))
-
-    test_record.update(
-        {
-            "SIZE": "LARGE",
-            "TAG": ytest.serialize_list(test_tags),
-            "REQUIREMENTS": ytest.serialize_list(test_requirements),
-            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
-        }
+@df.with_fields(
+    TS_TEST_FIELDS_BASE
+    + (
+        df.Tag.value3,
+        df.Requirements.value5,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
     )
+)
+def _add_hermione_ts_test(fields, unit, default_config, node_modules_filename):
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
 
-    _add_test(unit, test_runner, test_files, deps, test_record)
+    for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
+    # for_mod_path = unit.get("TS_TEST_FOR_PATH")
+    unit.onpeerdir([for_mod_path])
+    unit.on_setup_extract_node_modules_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
+
+    test_runner = 'hermione'
+
+    unit.set(["TS_TEST_NM", os.path.join("$B", for_mod_path, node_modules_filename)])
+
+    config_path = unit.get("TS_TEST_CONFIG_PATH")
+    if not config_path:
+        config_path = os.path.join(for_mod_path, default_config)
+        unit.set(["TS_TEST_CONFIG_PATH", config_path])
+
+    test_files = df.TestFiles.value6(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
+        ymake.report_configure_error("No tests found")
+        return
+
+    from lib.nots.package_manager import constants
+
+    def sort_uniq(text):
+        return sorted(set(text))
+
+    deps = df.CustomDependencies.value5(unit, (), {})[df.CustomDependencies.KEY].split()
+
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_runner} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+
+    dart_record = create_dart_record(fields, unit, flat_args, {})
+    dart_record[df.TestFiles.KEY] = test_files
+    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+    dart_record[df.TsTestForPath.KEY] = for_mod_path
+    dart_record[df.Size.KEY] = "LARGE"
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
 
 
-def _add_playwright_ts_test(unit, test_runner, test_files, deps, test_record):
-    test_record.update(
-        {
-            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
-        }
+@df.with_fields(
+    TS_TEST_FIELDS_BASE
+    + (
+        df.Size.value2,
+        df.Tag.value2,
+        df.Requirements.value4,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
     )
-    _add_test(unit, test_runner, test_files, deps, test_record)
+)
+def _add_playwright_ts_test(fields, unit, default_config, node_modules_filename):
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
+
+    for_mod_path = unit.get("TS_TEST_FOR_PATH")
+    unit.onpeerdir([for_mod_path])
+    unit.on_setup_extract_node_modules_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
+
+    test_runner = 'playwright'
+
+    unit.set(["TS_TEST_NM", os.path.join("$(BUILD_ROOT)", for_mod_path, node_modules_filename)])
+
+    config_path = unit.get("TS_TEST_CONFIG_PATH")
+    if not config_path:
+        config_path = os.path.join(for_mod_path, default_config)
+        unit.set(["TS_TEST_CONFIG_PATH", config_path])
+
+    test_files = df.TestFiles.value6(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
+        ymake.report_configure_error("No tests found")
+        return
+
+    from lib.nots.package_manager import constants
+
+    def sort_uniq(text):
+        return sorted(set(text))
+
+    deps = df.CustomDependencies.value5(unit, (), {})[df.CustomDependencies.KEY].split()
+
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_runner} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+
+    dart_record = create_dart_record(fields, unit, flat_args, {})
+    dart_record[df.TestFiles.KEY] = test_files
+    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+    dart_record[df.TsTestForPath.KEY] = for_mod_path
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
 
 
-def _setup_eslint(unit):
+@df.with_fields(
+    TS_TEST_FIELDS_BASE
+    + (
+        df.Size.value2,
+        df.TestCwd.value3,
+        df.Tag.value2,
+        df.Requirements.value4,
+        df.EslintConfigPath.value,
+    )
+)
+def _setup_eslint(fields, unit):
     if not _is_tests_enabled(unit):
         return
 
     if unit.get("_NO_LINT_VALUE") == "none":
         return
 
-    lint_files = ytest.get_values_list(unit, "_TS_LINT_SRCS_VALUE")
-    if not lint_files:
+    test_files = df.TestFiles.value6(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
         return
-
-    mod_dir = unit.get("MODDIR")
 
     unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
-    lint_files = _resolve_module_files(unit, mod_dir, lint_files)
-    deps = _create_pm(unit).get_peers_from_package_json()
-    test_record = {
-        "ESLINT_CONFIG_PATH": _resolve_config_path(unit, "eslint", rel_to="MODDIR"),
-        "LINT-FILE-PROCESSING-TIME": str(ESLINT_FILE_PROCESSING_TIME_DEFAULT),
-    }
+    test_type = "eslint"
 
-    _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    from lib.nots.package_manager import constants
+
+    def sort_uniq(text):
+        return sorted(set(text))
+
+    deps = df.CustomDependencies.value5(unit, (), {})[df.CustomDependencies.KEY].split()
+
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_type, "TS_TEST_FOR_PATH")
+
+    dart_record = create_dart_record(fields, unit, flat_args, {})
+    dart_record[df.TestFiles.KEY] = test_files
+    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+    dart_record[df.LintFileProcessingTime.KEY] = str(ESLINT_FILE_PROCESSING_TIME_DEFAULT)
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
-def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
+@df.with_fields(
+    TS_TEST_FIELDS_BASE
+    + (
+        df.Size.value2,
+        df.TestCwd.value3,
+        df.Tag.value2,
+        df.Requirements.value4,
+    )
+)
+def _setup_tsc_typecheck(fields, unit):
     if not _is_tests_enabled(unit):
         return
 
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    typecheck_files = ytest.get_values_list(unit, "TS_INPUT_FILES")
-    if not typecheck_files:
+    # typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
+    test_files = df.TestFiles.value6(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
         return
 
+    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
     tsconfig_path = tsconfig_paths[0]
 
     if len(tsconfig_paths) > 1:
@@ -436,14 +600,33 @@ def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
     unit.on_setup_install_node_modules_recipe()
     unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
-    _add_test(
-        unit,
-        test_type="tsc_typecheck",
-        test_files=[resolve_common_const(f) for f in typecheck_files],
-        deps=_create_pm(unit).get_peers_from_package_json(),
-        test_record={"TS_CONFIG_PATH": tsconfig_path},
-        test_cwd=unit.get("MODDIR"),
-    )
+    test_type = "tsc_typecheck"
+
+    from lib.nots.package_manager import constants
+
+    def sort_uniq(text):
+        return sorted(set(text))
+
+    deps = df.CustomDependencies.value5(unit, (), {})[df.CustomDependencies.KEY].split()
+
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_type,)
+
+    dart_record = create_dart_record(fields, unit, flat_args, {})
+    dart_record[df.TestFiles.KEY] = test_files
+    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+    dart_record[df.TsConfigPath.KEY] = tsconfig_path
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
@@ -458,56 +641,6 @@ def _resolve_module_files(unit, mod_dir, file_paths):
         resolved_files.append(resolved)
 
     return resolved_files
-
-
-def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd=None):
-    from lib.nots.package_manager import constants
-
-    def sort_uniq(text):
-        return sorted(set(text))
-
-    recipes_lines = ytest.format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
-    if recipes_lines:
-        deps = deps or []
-        deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
-
-    if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
-        unit.ondepends(deps)
-
-    test_dir = get_norm_unit_path(unit)
-    full_test_record = {
-        # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
-        "SCRIPT-REL-PATH": test_type,
-        # Test name as shown in PR check, should be unique inside one module
-        "TEST-NAME": test_type.lower().replace(".new", ""),
-        "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
-        "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
-        "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
-        "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        "SOURCE-FOLDER-PATH": test_dir,
-        "BUILD-FOLDER-PATH": test_dir,
-        "BINARY-PATH": os.path.join(test_dir, unit.filename()),
-        "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
-        "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
-        "SIZE": unit.get("TEST_SIZE_NAME") or "",
-        "TEST-DATA": ytest.serialize_list(ytest.get_values_list(unit, "TEST_DATA_VALUE")),
-        "TEST-FILES": ytest.serialize_list(test_files),
-        "TEST-CWD": test_cwd or "",
-        "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),
-        "REQUIREMENTS": ytest.serialize_list(ytest.get_values_list(unit, "TEST_REQUIREMENTS_VALUE")),
-        "NODEJS-ROOT-VAR-NAME": unit.get("NODEJS-ROOT-VAR-NAME"),
-        "NODE-MODULES-BUNDLE-FILENAME": constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
-        "CUSTOM-DEPENDENCIES": " ".join(sort_uniq((deps or []) + ytest.get_values_list(unit, "TEST_DEPENDS_VALUE"))),
-    }
-
-    if test_record:
-        full_test_record.update(test_record)
-
-    data = ytest.dump_test(unit, full_test_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
 
 
 def _set_resource_vars(unit, erm_json, tool, version, nodejs_major=None):
@@ -661,40 +794,12 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
     if not _is_tests_enabled(unit):
         return
 
-    if unit.enabled('TS_COVERAGE'):
-        unit.on_peerdir_ts_resource("nyc")
-
-    for_mod_path = unit.get("TS_TEST_FOR_PATH")
-    unit.onpeerdir([for_mod_path])
-    unit.on_setup_extract_node_modules_recipe([for_mod_path])
-    unit.on_setup_extract_output_tars_recipe([for_mod_path])
-
-    root = "$B" if test_runner == "hermione" else "$(BUILD_ROOT)"
-    unit.set(["TS_TEST_NM", os.path.join(root, for_mod_path, node_modules_filename)])
-
-    config_path = unit.get("TS_TEST_CONFIG_PATH")
-    if not config_path:
-        config_path = os.path.join(for_mod_path, default_config)
-        unit.set(["TS_TEST_CONFIG_PATH", config_path])
-
-    test_record = _add_ts_resources_to_test_record(
-        unit,
-        {
-            "TS-TEST-FOR-PATH": for_mod_path,
-            "TS-TEST-DATA-DIRS": ytest.serialize_list(_get_ts_test_data_dirs(unit)),
-            "TS-TEST-DATA-DIRS-RENAME": unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE"),
-        },
-    )
-
-    test_files = ytest.get_values_list(unit, "_TS_TEST_SRCS_VALUE")
-    test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-    if not test_files:
-        ymake.report_configure_error("No tests found")
-        return
-
-    deps = _create_pm(unit).get_peers_from_package_json()
-    add_ts_test = _get_test_runner_handlers()[test_runner]
-    add_ts_test(unit, test_runner, test_files, deps, test_record)
+    if test_runner == 'jest':
+        _add_jest_ts_test(unit, default_config, node_modules_filename)
+    elif test_runner == 'hermione':
+        _add_hermione_ts_test(unit, default_config, node_modules_filename)
+    elif test_runner == 'playwright':
+        _add_playwright_ts_test(unit, default_config, node_modules_filename)
 
 
 @_with_report_configure_error

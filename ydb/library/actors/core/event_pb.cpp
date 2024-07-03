@@ -326,7 +326,7 @@ namespace NActors {
     }
 
 
-    void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
+    void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, const TVector<TRope> &payload, size_t &totalPayloadSize)
     {
         // check marker
         if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {

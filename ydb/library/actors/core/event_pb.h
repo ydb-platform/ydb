@@ -147,7 +147,7 @@ namespace NActors {
     static constexpr char PayloadMarker = 0x07;
     static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 
-    void FillExtendedFormat(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
+    void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, const TVector<TRope> &payload, size_t &totalPayloadSize);
     size_t SerializeNumber(size_t num, char *buffer);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);
@@ -183,7 +183,7 @@ namespace NActors {
             return Record.GetTypeName();
         }
 
-        TString ToString() const override {            
+        TString ToString() const override {
             TStringStream ss;
             ss << ToStringHeader() << " " << Record.ShortDebugString();
             return ss.Str();
@@ -194,15 +194,16 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            if (!SerializeToArcadiaStreamImpl(chunker, Payload)) 
+            if (!SerializeToArcadiaStreamImpl(chunker, Payload)) {
                 return false;
+            }
             return Record.SerializeToZeroCopyStream(chunker);
         }
 
         ui32 CalculateSerializedSize() const override {
             return CalculateSerializedSizeImpl(Payload, GetTotalPayloadSize(), Record.ByteSize());
         }
-        
+
         static IEventBase* Load(TEventSerializedData *input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
@@ -212,7 +213,7 @@ namespace NActors {
                 ui64 size = input->GetSize();
 
                 if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
-                    FillExtendedFormat(iter, size, ev->Payload, ev->TotalPayloadSize);
+                    ParseExtendedFormatPayload(iter, size, ev->Payload, ev->TotalPayloadSize);
                 }
 
                 // parse the protobuf
@@ -241,7 +242,7 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayloadFull(), GetTotalPayloadSize(), Record.ByteSize());
+            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayload(), GetTotalPayloadSize(), Record.ByteSize());
         }
 
         bool AllowExternalDataChannel() const {
@@ -266,7 +267,7 @@ namespace NActors {
             return Payload[id];
         }
 
-        const TVector<TRope>& GetPayloadFull() const {
+        const TVector<TRope>& GetPayload() const {
             return Payload;
         }
 
@@ -418,8 +419,9 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayloadFull())) 
+            if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayload())) {
                 return false;
+            }
             
             if (PreSerializedData && !chunker->WriteString(&PreSerializedData)) {
                 return false;
@@ -442,7 +444,7 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayloadFull(), TBase::GetTotalPayloadSize(), Record.ByteSize());
+            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayload(), TBase::GetTotalPayloadSize(), Record.ByteSize());
         }
     };
 

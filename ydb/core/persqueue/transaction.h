@@ -17,11 +17,8 @@
 namespace NKikimr::NPQ {
 
 struct TDistributedTransaction {
-    explicit TDistributedTransaction(ui64 tabletId);
-    TDistributedTransaction(ui64 tabletId,
-                            const NKikimrPQ::TTransaction& tx);
-
-    TString LogPrefix() const;
+    TDistributedTransaction() = default;
+    explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
                               ui64 minStep,
@@ -44,7 +41,6 @@ struct TDistributedTransaction {
 
     NKikimrPQ::TTransaction::EKind Kind = NKikimrPQ::TTransaction::KIND_UNKNOWN;
 
-    ui64 TabletId = 0;
     ui64 TxId = Max<ui64>();
     ui64 Step = Max<ui64>();
     EState State = NKikimrPQ::TTransaction::UNKNOWN;

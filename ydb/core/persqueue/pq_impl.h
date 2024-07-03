@@ -503,9 +503,6 @@ private:
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                ui64 writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
-
-    TDistributedTransaction& GetOrCreateDistributedTransaction(ui64 txId);
-    TDistributedTransaction MakeDistributedTransaction(const NKikimrPQ::TTransaction& tx) const;
 };
 
 

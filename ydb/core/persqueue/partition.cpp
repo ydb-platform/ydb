@@ -82,7 +82,7 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "[Partition:" << Partition << ", PQ: " << TabletID << ", State:" << state << "] ";
+    return TStringBuilder() << "[Partition:" << Partition << ", State:" << state << "] ";
 }
 
 bool TPartition::IsActive() const {

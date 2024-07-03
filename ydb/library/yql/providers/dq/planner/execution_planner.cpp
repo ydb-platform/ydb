@@ -1,7 +1,6 @@
 #include "execution_planner.h"
 
 #include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
@@ -677,7 +676,6 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
-
             TSpillingSettings spillingSettings{Settings->IsSpillingInGraceJoinEnabled()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(

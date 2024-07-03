@@ -1175,8 +1175,6 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
         isSpillingAllowed = true;
     }
 
-    std::cerr << "MISHA " << callable.GetType()->GetName() << std::endl;
-
     return WrapGraceJoinCommon(callable, ctx, false, isSpillingAllowed);
 }
 

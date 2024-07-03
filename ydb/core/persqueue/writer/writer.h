@@ -14,8 +14,6 @@
 
 namespace NKikimr::NPQ {
 
-constexpr ui64 INVALID_WRITE_ID = Max<ui64>();
-
 struct TEvPartitionWriter {
     enum EEv {
         EvInitResult = EventSpaceBegin(TKikimrEvents::ES_PQ_PARTITION_WRITER),

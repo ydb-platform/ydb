@@ -1718,7 +1718,9 @@ void TFixture::WriteToTable(const TString& tablePath,
                             const TVector<TTableRecord>& records,
                             NTable::TTransaction* tx)
 {
-    TString query = Sprintf(R"(UPSERT INTO `%s` (key, value) VALUES ($key, $value);)",
+    TString query = Sprintf("DECLARE $key AS Utf8;"
+                            "DECLARE $value AS Utf8;"
+                            "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
                             tablePath.data());
     NTable::TSession session = tx->GetSession();
 

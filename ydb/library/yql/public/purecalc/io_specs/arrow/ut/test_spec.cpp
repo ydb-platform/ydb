@@ -126,6 +126,42 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             UNIT_ASSERT(!stream->Fetch());
         }
     }
+
+    Y_UNIT_TEST(TestMultiInput) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePullListProgram(
+                TArrowInputSpec({schema, schema}),
+                TArrowOutputSpec(schema),
+                R"(
+                    SELECT * FROM Input0
+                    UNION ALL
+                    SELECT * FROM Input1
+                )",
+                ETranslationMode::SQL
+            );
+
+            ExecBatchStreamImpl items0({MakeBatch()});
+            ExecBatchStreamImpl items1({MakeBatch()});
+            const TVector<IStream<arrow::compute::ExecBatch*>*> items({&items0, &items1});
+
+            auto stream = program->Apply(items);
+
+            arrow::compute::ExecBatch* batch;
+
+            UNIT_ASSERT(batch = stream->Fetch());
+            AssertBatch(batch);
+            UNIT_ASSERT(batch = stream->Fetch());
+            AssertBatch(batch);
+            UNIT_ASSERT(!stream->Fetch());
+        }
+    }
 }
 
 

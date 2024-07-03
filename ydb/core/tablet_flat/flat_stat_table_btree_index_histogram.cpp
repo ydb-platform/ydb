@@ -109,11 +109,11 @@ class TTableHistogramBuilderBtreeIndex {
             // events go in order:
             // - Key = {}, IsBegin = true
             // - ...
-            // - Key = {'c'}, IsBegin = true
             // - Key = {'c'}, IsBegin = false
+            // - Key = {'c'}, IsBegin = true
             // - ...
-            // - Key = {'d'}, IsBegin = true
             // - Key = {'d'}, IsBegin = false
+            // - Key = {'d'}, IsBegin = true
             // - ...
             // - Key = {}, IsBegin = false
 
@@ -122,8 +122,8 @@ class TTableHistogramBuilderBtreeIndex {
                 if (cmp != 0) {
                     return cmp;
                 }
-                // keys are the same, compare by begin flag:
-                return Compare(a.IsBegin ? -1 : 1, b.IsBegin ? -1 : 1);
+                // keys are the same, compare by begin flag, end events first:
+                return Compare(a.IsBegin ? 1 : -1, b.IsBegin ? 1 : -1);
             }
 
             // category = -1 for Key = { }, IsBegin = true
@@ -288,7 +288,7 @@ private:
             } while (FutureEvents && NodeEventKeyGreater.Compare(FutureEvents.top(), currentKeyPointer) == 0);
 
             const auto addEvent = [&](TEvent event) {
-                auto cmp = NodeEventKeyGreater(event, currentKeyPointer);
+                auto cmp = NodeEventKeyGreater.Compare(event, currentKeyPointer);
                 if (cmp <= 0) { // event happened
                     processEvent(event);
                     if (cmp == 0) {

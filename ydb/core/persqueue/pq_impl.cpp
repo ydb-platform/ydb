@@ -3335,11 +3335,13 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 {
     const TEvPQ::TEvTxCalcPredicateResult& event = *ev->Get();
 
-    PQ_LOG_D("Handle TEvPQ::TEvTxCalcPredicateResult" <<
-             " Step " << event.Step <<
-             " TxId " << event.TxId <<
-             " Partition " << event.Partition <<
-             " Predicate " << (event.Predicate ? "true" : "false"));
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                " Handle TEvPQ::TEvTxCalcPredicateResult" <<
+                " Step " << event.Step <<
+                " TxId " << event.TxId <<
+                " Partition " << event.Partition <<
+                " Predicate " << (event.Predicate ? "true" : "false"));
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
@@ -3624,7 +3626,10 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 
             PQ_LOG_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
         } else {
-            PQ_LOG_E("The plan step is expected to be greater or equal than " << PlanStep << ". Received plan step is " << step);
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Tablet " << TabletID() <<
+                        " Old plan step " << step <<
+                        ", PlanStep: " << PlanStep);
         }
 
         SchedulePlanStepAck(step, txAcks);
@@ -3964,11 +3969,11 @@ const THashSet<ui64>& TPersQueue::GetBindedTxs(ui64 tabletId)
 TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
                                                     ui64 txId)
 {
-    Y_UNUSED(ctx);
-
     auto p = Txs.find(txId);
     if (p == Txs.end()) {
-        PQ_LOG_W("Unknown transaction " << txId);
+        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
+                   "Tablet " << TabletID() <<
+                   " Unknown transaction " << txId);
         return nullptr;
     }
     return &p->second;
@@ -4191,7 +4196,6 @@ void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::E
 void TPersQueue::DeleteTx(TDistributedTransaction& tx)
 {
     DeleteTxs.insert(tx.TxId);
-    PQ_LOG_D("delete tx " << tx.TxId);
 
     tx.WriteInProgress = true;
 }
@@ -4516,14 +4520,11 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
 
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext&)
 {
-    PQ_LOG_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
-
     auto& record = ev->Get()->Record;
     ui64 writeId = record.GetLockId();
 
     if (!TxWrites.contains(writeId)) {
         // the transaction has already been completed
-        PQ_LOG_D("unknown WriteId " << writeId);
         return;
     }
 
@@ -4536,7 +4537,6 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
 
     if (!writeInfo.TxId.Defined()) {
         // the message TEvProposeTransaction will not come anymore
-        PQ_LOG_D("the TEvProposeTransaction message will not be received for WriteId " << writeId);
         BeginDeletePartitions(writeInfo);
     }
 }
@@ -4557,9 +4557,6 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
 
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPQ::TEvDeletePartitionDone" <<
-             " PartitionId " << ev->Get()->PartitionId);
-
     auto* event = ev->Get();
     Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
     const ui64 writeId = *event->PartitionId.WriteId;
@@ -4606,19 +4603,15 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
 
 void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
 {
-    PQ_LOG_D("begin delete tx " << tx.TxId << ", WriteId " << tx.WriteId);
-
     Y_ABORT_UNLESS(tx.WriteId.Defined());
     const ui64 writeId = *tx.WriteId;
     if (!TxWrites.contains(writeId)) {
         // the transaction has already been completed
-        PQ_LOG_D("unknown WriteId " << tx.WriteId);
         return;
     }
 
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
-        PQ_LOG_D("wait for NKikimrLongTxService::TEvLockStatus");
         return;
     }
 
@@ -4628,13 +4621,11 @@ void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
 void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
 {
     if (writeInfo.Deleting) {
-        PQ_LOG_D("already deleting");
         return;
     }
     for (auto& [_, partitionId] : writeInfo.Partitions) {
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
-        PQ_LOG_D("send TEvPQ::TEvDeletePartition to partition " << partitionId);
         Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
     writeInfo.Deleting = true;

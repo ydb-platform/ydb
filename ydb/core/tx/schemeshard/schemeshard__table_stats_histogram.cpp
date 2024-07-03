@@ -382,6 +382,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
         // TODO: check that the choosen key is valid
     } else {
+        // Choose number of parts and split boundaries
         const auto& histogram = rec.GetTableStats().GetDataSizeHistogram();
 
         splitKey = ChooseSplitKeyByHistogram(histogram, dataSize, keyColumnTypes);

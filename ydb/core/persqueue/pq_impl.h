@@ -204,7 +204,7 @@ private:
         bool Deleting = false;
     };
 
-    THashMap<ui64, TTxWriteInfo> TxWrites;
+    THashMap<TWriteId, TTxWriteInfo> TxWrites;
     bool TxWritesChanged = false;
     ui32 NextSupportivePartitionId = 100'000;
 
@@ -488,8 +488,8 @@ private:
     void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
-    void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
-    void UnsubscribeWriteId(ui64 writeId, const TActorContext& ctx);
+    void SubscribeWriteId(const TWriteId& writeId, const TActorContext& ctx);
+    void UnsubscribeWriteId(const TWriteId& writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;
 
@@ -501,7 +501,7 @@ private:
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
-                               ui64 writeId) const;
+                               const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 };
 

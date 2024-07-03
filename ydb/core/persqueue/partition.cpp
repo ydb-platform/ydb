@@ -3366,9 +3366,9 @@ void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransac
     Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(tx.HasData());
 
-    TMaybe<ui64> writeId;
+    TMaybe<TWriteId> writeId;
     if (tx.GetData().HasWriteId()) {
-        writeId = tx.GetData().GetWriteId();
+        writeId = GetWriteId(tx.GetData());
     }
 
     Replies.emplace_back(Tablet,

@@ -114,22 +114,6 @@ code { white-space: pre; }
         dirfiles = zip(rdirs, filelists)
     for dirname, filelist in dirfiles:
         for name in filelist:
-            if len(args.include_q):
-                include = False
-                for r in args.include_q:
-                    if re.search(r, name):
-                        include = True
-                        break
-                if not include:
-                    continue
-            if len(args.exclude_q):
-                include = True
-                for r in args.exclude_q:
-                    if re.search(r, name):
-                        include = False
-                        break
-                if not include:
-                    continue
             try:
                 with open(name) as f:
                     coldata = []
@@ -138,6 +122,22 @@ code { white-space: pre; }
                     for line in f:
                         line = line.split('\t')
                         (q, utime, stime, maxrss, exitcode, elapsed, minflt, majflt, inblock, oublock, nvcsw, nivcsv) = line[:12]
+                        if len(args.include_q):
+                            include = False
+                            for r in args.include_q:
+                                if re.search(r, q):
+                                    include = True
+                                    break
+                            if not include:
+                                continue
+                        if len(args.exclude_q):
+                            include = True
+                            for r in args.exclude_q:
+                                if re.search(r, q):
+                                    include = False
+                                    break
+                            if not include:
+                                continue
                         if len(line) >= 14:
                             rchar = line[12]
                             wchar = line[13]

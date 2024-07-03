@@ -23,67 +23,69 @@ void TWriteId::ToStream(IOutputStream& s) const
     s << '{' << NodeId << ", " << KeyId << '}';
 }
 
-TWriteId GetWriteId(const NKikimrPQ::TTransaction& m)
+template <class T>
+TWriteId GetWriteIdImpl(const T& m)
 {
     const auto& writeId = m.GetWriteId();
     return {writeId.GetNodeId(), writeId.GetKeyId()};
+}
+
+template <class T>
+void SetWriteIdImpl(T& m, const TWriteId& writeId)
+{
+    auto* w = m.MutableWriteId();
+    w->SetNodeId(writeId.NodeId);
+    w->SetKeyId(writeId.KeyId);
+}
+
+TWriteId GetWriteId(const NKikimrPQ::TTransaction& m)
+{
+    return GetWriteIdImpl(m);
 }
 
 void SetWriteId(NKikimrPQ::TTransaction& m, const TWriteId& writeId)
 {
-    auto* w = m.MutableWriteId();
-    w->SetNodeId(writeId.NodeId);
-    w->SetKeyId(writeId.KeyId);
+    SetWriteIdImpl(m, writeId);
 }
 
 TWriteId GetWriteId(const NKikimrPQ::TDataTransaction& m)
 {
-    const auto& writeId = m.GetWriteId();
-    return {writeId.GetNodeId(), writeId.GetKeyId()};
+    return GetWriteIdImpl(m);
 }
 
 void SetWriteId(NKikimrPQ::TDataTransaction& m, const TWriteId& writeId)
 {
-    auto* w = m.MutableWriteId();
-    w->SetNodeId(writeId.NodeId);
-    w->SetKeyId(writeId.KeyId);
+    SetWriteIdImpl(m, writeId);
 }
 
 TWriteId GetWriteId(const NKikimrPQ::TTabletTxInfo::TTxWriteInfo& m)
 {
-    const auto& writeId = m.GetWriteId();
-    return {writeId.GetNodeId(), writeId.GetKeyId()};
+    return GetWriteIdImpl(m);
 }
 
 void SetWriteId(NKikimrPQ::TTabletTxInfo::TTxWriteInfo& m, const TWriteId& writeId)
 {
-    auto* w = m.MutableWriteId();
-    w->SetNodeId(writeId.NodeId);
-    w->SetKeyId(writeId.KeyId);
+    SetWriteIdImpl(m, writeId);
 }
 
 TWriteId GetWriteId(const NKikimrClient::TPersQueuePartitionRequest& m)
 {
-    const auto& writeId = m.GetWriteId();
-    return {writeId.GetNodeId(), writeId.GetKeyId()};
+    return GetWriteIdImpl(m);
 }
 
 void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& m, const NKikimr::NPQ::TWriteId& writeId)
 {
-    auto* w = m.MutableWriteId();
-    w->SetNodeId(writeId.NodeId);
-    w->SetKeyId(writeId.KeyId);
+    SetWriteIdImpl(m, writeId);
 }
 
 TWriteId GetWriteId(const NKikimrKqp::TTopicOperationsResponse& m)
 {
-    return {m.GetNodeId(), m.GetKeyId()};
+    return GetWriteIdImpl(m);
 }
 
 void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId)
 {
-    m.SetNodeId(writeId.NodeId);
-    m.SetKeyId(writeId.KeyId);
+    SetWriteIdImpl(m, writeId);
 }
 
 }

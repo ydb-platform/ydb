@@ -31,6 +31,8 @@
 
 namespace NYdb::NTopic {
 
+bool AllowDirectRead = false;
+
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage,
@@ -1203,6 +1205,7 @@ private:
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
 
     // Direct Read
+    bool IsDirectRead();
     void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
     void StopPartitionSession(TPartitionSessionId);
     void StopPartitionSessionImpl(TIntrusivePtr<TPartitionStreamImpl<false>>, bool graceful, bool fromControlSession, TDeferredActions<false>&);

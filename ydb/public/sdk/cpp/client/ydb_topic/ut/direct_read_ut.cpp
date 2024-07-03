@@ -829,8 +829,13 @@ TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(IDirec
     return DirectReadSessionPtr.get();
 }
 
+class TFixture : public NUnitTest::TBaseFixture {
+    void SetUp(NUnitTest::TTestContext&) override {
+        AllowDirectRead = true;
+    }
+};
 
-Y_UNIT_TEST_SUITE(DirectReadWithClient) {
+Y_UNIT_TEST_SUITE_F(DirectReadWithClient, TFixture) {
 
     /*
     This suite tests direct read mode only through IReadSession, without using internal classes.
@@ -965,10 +970,10 @@ Y_UNIT_TEST_SUITE(DirectReadWithClient) {
             }
         }
     }
-} // Y_UNIT_TEST_SUITE(DirectReadWithClient)
+} // Y_UNIT_TEST_SUITE_F(DirectReadWithClient)
 
 
-Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
+Y_UNIT_TEST_SUITE_F(DirectReadWithControlSession, TFixture) {
 
     /*
     This suite tests direct read sessions together with a control session.
@@ -1321,10 +1326,10 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
         setup.AssertNoEvents();
     }
 
-} // Y_UNIT_TEST_SUITE(DirectReadWithControlSession)
+} // Y_UNIT_TEST_SUITE_F(DirectReadWithControlSession)
 
 
-Y_UNIT_TEST_SUITE(DirectReadSession) {
+Y_UNIT_TEST_SUITE_F(DirectReadSession, TFixture) {
 
     /*
     This suite test TDirectReadSession in isolation, without control session.
@@ -1843,6 +1848,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         Start requests for all previously active partition sessions are sent.
     */
 
-} // Y_UNIT_TEST_SUITE(DirectReadSession)
+} // Y_UNIT_TEST_SUITE_F(DirectReadSession)
 
 } // namespace NYdb::NTopic::NTests

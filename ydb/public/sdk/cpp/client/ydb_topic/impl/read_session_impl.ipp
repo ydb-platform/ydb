@@ -488,6 +488,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
     }
 }
 
+
+template<>
+inline bool TSingleClusterReadSessionImpl<false>::IsDirectRead() {
+    return AllowDirectRead && Settings.DirectRead_;
+}
+
+
 template<>
 inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -528,8 +535,8 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     auto& init = *req.mutable_init_request();
 
     init.set_consumer(Settings.ConsumerName_);
-    init.set_auto_partitioning_support(Settings.AutoPartitioningSupport_);
-    init.set_direct_read(Settings.DirectRead_);
+    init.set_autoscaling_support(Settings.AutoscalingSupport_);
+    init.set_direct_read(IsDirectRead());
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -676,7 +683,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 
             WriteToProcessorImpl(std::move(req));
 
-            if (Settings.DirectRead_) {
+            if (IsDirectRead()) {
                 // First send Start response to the control session,
                 // then send Start request to the direct read session.
                 // As the messages are sent to different nodes, there is no order between them,
@@ -1384,7 +1391,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 ) {
     auto partitionSessionId = partitionStream->GetAssignId();
 
-    if (Settings.DirectRead_ && graceful) {
+    if (IsDirectRead() && graceful) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
 
         if (fromControlSession) {
@@ -1447,7 +1454,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     ServerSessionId = msg.session_id();
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
 
-    if (Settings.DirectRead_) {
+    if (IsDirectRead()) {
         Y_ABORT_UNLESS(!DirectReadSessionManager.Defined());
         DirectReadSessionManager.ConstructInPlace(
             ServerSessionId,
@@ -1498,7 +1505,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // For DirectRead the message MUST have partition location.
-    Y_ABORT_UNLESS(!Settings.DirectRead_ || msg.has_partition_location());
+    Y_ABORT_UNLESS(!IsDirectRead() || msg.has_partition_location());
 
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
@@ -1528,7 +1535,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     // TODO(qyryq) Do we need to store generation/nodeid info in TSingleClusterReadSessionImpl?
     auto id = it->second->GetPartitionSessionId();
-    if (Settings.DirectRead_) {
+    if (IsDirectRead()) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
         DirectReadSessionManager->UpdatePartitionSession(id, TPartitionLocation(msg.partition_location()));
     }
@@ -1553,7 +1560,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         return;
     }
 
-    if (msg.graceful() && Settings.DirectRead_) {
+    if (msg.graceful() && IsDirectRead()) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
         DirectReadSessionManager->StopPartitionSessionGracefully(partitionSessionId, msg.last_direct_read_id());
         return;
@@ -1590,7 +1597,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                 partitionStream->GetPartitionSessionId());
     }
 
-    if (Settings.DirectRead_) {
+    if (IsDirectRead()) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
         DirectReadSessionManager->StopPartitionSession(msg.partition_session_id());
     }

@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 #include "events_common.h"
-#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
+#include "control_plane.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>

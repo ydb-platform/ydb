@@ -2236,8 +2236,8 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
     auto simplifiedPlan = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
     if (optCtx) {
         NJson::TJsonValue optimizerStats;
-        optimizerStats["NJoins"] = optCtx->NJoins;
-        optimizerStats["NEquiJoins"] = optCtx->NEquiJoins;
+        optimizerStats["JoinsCount"] = optCtx->JoinsCount;
+        optimizerStats["EquiJoinsCount"] = optCtx->EquiJoinsCount;
         simplifiedPlan["OptimizerStats"] = optimizerStats;
     }   
     planJson["SimplifiedPlan"] = simplifiedPlan;

@@ -2973,6 +2973,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
+        hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
     }
 }
 
@@ -3074,6 +3075,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3345,6 +3347,30 @@ void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
     if (!node->IsAlive()) {
         TryToDeleteNode(node);
     }
+}
+
+void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
+    std::unordered_map<TNodeId, std::unordered_set<TTabletId>> distribution;
+    auto& tabletIds = ev->Get()->Record.GetTabletIds();
+    for (auto& tabletId : tabletIds) {
+        TTabletInfo* tablet = FindTablet(tabletId);
+        if (tablet == nullptr) {
+            continue;
+        }
+        auto nodeId = tablet->NodeId;
+        distribution[nodeId].insert(tabletId);
+    }
+    auto response = std::make_unique<TEvHive::TEvResponseTabletDistribution>();
+    auto& record = response->Record;
+    for (auto& [nodeId, tabletIds] : distribution) {
+        auto* node = record.AddNodes();
+        node->SetNodeId(nodeId);
+        node->MutableTabletIds()->Reserve(tabletIds.size());
+        for (auto& tabletId : tabletIds) {
+            node->AddTabletIds(tabletId);
+        }
+    }
+    Send(ev->Sender, response.release());
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

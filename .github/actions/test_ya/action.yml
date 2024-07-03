@@ -36,6 +36,10 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  bazel_remote_uri:
+    required: false
+    description: "bazel-remote endpoint"
+
 runs:
   using: "composite"
   steps:
@@ -204,8 +208,10 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        # Also build targets which are not in tests' dependencies
-        params+=(--build-all)
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
 
         echo "::debug::get version"
         ./ya --version

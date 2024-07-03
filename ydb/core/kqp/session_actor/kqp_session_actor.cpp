@@ -454,7 +454,11 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        PassRequestToResourcePool();
+        if (QueryState->UserRequestContext->PoolId) {
+            PassRequestToResourcePool();
+        } else {
+            CompileQuery();
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1719,7 +1723,10 @@ public:
 
         if (replyTopicOperations) {
             if (HasTopicWriteId()) {
-                response->MutableTopicOperations()->SetWriteId(GetTopicWriteId());
+                auto* w = response->MutableTopicOperations();
+                auto* writeId = w->MutableWriteId();
+                writeId->SetNodeId(SelfId().NodeId());
+                writeId->SetKeyId(GetTopicWriteId());
             }
         }
 

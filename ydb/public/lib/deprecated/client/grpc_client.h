@@ -109,7 +109,6 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void TabletStateRequest(const NKikimrClient::TTabletStateRequest& request, TResponseCallback callback);
 
-            void WhoAmI(const NKikimrClient::TWhoAmI& request, TResponseCallback callback);
             void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback);
             void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback);
 

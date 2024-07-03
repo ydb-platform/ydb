@@ -9,7 +9,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTa
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
     request->ReadToSnapshot = Snapshot;
     request->RangesFilter = std::make_shared<TPKRangesFilter>(false);
-    auto pkData = NArrow::ExtractColumns(IncomingData, ActualSchema->GetPKColumnNames());
+    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
     for (ui32 i = 0; i < pkData->num_rows(); ++i) {
         auto batch = pkData->Slice(i, 1);
         auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batch);

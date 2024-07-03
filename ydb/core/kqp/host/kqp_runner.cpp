@@ -283,7 +283,7 @@ private:
         const NMiniKQL::IFunctionRegistry& funcRegistry)
     {
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
-            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx);
+            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
         auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()

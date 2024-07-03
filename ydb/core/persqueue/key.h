@@ -35,7 +35,7 @@ public:
         : Partition(partition)
     {
         Resize(UnmarkedSize());
-        SetType(type);
+        SetTypeImpl(type, IsServicePartition());
         memcpy(PtrPartition(), Sprintf("%.10" PRIu32, Partition.InternalPartitionId).data(), 10);
     }
 
@@ -68,32 +68,7 @@ public:
 
 
     void SetType(EType type) {
-        if (!IsServicePartition() && !HasServiceType()) {
-            *PtrType() = type;
-            return;
-        }
-        switch (type) {
-            case TypeNone:
-                *PtrType() = TypeNone;
-                return;
-	    case TypeData:
-                *PtrType() = ServiceTypeData;
-                return;
-            case TypeTmpData:
-                *PtrType() = ServiceTypeTmpData;
-                return;
-            case TypeInfo:
-                *PtrType() = ServiceTypeInfo;
-                return;
-            case TypeMeta:
-                *PtrType() = ServiceTypeMeta;
-                return;
-            case TypeTxMeta:
-               *PtrType() = ServiceTypeTxMeta;
-                return;
-            default:
-                Y_ABORT();
-        }
+        SetTypeImpl(type, IsServicePartition() || HasServiceType());
     }
 
     EType GetType() const {
@@ -144,6 +119,8 @@ private:
         ServiceTypeTxMeta = 'K'
     };
 
+    void SetTypeImpl(EType, bool isServicePartition);
+
     char* PtrType() { return Data(); }
     char* PtrMark() { return Data() + UnmarkedSize(); }
     char* PtrPartition() { return Data() + 1; }
@@ -153,7 +130,6 @@ private:
     const char* PtrPartition() const { return Data() + 1; }
 
     TPartitionId Partition;
-
 };
 
 std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition);

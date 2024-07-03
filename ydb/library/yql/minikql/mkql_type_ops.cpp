@@ -2112,6 +2112,9 @@ bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     case NUdf::EDataSlot::Datetime64:
     case NUdf::EDataSlot::Timestamp64:
     case NUdf::EDataSlot::Interval64:
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64:
         return bool(ValueFromString(type, buf));
 
     default:

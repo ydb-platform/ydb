@@ -168,6 +168,11 @@ private:
         }
 
         const auto& result = ev->Get()->Result;
+        if (!result) {
+            LOG_W("Got empty notification");
+            return;
+        }
+
         if (result->GetStatus() != NKikimrScheme::StatusSuccess) {
             LOG_W("Got bad watch notification " << result->GetStatus() << ", reason: " << result->GetReason());
             return;

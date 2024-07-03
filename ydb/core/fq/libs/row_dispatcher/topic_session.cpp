@@ -25,14 +25,12 @@
 #include <ydb/library/yql/minikql/mkql_mem_info.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
-
-
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
 #include <queue>
-// #define LOG_D(s) LOG_YQ_ROW_DISPATCHER_DEBUG(LogPrefix << s)
-// #define LOG_I(s) LOG_YQ_ROW_DISPATCHER_DEBUG(LogPrefix << s)
+
+#include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
 
 
 namespace NFq {
@@ -100,6 +98,7 @@ private:
         ui64 LastSendedMessage = 0;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
+    TJsonParser Parser;
 
 
 public:
@@ -111,6 +110,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 
     void Bootstrap();
+    TVector<TString> GetColumns();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
     NYdb::NTopic::TTopicClient& GetTopicClient();
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings() const;
@@ -154,6 +154,14 @@ private:
 
 };
 
+TVector<TString> TTopicSession::GetColumns() {
+    TVector<TString> result;
+    for (const auto& fieldName : SourceParams.GetColumns()) {
+        result.push_back(fieldName);
+    }
+    return result;
+}
+
 TTopicSession::TTopicSession(
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
@@ -169,6 +177,11 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
    // , Alloc(__LOCATION__)
+    , Parser(GetColumns(), [&](const TVector<TString>& values){
+        for (auto v : values) {
+            LOG_ROW_DISPATCHER_DEBUG("parser " << v);
+        }
+        })
 {
    // Alloc.DisableStrictAllocationCheck();
     LOG_ROW_DISPATCHER_DEBUG("MetadataFieldsSize " << SourceParams.MetadataFieldsSize());
@@ -316,6 +329,7 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
         // } // TODO
 
         const TString& item = message.GetData();
+        
         size_t size = item.size();
 
      //   auto [item, size] = CreateItem(message);
@@ -449,11 +463,14 @@ void TTopicSession::SendData() {
        // ui64 offset = readyBatch.FirstOffset;
     
         for (const auto& value : readyBatch.Data) {
+            Parser.Push(value);
             event->Record.AddBlob(value);
         }
         event->Record.SetLastOffset(readyBatch.LastOffset);
 
         LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId << " size " <<  event->Record.BlobSize());
+
+        
         //info.LastSendedMessage = offset;
         Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }

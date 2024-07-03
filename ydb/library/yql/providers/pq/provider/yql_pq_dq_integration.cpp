@@ -233,6 +233,17 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
+                std::cerr << "FillSourceSettings" << std::endl;
+
+                for (const auto& column : topicSource.Columns().Cast<TCoAtomList>()) {
+                    std::cerr << "  " <<  column.StringValue()<< std::endl;
+                    srcDesc.AddColumns(column.StringValue());
+                }
+
+                // for (const auto metadata : topic.Columns()) {
+                //     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
+                // }
+
                 protoSettings.PackFrom(srcDesc);
                 sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
               //  sourceType = "PqSource";

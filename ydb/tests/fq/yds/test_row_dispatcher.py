@@ -156,6 +156,86 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)  # TODO?
         kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
 
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_2_session(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
+        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        
+        output_topic1 = "pq_test_pq_read_write_output1"
+        output_topic2 = "pq_test_pq_read_write_output2"
+        create_stream(output_topic1, partitions_count=1)
+        create_read_rule(output_topic1, self.consumer_name)
 
+        create_stream(output_topic2, partitions_count=1)
+        create_read_rule(output_topic2, self.consumer_name)
 
+        sql1 = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
+            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+        sql2 = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
+            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+        query_id1 = start_yds_query(kikimr, client, sql1)
+        query_id2 = start_yds_query(kikimr, client, sql2)
 
+        data = [
+            '{"time" = 101;}',
+            '{"time" = 102;}'
+        ]
+
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+
+        stop_yds_query(client, query_id1)
+
+        data = [
+            '{"time" = 103;}',
+            '{"time" = 104;}'
+        ]
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+        assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_with_schema(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
+        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        
+        output_topic1 = "pq_test_pq_read_write_output1"
+        create_stream(output_topic1, partitions_count=1)
+        create_read_rule(output_topic1, self.consumer_name)
+
+        sql1 = Rf'''
+             $input = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (
+                    format=json_each_row,
+                    SCHEMA (
+                        time Int32,
+                        data String
+                    )
+                );
+
+            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
+                SELECT Yson::SerializeText(Yson::From(TableRow())) FROM $input;
+                
+           ;'''
+
+        query_id1 = start_yds_query(kikimr, client, sql1)
+
+        data = [
+            '{"time": 101, "data": "hello"}',
+            '{"time": 102, "data": "yoyo"}'
+        ]
+
+        self.write_stream(data)
+
+        expected = [
+            '{"data" = "hello"; "time" = 101}',
+            '{"data" = "yoyo"; "time" = 102}'
+        ]
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected

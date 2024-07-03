@@ -33,6 +33,7 @@ message TDqPqTopicSource {
     string DatabaseId = 9;
     repeated string MetadataFields = 10;
     TWatermarks Watermarks = 11;
+    repeated string Columns = 12;
 }
 
 message TDqPqTopicSink {

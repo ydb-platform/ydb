@@ -7,6 +7,7 @@ SRCS(
     leader_detector.cpp
     leader_election.cpp
     topic_session.cpp
+    json_parser.cpp
 )
 
 PEERDIR(
@@ -24,6 +25,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
     ydb/library/yql/providers/pq/provider
+    ydb/library/yql/public/purecalc
 )
 
 YQL_LAST_ABI_VERSION()

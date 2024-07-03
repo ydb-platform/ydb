@@ -5,6 +5,7 @@ if [ "X$1" = "X--help" ]; then
     echo '  $datasize     1, 10, 100; 1 is default]'
     echo '  $variant      h or ds; h is default'
     echo '  $tasks        1 is default'
+    echo '  $syntax      yql or pg; yql is default'
     echo '  $script_path  default is deduced from argv0'
     echo '  $ydb_path     default is $script_path/../../../..'
     echo '  $rebuild      0 [default] or 1; requires clean git repository and presence of {current branch}-base tag'
@@ -57,22 +58,22 @@ else
     xpragma=""
 fi
 
-qs=2spilling
-ql=3llvm-on
-qX=1main
-q=1main-no-enable-spilling
-qL=4main+llvm
-qsL=5spilling+llvm
+qs=2spilling${syntax+-$syntax}
+ql=3llvm-on${syntax+-$syntax}
+qX=1main${syntax+-$syntax}
+q=1main-no-enable-spilling${syntax+-$syntax}
+qL=4main+llvm${syntax+-$syntax}
+qsL=5spilling+llvm${syntax+-$syntax}
 
 [ -f ${ql}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
-        --output ${ql}-${datasize}-$tasks --variant ${variant} --syntax yql --dataset-size $datasize \
+        --output ${ql}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
         $xpragma \
         #
 
 [ -f ${qs}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
-        --output ${qs}-${datasize}-$tasks --variant ${variant} --syntax yql --dataset-size $datasize \
+        --output ${qs}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
     --pragma dq.MaxTasksPerStage=$tasks \
     --pragma config.flags=LLVM_OFF \
     --pragma dq.ComputeActorType="async" \
@@ -84,7 +85,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
 #
 [ -f ${qsL}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
-        --output ${qsL}-${datasize}-$tasks --variant ${variant} --syntax yql --dataset-size $datasize \
+        --output ${qsL}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
     --pragma dq.MaxTasksPerStage=$tasks \
     --pragma dq.ComputeActorType="async" \
     --pragma dq.UseFinalizeByKey=true \
@@ -95,24 +96,35 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
 
 outdir=results-`date -u +%Y%m%dT%H%M%S`-${variant}-${datasize}-$tasks
 if false; then
+start="`cd ${dq_path} && git describe --always --dirty`"
 echo LLVM && \
-command time ${script_path}/runner/runner $perf --query-dir ${ql}-${datasize}-$tasks/${variant} --bindings ${ql}-${datasize}-$tasks/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
-(cd ${dq_path} && git describe --always --dirty) > $outdir/${ql}-${datasize}-$tasks/${variant}/commit
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${ql}-${datasize}-$tasks/${variant} --bindings ${ql}-${datasize}-$tasks/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(echo $start; cd ${dq_path} && git describe --always --dirty) > $outdir/${ql}-${datasize}-$tasks/${variant}/commit
 fi
 if false; then
 echo main NO LLVM && \
-command time ${script_path}/runner/runner $perf --query-dir ${qX}-${datasize}-$tasks/${variant} --bindings ${qX}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qX}-${datasize}-$tasks/${variant} --bindings ${qX}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${qX}-${datasize}-$tasks/${variant}/commit
 fi
+if [ -z "${skipllvm+set}" ]; then
+start="`cd ${dq_path} && git describe --always --dirty`"
 echo Spilling+LLVM && \
-command time ${script_path}/runner/runner $perf --query-dir ${qsL}-${datasize}-$tasks/${variant} --bindings ${qsL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
-(cd ${dq_path} && git describe --always --dirty) > $outdir/${qsL}-${datasize}-$tasks/${variant}/commit
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qsL}-${datasize}-$tasks/${variant} --bindings ${qsL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(echo $start; cd ${dq_path} && git describe --always --dirty) > $outdir/${qsL}-${datasize}-$tasks/${variant}/commit
+if [ -z "${skipmain+set}" ]; then
 echo main+LLVM no enable spilling && \
-command time ${script_path}/runner/runner $perf --query-dir ${qL}-${datasize}-$tasks/${variant} --bindings ${qL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qL}-${datasize}-$tasks/${variant} --bindings ${qL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${qL}-${datasize}-$tasks/${variant}/commit
+fi
+fi
+if [ -z "${skipnollvm+set}" ]; then
+start="`cd ${dq_path} && git describe --always --dirty`"
 echo Spilling NO LLVM && \
-command time ${script_path}/runner/runner $perf --query-dir ${qs}-${datasize}-$tasks/${variant} --bindings ${qs}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
-(cd ${dq_path} && git describe --always --dirty) > $outdir/${qs}-${datasize}-$tasks/${variant}/commit
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qs}-${datasize}-$tasks/${variant} --bindings ${qs}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(echo $start; cd ${dq_path} && git describe --always --dirty) > $outdir/${qs}-${datasize}-$tasks/${variant}/commit
+if [ -z "${skipmain+set}" ]; then
 echo main NO LLVM no enable spilling && \
-command time ${script_path}/runner/runner $perf --query-dir ${q}-${datasize}-$tasks/${variant} --bindings ${q}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${q}-${datasize}-$tasks/${variant} --bindings ${q}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${q}-${datasize}-$tasks/${variant}/commit
+fi
+fi

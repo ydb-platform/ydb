@@ -3675,9 +3675,11 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
                 ResourceMetrics->StorageSystem.Set(storageSize);
 
-                ResourceMetrics->Memory.Set(UsedTabletMemory);
+                auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
+                auto memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
+                ResourceMetrics->Memory.Set(memorySize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
-                Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(UsedTabletMemory);
+                Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
             }
         }
 

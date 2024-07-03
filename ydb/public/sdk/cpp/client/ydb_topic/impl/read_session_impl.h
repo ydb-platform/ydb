@@ -1089,7 +1089,7 @@ public:
     using TPtr = std::shared_ptr<TSelf>;
     using IProcessorFactory = IReadSessionConnectionProcessorFactory<UseMigrationProtocol>;
     using IProcessorFactoryPtr = std::shared_ptr<IProcessorFactory>;
-    using IProcessor = IProcessorFactory::IProcessor;
+    using IProcessor = typename IProcessorFactory::IProcessor;
     using TScheduleCallbackFunc = std::function<void(TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr)>;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
@@ -1290,10 +1290,10 @@ private:
 
         // Removes (partition stream, offset) from mapping.
         // Returns cookie ptr if this was the last message, otherwise nullptr.
-        TSelf::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
+        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
 
         // Gets and then removes committed cookie from mapping.
-        TSelf::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
+        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
 
         // Removes mapping on partition stream.
         void RemoveMapping(ui64 partitionStreamId);

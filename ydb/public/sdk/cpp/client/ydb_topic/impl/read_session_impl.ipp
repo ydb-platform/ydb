@@ -1534,10 +1534,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     // TODO(qyryq) Do we need to store generation/nodeid info in TSingleClusterReadSessionImpl?
-    auto id = it->second->GetPartitionSessionId();
     if (IsDirectRead()) {
         Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
-        DirectReadSessionManager->UpdatePartitionSession(id, TPartitionLocation(msg.partition_location()));
+        DirectReadSessionManager->UpdatePartitionSession(it->second->GetPartitionSessionId(), msg.partition_location());
     }
 }
 

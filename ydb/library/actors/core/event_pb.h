@@ -147,7 +147,7 @@ namespace NActors {
     static constexpr char PayloadMarker = 0x07;
     static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 
-    void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, const TVector<TRope> &payload, size_t &totalPayloadSize);
+    void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     size_t SerializeNumber(size_t num, char *buffer);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);

@@ -218,6 +218,10 @@ struct TDqSettings {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
     }
 
+    bool IsSpillingInGraceJoinEnabled() const {
+        return IsSpillingEnabled() && EnableSpillingInGraceJoin.Get().GetOrElse(false);
+    }
+
     bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {
         return EnableDqReplicate.Get().GetOrElse(
             typesCtx.BlockEngineMode != EBlockEngineMode::Disable || TDqSettings::TDefault::EnableDqReplicate);

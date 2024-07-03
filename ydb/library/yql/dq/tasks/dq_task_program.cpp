@@ -5,8 +5,6 @@
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 
-#include <util/generic/xrange.h>
-
 namespace NYql::NDq {
 
 using namespace NKikimr::NMiniKQL;
@@ -15,13 +13,17 @@ using namespace NYql::NNodes;
 
 class TSpillingTransformProvider {
 public:
+
+    TSpillingTransformProvider(const TSpillingSettings& spillingSettings): SpillingSettings(spillingSettings){};
+
+
     TCallableVisitFunc operator()(TInternName name) {
-        if (name == "GraceJoin" || name == "GraceSelfJoin") {
+        if (RuntimeVersion >= 50U && SpillingSettings.EnableSpillingInGraceJoin && (name == "GraceJoin" || name == "GraceSelfJoin")) {
             return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",
                     callable.GetType()->GetReturnType(), false);
-                for (ui32 i: xrange(callable.GetInputsCount())) {
+                for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
                     callableBuilder.Add(callable.GetInput(i));
                 }
                 return TRuntimeNode(callableBuilder.Build(), false);
@@ -31,6 +33,10 @@ public:
 
         return TCallableVisitFunc();
     }
+
+private:
+
+    TSpillingSettings SpillingSettings;
 };
 
 const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext& ctx) {
@@ -51,7 +57,7 @@ const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext
 
 TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsType,
                      const NCommon::IMkqlCallableCompiler& compiler, const TTypeEnvironment& typeEnv,
-                     const IFunctionRegistry& funcRegistry, TExprContext& exprCtx, const TVector<TExprBase>& reads)
+                     const IFunctionRegistry& funcRegistry, TExprContext& exprCtx, const TVector<TExprBase>& reads, const TSpillingSettings& spillingSettings)
 {
     TProgramBuilder pgmBuilder(typeEnv, funcRegistry);
 
@@ -73,14 +79,10 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
 
     TRuntimeNode rootNode = MkqlBuildExpr(program.Body().Ref(), ctx);
 
-    if (RuntimeVersion >= 50U) {
-        TExploringNodeVisitor explorer;
-        explorer.Walk(rootNode.GetNode(), typeEnv);
-        bool wereChanges = false;
-        rootNode = SinglePassVisitCallables(rootNode, explorer, TSpillingTransformProvider(), typeEnv, true, wereChanges);
-
-        std::cerr << "MISHA " << wereChanges << std::endl; 
-    }
+    TExploringNodeVisitor explorer;
+    explorer.Walk(rootNode.GetNode(), typeEnv);
+    bool wereChanges = false;
+    rootNode = SinglePassVisitCallables(rootNode, explorer, TSpillingTransformProvider(spillingSettings), typeEnv, true, wereChanges);
 
     TStructLiteralBuilder structBuilder(typeEnv);
     structBuilder.Add("Program", rootNode);
@@ -97,7 +99,6 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
 
     auto programNode = structBuilder.Build();
 
-    TExploringNodeVisitor explorer;
     explorer.Walk(programNode, typeEnv);
     ui32 uniqueId = 0;
     for (auto& node : explorer.GetNodes()) {

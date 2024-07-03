@@ -9,11 +9,15 @@
 
 namespace NYql::NDq {
 
+struct TSpillingSettings {
+    bool EnableSpillingInGraceJoin = false;
+};
+
 const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext& ctx);
 
 TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsType,
                      const NCommon::IMkqlCallableCompiler& compiler, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
                      const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, TExprContext& exprCtx,
-                     const TVector<NNodes::TExprBase>& reads);
+                     const TVector<NNodes::TExprBase>& reads, const TSpillingSettings& spillingSettings);
 
 } // namespace NYql::NDq

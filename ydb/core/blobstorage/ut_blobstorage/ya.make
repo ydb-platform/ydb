@@ -17,6 +17,7 @@ SRCS(
     counting_events.cpp
     decommit_3dc.cpp
     defrag.cpp
+    ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp
     gc_quorum_3dc.cpp

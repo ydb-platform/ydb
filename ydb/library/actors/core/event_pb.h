@@ -148,9 +148,8 @@ namespace NActors {
     static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
-    size_t SerializeNumber(size_t num, char *buffer);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
-    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
@@ -201,7 +200,7 @@ namespace NActors {
         }
 
         ui32 CalculateSerializedSize() const override {
-            return CalculateSerializedSizeImpl(Payload, GetTotalPayloadSize(), Record.ByteSize());
+            return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
         }
 
         static IEventBase* Load(TEventSerializedData *input) {
@@ -250,10 +249,6 @@ namespace NActors {
         }
 
     public:
-        void ReservePayload(size_t size) {
-            Payload.reserve(size);
-        }
-
         ui32 AddPayload(TRope&& rope) {
             const ui32 id = Payload.size();
             TotalPayloadSize += rope.size();

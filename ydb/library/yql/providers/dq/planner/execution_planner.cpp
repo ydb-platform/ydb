@@ -1,6 +1,7 @@
 #include "execution_planner.h"
 
 #include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
@@ -27,6 +28,8 @@
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/actors/core/event_pb.h>
+
+#include <util/generic/xrange.h>
 
 #include <stack>
 

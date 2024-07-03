@@ -2,12 +2,36 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+
+#include <util/generic/xrange.h>
 
 namespace NYql::NDq {
 
 using namespace NKikimr::NMiniKQL;
 using namespace NYql::NNodes;
+
+
+class TSpillingTransformProvider {
+public:
+    TCallableVisitFunc operator()(TInternName name) {
+        if (name == "GraceJoinCore" || name == "GraceSelfJoinCore") {
+            return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                TCallableBuilder callableBuilder(env,
+                    TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",
+                    callable.GetType()->GetReturnType(), false);
+                for (ui32 i: xrange(callable.GetInputsCount())) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
+                return TRuntimeNode(callableBuilder.Build(), false);
+            };
+        }
+        
+
+        return TCallableVisitFunc();
+    }
+};
 
 const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext& ctx) {
     TVector<const TItemExprType*> memberTypes;
@@ -48,6 +72,15 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
     ctx.Parameters = paramsNode;
 
     TRuntimeNode rootNode = MkqlBuildExpr(program.Body().Ref(), ctx);
+
+    if (RuntimeVersion >= 50U) {
+        TExploringNodeVisitor explorer;
+        explorer.Walk(rootNode.GetNode(), typeEnv);
+        bool wereChanges = false;
+        rootNode = SinglePassVisitCallables(rootNode, explorer, TSpillingTransformProvider(), typeEnv, true, wereChanges);
+
+        std::cerr << "MISHA " << wereChanges << std::endl; 
+    }
 
     TStructLiteralBuilder structBuilder(typeEnv);
     structBuilder.Add("Program", rootNode);

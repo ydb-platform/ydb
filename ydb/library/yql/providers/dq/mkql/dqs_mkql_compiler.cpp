@@ -16,11 +16,6 @@ void RegisterDqsMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, cons
             return TRuntimeNode();
         });
 
-    bool isSpillingEnabled = GetParamFromPragma();
-    if (isSpillingEnabled) {
-        compiler.OverrideCallable("GraceJoinCore", MakeGraceJoinCoreWithSpillingCallableCompiler());
-        compiler.OverrideCallable("GraceSelfJoinCore", MakeGraceSelfJoinCoreWithSpillingCallableCompiler());
-    }
     auto integrations = GetUniqueIntegrations(ctx);
     std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::RegisterMkqlCompiler, std::placeholders::_1, std::ref(compiler)));
 }

@@ -24,17 +24,12 @@ public:
 
 private:
     using TSourcePortion = std::pair<ui64, ui64>;
-    struct TThreadSourceState {
-        using TFinishedPortions = TDeque<TSourcePortion>;
-        TFinishedPortions FinishedPortions;
-    };
-
     class TSourceStateImpl {
     public:
         bool FinishPortion(ui64 from, ui64 size, ui64& position);
 
     private:
-        TMap<ui64, TThreadSourceState> ThreadsState;
+        TList<TSourcePortion> FinishedPortions;
     };
 
 private:
@@ -51,18 +46,20 @@ private:
 class TDataPortionWithState: public IBulkDataGenerator::TDataPortion {
 public:
     template<class T>
-    TDataPortionWithState(TGeneratorStateProcessor* stateProcessor, const TString& table, T&& data, ui64 position, ui64 size)
+    TDataPortionWithState(TGeneratorStateProcessor* stateProcessor, const TString& table, const TString& stateSource, T&& data, ui64 position, ui64 size)
         : TDataPortion(table, std::move(data), size)
+        , StateSource(stateSource)
         , Position(position)
         , StateProcessor(stateProcessor)
     {}
 
     virtual void SetSendResult(const NYdb::TStatus& status) {
         if (StateProcessor && status.IsSuccess()) {
-            StateProcessor->FinishPortion(GetTable(), Position, GetSize());
+            StateProcessor->FinishPortion(StateSource, Position, GetSize());
         }
     }
 private:
+    TString StateSource;
     ui64 Position;
     TGeneratorStateProcessor* StateProcessor;
 };

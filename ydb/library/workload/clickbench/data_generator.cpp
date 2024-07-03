@@ -141,6 +141,7 @@ public:
         return MakeIntrusive<TDataPortionWithState>(
             Owner.Owner.StateProcessor.Get(),
             Owner.Owner.Params.GetFullTableName(nullptr),
+            Path,
             TDataPortion::TCsv(std::move(data), Foramt),
             position,
             lines.size()

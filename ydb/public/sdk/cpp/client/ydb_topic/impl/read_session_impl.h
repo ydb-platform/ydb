@@ -307,7 +307,7 @@ private:
         }
 
     private:
-        TDataDecompressionInfo::TPtr Parent;
+        std::weak_ptr<TDataDecompressionInfo> Parent;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
         i64 SourceDataSize = 0;
         i64 EstimatedDecompressedSize = 0;

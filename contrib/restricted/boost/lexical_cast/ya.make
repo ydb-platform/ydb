@@ -6,7 +6,7 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-01-24)
+VERSION(1.85.0)
 
 ORIGINAL_SOURCE(https://github.com/boostorg/lexical_cast/archive/f0862bb60ddd56c3e5b4e413605c4e2528540ed6.tar.gz)
 

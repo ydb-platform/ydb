@@ -532,7 +532,7 @@ private:
         LOG_T("Try to start scheduled refresh");
 
         RefreshState();
-        if (GetLocalInFlight() + DelayedRequests.size() > 0) {
+        if (GetLocalInFlight() + DelayedRequests.size() + PendingRequests.size() > 0) {
             ScheduleRefresh();
         }
     }
@@ -564,6 +564,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("refresh pool state failed " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             RefreshRequired = true;
+            ScheduleRefresh();
             return;
         }
 
@@ -598,10 +599,12 @@ private:
 
         DoDelayRequest();
         DoStartDelayedRequest();
+        RefreshState();
     };
 
     void Handle(TEvPrivate::TEvDelayRequestResponse::TPtr& ev) {
         RunningOperation = false;
+        ScheduleRefresh();
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed to delay request " << ev->Get()->Status << ", session id: " << ev->Get()->SessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
@@ -617,7 +620,6 @@ private:
         GlobalDelayedRequests->Inc();
         LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
 
-        ScheduleRefresh();
         DoStartDelayedRequest();
         RefreshState();
     };
@@ -637,12 +639,13 @@ private:
             return;
         }
 
-        if (!sessionId) {
-            LOG_D("first request in queue is remote, send notification to node " << ev->Get()->NodeId);
+        const ui32 nodeId = ev->Get()->NodeId;
+        if (SelfId().NodeId() != nodeId) {
+            LOG_D("first request in queue is remote, send notification to node " << nodeId);
             auto event = std::make_unique<TEvPrivate::TEvRefreshPoolState>();
             event->Record.SetPoolId(PoolId);
             event->Record.SetDatabase(Database);
-            this->Send(MakeKqpWorkloadServiceId(ev->Get()->NodeId), std::move(event));
+            this->Send(MakeKqpWorkloadServiceId(nodeId), std::move(event));
             RefreshState();
             return;
         }
@@ -680,7 +683,7 @@ private:
         }
 
         for (const TString& sessionId : ev->Get()->SesssionIds) {
-            LOG_T("succefully cleanuped request, session id: " << sessionId);
+            LOG_T("cleanuped request, session id: " << sessionId);
             if (TRequest* request = GetRequestSafe(sessionId)) {
                 FinalReply(request, ev->Get()->Status, ev->Get()->Issues);
             }

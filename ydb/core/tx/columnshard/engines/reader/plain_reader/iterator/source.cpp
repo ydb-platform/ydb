@@ -53,7 +53,7 @@ void IDataSource::OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourc
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
-    THashMap<TChunkAddress, ui32>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+    THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& defaultBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
@@ -72,7 +72,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
-                nullBlocks.emplace(c->GetAddress(), c->GetMeta().GetNumRows());
+                defaultBlocks.emplace(c->GetAddress(),
+                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetDefaultValueVerified(c->GetColumnId())));
                 ++nullChunks;
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
@@ -92,9 +93,9 @@ bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSourc
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
-        THashMap<TChunkAddress, ui32> nullBlocks;
+        THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> nullBlocks;
         NeedFetchColumns(columnIds, action, nullBlocks, StageData->GetAppliedFilter());
-        StageData->AddNulls(std::move(nullBlocks));
+        StageData->AddDefaults(std::move(nullBlocks));
     }
 
     auto readActions = action.GetReadingActions();

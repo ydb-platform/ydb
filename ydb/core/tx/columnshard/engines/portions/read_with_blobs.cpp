@@ -31,9 +31,7 @@ std::shared_ptr<arrow::RecordBatch> TReadPortionInfoWithBlobs::GetBatch(const IS
         for (auto&& i : columnNames) {
             columnNamesString.emplace_back(i.data(), i.size());
         }
-        auto result = NArrow::ExtractColumns(*CachedBatch, columnNamesString);
-        Y_ABORT_UNLESS(result);
-        return result;
+        return NArrow::TColumnOperator().VerifyIfAbsent().Extract(*CachedBatch, columnNamesString);
     } else {
         auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
         THashMap<TChunkAddress, TString> blobs;

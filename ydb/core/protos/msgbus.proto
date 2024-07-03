@@ -245,10 +245,6 @@ message TResponse {
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
 
-    // TWhoAmI
-    optional string UserName = 1100;
-    repeated string Groups = 1101;
-
     // Login
     optional string UserToken = 1102;
 }
@@ -464,11 +460,6 @@ message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;
     optional bool PreferLocalProxy = 2 [default = false];
-}
-
-message TWhoAmI {
-    optional bool ReturnGroups = 1;
-    optional string SecurityToken = 5;
 }
 
 message TBlobStorageConfigRequest {
@@ -717,6 +708,8 @@ message TTestShardControlRequest {
         repeated TTimeInterval WritePeriods = 7; // time between two events
         repeated TTimeInterval RestartPeriods = 8; // time between automatic restarts
         optional uint32 PatchRequestsFractionPPM = 12;
+        optional uint32 PutTraceFractionPPM = 13;
+        optional uint32 PutTraceVerbosity = 14 [default = 15];
     }
 
     optional uint64 TabletId = 1;

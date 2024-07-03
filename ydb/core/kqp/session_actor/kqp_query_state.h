@@ -138,7 +138,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
-    bool PlacedInWorkloadPool = false;
+    TMaybe<TActorId> PoolHandlerActor;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;

@@ -5485,7 +5485,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateAsyncReplicationWithSecret) {
+        using namespace NReplication;
+
         TKikimrRunner kikimr("root@builtin");
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -5528,6 +5531,34 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
 
             Sleep(TDuration::Seconds(1));
+        }
+
+        while (true) {
+            auto settings = TDescribeReplicationSettings().IncludeStats(true);
+            const auto result = repl.DescribeReplication("/Root/replication", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& desc = result.GetReplicationDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState(), TReplicationDescription::EState::Running);
+
+            const auto& total = desc.GetRunningState().GetStats();
+            if (!total.GetInitialScanProgress() || *total.GetInitialScanProgress() < 100) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+
+            UNIT_ASSERT(total.GetInitialScanProgress());
+            UNIT_ASSERT_DOUBLES_EQUAL(*total.GetInitialScanProgress(), 100.0, 0.01);
+
+            const auto& items = desc.GetItems();
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+            const auto& item = items.at(0).Stats;
+
+            UNIT_ASSERT(item.GetInitialScanProgress());
+            UNIT_ASSERT_DOUBLES_EQUAL(*item.GetInitialScanProgress(), *total.GetInitialScanProgress(), 0.01);
+
+            // TODO: check lag too
+            break;
         }
     }
 

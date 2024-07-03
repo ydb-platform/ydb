@@ -1,7 +1,5 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
-#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -101,10 +99,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
-        NWorkload::TWorkloadManagerConfig workloadManagerConfig;
-        workloadManagerConfig.Pools.insert({"sample_pool_id", NResourcePool::TPoolSettings()});
-        SetWorkloadManagerConfig(workloadManagerConfig);
-
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
@@ -117,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         TExecuteScriptSettings settings;
 
         {  // Existing pool
-            settings.PoolId("sample_pool_id");
+            settings.PoolId("default");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
@@ -133,7 +127,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
             UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Resource pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Failed to resolve pool id another_pool");
             UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
         }
     }

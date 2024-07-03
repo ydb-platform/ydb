@@ -134,12 +134,14 @@ public:
             TString taskId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::TaskID>();
             TString requestId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::RequestID>();
             TString owner = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::Owner>();
+            bool hasSingleCompositeActionGroup = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>();
 
             state->MaintenanceRequests.emplace(requestId, taskId);
             state->MaintenanceTasks.emplace(taskId, TTaskInfo{
                 .TaskId = taskId,
                 .RequestId = requestId,
                 .Owner = owner,
+                .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup
             });
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",

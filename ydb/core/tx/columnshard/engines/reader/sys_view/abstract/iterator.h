@@ -40,7 +40,7 @@ public:
             if (originalBatch->num_rows() == 0) {
                 continue;
             }
-            auto keyBatch = NArrow::ExtractColumns(originalBatch, KeySchema);
+            auto keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Adapt(originalBatch, KeySchema).DetachResult();
             auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
             {
@@ -49,7 +49,7 @@ public:
             }
 
             // Leave only requested columns
-            auto resultBatch = NArrow::ExtractColumns(originalBatch, ResultSchema);
+            auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
             NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
             if (resultBatch->num_rows() == 0) {
                 continue;

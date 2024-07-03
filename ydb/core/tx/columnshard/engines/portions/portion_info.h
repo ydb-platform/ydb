@@ -613,7 +613,8 @@ public:
     class TAssembleBlobInfo {
     private:
         YDB_READONLY_DEF(std::optional<ui32>, ExpectedRowsCount);
-        ui32 NullRowsCount = 0;
+        ui32 DefaultRowsCount = 0;
+        std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
     public:
         ui32 GetExpectedRowsCountVerified() const {
@@ -625,13 +626,15 @@ public:
             AFL_VERIFY(!ExpectedRowsCount);
             ExpectedRowsCount = expectedRowsCount;
             if (!Data) {
-                AFL_VERIFY(*ExpectedRowsCount == NullRowsCount);
+                AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount)
-            : NullRowsCount(rowsCount) {
-            AFL_VERIFY(NullRowsCount);
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
+            : DefaultRowsCount(rowsCount)
+            , DefaultValue(defValue)
+        {
+            AFL_VERIFY(DefaultRowsCount);
         }
 
         TAssembleBlobInfo(const TString& data)
@@ -639,8 +642,8 @@ public:
             AFL_VERIFY(!!Data);
         }
 
-        ui32 GetNullRowsCount() const noexcept {
-            return NullRowsCount;
+        ui32 GetDefaultRowsCount() const noexcept {
+            return DefaultRowsCount;
         }
 
         const TString& GetData() const noexcept {
@@ -648,11 +651,11 @@ public:
         }
 
         bool IsBlob() const {
-            return !NullRowsCount && !!Data;
+            return !DefaultRowsCount && !!Data;
         }
 
-        bool IsNull() const {
-            return NullRowsCount && !Data;
+        bool IsDefault() const {
+            return DefaultRowsCount && !Data;
         }
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
@@ -788,7 +791,7 @@ public:
 
         TPreparedColumn Compile() {
             if (BlobsInfo.empty()) {
-                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows));
+                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader->GetDefaultValue()));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
                 AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);

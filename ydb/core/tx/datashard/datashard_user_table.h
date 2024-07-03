@@ -251,10 +251,12 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TTableIndex {
-        using EIndexType = NKikimrSchemeOp::EIndexType;
+        using EType = NKikimrSchemeOp::EIndexType;
+        using EState = NKikimrSchemeOp::EIndexState;
 
         TString Name;
-        EIndexType Type;
+        EType Type;
+        EState State;
         TVector<ui32> KeyColumnIds;
         TVector<ui32> DataColumnIds;
 
@@ -263,6 +265,7 @@ struct TUserTable : public TThrRefBase {
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
             : Name(indexDesc.GetName())
             , Type(indexDesc.GetType())
+            , State(indexDesc.GetState())
         {
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
@@ -443,6 +446,7 @@ struct TUserTable : public TThrRefBase {
     bool ResetTableSchemaVersion();
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
+    void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);
     void DropIndex(const TPathId& indexPathId);
     bool HasAsyncIndexes() const;
 

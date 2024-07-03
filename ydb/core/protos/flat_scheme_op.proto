@@ -1041,9 +1041,16 @@ message TBuildIndexOutcome {
         optional NKikimrProto.TPathID IndexPathId = 1;
     }
 
+    message TApply {
+        // Path id of the index whose creation was done
+        optional NKikimrProto.TPathID IndexPathId = 1;
+    }
+
+    reserved 1; // Apply type was changed from Empty to TApply
+
     oneof Result {
-        google.protobuf.Empty Apply = 1;
         TCancel Cancel = 2;
+        TApply Apply = 3;
     }
 }
 

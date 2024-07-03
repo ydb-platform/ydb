@@ -73,6 +73,8 @@ def main():
     parser.add_argument('--timeout', type=int, default=30*60)
     parser.add_argument('--perf', action='store_true')
     parser.add_argument('--arc-path', type=str, default='{}/arcadia'.format(os.environ['HOME']))
+    parser.add_argument('--include-q', default=[], action='append')
+    parser.add_argument('--exclude-q', default=[], action='append')
     args, argv = parser.parse_known_intermixed_args()
     qdir = args.query_dir
     bindings = args.bindings
@@ -91,8 +93,24 @@ def main():
         }), file=outj)
         for query in sorted(querydir.glob('**/*.sql'), key=lambda x: tuple(map(lambda y: int(y) if re.match(RE_DIGITS, y) else y, re.split(RE_DIGITS, str(x))))):
             q = str(query)
-            print(q, end='\t', file=outf)
             name = outdir + '/' + q
+            if len(args.include_q):
+                include = False
+                for r in args.include_q:
+                    if re.search(r, name):
+                        include = True
+                        break
+                if not include:
+                    continue
+            if len(args.exclude_q):
+                include = True
+                for r in args.exclude_q:
+                    if re.search(r, name):
+                        include = False
+                        break
+                if not include:
+                    continue
+            print(q, end='\t', file=outf)
             outname = name + '-result.yson'
             exitcode, rusage, elapsed, iostat = run(
                 argv + [

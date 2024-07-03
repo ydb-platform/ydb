@@ -1,5 +1,6 @@
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
+#include "flat_page_btree_index_writer.h"
 
 namespace NKikimr::NTable {
 
@@ -54,17 +55,17 @@ class TTableHistogramBuilderBtreeIndex {
             return EndDataSize - BeginDataSize;
         }
 
-        void Open(ui64& openedRowCount, ui64& openedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == ENodeState::Initial);
-            
-            State = ENodeState::Opened;
-            openedRowCount += GetRowCount();
-            openedDataSize += GetDataSize();
+        bool Open(ui64& openedRowCount, ui64& openedDataSize) noexcept {
+            if (State == ENodeState::Initial) {
+                State = ENodeState::Opened;
+                openedRowCount += GetRowCount();
+                openedDataSize += GetDataSize();
+                return true;
+            }
+            return false;            
         }
 
-        void Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == ENodeState::Opened || State == ENodeState::Ignored);
-
+        bool Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) noexcept {
             if (State == ENodeState::Opened) {
                 State = ENodeState::Closed;
                 ui64 rowCount = GetRowCount();
@@ -75,19 +76,30 @@ class TTableHistogramBuilderBtreeIndex {
                 openedDataSize -= dataSize;
                 closedRowCount += rowCount;
                 closedDataSize += dataSize;
+                return true;
+            } else if (State == ENodeState::Initial) {
+                // wrong node states pipeline is possible in case when bound keys were taken from slices
+                // and node EndKey >= BeginKey as we ignore inclusive flags
+                State = ENodeState::Closed;
+                closedRowCount += GetRowCount();
+                closedDataSize += GetDataSize();
+                return true;
             }
+            return false;
         }
 
-        void Ignore(ui64& openedRowCount, ui64& openedDataSize) noexcept {
-            Y_ABORT_UNLESS(State == ENodeState::Opened);
-            
-            State = ENodeState::Ignored;
-            ui64 rowCount = GetRowCount();
-            ui64 dataSize = GetDataSize();
-            Y_ABORT_UNLESS(openedRowCount >= rowCount);
-            Y_ABORT_UNLESS(openedDataSize >= dataSize);
-            openedRowCount -= rowCount;
-            openedDataSize -= dataSize;
+        bool Ignore(ui64& openedRowCount, ui64& openedDataSize) noexcept {
+            if (State == ENodeState::Opened) {
+                State = ENodeState::Ignored;
+                ui64 rowCount = GetRowCount();
+                ui64 dataSize = GetDataSize();
+                Y_ABORT_UNLESS(openedRowCount >= rowCount);
+                Y_ABORT_UNLESS(openedDataSize >= dataSize);
+                openedRowCount -= rowCount;
+                openedDataSize -= dataSize;
+                return true;
+            }
+            return false;
         }
     };
 
@@ -180,7 +192,15 @@ public:
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
-            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetDataSize(), EmptyKey, EmptyKey);
+            TCellsIterable beginKey = EmptyKey;
+            if (part.Slices && part.Slices->front().FirstKey.GetCells()) {
+                beginKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->front().FirstKey);
+            }
+            TCellsIterable endKey = EmptyKey;
+            if (part.Slices && part.Slices->back().LastKey.GetCells()) {
+                endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
+            }
+            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetDataSize(), beginKey, endKey);
             ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
@@ -271,9 +291,10 @@ private:
             auto processEvent = [&](const TEvent& event) {
                 Y_DEBUG_ABORT_UNLESS(NodeEventKeyGreater.Compare(event, currentKeyPointer) <= 0, "Can't process future events");
                 if (event.IsBegin) {
-                    event.Node->Open(openedRowCount, openedDataSize);
-                    openedSortedByRowCount.push(event.Node);
-                    openedSortedByDataSize.push(event.Node);
+                    if (event.Node->Open(openedRowCount, openedDataSize)) {
+                        openedSortedByRowCount.push(event.Node);
+                        openedSortedByDataSize.push(event.Node);
+                    }
                 } else {
                     event.Node->Close(openedRowCount, closedRowCount, openedDataSize, closedDataSize);
                 }
@@ -318,7 +339,6 @@ private:
 
                 if (node->State != ENodeState::Opened) {
                     // may have already closed or ignored nodes in the heap, just skip them
-                    Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
 
@@ -336,7 +356,6 @@ private:
 
                 if (node->State != ENodeState::Opened) {
                     // may have already closed or ignored nodes in the heap, just skip them
-                    Y_ABORT_UNLESS(node->State == ENodeState::Closed || node->State == ENodeState::Ignored);
                     continue;
                 }
 
@@ -367,7 +386,7 @@ private:
                         Y_ABORT_UNLESS(currentKeyRowCountOpens <= openedRowCount);
                         ui64 currentKeyPointerRowCount = closedRowCount + (openedRowCount - currentKeyRowCountOpens) / 2;
                         currentKeyPointerRowCount = Min(currentKeyPointerRowCount, stats.RowCount);
-                        if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < currentKeyPointerRowCount) {
+                        if (currentKeyPointerRowCount && (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < currentKeyPointerRowCount)) {
                             AddKey(stats.RowCountHistogram, currentKeyPointer.Key, currentKeyPointerRowCount);
                             nextHistogramRowCount = Max(currentKeyPointerRowCount + 1, nextHistogramRowCount + RowCountResolution);
                             if (nextHistogramRowCount + RowCountResolutionGap > stats.RowCount) {
@@ -387,7 +406,7 @@ private:
                         Y_ABORT_UNLESS(currentKeyDataSizeOpens <= openedDataSize);
                         ui64 currentKeyPointerDataSize = closedDataSize + (openedDataSize - currentKeyDataSizeOpens) / 2;
                         currentKeyPointerDataSize = Min(currentKeyPointerDataSize, stats.DataSize.Size);
-                        if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < currentKeyPointerDataSize) {
+                        if (currentKeyPointerDataSize && (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < currentKeyPointerDataSize)) {
                             AddKey(stats.DataSizeHistogram, currentKeyPointer.Key, currentKeyPointerDataSize);
                             nextHistogramDataSize = Max(currentKeyPointerDataSize + 1, nextHistogramDataSize + DataSizeResolution);
                             if (nextHistogramDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
@@ -455,6 +474,18 @@ private:
     }
     
 private:
+    TCellsIterable MakeCellsIterableKey(const TPart* part, TSerializedCellVec serializedKey) {
+        // Note: this method is only called for root nodes and don't worth optimizing
+        // so let's simply create a new fake b-tree index node with a given key
+        NPage::TBtreeIndexNodeWriter writer(part->Scheme, {});
+        writer.AddChild({1, 1, 1, 0, 0});
+        writer.AddKey(serializedKey.GetCells());
+        writer.AddChild({2, 2, 2, 0, 0});
+        TSharedData serializedNode = writer.Finish();
+        LoadedBTreeNodes.emplace_back(serializedNode);
+        return LoadedBTreeNodes.back().GetKeyCellsIterable(0, part->Scheme->GetLayout({}).ColsKeyData);
+    }
+
     static int CompareKeys(const TCellsIterable& left_, const TCellsIterable& right_, const TKeyCellDefaults& keyDefaults) {
         Y_ABORT_UNLESS(left_);
         Y_ABORT_UNLESS(right_);

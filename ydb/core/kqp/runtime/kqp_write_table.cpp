@@ -229,7 +229,6 @@ public:
             const i32 typmod = -1) {
         CellsInfo[index].Type = type;
         CellsInfo[index].Value = value;
-        CellsInfo[index].PgBinaryValue.clear();
 
         if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
             const auto typeDesc = type.GetTypeDesc();
@@ -242,6 +241,8 @@ public:
             } else {
                 CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(typeDesc));
             }
+        } else {
+            CellsInfo[index].PgBinaryValue.clear();
         }
         return *this;
     }
@@ -370,10 +371,8 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,  // key columns then value columns
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-        : TypeEnv(typeEnv)
-        , Columns(BuildColumns(inputColumns))
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) // key columns then value columns
+        : Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndex(schemeEntry, inputColumns))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
@@ -405,8 +404,6 @@ public:
             return;
         }
 
-        Y_UNUSED(TypeEnv);
-        //auto allocGuard = TypeEnv.BindAllocator();
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
@@ -576,7 +573,6 @@ public:
     }
 
 private:
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NSharding::IShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
@@ -691,10 +687,8 @@ public:
     TDataShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-        : TypeEnv(typeEnv)
-        , SchemeEntry(schemeEntry)
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns)
+        : SchemeEntry(schemeEntry)
         , KeyDescription(std::move(partitionsEntry.KeyDescription))
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndexKeyFirst(SchemeEntry, inputColumns))
@@ -729,8 +723,6 @@ public:
     void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
         YQL_ENSURE(!Closed);
 
-        Y_UNUSED(TypeEnv);
-        //auto allocGuard = TypeEnv.BindAllocator();
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
@@ -832,7 +824,6 @@ private:
         return *KeyDescription;
     }
 
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NSchemeCache::TSchemeCacheNavigate::TEntry SchemeEntry;
     THolder<TKeyDesc> KeyDescription;
 
@@ -857,19 +848,17 @@ bool IPayloadSerializer::IBatch::IsEmpty() const {
 
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const NMiniKQL::TTypeEnvironment& typeEnv) {
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, typeEnv);
+        schemeEntry, inputColumns);
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const NMiniKQL::TTypeEnvironment& typeEnv) {
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     return MakeIntrusive<TDataShardPayloadSerializer>(
-        schemeEntry, std::move(partitionsEntry), inputColumns, typeEnv);
+        schemeEntry, std::move(partitionsEntry), inputColumns);
 }
 
 namespace {
@@ -1048,8 +1037,7 @@ public:
         BeforePartitioningChanged();
         Serializer = CreateColumnShardPayloadSerializer(
             schemeEntry,
-            InputColumnsMetadata,
-            TypeEnv);
+            InputColumnsMetadata);
         AfterPartitioningChanged();
     }
 
@@ -1060,8 +1048,7 @@ public:
         Serializer = CreateDataShardPayloadSerializer(
             schemeEntry,
             std::move(partitionsEntry),
-            InputColumnsMetadata,
-            TypeEnv);
+            InputColumnsMetadata);
         AfterPartitioningChanged();
     }
 

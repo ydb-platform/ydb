@@ -848,26 +848,22 @@ private:
 
         bool advanced = false;
 
-        bool hasMissingExternalBlobs = false;
+        bool hasMissingReferencedBlobs = false;
         ui64 prechargedCount = 0;
         ui64 prechargedRowsSize = 0; // Without referenced blobs (external, outer)
 
         TString lastKey;
 
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-            advanced = true;
-            DeletedRowSkips += iter->Stats.DeletedRowSkips;
-            InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
-
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            if (!hasMissingExternalBlobs && env.MissingReferencesSize()) {
+            if (!hasMissingReferencedBlobs && env.MissingReferencesSize()) {
                 lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
-                hasMissingExternalBlobs = true;
+                hasMissingReferencedBlobs = true;
             }
 
-            if (hasMissingExternalBlobs) {
+            if (hasMissingReferencedBlobs) {
                 prechargedCount++;
                 prechargedRowsSize += EstimateSize(rowValues.Cells());
 
@@ -877,6 +873,10 @@ private:
 
                 continue;
             }
+
+            advanced = true;
+            DeletedRowSkips += iter->Stats.DeletedRowSkips;
+            InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
@@ -912,19 +912,19 @@ private:
             auto lastKeyCells = iter->GetKey().Cells();
             if (lastKeyCells && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
                 lastKey = TSerializedCellVec::Serialize(lastKeyCells);
+                advanced = true;
             }
         }
 
         if (lastKey) {
             LastProcessedKey = lastKey;
-            LastProcessedKeyErasedOrMissing = hasMissingExternalBlobs || iter->GetKeyState() == NTable::ERowOp::Erase;
-            advanced = true;
+            LastProcessedKeyErasedOrMissing = hasMissingReferencedBlobs || iter->GetKeyState() == NTable::ERowOp::Erase;
         } else {
             LastProcessedKey.clear();
         }
 
         // last iteration to Page or Gone might also have deleted or invisible rows
-        if (advanced || (iter->Last() != NTable::EReady::Page && !hasMissingExternalBlobs)) {
+        if (advanced || (iter->Last() != NTable::EReady::Page && !hasMissingReferencedBlobs)) {
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
@@ -934,7 +934,7 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page || hasMissingExternalBlobs) {
+        if (iter->Last() == NTable::EReady::Page || hasMissingReferencedBlobs) {
             return EReadStatus::NeedData;
         }
 

@@ -39,7 +39,7 @@ namespace NKikimr {
         AddPayload(std::move(buffer));
     }
 
-    void TEvBlobStorage::TEvVMultiPut::StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TRcBuf& buffer) {
+    void TEvBlobStorage::TEvVMultiPut::StorePayload(const TRcBuf& buffer) {
         AddPayload(TRope(buffer));
         Y_DEBUG_ABORT_UNLESS(Record.ItemsSize() == GetPayloadCount());
     }

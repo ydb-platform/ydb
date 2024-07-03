@@ -235,6 +235,7 @@ public:
         ui64 StorageQuota;
         ui64 StorageUsage;
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+        TNodeId MaxTimeDifferenceNodeId = 0;
     };
 
     struct TSelfCheckResult {
@@ -517,20 +518,6 @@ public:
 
     bool IsSpecificDatabaseFilter() const {
         return FilterDatabase && FilterDatabase != DomainPath;
-    }
-
-    bool IsTimeDifferenceCheckNode(const TNodeId nodeId) const {
-        if (!IsSpecificDatabaseFilter()) {
-            return true;
-        }
-
-        auto it = DatabaseState.find(FilterDatabase);
-        if (it == DatabaseState.end()) {
-            return false;
-        }
-        auto& computeNodeIds = it->second.ComputeNodeIds;
-
-        return std::find(computeNodeIds.begin(), computeNodeIds.end(), nodeId) != computeNodeIds.end();
     }
 
     void Bootstrap() {
@@ -1265,7 +1252,7 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
@@ -1303,6 +1290,34 @@ public:
                 }
                 loadAverageStatus.set_overall(laContext.GetOverallStatus());
             }
+
+            if (nodeSystemState.HasMaxClockSkewPeerId()) {
+                TNodeId peerId = nodeSystemState.GetMaxClockSkewPeerId();
+                long timeDifferenceUs = nodeSystemState.GetMaxClockSkewWithPeerUs();
+                TDuration timeDifferenceDuration = TDuration::MicroSeconds(abs(timeDifferenceUs));
+                Ydb::Monitoring::StatusFlag::Status status;
+                if (timeDifferenceDuration > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+                    status = Ydb::Monitoring::StatusFlag::ORANGE;
+                } else if (timeDifferenceDuration > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+                    status = Ydb::Monitoring::StatusFlag::YELLOW;
+                } else {
+                    status = Ydb::Monitoring::StatusFlag::GREEN;
+                }
+
+                computeNodeStatus.mutable_max_time_difference()->set_peer(ToString(peerId));
+                computeNodeStatus.mutable_max_time_difference()->set_difference_ms(timeDifferenceDuration.MilliSeconds());
+                computeNodeStatus.set_overall(status);
+
+                if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
+                    TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
+                    FillNodeInfo(peerId, tdContext.Location.mutable_compute()->mutable_peer());
+                    if (status == Ydb::Monitoring::StatusFlag::GREEN) {
+                        tdContext.ReportStatus(status);
+                    } else {
+                        tdContext.ReportStatus(status, TStringBuilder() << "The nodes have a time difference of " << timeDifferenceDuration.MilliSeconds() << " ms", ETags::SyncState);
+                    }
+                }
+            }
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
@@ -1334,12 +1349,24 @@ public:
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
+            long maxTimeDifferenceUs = 0;
+            for (TNodeId nodeId : *computeNodeIds) {
+                auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+                if (itNodeSystemState != MergedNodeSystemState.end()) {
+                    if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
+                            && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
+                        maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
+                        databaseState.MaxTimeDifferenceNodeId = nodeId;
+                    }
+                }
+            }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
             context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
+            context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
             for (TNodeId nodeId : *computeNodeIds) {
@@ -2086,40 +2113,6 @@ public:
     const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
     const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
-    void FillNodesSyncStatus(TOverallStateContext& context) {
-        long maxClockSkewUs = 0;
-        TNodeId maxClockSkewPeerId = 0;
-        TNodeId maxClockSkewNodeId = 0;
-        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
-            if (IsTimeDifferenceCheckNode(nodeId) && IsTimeDifferenceCheckNode(nodeSystemState->GetMaxClockSkewPeerId())
-                    && abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
-                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
-                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
-                maxClockSkewNodeId = nodeId;
-            }
-        }
-        if (!maxClockSkewNodeId) {
-            return;
-        }
-
-        TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_TIME_DIFFERENCE";
-        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
-        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
-
-        TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
-        if (maxClockSkewTime > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
-        } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
-        } else {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-        }
-
-        context.UpdateMaxStatus(syncContext.GetOverallStatus());
-        context.AddIssues(syncContext.IssueRecords);
-    }
-
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -2128,7 +2121,6 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
-        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;

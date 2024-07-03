@@ -1,4 +1,5 @@
 #include <queue>
+#include <util/stream/format.h>
 #include "ldap_defines.h"
 
 namespace LdapMock {
@@ -7,23 +8,29 @@ namespace {
 
 bool checkFilters(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRequestInfo::TSearchFilter& f2) {
     if (f1.Type != f2.Type) {
+        Cerr << "+++  Different Type: " << static_cast<int>(f1.Type) << " " << static_cast<int>(f2.Type) << Endl;
         return false;
     }
     if (f1.Attribute != f2.Attribute) {
+        Cerr << "+++  Different Attribute: " << f1.Attribute << " " << f2.Attribute << Endl;
         return false;
     }
     if (f1.Value != f2.Value) {
+        Cerr << "+++  Different Value: " << f1.Value << " " << f2.Value << Endl;
         return false;
     }
     if (f1.Type == EFilterType::LDAP_FILTER_EXT) {
         if (f1.MatchingRule != f2.MatchingRule) {
+            Cerr << "+++  Different MatchingRule: " << f1.MatchingRule << " " << f2.MatchingRule << Endl;
             return false;
         }
         if (f1.DnAttributes != f2.DnAttributes) {
+            Cerr << "+++  Different DnAttr: " << f1.DnAttributes << " " << f2.DnAttributes << Endl;
             return false;
         }
     }
     if (f1.NestedFilters.size() != f2.NestedFilters.size()) {
+        Cerr << "+++  Different nestedFilters: " << f1.NestedFilters.size() << " " << f2.NestedFilters.size() << Endl;
         return false;
     }
     return true;
@@ -35,12 +42,15 @@ bool TraverseFilter(const TSearchRequestInfo::TSearchFilter& f1, const TSearchRe
     }
     std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q1;
     for (const auto& filter : f1.NestedFilters) {
+        Cerr << "+++q1: " << filter->Value << Endl;
         q1.push(filter);
     }
     std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q2;
     for (const auto& filter : f2.NestedFilters) {
+        Cerr << "+++q2: " << filter->Value << Endl;
         q2.push(filter);
     }
+    Cerr << "+++Before while: " << q1.size() << " : " << q2.size() << Endl;
     while (!q1.empty() && !q2.empty()) {
         const auto filterQ1 = q1.front();
         q1.pop();

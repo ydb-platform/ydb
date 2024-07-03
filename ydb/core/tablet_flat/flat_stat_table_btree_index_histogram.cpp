@@ -347,7 +347,10 @@ private:
             // add current key pointer if we either:
             // - failed to split opened nodes and may exceed next histogram bucket values (plus their gaps)
             // - have enough closed nodes (more than next histogram bucket values (minus their gaps))
-            // current key pointer value ignores all nodes that start at current key pointer, subtract them
+            // current key pointer value:
+            // - includes size of all closed nodes
+            // - includes half of size of all opened nodes (as they exact position is unknown)
+            // - ignores all nodes that start at current key pointer
             if (currentKeyPointer.Key) {
                 if (nextHistogramRowCount != Max<ui64>()) {
                     if (closedRowCount + openedRowCount > nextHistogramRowCount + RowCountResolutionGap || closedRowCount > nextHistogramRowCount - RowCountResolutionGap) {
@@ -358,7 +361,8 @@ private:
                             }
                         }
                         Y_ABORT_UNLESS(currentKeyRowCountOpens <= openedRowCount);
-                        ui64 currentKeyPointerRowCount = closedRowCount + openedRowCount - currentKeyRowCountOpens;
+                        ui64 currentKeyPointerRowCount = closedRowCount + (openedRowCount - currentKeyRowCountOpens) / 2;
+                        currentKeyPointerRowCount = Min(currentKeyPointerRowCount, stats.RowCount);
                         if (stats.RowCountHistogram.empty() || stats.RowCountHistogram.back().Value < currentKeyPointerRowCount) {
                             AddKey(stats.RowCountHistogram, currentKeyPointer.Key, currentKeyPointerRowCount);
                             nextHistogramRowCount = Max(currentKeyPointerRowCount + 1, nextHistogramRowCount + RowCountResolution);
@@ -377,7 +381,8 @@ private:
                             }
                         }
                         Y_ABORT_UNLESS(currentKeyDataSizeOpens <= openedDataSize);
-                        ui64 currentKeyPointerDataSize = closedDataSize + openedDataSize - currentKeyDataSizeOpens;
+                        ui64 currentKeyPointerDataSize = closedDataSize + (openedDataSize - currentKeyDataSizeOpens) / 2;
+                        currentKeyPointerDataSize = Min(currentKeyPointerDataSize, stats.DataSize.Size);
                         if (stats.DataSizeHistogram.empty() || stats.DataSizeHistogram.back().Value < currentKeyPointerDataSize) {
                             AddKey(stats.DataSizeHistogram, currentKeyPointer.Key, currentKeyPointerDataSize);
                             nextHistogramDataSize = Max(currentKeyPointerDataSize + 1, nextHistogramDataSize + DataSizeResolution);

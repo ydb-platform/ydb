@@ -2,6 +2,8 @@
 #include "flat_stat_table.h"
 #include "flat_stat_table_mixed_index.h"
 #include "flat_stat_table_btree_index.h"
+#include <test/libs/table/wrap_iter.h>
+#include <test/libs/table/wrap_part.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
@@ -475,7 +477,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
                 }
                 Cerr << ") ";
             }
-            // Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
+            Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
             Cerr << Endl;
         }
     }
@@ -492,7 +494,33 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         UNIT_ASSERT_LE(std::abs(percent), allowed);
     }
 
-    void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+    void CalcDataBeforeIterate(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+        NTest::TChecker<NTest::TWrapIter, TSubset> wrap(subset, { new TTouchEnv });
+        auto env = wrap.GetEnv<TTouchEnv>();
+        env->Faulty = false;
+        
+        bytes = 0;
+        rows = 0;
+        wrap.Seek({}, ESeek::Lower);
+
+        while (wrap.GetReady() == EReady::Data) {
+            ui64 prevBytes = env->TouchedBytes;
+
+            wrap.Next();
+
+            if (wrap.GetReady() == EReady::Data && key.GetCells()) {
+                auto cmp = CompareTypedCellVectors(key.GetCells().data(), wrap->GetKey().Cells().data(), subset.Scheme->Keys->Types.data(), Min(key.GetCells().size(), wrap->GetKey().Cells().size()));
+                if (cmp < 0) {
+                    break;
+                }
+            }
+
+            rows++;
+            bytes = prevBytes;
+        }
+    }
+
+    void CalcDataBeforePrecharge(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
         TTouchEnv env;
         env.Faulty = false;
 
@@ -511,6 +539,23 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         bytes = env.TouchedBytes;
         rows = env.TouchedRows;
+    }
+
+    void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+        bool groups = false;
+        rows = 0;
+        for (const auto& part : subset.Flatten) {
+            TTestEnv env;
+            auto index = CreateIndexIter(part.Part.Get(), &env, {});
+            rows += index->GetEndRowId();
+            groups |= part->GroupsCount > 1 || part->HistoricGroupsCount > 0;
+        }
+
+        if (groups || rows > 10000) {
+            CalcDataBeforePrecharge(subset, key, bytes, rows);
+        } else {
+            CalcDataBeforeIterate(subset, key, bytes, rows);
+        }
     }
 
     void CheckHistogram(const TSubset& subset, THistogram histogram, bool isBytes, ui64 total, bool verifyPercents) {

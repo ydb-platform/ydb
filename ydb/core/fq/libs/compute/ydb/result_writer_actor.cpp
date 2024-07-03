@@ -327,8 +327,10 @@ public:
 
         for (const auto& resultSetMeta: ev.Get()->Get()->ResultSetsMeta) {
             auto& meta = *PingTaskRequest.add_result_set_meta();
-            for (const auto& column: resultSetMeta.columns()) {
-                *meta.add_column() = column;
+            for (const auto& column: resultSetMeta.Columns) {
+                auto& new_column = *meta.add_column();
+                new_column.set_name(column.Name);
+                *new_column.mutable_type() = column.Type.GetProto();
             }
         }
 

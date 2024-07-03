@@ -201,6 +201,7 @@ private:
     bool SlicePart(const TSlices& slices, TNodeState& node) {
         YieldHandler();
 
+        // TODO: avoid binary search for each call (we may intersect slices with nodes in linear time actually)
         auto it = slices.LookupBackward(slices.end(), node.EndRowId - 1);
         
         if (it == slices.end() || node.EndRowId <= it->BeginRowId() || it->EndRowId() <= node.BeginRowId) {
@@ -218,6 +219,7 @@ private:
 
         if (node.Level == 0) {
             // can't split, decide by node.EndRowId - 1
+            // TODO: decide by non-empty slice and node intersection, but this requires size calculation changes too
             if (it->Has(node.EndRowId - 1)) {
                 AddFutureEvents(node);
             }
@@ -288,6 +290,8 @@ private:
             } while (FutureEvents && NodeEventKeyGreater.Compare(FutureEvents.top(), currentKeyPointer) == 0);
 
             const auto addEvent = [&](TEvent event) {
+                // TODO: skip all closed nodes and don't process them here
+                // TODO: don't compare each node key and replace it with parentNode.Seek(currentKeyPointer)
                 auto cmp = NodeEventKeyGreater.Compare(event, currentKeyPointer);
                 if (cmp <= 0) { // event happened
                     processEvent(event);

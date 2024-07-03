@@ -492,7 +492,7 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {

@@ -45,6 +45,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             const NUdf::TUnboxedValue& strDate32 = ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(value32.Get<i32>()));
             UNIT_ASSERT(strDate32.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
+/*
+            ui32 dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
+            ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            EnrichDate(value16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16);
+            EnrichDate32(value16, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfYear16, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(weekOfYear16, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_16, weekOfYearIso8601);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
+*/
         }
     }
 

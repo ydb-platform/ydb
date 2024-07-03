@@ -76,7 +76,15 @@ namespace NFq {
                             ythrow yexception() << "Unexpected protocol for PostgreSQL " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
                     }
                 case NYql::EDatabaseType::Greenplum:
-                    // https://cloud.yandex.ru/docs/managed-postgresql/operations/connect
+                    // https://cloud.yandex.ru/docs/managed-greenplum/operations/connect
+                    switch (params.Protocol) {
+                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                            return TEndpoint(fixedHost, GREENPLUM_PORT);
+                        default:
+                            ythrow yexception() << "Unexpected protocol for Greenplum: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                    }
+                case NYql::EDatabaseType::MySQL:
+                    // https://cloud.yandex.ru/docs/managed-mysql/operations/connect
                     switch (params.Protocol) {
                         case NYql::NConnector::NApi::EProtocol::NATIVE:
                             return TEndpoint(fixedHost, GREENPLUM_PORT);

@@ -6,7 +6,7 @@
 
 #include "direct_reader.h"
 
-#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 

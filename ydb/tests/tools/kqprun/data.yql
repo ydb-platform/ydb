@@ -1,1 +1,1 @@
-SELECT * FROM mr_nvme_testing_08_greenplum_native.simple
+SELECT * FROM mr_nvme_testing_08_mysql_native.simple

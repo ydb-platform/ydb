@@ -26,7 +26,32 @@ public:
 };
 
 
+template <typename T>
+class TCallbackConsumer: public NYql::NPureCalc::IConsumer<T*> {
+private:
+    using TCallable = void (*)(const T*);
+    int I_ = 0;
+    TCallable Callback_;
+
+public:
+    TCallbackConsumer(TCallable callback)
+        : Callback_(std::move(callback))
+    {
+    }
+
+    void OnObject(T* t) override {
+        I_ += 1;
+        Callback_(t);
+    }
+
+    void OnFinish() override {
+        UNIT_ASSERT(I_ > 0);
+    }
+};
+
+
 using ExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
+using ExecBatchConsumerImpl = TCallbackConsumer<arrow::compute::ExecBatch>;
 
 
 static constexpr i64 value = 19;
@@ -130,6 +155,34 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
             UNIT_ASSERT(batch = stream->Fetch());
             AssertBatch(batch);
             UNIT_ASSERT(!stream->Fetch());
+        }
+    }
+}
+
+
+Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
+    Y_UNIT_TEST(TestAllColumns) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePushStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                "SELECT * FROM Input",
+                ETranslationMode::SQL
+            );
+
+            arrow::compute::ExecBatch item = MakeBatch();
+
+            auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(AssertBatch));
+
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnObject(&item); }());
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnFinish(); }());
         }
     }
 }

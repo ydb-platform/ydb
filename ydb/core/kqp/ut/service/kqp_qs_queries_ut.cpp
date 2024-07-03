@@ -470,6 +470,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(IssuesInCaseOfSuccess) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, true);
+        auto selectRes = db.ExecuteQuery(
+            "SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Key = 2",
+            TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+        const TString expected = R"([[["Payload2"]]])";
+        CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        UNIT_ASSERT_C(HasIssue(selectRes.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+            [](const NYql::TIssue& issue) {
+                return issue.GetMessage().Contains("Given predicate is not suitable for used index: Index");
+            }), selectRes.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ExecuteQueryInteractiveTxCommitWithQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

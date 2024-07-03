@@ -1303,23 +1303,23 @@
     "test.test[insert-select_subquery--Results]": [],
     "test.test[insert-select_with_sort_limit-default.txt-Analyze]": [
         {
-            "checksum": "72a01c202c458a8e4bef611782656a60",
-            "size": 5534,
-            "uri": "https://{canondata_backend}/1937429/59a2cd633803abba31f17e8fdf7e41c273aaacf8/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Analyze_/plan.txt"
+            "checksum": "e167d1c263e22409b5504e5ead86f0dc",
+            "size": 6497,
+            "uri": "https://{canondata_backend}/1942278/d9a3667b4b47eaef4ecbf7f8215efdd87df9db8b/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[insert-select_with_sort_limit-default.txt-Debug]": [
         {
-            "checksum": "18494d2075282af0f713914d5e325d03",
-            "size": 2102,
-            "uri": "https://{canondata_backend}/212715/f378560b982f85f8f3e84ad2e95e4205b1a7b465/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e66e7b967b2f90682a9d652d23dd6bd1",
+            "size": 2598,
+            "uri": "https://{canondata_backend}/1942278/d9a3667b4b47eaef4ecbf7f8215efdd87df9db8b/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-select_with_sort_limit-default.txt-Plan]": [
         {
-            "checksum": "72a01c202c458a8e4bef611782656a60",
-            "size": 5534,
-            "uri": "https://{canondata_backend}/1871182/02c4e8ba45dea18da2d4af195dc4a2de592050d0/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Plan_/plan.txt"
+            "checksum": "e167d1c263e22409b5504e5ead86f0dc",
+            "size": 6497,
+            "uri": "https://{canondata_backend}/1942278/d9a3667b4b47eaef4ecbf7f8215efdd87df9db8b/resource.tar.gz#test.test_insert-select_with_sort_limit-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[insert-select_with_sort_limit-default.txt-Results]": [],

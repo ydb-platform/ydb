@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 import itertools
-import importlib.resources
+from importlib_resources import read_binary
 from google.protobuf import text_format
 
 import ydb.tests.library.common.yatest_common as yatest_common
@@ -346,8 +346,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            resource = importlib.resources.files(__name__).joinpath("resources/default_profile.txt")
-            self.client.add_config_item(resource.read_bytes())
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
 
     def __run_node(self, node_id):
         """

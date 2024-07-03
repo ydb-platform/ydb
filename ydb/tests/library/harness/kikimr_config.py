@@ -9,7 +9,7 @@ import tempfile
 import six
 import yaml
 from google.protobuf.text_format import Parse
-import importlib.resources
+from importlib_resources import read_binary
 
 import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.core.protos import config_pb2
@@ -62,8 +62,7 @@ def get_grpc_host():
 
 
 def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
-    resource = importlib.resources.files(__name__).joinpath("resources/default_yaml.yml")
-    data = resource.read_bytes()
+    data = read_binary(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
     data = data.format(
@@ -467,8 +466,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
-        resource = importlib.resources.files(__name__).joinpath("resources/default_domains.txt")
-        Parse(resource.read_bytes(), app_config.DomainsConfig)
+        Parse(read_binary(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 
     @property

@@ -98,6 +98,10 @@ struct TInputSpecTraits<TArrowInputSpec> {
         IInputStream*);
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
         THolder<IInputStream>);
+    static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
+        const TVector<IInputStream*>&);
+    static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
+        TVector<THolder<IInputStream>>&&);
 
     static TConsumerType MakeConsumer(const TArrowInputSpec&, TWorkerHolder<IPushStreamWorker>);
 };

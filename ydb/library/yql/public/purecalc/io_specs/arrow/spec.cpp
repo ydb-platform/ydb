@@ -437,20 +437,38 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     IArrowIStream* stream
 ) {
-    with_lock(worker->GetScopedAlloc()) {
-        worker->SetInput(worker->GetGraph().GetHolderFactory()
-            .Create<TArrowListValue>(inputSpec, MakeHolder<TArrowIStreamImpl>(stream), worker), 0);
+    TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+        inputSpec, worker, TVector<IArrowIStream*>({stream}));
+}
+
+void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+    const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
+    const TVector<IArrowIStream*>& streams
+) {
+    TVector<THolder<TArrowIStreamImpl>> wrappers;
+    for (ui32 i = 0; i < streams.size(); i++) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
     }
+    PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
 
 void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     THolder<IArrowIStream> stream
 ) {
-    with_lock(worker->GetScopedAlloc()) {
-        worker->SetInput(worker->GetGraph().GetHolderFactory()
-            .Create<TArrowListValue>(inputSpec, std::move(stream), worker), 0);
+    TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+        inputSpec, worker, VectorFromHolder<IArrowIStream>(std::move(stream)));
+}
+
+void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
+    const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
+    TVector<THolder<IArrowIStream>>&& streams
+) {
+    TVector<THolder<TArrowIStreamImpl>> wrappers;
+    for (ui32 i = 0; i < streams.size(); i++) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
     }
+    PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
 
 

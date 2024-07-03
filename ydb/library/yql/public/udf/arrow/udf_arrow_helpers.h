@@ -357,15 +357,6 @@ TReader* CastToBlockReaderImpl(IBlockReader& reader) {
 template <typename TDerived, typename TReader = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TUnaryKernelExec {
 
-template<typename TSink>
-static void Process(const TBlockItem& arg, TUdfKernelState& state, const TSink& sink) {
-    if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TUdfKernelState&, TSink&>) {
-        TDerived::Process(arg, state, sink);
-    } else {
-        TDerived::Process(arg, sink);
-    }
-}
-
 static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
         auto& reader = state.GetReader(0);
@@ -377,7 +368,7 @@ static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute
             auto* builderImpl = CastToScalarBuilderImpl<TScalarBuilderImpl>(builder);
 
             auto item = readerImpl->GetScalarItem(*arg.scalar());
-            TDerived::Process(item, [&](TBlockItem out) {
+            TDerived::Process(item, state.GetValueBuilder(), [&](auto out) {
                 *res = builderImpl->Build(out);
             });
         }
@@ -392,7 +383,7 @@ static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute
             for (int64_t i = 0; i < array.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array.length; ++j, ++i) {
                     auto item = readerImpl->GetItem(array, i);
-                    TDerived::Process(item, [&](TBlockItem out) {
+                    TDerived::Process(item, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -409,15 +400,6 @@ static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute
 
 template <typename TDerived, typename TReader1 = IBlockReader, typename TReader2 = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TBinaryKernelExec {
-    template<typename TSink>
-    static void Process(const TBlockItem& arg1, const TBlockItem& arg2, TUdfKernelState& state, const TSink& sink) {
-        if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TBlockItem, TUdfKernelState&, TSink&>) {
-            TDerived::Process(arg1, arg2, state, sink);
-        } else {
-            TDerived::Process(arg1, arg2, sink);
-        }
-    }
-
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
 
@@ -435,7 +417,8 @@ struct TBinaryKernelExec {
 
             auto item1 = reader1Impl->GetScalarItem(*arg1.scalar());
             auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
-            TDerived::Process(item1, item2, [&](TBlockItem out) {
+
+            TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
                 *res = builderImpl->Build(out);
             });
         }
@@ -451,7 +434,7 @@ struct TBinaryKernelExec {
             for (int64_t i = 0; i < array2.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array2.length; ++j, ++i) {
                     auto item2 = reader2Impl->GetItem(array2, i);
-                    TDerived::Process(item1, item2, [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -472,7 +455,7 @@ struct TBinaryKernelExec {
             for (int64_t i = 0; i < array1.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
                     auto item1 = reader1Impl->GetItem(array1, i);
-                    TDerived::Process(item1, item2, [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -494,9 +477,9 @@ struct TBinaryKernelExec {
             Y_ENSURE(array1.length == array2.length);
             for (int64_t i = 0; i < array1.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
-                    auto item1 = reader1.GetItem(array1, i);
-                    auto item2 = reader2.GetItem(array2, i);
-                    TDerived::Process(item1, item2, [&](TBlockItem out) {
+                    auto item1 = reader1Impl->GetItem(array1, i);
+                    auto item2 = reader2Impl->GetItem(array2, i);
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -553,7 +536,7 @@ struct TGenericKernelExec {
                 auto& reader = state.GetReader(k);
                 args[k] = reader.GetScalarItem(*batch[k].scalar());
             }
-            TDerived::Process(items, [&](TBlockItem out) {
+            TDerived::Process(items, state.GetValueBuilder(), [&](TBlockItem out) {
                 *res = builderImpl->Build(out);
             });
         } else {
@@ -583,7 +566,7 @@ struct TGenericKernelExec {
 
                         args[k] = reader.GetItem(*batch[k].array(), i);
                     }
-                    TDerived::Process(items, [&](TBlockItem out) {
+                    TDerived::Process(items, state.GetValueBuilder(), [&](TBlockItem out) {
                         builderImpl->Add(out);
                     });
                 }

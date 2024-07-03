@@ -628,9 +628,9 @@
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Debug]": [
         {
-            "checksum": "90dcb5133679abb1cdc16acdcbb8754f",
+            "checksum": "1c424eb06f52c2ad0ebd534553776a3d",
             "size": 5049,
-            "uri": "https://{canondata_backend}/1777230/e531db07d3e2131a85fc53f8f26e2eb72c689723/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1903280/db3ae6888f81e8ba4bab571a7ab36c4a89df8afd/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Plan]": [

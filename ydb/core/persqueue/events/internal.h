@@ -99,7 +99,6 @@ namespace NPQ {
     inline bool HasError(const T& event) {
         return event.Error.HasError();
     }
-
 } // namespace NPQ;
 
 struct TEvPQ {
@@ -1160,7 +1159,7 @@ struct TEvPQ {
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
-        explicit TEvTransactionCompleted(TMaybe<NPQ::TWriteId> writeId) :
+        explicit TEvTransactionCompleted(const TMaybe<NPQ::TWriteId>& writeId) :
             WriteId(writeId)
         {
         }

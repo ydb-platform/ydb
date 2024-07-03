@@ -18,6 +18,14 @@ using ConsumerType = typename TInputSpecTraits<TArrowInputSpec>::TConsumerType;
 
 namespace {
 
+template <typename T>
+inline TVector<THolder<T>> VectorFromHolder(THolder<T> holder) {
+    TVector<THolder<T>> result;
+    result.push_back(std::move(holder));
+    return result;
+}
+
+
 class TArrowIStreamImpl : public IArrowIStream {
 private:
     IArrowIStream* Underlying_;
@@ -56,20 +64,24 @@ class TArrowInputConverter {
 protected:
     IWorker* Worker_;
     const THolderFactory& Factory_;
+    const NYT::TNode& Schema_;
 
 public:
     explicit TArrowInputConverter(
         const TArrowInputSpec& inputSpec,
+        ui32 index,
         IWorker* worker
     )
         : Worker_(worker)
         , Factory_(Worker_->GetGraph().GetHolderFactory())
+        , Schema_(inputSpec.GetSchema(index))
     {
-        Y_UNUSED(inputSpec);
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
-        ui64 nvalues = batch->num_values();
+        ui64 nvalues = Schema_.Size();
+        Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
+
         TUnboxedValue* datums = nullptr;
         result = Factory_.CreateDirectArrayHolder(nvalues, datums);
         for (ui64 i = 0; i < nvalues; i++) {
@@ -130,13 +142,14 @@ public:
     TArrowListValue(
         TMemoryUsageInfo* memInfo,
         const TArrowInputSpec& inputSpec,
+        ui32 index,
         THolder<IArrowIStream> underlying,
         IWorker* worker
     )
       : TCustomListValue(memInfo)
       , Underlying_(std::move(underlying))
       , Worker_(worker)
-      , Converter_(inputSpec, Worker_)
+      , Converter_(inputSpec, index, Worker_)
       , ScopedAlloc_(Worker_->GetScopedAlloc())
     {
     }
@@ -274,8 +287,17 @@ public:
         const TArrowInputSpec& inputSpec,
         TWorkerHolder<IPushStreamWorker> worker
     )
+        : TArrowConsumerImpl(inputSpec, 0, std::move(worker))
+    {
+    }
+
+    explicit TArrowConsumerImpl(
+        const TArrowInputSpec& inputSpec,
+        ui32 index,
+        TWorkerHolder<IPushStreamWorker> worker
+    )
         : WorkerHolder_(std::move(worker))
-        , Converter_(inputSpec, WorkerHolder_.Get())
+        , Converter_(inputSpec, index, WorkerHolder_.Get())
     {
     }
 
@@ -338,6 +360,24 @@ public:
     }
 };
 
+
+template <typename TWorker>
+void PrepareWorkerImpl(const TArrowInputSpec& inputSpec, TWorker* worker,
+    TVector<THolder<TArrowIStreamImpl>>&& streams
+) {
+    YQL_ENSURE(worker->GetInputsCount() == streams.size(),
+        "number of input streams should match number of inputs provided by spec");
+
+    with_lock(worker->GetScopedAlloc()) {
+        auto& holderFactory = worker->GetGraph().GetHolderFactory();
+        for (ui32 i = 0; i < streams.size(); i++) {
+            auto input = holderFactory.template Create<TArrowListValue>(
+                inputSpec, i, std::move(streams[i]), worker);
+            worker->SetInput(std::move(input), i);
+        }
+    }
+}
+
 } // namespace
 
 
@@ -350,25 +390,46 @@ const TVector<NYT::TNode>& TArrowInputSpec::GetSchemas() const {
     return Schemas_;
 }
 
+const NYT::TNode& TArrowInputSpec::GetSchema(ui32 index) const {
+    return Schemas_[index];
+}
 
 void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     IArrowIStream* stream
 ) {
-    with_lock(worker->GetScopedAlloc()) {
-        worker->SetInput(worker->GetGraph().GetHolderFactory()
-            .Create<TArrowListValue>(inputSpec, MakeHolder<TArrowIStreamImpl>(stream), worker), 0);
+    TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
+        inputSpec, worker, TVector<IArrowIStream*>({stream}));
+}
+
+void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
+    const TArrowInputSpec& inputSpec, IPullListWorker* worker,
+    const TVector<IArrowIStream*>& streams
+) {
+    TVector<THolder<TArrowIStreamImpl>> wrappers;
+    for (ui32 i = 0; i < streams.size(); i++) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
     }
+    PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
 
 void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     THolder<IArrowIStream> stream
 ) {
-    with_lock(worker->GetScopedAlloc()) {
-        worker->SetInput(worker->GetGraph().GetHolderFactory()
-            .Create<TArrowListValue>(inputSpec, std::move(stream), worker), 0);
+    TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(inputSpec, worker,
+        VectorFromHolder<IArrowIStream>(std::move(stream)));
+}
+
+void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
+    const TArrowInputSpec& inputSpec, IPullListWorker* worker,
+    TVector<THolder<IArrowIStream>>&& streams
+) {
+    TVector<THolder<TArrowIStreamImpl>> wrappers;
+    for (ui32 i = 0; i < streams.size(); i++) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
     }
+    PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
 
 

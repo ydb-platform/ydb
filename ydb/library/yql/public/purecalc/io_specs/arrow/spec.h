@@ -36,6 +36,7 @@ private:
 public:
     explicit TArrowInputSpec(const TVector<NYT::TNode>& schemas);
     const TVector<NYT::TNode>& GetSchemas() const override;
+    const NYT::TNode& GetSchema(ui32) const;
     static constexpr bool ProvidesBlocks = true;
 };
 
@@ -88,6 +89,10 @@ struct TInputSpecTraits<TArrowInputSpec> {
         IInputStream*);
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
         THolder<IInputStream>);
+    static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
+        const TVector<IInputStream*>&);
+    static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
+        TVector<THolder<IInputStream>>&&);
 
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
         IInputStream*);

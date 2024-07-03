@@ -31,8 +31,6 @@
 
 namespace NYdb::NTopic {
 
-bool AllowDirectRead = false;
-
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage,
@@ -1175,6 +1173,8 @@ public:
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
+    static void SetAllowDirectRead();
+
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
 
@@ -1380,5 +1380,6 @@ private:
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
 };
+
 
 }  // namespace NYdb::NTopic

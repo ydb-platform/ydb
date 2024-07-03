@@ -31,6 +31,12 @@
 namespace NYdb::NTopic {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
+static bool AllowDirectRead = false;
+
+template<>
+inline void TSingleClusterReadSessionImpl<false>::SetAllowDirectRead() {
+    AllowDirectRead = true;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TPartitionStreamImpl

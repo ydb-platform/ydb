@@ -661,16 +661,16 @@
     ],
     "test.test[blocks-interval_add_interval_scalar--Debug]": [
         {
-            "checksum": "d4c62a2d71def1db16c8ff43c66645b0",
+            "checksum": "92c6ad2ac25db656ae8218433392e81e",
             "size": 3087,
-            "uri": "https://{canondata_backend}/1917492/4bff0e4d1b6e88e27b8db81dbedfe6afacb1f68c/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1942671/c0468d78138831c643a3aabcf9894dc3243eab95/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Debug_/opt.yql"
         }
     ],
     "test.test[blocks-interval_add_interval_scalar--Peephole]": [
         {
-            "checksum": "309456b8f734ac224832341fc76b3210",
+            "checksum": "8c6adaf6295572518c274a7fa752eebd",
             "size": 2779,
-            "uri": "https://{canondata_backend}/1917492/4bff0e4d1b6e88e27b8db81dbedfe6afacb1f68c/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1942671/c0468d78138831c643a3aabcf9894dc3243eab95/resource.tar.gz#test.test_blocks-interval_add_interval_scalar--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-interval_add_interval_scalar--Plan]": [

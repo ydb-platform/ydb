@@ -2801,9 +2801,9 @@
     ],
     "test.test[simple_columns-simple_columns_tablerow-default.txt-Debug]": [
         {
-            "checksum": "8e1c887f0c02639d40e8d2518d718830",
+            "checksum": "460cdb2f8bdf65fe08d1cb2050b900db",
             "size": 3435,
-            "uri": "https://{canondata_backend}/1880306/b7c0983a1c6c9c608654f7a228532df5441ad227/resource.tar.gz#test.test_simple_columns-simple_columns_tablerow-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937424/c129022da3a346dda28c53da9edba53b3eb3f07a/resource.tar.gz#test.test_simple_columns-simple_columns_tablerow-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[simple_columns-simple_columns_tablerow-default.txt-Plan]": [

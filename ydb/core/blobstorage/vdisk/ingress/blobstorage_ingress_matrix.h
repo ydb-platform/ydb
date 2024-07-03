@@ -97,8 +97,7 @@ namespace NKikimr {
             }
 
             ui8 CountBits() const {
-                unsigned v = Vec;
-                return ::PopCount(v);
+                return ::PopCount(Vec);
             }
 
             ui8 Raw() const {
@@ -134,8 +133,7 @@ namespace NKikimr {
             }
 
             TVectorType operator ~() const {
-                ui8 v = ~Vec;
-                return TVectorType(v, Size);
+                return TVectorType(~Vec, Size);
             }
 
             bool operator ==(const TVectorType &v) const {
@@ -173,6 +171,34 @@ namespace NKikimr {
                 res.Set(pos);
                 return res;
             }
+
+            class TIterator {
+                const TVectorType& Parts;
+                ui8 Index;
+
+            public:
+                TIterator(const TVectorType& parts, bool end)
+                    : Parts(parts)
+                    , Index(end ? Parts.GetSize() : Parts.FirstPosition())
+                {}
+
+                friend bool operator ==(const TIterator& x, const TIterator& y) {
+                    Y_DEBUG_ABORT_UNLESS(&x.Parts == &y.Parts);
+                    return x.Index == y.Index;
+                }
+
+                ui8 operator *() const {
+                    return Index;
+                }
+
+                TIterator& operator ++() {
+                    Index = Parts.NextPosition(Index);
+                    return *this;
+                }
+            };
+
+            TIterator begin() const { return {*this, false}; }
+            TIterator end() const { return {*this, true}; }
 
         private:
             ui8 Vec;

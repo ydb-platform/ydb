@@ -60,6 +60,7 @@ struct TDqSettings {
         static constexpr ui32 MaxDPccpDPTableSize = 16400U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
+        static constexpr bool EnableSpillingInGraceJoin = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -130,6 +131,8 @@ struct TDqSettings {
     NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
     NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
+
+    NCommon::TConfSetting<bool, false> EnableSpillingInGraceJoin;
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;

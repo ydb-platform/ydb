@@ -26,7 +26,7 @@ enum class EJoinAlgoType {
 };
 
 //StreamLookupJoin is not a subject for CBO and not not included here
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MergeJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::MergeJoin };
 
 namespace NDq {
 

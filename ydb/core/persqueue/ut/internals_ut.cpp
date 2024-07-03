@@ -275,6 +275,21 @@ Y_UNIT_TEST(TestAsInt) {
     }
 }
 
+Y_UNIT_TEST(TestAsIntWide) {
+    {
+        ui32 v = 0x00001234;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+    {
+        ui32 v = 0x12345678;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+}
+
 Y_UNIT_TEST(TestToHex) {
     ui64 v = 0x0102030405060708;
     TString r = NPQ::ToHex<ui64>(v);

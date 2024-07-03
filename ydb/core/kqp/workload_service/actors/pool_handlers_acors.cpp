@@ -1,5 +1,7 @@
 #include "actors.h"
 
+#include <ydb/core/base/path.h>
+
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
@@ -46,7 +48,7 @@ public:
     TPoolHandlerActorBase(void (TDerived::* requestFunc)(TAutoPtr<IEventHandle>& ev), const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : TBase(requestFunc)
         , CountersRoot(counters)
-        , CountersSubgroup(counters->GetSubgroup("pool", TStringBuilder() << database << "/" << poolId))
+        , CountersSubgroup(counters->GetSubgroup("pool", CanonizePath(TStringBuilder() << database << "/" << poolId)))
         , Database(database)
         , PoolId(poolId)
         , QueueSizeLimit(GetMaxQueueSize(poolConfig))

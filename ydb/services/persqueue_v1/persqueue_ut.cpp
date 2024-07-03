@@ -44,6 +44,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 #include <thread>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -3383,6 +3384,12 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
     };
 
     void WhenTheTopicIsDeletedImpl(WhenTheTopicIsDeletedMode mode, i64 maxMemoryUsageSize, bool decompress, i64 decompressedSize, i64 compressedSize) {
+        DBGTRACE("WhenTheTopicIsDeletedImpl");
+        DBGTRACE_LOG("maxMemoryUsageSize=" << maxMemoryUsageSize <<
+                     ", decompress=" << decompress <<
+                     ", decompressedSize=" << decompressedSize <<
+                     ", compressedSize=" << compressedSize);
+
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);

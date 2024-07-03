@@ -6,4 +6,5 @@ RECURSE(
     secondary_index_builtin
     topic_reader
     ttl
+    vector_index
 )

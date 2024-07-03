@@ -72,7 +72,7 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     }
 
     Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
-    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);

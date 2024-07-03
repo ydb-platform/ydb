@@ -334,6 +334,8 @@ private:
 
             double seconds = UsageTimer.PassedReset();
 
+            numThreads = poolStats.PotentialMaxThreadCount;
+
             // TODO[serxa]: It doesn't account for contention. Use 1 - parkedTicksDelta / seconds / numThreads KIKIMR-11916
             const double elapsed = NHPTimer::GetSeconds(stats.ElapsedTicks);
             const double currentUsage = numThreads > 0 ? ((elapsed - LastElapsedSeconds) / seconds / numThreads) : 0;

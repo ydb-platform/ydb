@@ -16,7 +16,7 @@ using namespace NYql::NNodes;
 class TSpillingTransformProvider {
 public:
     TCallableVisitFunc operator()(TInternName name) {
-        if (name == "GraceJoinCore" || name == "GraceSelfJoinCore") {
+        if (name == "GraceJoin" || name == "GraceSelfJoin") {
             return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",

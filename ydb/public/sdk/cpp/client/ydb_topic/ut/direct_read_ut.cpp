@@ -1280,9 +1280,6 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
             ++offset;
 
             setup.AddDirectReadResponse(resp);
-            if (GetEnv("SLEEP", "0") == "1") {
-                Sleep(TDuration::Seconds(1));
-            }
         }
 
         // Verify that the session receives data sent to direct read session:
@@ -1304,6 +1301,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
                     .CommittedOffset = offset,
                 }));
         }
+
+        // TODO(qyryq) Send some bogus events from server, the client should ignore them.
 
         {
             // Verify that the session receives TStopPartitionSessionEvent after data was received:

@@ -249,7 +249,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
     developersOfProject1->Attribute = "entryDn";
     developersOfProject1->Value = "cn=project1,cn=developers,cn=people,ou=groups,dc=search,dc=yandex,dc=net";
 
-    std::vector<std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter>> nestedGroups = {
+    std::vector<std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter>> managersAndDevelopersNestedGroups = {
         managerOfProject1,
         developersOfProject1
     };
@@ -258,7 +258,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
             .BaseDn = "dc=search,dc=yandex,dc=net",
             .Scope = 2,
             .DerefAliases = 0,
-            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_OR, .NestedFilters = nestedGroups},
+            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_OR, .NestedFilters = managersAndDevelopersNestedGroups},
             .Attributes = {groupAttribute}
         }
     };
@@ -327,6 +327,31 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
         .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
     };
     responses.SearchResponses.push_back({fetchPeopleGroupsSearchRequestInfo, fetchPeopleGroupsSearchResponseInfo});
+
+    std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> groups = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
+    groups->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
+    groups->Attribute = "entryDn";
+    groups->Value = "cn=people,ou=groups,dc=search,dc=yandex,dc=net";
+
+    std::vector<std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter>> nestedGroups = {
+        groups
+    };
+    LdapMock::TSearchRequestInfo fetchGroupsSearchRequestInfo {
+        {
+            .BaseDn = "dc=search,dc=yandex,dc=net",
+            .Scope = 2,
+            .DerefAliases = 0,
+            .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_OR, .NestedFilters = nestedGroups},
+            .Attributes = {groupAttribute}
+        }
+    };
+
+    LdapMock::TSearchResponseInfo fetchGroupsSearchResponseInfo {
+        .ResponseEntries = {},
+        .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+    };
+    responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
+
     return responses;
 }
 

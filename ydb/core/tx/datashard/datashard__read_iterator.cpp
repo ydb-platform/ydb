@@ -849,7 +849,7 @@ private:
         bool advanced = false;
 
         bool hasMissingExternalBlobs = false;
-        ui32 prechargedCount = 0;
+        ui64 prechargedCount = 0;
         ui64 prechargedRowsSize = 0; // Without referenced blobs (external, outer)
 
         TString lastKey;
@@ -862,7 +862,7 @@ private:
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            if (!hasMissingExternalBlobs && env.MissingExternalBlobsSize()) {
+            if (!hasMissingExternalBlobs && env.MissingReferencesSize()) {
                 lastKey = TSerializedCellVec::Serialize(rowKey.Cells());
                 hasMissingExternalBlobs = true;
             }
@@ -871,7 +871,7 @@ private:
                 prechargedCount++;
                 prechargedRowsSize += EstimateSize(rowValues.Cells());
 
-                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedRowsSize + env.MissingExternalBlobsSize())) {
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedRowsSize + env.MissingReferencesSize())) {
                     break;
                 }
 
@@ -900,10 +900,6 @@ private:
             }
         }
 
-        if (!lastKey) {
-            lastKey = TSerializedCellVec::Serialize(iter->GetKey().Cells());
-        }
-
         // Note: when stopping due to page faults after an erased row we will
         // reposition on that same row so erase cache can extend that cached
         // erased range. When we don't observe any user-visible rows before a
@@ -912,9 +908,16 @@ private:
         // row). When there are not enough rows we would prefer restarting in
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && (iter->Last() == NTable::EReady::Page || hasMissingExternalBlobs)) {
+        if (!lastKey) {
+            auto lastKeyCells = iter->GetKey().Cells();
+            if (lastKeyCells && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
+                lastKey = TSerializedCellVec::Serialize(lastKeyCells);
+            }
+        }
+
+        if (lastKey) {
             LastProcessedKey = lastKey;
-            LastProcessedKeyErasedOrMissing = iter->GetKeyState() == NTable::ERowOp::Erase || hasMissingExternalBlobs;
+            LastProcessedKeyErasedOrMissing = hasMissingExternalBlobs || iter->GetKeyState() == NTable::ERowOp::Erase;
             advanced = true;
         } else {
             LastProcessedKey.clear();

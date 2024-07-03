@@ -32,7 +32,7 @@ namespace NTabletFlatExecutor {
             const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
 
             if (!page) {
-                MissingExternalBlobsSize_ += part->GetPageSize(lob, ref);
+                MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
             }
 
             return { !ReadMissingReferences, page };
@@ -45,27 +45,28 @@ namespace NTabletFlatExecutor {
             return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
         }
 
-    public:
-        TPrivatePageCache& Cache;
-
         void EnableReadMissingReferences() noexcept {
             ReadMissingReferences = true;
         }
 
-        ui64 MissingExternalBlobsSize() const noexcept
+        ui64 MissingReferencesSize() const noexcept
         { 
-            return MissingExternalBlobsSize_;
+            return MissingReferencesSize_;
         }
 
     private:
-        bool ReadMissingReferences = false;
-
-        ui64 MissingExternalBlobsSize_ = 0;
-        
         const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
         {
             return Cache.Lookup(pageId, info);
         }
+
+    public:
+        TPrivatePageCache& Cache;
+    
+    private:
+        bool ReadMissingReferences = false;
+
+        ui64 MissingReferencesSize_ = 0;
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
@@ -211,9 +212,9 @@ namespace NTabletFlatExecutor {
             TPageCollectionReadEnv::EnableReadMissingReferences();
         }
 
-        ui64 MissingExternalBlobsSize() const noexcept override
+        ui64 MissingReferencesSize() const noexcept override
         {
-            return TPageCollectionReadEnv::MissingExternalBlobsSize();
+            return TPageCollectionReadEnv::MissingReferencesSize();
         }
     protected:
         NTable::TDatabase& DB;

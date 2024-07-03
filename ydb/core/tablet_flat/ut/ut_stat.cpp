@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
                 }
                 Cerr << ") ";
             }
-            Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
+            // Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
             Cerr << Endl;
         }
     }
@@ -957,6 +957,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
+    Y_UNIT_TEST(Single_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 5, false);
+        }
+    }
+
     Y_UNIT_TEST(Single_Small_1_Level)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
@@ -989,6 +997,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
+    Y_UNIT_TEST(Three_Mixed_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerRnd(3));   
+            Check(*subset, mode, 5, false);
+        }
+    }
+
     Y_UNIT_TEST(Three_Mixed_Small_1_Level)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
@@ -1018,6 +1034,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
             auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
             Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
+            Check(*subset, mode, 5, false);
         }
     }
 

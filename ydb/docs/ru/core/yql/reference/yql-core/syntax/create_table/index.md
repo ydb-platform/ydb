@@ -1,3 +1,8 @@
+---
+title: "Обзор оператора CREATE TABLE в {{ ydb-short-name }}"
+description: "В статье рассказываем о том, как создать реляционную таблицу в {{ ydb-short-name }}. Рассматриваем структуру таблиц (колонки, вторичные индексы, дополнительные параметры, группы колонок)."
+---
+
 # CREATE TABLE
 
 ## Синтаксис CREATE TABLE
@@ -39,10 +44,10 @@
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
-* [строковые](../../../../concepts/datamodel/table.md);
-* [колоночные](../../../../concepts/datamodel/table.md#column-tables).
+* [Строковые](../../../../concepts/datamodel/table.md#row-oriented-tables).
+* [Колоночные](../../../../concepts/datamodel/table.md#column-oriented-tables).
 
-Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-tables):
+Тип таблицы при создании задается параметром `STORE` в блоке `WITH`, где `ROW` означает [строковую таблицу](../../../../concepts/datamodel/table.md#row-oriented-tables), а `COLUMN` — [колоночную](../../../../concepts/datamodel/table.md#column-oriented-tables):
 ```sql
 CREATE <table_name> (
   columns 
@@ -157,6 +162,6 @@ WITH (
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 
-Для колоночных таблиц при их создании возможно задать только [дополнительные параметры](with.md)
+Для колоночных таблиц при их создании возможно задать только [дополнительные параметры](with.md).
 
 {% endif %}

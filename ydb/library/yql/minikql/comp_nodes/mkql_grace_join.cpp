@@ -1171,7 +1171,7 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
     bool isSpillingAllowed = false;
-    if (callable.GetType()->GetName() == "GraceJoinCoreWithSpilling") {
+    if (callable.GetType()->GetName() == "GraceJoinWithSpilling") {
         isSpillingAllowed = true;
     }
 
@@ -1182,7 +1182,7 @@ IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
 
     bool isSpillingAllowed = false;
-    if (callable.GetType()->GetName() == "GraceSelfJoinCoreWithSpilling") {
+    if (callable.GetType()->GetName() == "GraceSelfJoinWithSpilling") {
         isSpillingAllowed = true;
     }
     

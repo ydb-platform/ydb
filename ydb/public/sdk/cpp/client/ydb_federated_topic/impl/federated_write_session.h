@@ -63,10 +63,6 @@ private:
     };
 
     struct TDeferredWrite {
-        explicit TDeferredWrite(std::shared_ptr<NTopic::IWriteSession> writer)
-            : Writer(std::move(writer)) {
-        }
-
         void DoWrite() {
             if (Token.Empty() && Message.Empty()) {
                 return;

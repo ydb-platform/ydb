@@ -122,11 +122,13 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
         .ReadyToAcceptHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             if (auto self = selfCtx->LockShared()) {
-                TDeferredWrite deferred(self->Subsession);
+                TDeferredWrite deferred;
                 with_lock(self->Lock) {
-                    Y_ABORT_UNLESS(self->PendingToken.Empty());
-                    self->PendingToken = std::move(ev.ContinuationToken);
-                    self->PrepareDeferredWriteImpl(deferred);
+                    // If the PendingToken is not empty, ignore the event, as it is from the old subsession.
+                    if (self->PendingToken.Empty()) {
+                        self->PendingToken = std::move(ev.ContinuationToken);
+                        self->PrepareDeferredWriteImpl(deferred);
+                    }
                 }
                 deferred.DoWrite();
             }
@@ -393,6 +395,7 @@ bool TFederatedWriteSessionImpl::PrepareDeferredWriteImpl(TDeferredWrite& deferr
     }
     OriginalMessagesToGetAck.push_back(std::move(OriginalMessagesToPassDown.front()));
     OriginalMessagesToPassDown.pop_front();
+    deferred.Writer = Subsession;
     deferred.Token.ConstructInPlace(std::move(*PendingToken));
     deferred.Message.ConstructInPlace(std::move(OriginalMessagesToGetAck.back().Message));
     PendingToken.Clear();

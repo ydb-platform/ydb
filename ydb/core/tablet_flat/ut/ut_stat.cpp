@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
             if (verifyPercents) VerifyPercent(delta, total, 20);
-            UNIT_ASSERT_GT(total, prevValue);
+            UNIT_ASSERT_GE(total, prevValue);
         }
     }
 

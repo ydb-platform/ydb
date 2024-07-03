@@ -67,7 +67,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     } else {
         sortOnlyLambda = false;
         if (auto inputs = dqUnion.Output().Stage().Inputs(); inputs.Size() == 1 && inputs.Item(0).Maybe<TDqCnMerge>().IsValid()) {
-            if (topNode.IsArgument()) {
+            if (SkipCallables(topNode, {"Skip", "Take"}).IsArgument()) {
                 mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
             } else if (topNode.IsCallable(TDqReplicate::CallableName()) && topNode.Head().IsArgument()) {
                 auto ndx = FromString<size_t>(dqUnion.Output().Index().Value());

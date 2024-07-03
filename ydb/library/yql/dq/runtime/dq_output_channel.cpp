@@ -54,7 +54,7 @@ public:
     }
 
     bool HasMemoryForProcessing() const {
-        return !NKikimr::NMiniKQL::TlsAllocState->IsMemoryYellowZoneEnabled();
+        return !NKikimr::NMiniKQL::TlsAllocState->IsRSSLimitReached();
     }
 
     ui64 GetChannelId() const override {

@@ -4109,8 +4109,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", tx.HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
-            SendEvProposeTransactionResult(ctx, tx);
-
             if (tx.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 SendEvTxCommitToPartitions(ctx, tx);
             } else {
@@ -4134,6 +4132,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             Y_ABORT_UNLESS(!TxQueue.empty());
             Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId);
+
+            SendEvProposeTransactionResult(ctx, tx);
 
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:

@@ -1,4 +1,4 @@
-# VIEW (INDEX) {#secondary_index}
+# VIEW (INDEX)
 
 {% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 

@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto settings = TExecuteScriptSettings().StatsMode(Ydb::Query::STATS_MODE_BASIC);
+        auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
 
         const TString sql = fmt::format(R"(
                 SELECT * FROM `{external_table}`
@@ -201,12 +201,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStats.compilation().from_cache(), false);
+        UNIT_ASSERT_EQUAL(TProtoAccessor().GetProto(readyOp.Metadata().ExecStats).compilation().from_cache(), false);
 
         scriptExecutionOperation = db.ExecuteScript(sql, settings).ExtractValueSync();
         readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStats.compilation().from_cache(), false);
+        UNIT_ASSERT_EQUAL(TProtoAccessor().GetProto(readyOp.Metadata().ExecStats).compilation().from_cache(), false);
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSource) {
@@ -1786,6 +1786,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeFile) {
+        ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 65_MB, 500000);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithThinFile) {
         ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
     }
 }

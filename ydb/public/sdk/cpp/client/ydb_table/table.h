@@ -273,7 +273,10 @@ class TChangefeedDescription {
 public:
     class TInitialScanProgress {
     public:
+        TInitialScanProgress();
         explicit TInitialScanProgress(ui32 total, ui32 completed);
+
+        TInitialScanProgress& operator+=(const TInitialScanProgress& other);
 
         ui32 GetPartsTotal() const;
         ui32 GetPartsCompleted() const;

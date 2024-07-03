@@ -4,6 +4,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -13,7 +14,27 @@
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
+#include <util/string/split.h>
+
 using namespace NActors;
+
+TVector<std::pair<TString, TString>> GetJobFiles(TVector<TString> udfs) {
+    TVector<std::pair<TString, TString>> result;
+
+    for(const TString& udf: udfs) {
+        TVector<TString> splitResult;
+        Split(udf.data(), "/", splitResult);
+        while(!splitResult.empty() && splitResult.back().empty()) {
+            splitResult.pop_back();
+        }
+
+        Y_ENSURE(!splitResult.empty());
+
+        result.push_back(std::make_pair(udf, splitResult.back()));
+    }
+
+    return result;
+}
 
 class TQueryReplayMapper
     : public NYT::IMapper<NYT::TTableReader<NYT::TNode>, NYT::TTableWriter<NYT::TNode>>
@@ -25,7 +46,9 @@ class TQueryReplayMapper
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> ModuleResolverState;
 
-    TQueryReplayConfig Config;
+    NYql::IHTTPGateway::TPtr HttpGateway;
+    TVector<TString> UdfFiles;
+    ui32 ActorSystemThreadsCount = 5;
 
     TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
         switch (status) {
@@ -51,6 +74,8 @@ class TQueryReplayMapper
                 return "write_columns_mismatch";
             case TQueryReplayEvents::UncategorizedPlanMismatch:
                 return "uncategorized_plan_mismatch";
+            case TQueryReplayEvents::MissingTableMetadata:
+                return "missing_table_metadata";
             default:
                 return "unspecified";
         }
@@ -58,20 +83,35 @@ class TQueryReplayMapper
 
 public:
     TQueryReplayMapper() = default;
-    TQueryReplayMapper(const TQueryReplayConfig& config) : Config(config) {
-    }
+
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount);
+
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount)
+        : UdfFiles(udfFiles)
+        , ActorSystemThreadsCount(actorSystemThreadsCount)
+    {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
         TypeRegistry.Reset(new NKikimr::NScheme::TKikimrTypeRegistry());
         FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
         NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
+        NKikimr::NMiniKQL::TUdfModuleRemappings remappings;
+        THashSet<TString> usedUdfPaths;
+
+        for(const auto& [_, udfPath]: GetJobFiles(UdfFiles)) {
+            if (usedUdfPaths.insert(udfPath).second) {
+                FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+            }
+        }
+
         AppData.Reset(new NKikimr::TAppData(0, 0, 0, 0, {}, TypeRegistry.Get(), FunctionRegistry.Get(), nullptr, nullptr));
         AppData->Counters = MakeIntrusive<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
-        auto setup = BuildActorSystemSetup(Config.ActorSystemThreadsCount);
+        auto setup = BuildActorSystemSetup(ActorSystemThreadsCount);
         ActorSystem.Reset(new TActorSystem(setup, AppData.Get()));
         ActorSystem->Start();
         ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
         ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
+        HttpGateway = NYql::IHTTPGateway::Make();
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
@@ -85,7 +125,16 @@ public:
                 json.InsertValue(key, NJson::TJsonValue(child.AsString()));
             }
 
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get()));
+            TString queryType = row["query_type"].AsString();
+            if (queryType == "QUERY_TYPE_AST_SCAN") {
+                continue;
+            }
+
+            if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
+                continue;
+            }
+
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
@@ -97,7 +146,7 @@ public:
 
             TString failReason = GetFailReason(status);
 
-            if (failReason == "unspecified") {
+            if (failReason == "unspecified" || status == TQueryReplayEvents::MissingTableMetadata) {
                 continue;
             }
 
@@ -164,9 +213,17 @@ int main(int argc, const char** argv) {
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
     spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
-    spec.MapperSpec(NYT::TUserJobSpec().MemoryLimit(5_GB));
 
-    client->Map(spec, new TQueryReplayMapper(config));
+    auto userJobSpec = NYT::TUserJobSpec();
+    userJobSpec.MemoryLimit(1_GB);
+
+    for(const auto& [udf, udfInJob]: GetJobFiles(config.UdfFiles)) {
+        userJobSpec.AddLocalFile(udf, NYT::TAddLocalFileOptions().PathInJob(udfInJob));
+    }
+
+    spec.MapperSpec(userJobSpec);
+
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount));
 
     return EXIT_SUCCESS;
 }

@@ -1,37 +1,13 @@
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/counters.h>
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
 
 namespace NKikimr::NKqp {
 
-namespace {
-
 using namespace NWorkload;
 using namespace NYdb;
 
-
-void WaitPoolHandlersCount(TIntrusivePtr<IYdbSetup> ydb, i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) {
-    auto counter = GetServiceCounters(ydb->GetRuntime()->GetAppData().Counters, "kqp")
-        ->GetSubgroup("subsystem", "workload_manager")
-        ->GetCounter("ActivePoolHandlers");
-
-    if (initialCount) {
-        UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), *initialCount, "Unexpected pool handlers count");
-    }
-
-    TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < timeout) {
-        if (counter->Val() == finalCount) {
-            return;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
-    UNIT_ASSERT_C(false, "Pool handlers count wait timeout");
-}
-
-}  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
@@ -211,7 +187,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID)));
 
-        WaitPoolHandlersCount(ydb, 0, 2, TDuration::Seconds(35));
+        ydb->WaitPoolHandlersCount(0, 2, TDuration::Seconds(35));
     }
 }
 
@@ -388,7 +364,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        WaitPoolHandlersCount(ydb, 2);
+        ydb->WaitPoolHandlersCount(2);
 
         // Check that pool using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
@@ -416,7 +392,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        WaitPoolHandlersCount(ydb, 2);
+        ydb->WaitPoolHandlersCount(2);
 
         // Check that pool is not using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
@@ -444,9 +420,19 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             DROP RESOURCE POOL )" << poolId << ";"
         );
 
-        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found");
+        TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= FUTURE_WAIT_TIMEOUT) {
+            if (ydb->Navigate(TStringBuilder() << ".resource_pools/" << poolId)->ResultSet.at(0).Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown) {
+                auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found");
+                return;
+            }
+
+            Cerr << "WaitPoolDrop " << TInstant::Now() - start << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Pool drop waiting timeout");
     }
 
     Y_UNIT_TEST(TestResourcePoolAcl) {
@@ -460,6 +446,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             );
             GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
         );
+        ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema, poolId);
 
         auto settings = TQueryRunnerSettings().PoolId(poolId).UserSID(userSID);
         auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
@@ -469,6 +456,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             GRANT SELECT ROW ON `/Root/.resource_pools/)" << poolId << "` TO `" << userSID << "`;"
         );
+        ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::SelectRow, poolId);
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings));
     }
 }

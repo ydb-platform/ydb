@@ -49,6 +49,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
             GRANT DESCRIBE SCHEMA ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         ));
+        ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::DescribeSchema);
 
         auto failedResponse = FetchPool(ydb, ydb->GetSettings().PoolId_, userSID);
         UNIT_ASSERT_VALUES_EQUAL_C(failedResponse->Get()->Status, Ydb::StatusIds::UNAUTHORIZED, failedResponse->Get()->Issues.ToOneLineString());
@@ -57,6 +58,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
             GRANT SELECT ROW ON `/Root/.resource_pools/)" << ydb->GetSettings().PoolId_ << "` TO `" << userSID << "`;"
         ));
+        ydb->WaitPoolAccess(userSID, NACLib::EAccessRights::SelectRow);
 
         auto successResponse = FetchPool(ydb, ydb->GetSettings().PoolId_, userSID);
         UNIT_ASSERT_VALUES_EQUAL_C(successResponse->Get()->Status, Ydb::StatusIds::SUCCESS, successResponse->Get()->Issues.ToOneLineString());
@@ -121,17 +123,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
                 QUEUE_SIZE=1
             );
         )", settings));
-
-        // Check grant access
-        const TString& anotherUserSID = "another@sid";
-        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
-            GRANT SELECT ROW ON `/Root/.resource_pools/)" << NResourcePool::DEFAULT_POOL_ID << "` TO `" << anotherUserSID << "`;"
-        , settings));
-
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings()
-            .PoolId(NResourcePool::DEFAULT_POOL_ID)
-            .UserSID(anotherUserSID)
-        ));
 
         // Check drop access
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(

@@ -570,6 +570,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

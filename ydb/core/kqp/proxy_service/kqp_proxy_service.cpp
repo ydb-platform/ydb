@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
@@ -187,6 +188,7 @@ public:
         ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
+        , FeatureFlags()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -199,6 +201,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+        FeatureFlags = AppData()->FeatureFlags;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
@@ -219,12 +222,13 @@ public:
 
         UpdateYqlLogLevels();
 
-        // Subscribe for TableService & Logger config changes
+        // Subscribe for TableService & Logger & FeatureFlags config changes
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
+        ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
@@ -482,6 +486,8 @@ public:
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
 
+        FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         PublishResourceUsage();
@@ -679,6 +685,13 @@ public:
 
         if (sessionInfo) {
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
+        }
+
+        if (!FeatureFlags.GetEnableResourcePools()) {
+            ev->Get()->SetPoolId("");
+        } else if (!ev->Get()->GetPoolId()) {
+            // TODO: do not use default pool if there is no limits
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
         }
 
         TActorId targetId;
@@ -1742,6 +1755,7 @@ private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    NKikimrConfig::TFeatureFlags FeatureFlags;
     TKqpSettings::TConstPtr KqpSettings;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;

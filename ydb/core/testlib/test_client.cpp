@@ -50,7 +50,7 @@
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
@@ -225,7 +225,7 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app);
 
-        Runtime->SetupMonitoring(Settings->MonitoringPortOffset);
+        Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
@@ -2583,7 +2583,8 @@ namespace Tests {
             return TServerSetup("localhost", 0);
         }
 
-        TStringBuf str(GetEnv(ServerRedirectEnvVar));
+        const auto& envValue = GetEnv(ServerRedirectEnvVar);
+        TStringBuf str(envValue);
         TStringBuf address;
         TStringBuf port;
         str.Split('/', address, port);

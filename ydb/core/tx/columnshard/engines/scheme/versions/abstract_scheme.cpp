@@ -76,7 +76,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     const std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
 
-    auto batch = NArrow::ExtractColumnsOptional(incomingBatch, dstSchema->field_names());
+    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
 
     for (auto&& i : batch->schema()->fields()) {
         AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));

@@ -226,9 +226,7 @@ std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(cons
     const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
     auto batch = IIndexInfo::AddSnapshotColumns(srcBatch, inserted.GetSnapshot());
     batch = IIndexInfo::AddDeleteFlagsColumn(batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
-    auto result = NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
-    AFL_VERIFY(result);
-    return result;
+    return NArrow::TColumnOperator().Adapt(batch, indexInfo.ArrowSchemaWithSpecials()).DetachResult();
 }
 
 NColumnShard::ECumulativeCounters TInsertColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

@@ -59,6 +59,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
         HFunc(TEvService::TEvStatus, Handle);
@@ -128,6 +129,11 @@ void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorC
 }
 
 void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDescribeReplication(ev, ctx);
 }

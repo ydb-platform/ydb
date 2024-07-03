@@ -454,7 +454,11 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        PassRequestToResourcePool();
+        if (QueryState->UserRequestContext->PoolId) {
+            PassRequestToResourcePool();
+        } else {
+            CompileQuery();
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {

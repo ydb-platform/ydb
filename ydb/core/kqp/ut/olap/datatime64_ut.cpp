@@ -164,6 +164,32 @@ Y_UNIT_TEST_SUITE(KqpDatetime64ColumnShard) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` >= Date32('1969-12-29')", "[[-3;[-1000002]];[0;#];[4;[-2000003]];[9;[5000004]]]");
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` != Date32('1970-01-01')", "[[-7;[3000001]];[-3;[-1000002]];[4;[-2000003]];[9;[5000004]]]");
     }
+
+    Y_UNIT_TEST(Csv) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("date32").SetType(NScheme::NTypeIds::Date32),
+            TTestHelper::TColumnSchema().SetName("timestamp64").SetType(NScheme::NTypeIds::Timestamp64),
+            TTestHelper::TColumnSchema().SetName("datetime64").SetType(NScheme::NTypeIds::Datetime64),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            TStringBuilder builder;
+            builder << "1,2000-01-05,2000-01-15T01:15:12.122Z,2005-01-15T01:15:12Z" << Endl;
+            const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), EDataFormat::CSV, builder).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT id, date32, timestamp64, datetime64 FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;[10961];[947898912122000];[1105751712]]]");
+    }
+
 }
 
 } // namespace NKqp

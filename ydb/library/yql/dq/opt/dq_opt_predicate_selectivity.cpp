@@ -19,7 +19,7 @@ namespace {
      */
     bool IsAttribute(const TExprBase& input, TString& attributeName) {
         if (auto member = input.Maybe<TCoMember>()) {
-            attributeName = member.Cast().Raw()->Content();
+            attributeName = member.Cast().Name().StringValue();
             return true;
         } else if (auto cast = input.Maybe<TCoSafeCast>()) {
             return IsAttribute(cast.Cast().Value(), attributeName);
@@ -38,6 +38,111 @@ namespace {
         return false;
     }
 
+    double DefaultSelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
+        if (stats->KeyColumns && stats->KeyColumns->Data.size() == 1 && attributeName == stats->KeyColumns->Data[0]) {
+            if (stats->Nrows > 1) {
+                return 1.0 / stats->Nrows;
+            }
+            
+            return 1.0;
+        } else {
+            if (stats->Nrows > 1) {
+                return 0.1;
+            }
+                
+            return 1.0;
+        }
+    }
+
+    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+        if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
+            maybeLiteral = maybeJust.Cast().Input();
+        }
+
+        if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
+            auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
+
+            auto type = literal.Ref().GetTypeAnn();
+            auto slot = type->Cast<NYql::TDataExprType>()->GetSlot();
+            auto value = literal.Literal().Value();
+
+            switch (slot) {
+                case NYql::NUdf::EDataSlot::Bool: {
+                    ui8 v = FromString<bool>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Uint8: {
+                    ui8 v = FromString<ui8>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Int8: {
+                    i8 v = FromString<i8>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Uint32: {
+                    ui32 v = FromString<ui32>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Int32: {
+                    i32 v = FromString<i32>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Uint64: {
+                    ui64 v = FromString<ui64>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Int64: {
+                    i64 v = FromString<i64>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Float: {
+                    float v = FromString<float>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Double: {
+                    double v = FromString<double>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Date: {
+                    ui16 v = FromString<ui32>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Datetime: {
+                    ui32 v = FromString<ui32>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Utf8:
+                case NYql::NUdf::EDataSlot::String:
+                case NYql::NUdf::EDataSlot::Yson:
+                case NYql::NUdf::EDataSlot::Json: {
+                    return countMinSketch->Probe(value.Data(), value.Size());
+                }
+                case NYql::NUdf::EDataSlot::Interval:
+                case NYql::NUdf::EDataSlot::Timestamp64:
+                case NYql::NUdf::EDataSlot::Interval64: {
+                    i64 v = FromString<i64>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Timestamp: {
+                    ui64 v = FromString<ui64>(value);
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                case NYql::NUdf::EDataSlot::Uuid: {
+                    const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+
+                    std::pair<ui64,ui64> v{};
+                    v.first = uuidData[0]; // low128
+                    v.second = uuidData[1]; // high128
+                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+                }
+                default:
+                    return std::nullopt;
+            }  
+        }
+
+        return std::nullopt;
+    }
+
     double ComputeEqualitySelectivity(TExprBase& left, TExprBase& right, const std::shared_ptr<TOptimizerStatistics>& stats) {
 
         TString attributeName;
@@ -45,7 +150,7 @@ namespace {
         if (IsAttribute(right, attributeName) && IsConstantExpr(left.Ptr())) {
             std::swap(left, right);
         }
-        
+
         if (IsAttribute(left, attributeName)) {
             // In case both arguments refer to an attribute, return 0.2
             TString rightAttributeName;
@@ -56,21 +161,19 @@ namespace {
             // Currently, with the basic statistics we just return 1/nRows
 
             else if (IsConstantExpr(right.Ptr())) {
-                if (stats->KeyColumns && stats->KeyColumns->Data.size()==1 && attributeName==stats->KeyColumns->Data[0]) {
-                    if (stats->Nrows > 1) {
-                        return 1.0 / stats->Nrows;
-                    }
-                    else {
-                        return 1.0;
-                    }
-                } else {
-                    if (stats->Nrows > 1) {
-                        return 0.1;
-                    }
-                    else {
-                        return 1.0;
-                    }
+                if (stats->ColumnStatistics == nullptr) {
+                    return DefaultSelectivity(stats, attributeName);
                 }
+                
+                if (auto countMinSketch = stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
+                    std::optional<ui32> countMinEstimation = EstimateCountMin(right, countMinSketch);
+                    if (!countMinEstimation.has_value()) {
+                        return DefaultSelectivity(stats, attributeName);
+                    }
+                    return countMinEstimation.value() / stats->Nrows;
+                }
+                
+                return DefaultSelectivity(stats, attributeName);
             }
         }
 

@@ -1,7 +1,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
-#include "ticket_parser_log.h"
+#include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
 
@@ -156,7 +156,7 @@ private:
         }
 
         int result = 0;
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() != NKikimrLdap::LDAPS_SCHEME && Settings.GetUseTls().GetEnable()) {
             result = NKikimrLdap::StartTLS(*ld);
             if (!NKikimrLdap::IsSuccess(result)) {
                 TEvLdapAuthProvider::TError error {
@@ -173,7 +173,7 @@ private:
         result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
         if (!NKikimrLdap::IsSuccess(result)) {
             TEvLdapAuthProvider::TError error {
-                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + Settings.GetHost() + "\n"
+                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + UrisList + "\n"
                             + NKikimrLdap::ErrorToString(result),
                 .Retryable = NKikimrLdap::IsRetryableError(result)
             };
@@ -190,10 +190,8 @@ private:
             return response;
         }
 
-        const TString& host = Settings.GetHost();
-        const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort();
         int result = 0;
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
             const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
             if (!NKikimrLdap::IsSuccess(result)) {
@@ -204,10 +202,12 @@ private:
             }
         }
 
-        *ld = NKikimrLdap::Init(host, port);
-        if (*ld == nullptr) {
+        const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort(Settings.GetScheme());
+        UrisList = GetUris(port);
+        result = NKikimrLdap::Init(ld, Settings.GetScheme(), UrisList, port);
+        if (!NKikimrLdap::IsSuccess(result)) {
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                    {.Message = "Could not initialize LDAP connection for host: " + host + ", port: " + ToString(port) + ". " + NKikimrLdap::LdapError(*ld),
+                    {.Message = "Could not initialize LDAP connection for uris: " + UrisList + ". " + NKikimrLdap::LdapError(*ld),
                     .Retryable = false}}};
         }
 
@@ -219,7 +219,7 @@ private:
                     .Retryable = NKikimrLdap::IsRetryableError(result)}}};
         }
 
-        if (Settings.GetUseTls().GetEnable()) {
+        if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
             int requireCert = NKikimrLdap::ConvertRequireCert(Settings.GetUseTls().GetCertRequire());
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_REQUIRE_CERT, &requireCert);
             if (!NKikimrLdap::IsSuccess(result)) {
@@ -229,6 +229,7 @@ private:
                         .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
+
         return {};
     }
 
@@ -236,14 +237,14 @@ private:
         char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
         if (dn == nullptr) {
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
-                    {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + Settings.GetHost() + "\n"
+                    {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + UrisList + "\n"
                             + NKikimrLdap::LdapError(*request.Ld),
                     .Retryable = false}}};
         }
         TEvLdapAuthProvider::TError error;
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {
-            error.Message = "LDAP login failed for user " + TString(dn) + " on server " + Settings.GetHost() + "\n"
+            error.Message = "LDAP login failed for user " + TString(dn) + " on server " + UrisList + "\n"
                             + NKikimrLdap::ErrorToString((result));
             error.Retryable = NKikimrLdap::IsRetryableError(result);
         }
@@ -265,7 +266,7 @@ private:
         TSearchUserResponse response;
         if (!NKikimrLdap::IsSuccess(result)) {
             response.Status = NKikimrLdap::ErrorToStatus(result);
-            response.Error = {.Message = "Could not search for filter " + searchFilter + " on server " + Settings.GetHost() + "\n"
+            response.Error = {.Message = "Could not search for filter " + searchFilter + " on server " + UrisList + "\n"
                                          + NKikimrLdap::ErrorToString(result),
                               .Retryable = NKikimrLdap::IsRetryableError(result)};
             return response;
@@ -274,11 +275,11 @@ private:
         if (countEntries != 1) {
             if (countEntries == 0) {
                 response.Error  = {.Message = "LDAP user " + request.User + " does not exist. "
-                                              "LDAP search for filter " + searchFilter + " on server " + Settings.GetHost() + " return no entries",
+                                              "LDAP search for filter " + searchFilter + " on server " + UrisList + " return no entries",
                                    .Retryable = false};
             } else {
                 response.Error = {.Message = "LDAP user " + request.User + " is not unique. "
-                                             "LDAP search for filter " + searchFilter + " on server " + Settings.GetHost() + " return " + countEntries + " entries",
+                                             "LDAP search for filter " + searchFilter + " on server " + UrisList + " return " + countEntries + " entries",
                                   .Retryable = false};
             }
             response.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
@@ -290,8 +291,8 @@ private:
     }
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
-        if (Settings.GetHost().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Ldap server host is empty", .Retryable = false}};
+        if (Settings.GetHosts().empty() && Settings.GetHost().empty()) {
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "List of ldap server hosts is empty", .Retryable = false}};
         }
         if (Settings.GetBaseDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BaseDn is empty", .Retryable = false}};
@@ -305,10 +306,42 @@ private:
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }
 
+    TString GetUris(ui32 port) const {
+        TStringBuilder uris;
+        if (Settings.HostsSize() > 0) {
+            for (const auto& host : Settings.GetHosts()) {
+                uris << CreateUri(host, port) << " ";
+            }
+            uris.remove(uris.size() - 1);
+        } else {
+            uris << CreateUri(Settings.GetHost(), port);
+        }
+        return uris;
+    }
+
+    TString CreateUri(const TString& endpoint, ui32 port) const {
+        TStringBuilder uri;
+        uri << Settings.GetScheme() << "://" << endpoint;
+        if (!HasEndpointPort(endpoint)) {
+            uri << ':' << port;
+        }
+        return uri;
+    }
+
+    static bool HasEndpointPort(const TString& endpoint) {
+        size_t colonPos = endpoint.rfind(':');
+        if (colonPos == TString::npos) {
+            return false;
+        }
+        ++colonPos;
+        return (endpoint.size() - colonPos) > 0;
+    }
+
 private:
     const NKikimrProto::TLdapAuthentication Settings;
     const TSearchFilterCreator FilterCreator;
     char* RequestedAttributes[2];
+    TString UrisList;
 };
 
 IActor* CreateLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings) {

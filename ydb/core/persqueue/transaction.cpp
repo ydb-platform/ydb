@@ -337,7 +337,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
-    PQ_LOG_D("save tx " << tx.DebugString());
+    PQ_LOG_D("save tx " << tx.ShortDebugString());
 
     TString value;
     Y_ABORT_UNLESS(tx.SerializeToString(&value));

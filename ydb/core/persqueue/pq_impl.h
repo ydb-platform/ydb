@@ -272,8 +272,10 @@ private:
     //
     THashMap<ui64, TDistributedTransaction> Txs;
     TQueue<std::pair<ui64, ui64>> TxQueue;
-    ui64 LastStep = 0;
-    ui64 LastTxId = 0;
+    ui64 PlanStep = 0;
+    ui64 PlanTxId = 0;
+    ui64 ExecStep = 0;
+    ui64 ExecTxId = 0;
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;

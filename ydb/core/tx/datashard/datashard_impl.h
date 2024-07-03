@@ -1857,6 +1857,11 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const NKikimrSchemeOp::TIndexDescription& indexDesc);
 
+    TUserTable::TPtr AlterTableSwitchIndexState(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& streamPathId, NKikimrSchemeOp::EIndexState state);
+
     TUserTable::TPtr AlterTableDropIndex(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,

@@ -836,13 +836,17 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " LastStep " << LastStep << " LastTxId " << LastTxId);
+    PQ_LOG_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId <<
+             ", ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 }
 
 void TPersQueue::InitPlanStep(const NKikimrPQ::TTabletTxInfo& info)
 {
-    LastStep = info.GetLastStep();
-    LastTxId = info.GetLastTxId();
+    PlanStep = info.GetPlanStep();
+    PlanTxId = info.GetPlanTxId();
+
+    ExecStep = info.GetExecStep();
+    ExecTxId = info.GetExecTxId();
 }
 
 void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -3582,7 +3586,7 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
             txAcks[ActorIdFromProto(tx.GetAckTo())].push_back(tx.GetTxId());
         }
 
-        if (step >= LastStep) {
+        if (step >= PlanStep) {
             ui64 lastPlannedTxId = 0;
 
             for (ui64 txId : txIds) {
@@ -3617,13 +3621,15 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                 lastPlannedTxId = txId;
             }
 
-            LastStep = step;
-            LastTxId = lastPlannedTxId;
+            PlanStep = step;
+            PlanTxId = lastPlannedTxId;
+
+            PQ_LOG_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
                         "Tablet " << TabletID() <<
                         " Old plan step " << step <<
-                        ", LastStep: " << LastStep);
+                        ", PlanStep: " << PlanStep);
         }
 
         SchedulePlanStepAck(step, txAcks);
@@ -3699,8 +3705,11 @@ void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& reques
 
 void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 {
-    info.SetLastStep(LastStep);
-    info.SetLastTxId(LastTxId);
+    info.SetPlanStep(PlanStep);
+    info.SetPlanTxId(PlanTxId);
+
+    info.SetExecStep(ExecStep);
+    info.SetExecTxId(ExecTxId);
 }
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
@@ -4032,6 +4041,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", (!TxQueue.empty())=" << !TxQueue.empty());
 
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
+            std::tie(ExecStep, ExecTxId) = TxQueue.front();
+            PQ_LOG_D("ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
+
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
                 SendEvTxCalcPredicateToPartitions(ctx, tx);
@@ -4111,8 +4123,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", tx.HaveParticipantsDecision()=" << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
-            SendEvProposeTransactionResult(ctx, tx);
-
             if (tx.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 SendEvTxCommitToPartitions(ctx, tx);
             } else {
@@ -4135,6 +4145,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             Y_ABORT_UNLESS(!TxQueue.empty());
             Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId);
+
+            SendEvProposeTransactionResult(ctx, tx);
 
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
@@ -4380,7 +4392,7 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
         Txs.emplace(tx.GetTxId(), tx);
 
         if (tx.HasStep()) {
-            if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(LastStep, LastTxId)) {
+            if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
                 plannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
             }
         }
@@ -4420,7 +4432,7 @@ void TPersQueue::OnInitComplete(const TActorContext& ctx)
 
 ui64 TPersQueue::GetAllowedStep() const
 {
-    return Max(LastStep + 1,
+    return Max(PlanStep + 1,
                MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : TAppData::TimeProvider->Now().MilliSeconds());
 }
 

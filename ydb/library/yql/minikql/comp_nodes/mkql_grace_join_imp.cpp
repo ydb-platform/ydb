@@ -462,43 +462,46 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 if (*slotIt != hash)
                     continue;
 
-                auto slotStringsStart = slotIt + headerSize2;
-
                 if (table1HasKeyIColumns || !(keysValSize - nullsSize1 <= slotSize - 1 - nullsSize2)) {
+                    // 2nd condition cannot be true unless HasKeyStringColumns or HasKeyIColumns, hence size at the end of header is present
+
                     if (!std::equal(it1 + keyIntOffset1, it1 + headerSize1 - 1, slotIt + keyIntOffset2))
                         continue;
+
+                    auto slotStringsStart = slotIt + headerSize2;
+                    ui64 slotStringsSize = *(slotIt + headerSize2 - 1);
+
+                    if (headerSize2 + slotStringsSize + 1 > slotSize)
+                    {
+                        ui64 stringsPos = *(slotIt + headerSize2);
+                        slotStringsStart = bucket2->KeyIntVals.begin() + stringsPos;
+                    }
+
+                    if (table1HasKeyIColumns)
+                    {
+                        ui64 stringsOffsetsIdx1 = tuple1Idx * (JoinTable1->NumberOfStringColumns + JoinTable1->NumberOfIColumns + 2);
+                        ui64 stringsOffsetsIdx2 = tuple2Idx * (JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 2);
+                        ui32 * stringsSizesPtr1 = bucket1->StringsOffsets.data() + stringsOffsetsIdx1 + 2;
+                        ui32 * stringsSizesPtr2 = bucket2->StringsOffsets.data() + stringsOffsetsIdx2 + 2;
+
+                        if (!CompareIColumns( stringsSizesPtr1 ,
+                                    (char *) (it1 + headerSize1 ),
+                                    stringsSizesPtr2,
+                                    (char *) (slotStringsStart),
+                                    JoinTable1 -> ColInterfaces, JoinTable1->NumberOfStringColumns, JoinTable1 -> NumberOfKeyIColumns ))
+                            continue;
+                    } else {
+                        ui64 stringsSize = *(it1 + headerSize1 - 1);
+                        if (stringsSize != slotStringsSize || !std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, slotStringsStart))
+                            continue;
+                    }
+
                 } else {
                     if (!std::equal(it1 + keyIntOffset1, it1 + keysValSize, slotIt + keyIntOffset2))
                         continue;
                 }
-                if ( !(keysValSize - nullsSize1 <= slotSize - 1 - nullsSize2) ) {
-                    ui64 stringsPos = *(slotIt + headerSize2);
-
-                    slotStringsStart = bucket2->KeyIntVals.begin() + stringsPos;
-
-                    if (!table1HasKeyIColumns) {
-                        ui64 stringsSize = *(it1 + headerSize1 - 1);
-                        if (!std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, slotStringsStart))
-                            continue;
-                    }
-                }
 
                 tuple2Idx = slotIt[slotSize - 1];
-
-                if (table1HasKeyIColumns)
-                {
-                    ui64 stringsOffsetsIdx1 = tuple1Idx * (JoinTable1->NumberOfStringColumns + JoinTable1->NumberOfIColumns + 2);
-                    ui64 stringsOffsetsIdx2 = tuple2Idx * (JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 2);
-                    ui32 * stringsSizesPtr1 = bucket1->StringsOffsets.data() + stringsOffsetsIdx1 + 2;
-                    ui32 * stringsSizesPtr2 = bucket2->StringsOffsets.data() + stringsOffsetsIdx2 + 2;
-
-                    if (!CompareIColumns( stringsSizesPtr1 ,
-                            (char *) (it1 + headerSize1 ),
-                            stringsSizesPtr2,
-                            (char *) (slotStringsStart),
-                            JoinTable1 -> ColInterfaces, JoinTable1->NumberOfStringColumns, JoinTable1 -> NumberOfKeyIColumns ))
-                        continue;
-                }
 
                 tuplesFound++;
                 JoinTuplesIds joinIds;
@@ -713,30 +716,19 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
         if (*it != hash)
             continue;
 
-        if ( NumberOfKeyStringColumns > 0 || NumberOfKeyIColumns > 0) {
-            itValSize = HeaderSize + *(it + HeaderSize - 1);
-        }
-
-        auto slotStringsStart = it + HeaderSize;
-
-        if ( NumberOfKeyIColumns > 0 || !(itValSize <= t.SlotSize)) {
-            if (!std::equal(it + keyIntOffset, it + HeaderSize - 1, keys + keyIntOffset))
-                continue;
-        } else {
+        if ( NumberOfKeyIColumns == 0 && (itValSize <= t.SlotSize)) {
             if (!std::equal(it + keyIntOffset, it + itValSize, keys + keyIntOffset))
                 continue;
+            return false;
         }
 
-        if (!(itValSize <= t.SlotSize)) {
-            ui64 stringsPos = *(it + HeaderSize);
-            slotStringsStart = t.SpillData.begin() + stringsPos;
+        Y_DEBUG_ABORT_UNLESS( NumberOfKeyStringColumns > 0 || NumberOfKeyIColumns > 0);
 
-            if (NumberOfKeyIColumns == 0) {
-                if (keysSize != itValSize || !std::equal(slotStringsStart, slotStringsStart + itValSize, keys + HeaderSize))
-                    continue;
-                return false;
-            }
-        }
+        itValSize = HeaderSize + *(it + HeaderSize - 1);
+        auto slotStringsStart = it + HeaderSize;
+
+        if (!std::equal(it + keyIntOffset, it + HeaderSize - 1, keys + keyIntOffset))
+            continue;
 
         if (NumberOfKeyIColumns > 0) {
             if (!CompareIColumns( 
@@ -745,7 +737,16 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
                         iColumns,
                         JoinTable1 -> ColInterfaces, JoinTable1->NumberOfStringColumns, JoinTable1 -> NumberOfKeyIColumns ))
                 continue;
+            return false;
         }
+
+        Y_DEBUG_ABORT_UNLESS(!(itValSize <= t.SlotSize));
+
+        ui64 stringsPos = *(it + HeaderSize);
+        slotStringsStart = t.SpillData.begin() + stringsPos;
+
+        if (keysSize != itValSize || !std::equal(slotStringsStart, slotStringsStart + itValSize, keys + HeaderSize))
+            continue;
         return false;
     }
 

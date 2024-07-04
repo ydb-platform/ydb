@@ -51,12 +51,12 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
     }
 
     void CreateProcessor( // ISessionConnectionProcessorFactory method.
-        IFactory::TConnectedCallback callback,
+        typename IFactory::TConnectedCallback callback,
         const TRpcRequestSettings& requestSettings,
         NYdbGrpc::IQueueClientContextPtr connectContext,
         TDuration connectTimeout,
         NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
-        IFactory::TConnectTimeoutCallback connectTimeoutCallback,
+        typename IFactory::TConnectTimeoutCallback connectTimeoutCallback,
         TDuration connectDelay,
         NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext) override
     {
@@ -81,7 +81,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
     MOCK_METHOD(void, OnCreateProcessor, (size_t callNumber)); // 1-based
 
     // Actions to use in OnCreateProcessor handler:
-    void CreateProcessor(IFactory::IProcessor::TPtr processor) { // Success.
+    void CreateProcessor(typename IFactory::IProcessor::TPtr processor) { // Success.
         UNIT_ASSERT(ConnectedCallback);
         auto cb = std::move(ConnectedCallback);
         ConnectedCallback = nullptr;
@@ -111,7 +111,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         }
     }
 
-    void CreateAndThenTimeout(IFactory::IProcessor::TPtr processor) {
+    void CreateAndThenTimeout(typename IFactory::IProcessor::TPtr processor) {
         UNIT_ASSERT(ConnectedCallback);
         UNIT_ASSERT(ConnectTimeoutCallback);
         auto cb2 = [cbt = std::move(ConnectTimeoutCallback), cb = std::move(ConnectedCallback), processor]() mutable {
@@ -139,7 +139,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         }
     }
 
-    void TimeoutAndThenCreate(IFactory::IProcessor::TPtr processor) {
+    void TimeoutAndThenCreate(typename IFactory::IProcessor::TPtr processor) {
         UNIT_ASSERT(ConnectedCallback);
         UNIT_ASSERT(ConnectTimeoutCallback);
         auto cb2 = [cbt = std::move(ConnectTimeoutCallback), cb = std::move(ConnectedCallback), processor]() mutable {
@@ -174,8 +174,8 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
 
 private:
     TAdaptiveLock Lock;
-    IFactory::TConnectedCallback ConnectedCallback;
-    IFactory::TConnectTimeoutCallback ConnectTimeoutCallback;
+    typename IFactory::TConnectedCallback ConnectedCallback;
+    typename IFactory::TConnectTimeoutCallback ConnectTimeoutCallback;
     std::queue<std::future<void>> CallbackFutures;
 };
 

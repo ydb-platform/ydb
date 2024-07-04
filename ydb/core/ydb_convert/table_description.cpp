@@ -829,9 +829,6 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
     const auto& indexImplTableDescription = indexImplTables.Get(0);
 
-    if (indexImplTableDescription.HasUniformPartitionsCount()) {
-        settings.set_uniform_partitions(indexImplTableDescription.GetUniformPartitionsCount());
-    }
     if (indexImplTableDescription.SplitBoundarySize()) {
         NKikimrMiniKQL::TType splitKeyType;
         Ydb::Table::DescribeTableResult unused;

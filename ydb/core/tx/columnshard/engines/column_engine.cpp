@@ -12,7 +12,7 @@ const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {
 }
 
 ui64 IColumnEngine::GetMetadataLimit() {
-    static const MemoryTotal = NSystemInfo::TotalMemorySize();
+    static const ui64 MemoryTotal = NSystemInfo::TotalMemorySize();
     if (!HasAppData()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal);
         return MemoryTotal * 0.3;

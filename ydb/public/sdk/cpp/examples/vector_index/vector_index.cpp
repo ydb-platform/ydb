@@ -222,8 +222,8 @@ ECommand Parse(std::string_view command) {
     if (EqualsICase(command, "CreateIndex")) {
         return ECommand::CreateIndex;
     }
-    if (EqualsICase(command, "UpdateIndex")) {
-        return ECommand::UpdateIndex;
+    if (EqualsICase(command, "BuildIndex")) {
+        return ECommand::BuildIndex;
     }
     if (EqualsICase(command, "RecreateIndex")) {
         return ECommand::RecreateIndex;
@@ -249,7 +249,7 @@ int CreateIndex(NYdb::TDriver& driver, const TOptions& options) {
     return 1;
 }
 
-int UpdateIndex(NYdb::TDriver& driver, const TOptions& options) {
+int BuildIndex(NYdb::TDriver& driver, const TOptions& options) {
     TTableClient client(driver);
     if (EqualsICase(options.IndexType, FlatIndex)) {
         if (EqualsICase(options.IndexQuantizer, NQuantizer::None)) {

@@ -13,8 +13,8 @@
 enum class ECommand {
     DropIndex,
     CreateIndex,
-    UpdateIndex,   // Fill
-    RecreateIndex, // Drop, Create, Update
+    BuildIndex,  
+    RecreateIndex, // Drop, Create, Build
     TopK,
     None,
 };
@@ -39,7 +39,7 @@ int DropIndex(NYdb::TDriver& driver, const TOptions& options);
 
 int CreateIndex(NYdb::TDriver& driver, const TOptions& options);
 
-int UpdateIndex(NYdb::TDriver& driver, const TOptions& options);
+int BuildIndex(NYdb::TDriver& driver, const TOptions& options);
 
 int TopK(NYdb::TDriver& driver, const TOptions& options);
 

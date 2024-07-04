@@ -2882,6 +2882,9 @@ void THive::RequestPoolsInformation() {
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
     switch (ev->GetTypeRewrite()) {
+        case TEvPrivate::EvProcessBootQueue:
+        case TEvPrivate::EvProcessDisconnectNode:
+            return 0;
         case TEvHive::EvRequestHiveInfo:
         case TEvHive::EvRequestHiveDomainStats:
         case TEvHive::EvRequestHiveNodeStats:

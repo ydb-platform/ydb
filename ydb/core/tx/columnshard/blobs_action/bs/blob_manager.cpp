@@ -267,8 +267,6 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
     TTabletsByBlob extractedOld = BlobsToDelete.ExtractBlobs(predShared, gcContext.GetFreeSpace());
     gcContext.MutableExtractedToRemoveFromDB().Add(extractedOld);
 
-    TTabletId tabletId;
-    TUnifiedBlobId unifiedBlobId;
     for (TTabletsByBlob::TIterator it(extractedOld); it.IsValid(); ++it) {
         const auto& unifiedBlobId = it.GetBlobId();
         TBlobAddress bAddress(unifiedBlobId.GetDsGroup(), unifiedBlobId.GetLogoBlobId().Channel());

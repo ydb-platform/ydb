@@ -8,6 +8,16 @@
 
 #include <util/stream/format.h>
 
+namespace {
+
+void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSchemeOp::TPartitionConfig& out) {
+    out.CopyFrom(in);
+    NKikimr::NSchemeShard::TPartitionConfigMerger::DeduplicateColumnFamiliesById(out);
+    out.MutableStorageRooms()->Clear();
+}
+
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1175,9 +1185,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     }
 
     if (fillConfig) {
-        entry->MutablePartitionConfig()->CopyFrom(tableInfo->PartitionConfig());
-        TPartitionConfigMerger::DeduplicateColumnFamiliesById(*entry->MutablePartitionConfig());
-        entry->MutablePartitionConfig()->MutableStorageRooms()->Clear();
+        FillPartitionConfig(tableInfo->PartitionConfig(), *entry->MutablePartitionConfig());
     }
 
     if (fillBoundaries) {
@@ -1226,19 +1234,18 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         *entry.MutableDataColumnNames()->Add() = dataColumns;
     }
 
-    Y_ABORT_UNLESS(PathsById.contains(pathId));
-    auto indexPath = PathsById.at(pathId);
+    auto* indexPath = PathsById.FindPtr(pathId);
+    Y_ABORT_UNLESS(indexPath);
+    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == 1);
+    const auto& indexImplTablePathId = (*indexPath)->GetChildren().begin()->second;
 
-    Y_ABORT_UNLESS(indexPath->GetChildren().size() == 1);
-    const auto& indexImplPathId = indexPath->GetChildren().begin()->second;
+    auto* tableInfo = Tables.FindPtr(indexImplTablePathId);
+    Y_ABORT_UNLESS(tableInfo);
 
-    Y_ABORT_UNLESS(Tables.contains(indexImplPathId));
-    auto indexImplTable = Tables.at(indexImplPathId);
-
-    const auto& tableStats = indexImplTable->GetStats().Aggregated;
+    const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
 
-    *entry.AddIndexImplTableDescriptions() = indexImplTable->TableDescription;
+    *entry.AddIndexImplTableDescriptions() = (*tableInfo)->TableDescription;
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

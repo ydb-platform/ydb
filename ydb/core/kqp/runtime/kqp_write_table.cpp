@@ -1084,6 +1084,7 @@ public:
     }
 
     void Close() override {
+        auto allocGuard = TypeEnv.BindAllocator();
         YQL_ENSURE(Serializer);
         Closed = true;
         Serializer->Close();
@@ -1187,6 +1188,12 @@ public:
         : Settings(settings)
         , InputColumnsMetadata(std::move(inputColumnsMetadata))
         , TypeEnv(typeEnv) {
+    }
+
+    ~TShardedWriteController() {
+        auto allocGuard = TypeEnv.BindAllocator();
+        ShardsInfo.Clear();
+        Serializer = nullptr;
     }
 
 private:

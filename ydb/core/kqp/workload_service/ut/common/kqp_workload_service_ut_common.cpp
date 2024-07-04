@@ -404,9 +404,7 @@ public:
     }
 
     void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
-        auto counter = GetServiceCounters(GetRuntime()->GetAppData().Counters, "kqp")
-            ->GetSubgroup("subsystem", "workload_manager")
-            ->GetCounter("ActivePoolHandlers");
+        auto counter = GetWorkloadManagerCounters(0)->GetCounter("ActivePoolHandlers");
 
         if (initialCount) {
             UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), *initialCount, "Unexpected pool handlers count");
@@ -427,6 +425,18 @@ public:
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeKqpWorkloadServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
         Sleep(TDuration::Seconds(1));
+    }
+
+    void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const override {
+        for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount_; ++nodeIndex) {
+            auto subgroup = GetWorkloadManagerCounters(nodeIndex)
+                ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
+
+            CheckCommonCounters(subgroup);
+            if (checkTableCounters) {
+                CheckTableCounters(subgroup);
+            }
+        }
     }
 
     TTestActorRuntime* GetRuntime() const override {
@@ -458,6 +468,45 @@ private:
         request->SetPoolId(settings.PoolId_);
 
         return event;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(ui32 nodeIndex) const {
+        return GetServiceCounters(GetRuntime()->GetAppData(nodeIndex).Counters, "kqp")
+            ->GetSubgroup("subsystem", "workload_manager");
+    }
+
+    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalInFly", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("CleanupError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("Cancelled", true)->Val(), 0);
+
+        UNIT_ASSERT_GE(subgroup->GetCounter("ContinueOk", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOk", true)->Val(), subgroup->GetCounter("CleanupOk", true)->Val());
+    }
+
+    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0);
+
+        const std::vector<std::pair<TString, bool>> tableQueries = {
+            {"TCleanupTablesQuery", false},
+            {"TRefreshPoolStateQuery", true},
+            {"TDelayRequestQuery", true},
+            {"TStartFirstDelayedRequestQuery", true},
+            {"TStartRequestQuery", false},
+            {"TCleanupRequestsQuery", true},
+        };
+        for (const auto& [operation, runExpected] : tableQueries) {
+            auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            if (runExpected) {
+                UNIT_ASSERT_GE_C(operationSubgroup->GetCounter("FinishOk", true)->Val(), 1, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            }
+        }
     }
 
 private:

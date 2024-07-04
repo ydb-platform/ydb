@@ -521,6 +521,7 @@ protected:
         RemoveFinishedRequests();
         RefreshRequired |= !PendingRequests.empty();
         RefreshRequired |= (GetLocalInFlight() || !DelayedRequests.empty()) && TInstant::Now() - LastRefreshTime > LEASE_DURATION / 4;
+        RefreshRequired |= GlobalState.AmountRequests() && TInstant::Now() - LastRefreshTime > LEASE_DURATION;
         if (RefreshRequired) {
             RefreshRequired = false;
             RunningOperation = true;
@@ -534,7 +535,7 @@ private:
         LOG_T("Try to start scheduled refresh");
 
         RefreshState();
-        if (GetLocalInFlight() + DelayedRequests.size() + PendingRequests.size() > 0) {
+        if (GetLocalSessionsCount() || GlobalState.AmountRequests()) {
             ScheduleRefresh();
         }
     }
@@ -576,6 +577,9 @@ private:
         LastRefreshTime = TInstant::Now();
 
         GlobalState = ev->Get()->PoolState;
+        if (GlobalState.AmountRequests()) {
+            ScheduleRefresh();
+        }
         GlobalInFly->Set(GlobalState.RunningRequests);
         GlobalDelayedRequests->Set(GlobalState.DelayedRequests);
         LOG_T("succefully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);

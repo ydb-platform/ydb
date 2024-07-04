@@ -80,9 +80,9 @@ void AssertBatch(const arrow::compute::ExecBatch* batch) {
 
     UNIT_ASSERT(first.is_array());
     const auto& array = *first.array();
-    UNIT_ASSERT_EQUAL(array.length, bsize);
-    UNIT_ASSERT_EQUAL(array.GetNullCount(), 0);
-    UNIT_ASSERT_EQUAL(array.buffers.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(array.length, bsize);
+    UNIT_ASSERT_VALUES_EQUAL(array.GetNullCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(array.buffers.size(), 2);
 
     TVector<ui64> data(bsize);
     std::iota(data.begin(), data.end(), 1);
@@ -92,7 +92,7 @@ void AssertBatch(const arrow::compute::ExecBatch* batch) {
 
     UNIT_ASSERT(second.is_scalar());
     const auto& scalar = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*second.scalar());
-    UNIT_ASSERT_EQUAL(scalar.value, value);
+    UNIT_ASSERT_VALUES_EQUAL(scalar.value, value);
 }
 
 } // namespace

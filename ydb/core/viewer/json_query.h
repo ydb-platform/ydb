@@ -39,6 +39,7 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Syntax;
     TString UserToken;
     bool IsBase64Encode;
+    TString TransactionMode;
 
     enum ESchemaType {
         Classic,
@@ -83,6 +84,7 @@ public:
         TString schemaStr = params.Get("schema");
         Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
+        TransactionMode = params.Get("transaction_mode");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
@@ -97,6 +99,7 @@ public:
             Stats = Stats.empty() ? requestData["stats"].GetStringSafe({}) : Stats;
             Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
             Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
+            TransactionMode = TransactionMode.empty() ? requestData["transaction_mode"].GetStringSafe({}) : TransactionMode;
         }
     }
 
@@ -161,6 +164,22 @@ public:
         }
     }
 
+    void SetTransactionMode(NKikimrKqp::TQueryRequest& request) {
+        if (TransactionMode == "serializable-read-write") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "online-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_online_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "stale-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_stale_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "snapshot-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_snapshot_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        }
+    }
+
     void SendKpqProxyRequest() {
         if (MadeKqpProxyRequest) {
             return;
@@ -176,9 +195,8 @@ public:
         } else if (Action == "execute-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
+            SetTransactionMode(request);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
@@ -190,9 +208,8 @@ public:
         } else if (Action == "execute-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
+            SetTransactionMode(request);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -634,6 +651,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile, full)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
+                      {"name":"transaction_mode","in":"query","description":"transaction mode (serializable-read-write, online-read-only, stale-read-only, snapshot-read-only)","required":false,"type":"string"},
                       {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }

@@ -459,53 +459,6 @@ public:
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
-        Parsers[NYql::EDatabaseType::MySQL] = [](
-            NJson::TJsonValue& databaseInfo,
-            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
-            bool useTls,
-            NConnector::NApi::EProtocol protocol
-            ) {
-            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
-            TVector<TString> aliveHosts;
-
-            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-                const auto& hostMap = host.GetMap();
-
-                if (!hostMap.contains("services")) {
-                    // indicates that cluster is down
-                    continue;
-                }
-
-                // all services of a particular host must be alive
-                bool alive = true;
-
-                for (const auto& service: hostMap.at("services").GetArraySafe()) {
-                    if (service["health"].GetString() != "ALIVE") {
-                        alive = false;
-                        break;
-                    }
-                }
-
-                if (alive) {
-                    aliveHosts.push_back(host["name"].GetString());
-                }
-            }
-            
-            if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
-            }
-
-            NYql::IMdbEndpointGenerator::TParams params = {
-                .DatabaseType = NYql::EDatabaseType::MySQL,
-                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                .UseTls = useTls,
-                .Protocol = protocol,
-            };
-
-            endpoint = mdbEndpointGenerator->ToEndpoint(params);
-
-            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
-        };
     }
 
     static constexpr char ActorName[] = "YQ_DATABASE_RESOLVER";

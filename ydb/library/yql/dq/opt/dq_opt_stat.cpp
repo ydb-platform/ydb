@@ -369,6 +369,16 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
         EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
 }
 
+void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    double nRows = input->ChildrenSize();
+    int nAttrs = 5;
+    if (input->ChildrenSize() && input->Child(0)->IsCallable("StructType")) {
+        nAttrs = input->Child(0)->ChildrenSize();
+    }
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+}
+
 /***
  * For callables that include lambdas, we want to propagate the statistics from lambda's input to its argument, so
  * that the operators inside lambda receive the correct statistics

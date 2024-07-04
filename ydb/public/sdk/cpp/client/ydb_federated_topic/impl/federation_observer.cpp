@@ -182,7 +182,7 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
 }
 
 
-bool TFederatedDbObserverImpl::StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
+void TFederatedDbObserverImpl::StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
     with_lock(Lock) {
         WriteSessionPtrs.push_back(ptr);
     }

@@ -59,9 +59,6 @@ public:
 class TFederatedDbObserverImpl : public TClientImplCommon<TFederatedDbObserverImpl>,
                                  public NTopic::TEnableSelfContext<TFederatedDbObserverImpl> {
 public:
-    static constexpr TDuration REDISCOVER_DELAY = TDuration::Seconds(60);
-
-public:
     TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings);
 
     ~TFederatedDbObserverImpl();
@@ -75,7 +72,7 @@ public:
 
     bool IsStale() const;
 
-    bool StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession>);
+    void StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession>);
 
 private:
     Ydb::FederationDiscovery::ListFederationDatabasesRequest ComposeRequest() const;
@@ -125,8 +122,8 @@ public:
         return TryGetImpl()->IsStale();
     }
 
-    inline bool StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
-        return TryGetImpl()->StoreWriteSessionPtr(ptr);
+    inline void StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
+        TryGetImpl()->StoreWriteSessionPtr(ptr);
     }
 };
 

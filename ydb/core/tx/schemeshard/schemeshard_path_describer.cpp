@@ -374,7 +374,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
         switch (childPath->PathType) {
         case NKikimrSchemeOp::EPathTypeTableIndex:
-            Self->DescribeTableIndex(childPathId, childName, *entry->AddTableIndexes());
+            Self->DescribeTableIndex(childPathId, childName, returnConfig, returnBoundaries, *entry->AddTableIndexes());
             break;
         case NKikimrSchemeOp::EPathTypeCdcStream:
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
@@ -596,8 +596,12 @@ void TPathDescriber::DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathE
 }
 
 void TPathDescriber::DescribeTableIndex(const TPath& path) {
-    Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name,
-        *Result->Record.MutablePathDescription()->MutableTableIndex());
+    bool returnConfig = Params.GetReturnPartitionConfig();
+    bool returnBoundaries = Params.HasOptions() && Params.GetOptions().GetReturnBoundaries();
+
+    Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name, returnConfig, returnBoundaries,
+        *Result->Record.MutablePathDescription()->MutableTableIndex()
+    );
     DescribeChildren(path);
 }
 
@@ -1204,17 +1208,17 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TIndexDescription& entry)
+    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     auto it = Indexes.FindPtr(pathId);
     Y_ABORT_UNLESS(it, "TableIndex is not found");
     TTableIndexInfo::TPtr indexInfo = *it;
 
-    DescribeTableIndex(pathId, name, indexInfo, entry);
+    DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
-        NKikimrSchemeOp::TIndexDescription& entry)
+    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
 
@@ -1245,7 +1249,13 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
 
-    *entry.AddIndexImplTableDescriptions() = (*tableInfo)->TableDescription;
+    auto* tableDescription = entry.AddIndexImplTableDescriptions();
+    if (fillConfig) {
+        FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+    }
+    if (fillBoundaries) {
+        FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
+    }
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

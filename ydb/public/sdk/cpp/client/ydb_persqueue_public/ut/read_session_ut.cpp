@@ -627,6 +627,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
             "sessionid",
             ClusterName,
             Log,
+            TSingleClusterReadSessionImpl::TScheduleCallbackFunc{},
             MockProcessorFactory,
             GetEventsQueue(),
             FakeContext,

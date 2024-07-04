@@ -106,12 +106,14 @@ void TFederatedWriteSessionImpl::Start() {
 
 void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
+    ++SubsessionGeneration;
+
     if (Subsession) {
         PendingToken.Clear();
         OldSubsession = std::move(Subsession);
         OldSubsession->Close(TDuration::Zero());
     }
-    ++SubsessionGeneration;
 
     auto clientSettings = SubclientSettings;
     clientSettings

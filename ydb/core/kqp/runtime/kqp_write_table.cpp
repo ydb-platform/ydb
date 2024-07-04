@@ -1184,14 +1184,17 @@ public:
     TShardedWriteController(
         const TShardedWriteControllerSettings settings,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumnsMetadata,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
+        const NMiniKQL::TTypeEnvironment& typeEnv,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Settings(settings)
         , InputColumnsMetadata(std::move(inputColumnsMetadata))
-        , TypeEnv(typeEnv) {
+        , TypeEnv(typeEnv)
+        , Alloc(alloc) {
     }
 
     ~TShardedWriteController() {
-        auto allocGuard = TypeEnv.BindAllocator();
+        Y_ABORT_UNLESS(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
         ShardsInfo.Clear();
         Serializer = nullptr;
     }
@@ -1237,6 +1240,7 @@ private:
     TShardedWriteControllerSettings Settings;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     TShardsInfo ShardsInfo;
     bool Closed = false;
@@ -1250,8 +1254,10 @@ private:
 IShardedWriteControllerPtr CreateShardedWriteController(
         const TShardedWriteControllerSettings& settings,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
-        const NMiniKQL::TTypeEnvironment& typeEnv) {
-    return MakeIntrusive<TShardedWriteController>(settings, std::move(inputColumns), typeEnv);
+        const NMiniKQL::TTypeEnvironment& typeEnv,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TShardedWriteController>(
+        settings, std::move(inputColumns), typeEnv, alloc);
 }
 
 }

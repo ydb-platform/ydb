@@ -137,6 +137,7 @@ public:
         , Callbacks(args.Callback)
         , Counters(counters)
         , TypeEnv(args.TypeEnv)
+        , Alloc(args.Alloc)
         , TxId(args.TxId)
         , TableId(
             Settings.GetTable().GetOwnerId(),
@@ -693,7 +694,8 @@ private:
                             : kMaxBatchesPerMessage),
                     },
                     std::move(columnsMetadata),
-                    TypeEnv);
+                    TypeEnv,
+                    Alloc);
             } catch (...) {
                 RuntimeError(
                     CurrentExceptionMessage(),
@@ -730,6 +732,7 @@ private:
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
     TIntrusivePtr<TKqpCounters> Counters;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;

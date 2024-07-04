@@ -1803,7 +1803,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
-        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, "TestDomain");
 
         CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
@@ -1874,7 +1874,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString oltpTable = "DestinationOltp";
         {
             const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "Root";
+                PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1896,7 +1896,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString olapTable = "DestinationOlap";
         {
             const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "Root";
+                PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1929,7 +1929,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString oltpTable = "DestinationOltp";
         {
             const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "Root";
+                PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )
@@ -1945,7 +1945,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString olapTable = "DestinationOlap";
         {
             const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "Root";
+                PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
                     PRIMARY KEY (key, value)
                 )

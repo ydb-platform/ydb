@@ -187,7 +187,8 @@ namespace {
         const TString createTableName = !isAtomicOperation
             ? tableName
             : (TStringBuilder()
-                << "/Root/.tmp/sessions/"
+                << CanonizePath(AppData()->TenantName)
+                << "/.tmp/sessions/"
                 << sessionCtx->GetSessionId()
                 << CanonizePath(tmpTableName));
 

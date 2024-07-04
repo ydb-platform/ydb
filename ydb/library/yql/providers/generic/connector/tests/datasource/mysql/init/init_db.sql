@@ -1,16 +1,8 @@
-DROP TABLE IF EXISTS simple;
-CREATE TABLE simple (
-    id INT NOT NULL, 
-    col1 VARCHAR(7),
-    col2 INTEGER
-);
-INSERT INTO simple VALUES (1, 'mysql_a', 10),
-                          (2, 'mysql_b', 20),
-                          (3, 'mysql_c', 30);
+CREATE DATABASE primitive_types_NATIVE;
 
 
-DROP TABLE IF EXISTS primitives;
-CREATE TABLE primitives (
+DROP TABLE IF EXISTS primitive_types_NATIVE.primitives;
+CREATE TABLE primitive_types_NATIVE.primitives (
     id INT NOT NULL, 
     col_01_tinyint TINYINT,
     col_02_tinyint_unsigned TINYINT UNSIGNED,
@@ -44,26 +36,26 @@ CREATE TABLE primitives (
     PRIMARY KEY (id)
 );
 
-INSERT INTO primitives VALUES 
-                       (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11.11, 12.12, 
-                       '1988-11-20', '1988-11-20T12:34:56.777777', '1988-11-20T12:34:56.777777',
-                       'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az',
-                       true,
-                       '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'
-                       ),
-                       (1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 
-                       NULL, NULL, NULL,
-                       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                       NULL,
-                       NULL
-                       ),
-                       (2, -10, 20, -30, 40, -50, 60, -70, 80, -90, 100, -1111.1111, -1212.1212, 
-                       '2024-07-01', '2024-07-01T01:02:03.444444', '2024-07-01T01:02:03.444444',
-                       'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки',
-                       false,
-                       '{ "TODO" : "unicode" }'
-                       )
-                       ;
+INSERT INTO primitive_types_NATIVE.primitives VALUES 
+       (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11.11, 12.12, 
+       '1988-11-20', '1988-11-20T12:34:56.777777', '1988-11-20T12:34:56.777777',
+       'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az',
+       true,
+       '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'
+       ),
+       (1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 
+       NULL, NULL, NULL,
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+       NULL,
+       NULL
+       ),
+       (2, -10, 20, -30, 40, -50, 60, -70, 80, -90, 100, -1111.1111, -1212.1212, 
+       '2024-07-01', '2024-07-01T01:02:03.444444', '2024-07-01T01:02:03.444444',
+       'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки', 'буки',
+       false,
+       '{ "TODO" : "unicode" }'
+       )
+       ;
 
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (

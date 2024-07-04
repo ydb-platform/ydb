@@ -109,7 +109,7 @@ class Settings:
                         port_external=endpoint_determiner.get_external_port('mysql', 3306),
                         port_internal=3306,
                         dbname='db',
-                        username='user',
+                        username='root',
                         password='password',
                     )
                 case EDataSourceKind.POSTGRESQL:

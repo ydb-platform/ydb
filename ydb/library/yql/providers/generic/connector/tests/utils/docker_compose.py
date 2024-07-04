@@ -5,6 +5,7 @@ import shutil
 import socket
 import subprocess
 import yaml
+import time
 from typing import Dict, Any, Sequence
 
 import yatest.common
@@ -157,3 +158,39 @@ class DockerComposeHelper:
                 result.append(item['path'])
 
         return result
+
+    def await_mysql(self):
+        params = self.docker_compose_yml_data["services"]["mysql"]
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'mysql',
+            f'--password={params["environment"]["MYSQL_ROOT_PASSWORD"]}',
+            f'{params["environment"]["MYSQL_DATABASE"]}',
+            '-e',
+            'SELECT version()',
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        passed = False
+        err = None
+        start = datetime.now()
+        # timeout = 60
+        timeout = 20
+
+        while (datetime.now() - start).total_seconds() < timeout and not passed:
+            try:
+                subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+                passed = True
+            except subprocess.CalledProcessError as e:
+                LOGGER.error(f"called process error: {e}")
+                err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+                time.sleep(5)
+
+        if not passed:
+            if err is not None:
+                raise err
+            else:
+                raise RuntimeError("docker-compose error: timed out to check cmd output")

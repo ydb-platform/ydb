@@ -129,15 +129,37 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
         return false;
     }
 
-    for (auto [leftCol, rightCol] : joinConditions) {
-        // Fix for clang14, somehow structured binding does not create a variable in clang14
-        auto r = rightCol;
-        if (find_if(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), 
-            [&r] (const TString& s) {
-            return r.AttributeName == s;
-        } ) == rightStats->KeyColumns->Data.end()) {
-            return false;
+    bool isLeftJoinConditionPK = true;
+    bool isRightJoinConditionPK = true;
+    for (const auto& [leftCol, rightCol] : joinConditions) {
+        {
+            auto it = 
+                find_if(
+                    right->Stats->KeyColumns->Data.begin(), right->Stats->KeyColumns->Data.end(), 
+                    [&rightCol](const TString& s) {
+                        return rightCol.AttributeName == s;
+                    }
+                );
+            if (it == right->Stats->KeyColumns->Data.end()) {
+                isRightJoinConditionPK = false;
+            }
         }
+        {
+            auto it = 
+                find_if(
+                    left->Stats->KeyColumns->Data.begin(), left->Stats->KeyColumns->Data.end(), 
+                    [&leftCol](const TString& s) {
+                        return leftCol.AttributeName == s;
+                    }
+                );
+            if (it == left->Stats->KeyColumns->Data.end()) {
+                isLeftJoinConditionPK = false;
+            }
+        }
+    }
+
+    if (!isLeftJoinConditionPK && !isRightJoinConditionPK) {
+        return false;
     }
 
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);

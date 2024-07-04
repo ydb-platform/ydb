@@ -1304,17 +1304,15 @@ public:
                     status = Ydb::Monitoring::StatusFlag::GREEN;
                 }
 
-                computeNodeStatus.mutable_max_time_difference()->set_peer(ToString(peerId));
-                computeNodeStatus.mutable_max_time_difference()->set_difference_ms(timeDifferenceDuration.MilliSeconds());
-                computeNodeStatus.set_overall(status);
-
                 if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
                     TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
-                    FillNodeInfo(peerId, tdContext.Location.mutable_compute()->mutable_peer());
                     if (status == Ydb::Monitoring::StatusFlag::GREEN) {
                         tdContext.ReportStatus(status);
                     } else {
-                        tdContext.ReportStatus(status, TStringBuilder() << "The nodes have a time difference of " << timeDifferenceDuration.MilliSeconds() << " ms", ETags::SyncState);
+                        tdContext.ReportStatus(status, TStringBuilder() << "Node is  "
+                                                                        << timeDifferenceDuration.MilliSeconds() << " ms "
+                                                                        << (timeDifferenceUs > 0 ? "behind " : "ahead of ")
+                                                                        << "peer [" << peerId << "]", ETags::SyncState);
                     }
                 }
             }

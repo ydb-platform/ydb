@@ -3496,6 +3496,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST_TWIN(StreamLookupForDataQuery, StreamLookupJoin) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();

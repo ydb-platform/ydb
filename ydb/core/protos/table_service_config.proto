@@ -298,5 +298,6 @@ message TTableServiceConfig {
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
-
+    
+    optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
 };

@@ -804,6 +804,12 @@ namespace NActors {
         LogBackend = logBackend;
     }
 
+    void TTestActorRuntimeBase::SetLogBackendFactory(std::function<TAutoPtr<TLogBackend>()> logBackendFactory) {
+        Y_ABORT_UNLESS(!IsInitialized);
+        TGuard<TMutex> guard(Mutex);
+        LogBackendFactory = logBackendFactory;
+    }
+
     void TTestActorRuntimeBase::SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority) {
         TGuard<TMutex> guard(Mutex);
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
@@ -1761,6 +1767,9 @@ namespace NActors {
         }
 
         if (!SingleSysEnv) { // Single system env should do this self
+            if (LogBackendFactory) {
+                LogBackend = LogBackendFactory();
+            }
             TAutoPtr<TLogBackend> logBackend = LogBackend ? LogBackend : NActors::CreateStderrBackend();
             NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(node->LogSettings,
                 logBackend, GetCountersForComponent(node->DynamicCounters, "utils"));

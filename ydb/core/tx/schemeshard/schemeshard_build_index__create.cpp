@@ -171,6 +171,17 @@ public:
             }
         }
 
+        if (settings.has_column_check_not_null()) {
+            buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::CheckingNotNull;
+            const auto& columns = settings.column_check_not_null();
+            buildInfo->CheckNotNullColumns.reserve(columns.column_size());
+
+            for (size_t i = 0; i < static_cast<size_t>(columns.column_size()); i++) {
+                const auto& colInfo = columns.column(i);
+                buildInfo->CheckNotNullColumns.push_back(TIndexBuildInfo::TColumnCheckingInfo(colInfo.GetColumnName()));
+            }
+        }
+
         buildInfo->Limits.MaxBatchRows = settings.max_batch_rows();
         buildInfo->Limits.MaxBatchBytes = settings.max_batch_bytes();
         buildInfo->Limits.MaxShards = settings.max_shards_in_flight();

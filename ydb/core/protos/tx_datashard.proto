@@ -1418,6 +1418,7 @@ message TEvBuildIndexCreateRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
+    optional NKikimrIndexBuilder.TCheckingNotNullSettings CheckingNotNullSettings = 17;
 }
 
 message TEvBuildIndexProgressResponse {

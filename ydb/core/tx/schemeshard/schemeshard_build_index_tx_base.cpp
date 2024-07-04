@@ -285,6 +285,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         }
     }
 
+    if (info->IsCheckingNotNull()) {
+        for(const auto& column : info->CheckNotNullColumns) {
+            auto* columnProto = settings.mutable_column_check_not_null()->add_column();
+            columnProto->SetColumnName(column.ColumnName);
+        }
+    }
+
     settings.set_max_batch_bytes(info->Limits.MaxBatchBytes);
     settings.set_max_batch_rows(info->Limits.MaxBatchRows);
     settings.set_max_shards_in_flight(info->Limits.MaxShards);

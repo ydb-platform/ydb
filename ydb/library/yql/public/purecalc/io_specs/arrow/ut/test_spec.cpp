@@ -26,38 +26,33 @@ public:
 };
 
 
-template <typename T>
-class TCallbackConsumer: public NYql::NPureCalc::IConsumer<T*> {
-private:
-    using TCallable = void (*)(const T*);
-    int I_ = 0;
-    TCallable Callback_;
+template<typename T>
+struct TVectorConsumer: public NYql::NPureCalc::IConsumer<T*> {
+    TVector<T>& Data_;
+    size_t Index_ = 0;
 
 public:
-    TCallbackConsumer(TCallable callback)
-        : Callback_(std::move(callback))
+    TVectorConsumer(TVector<T>& items)
+        : Data_(items)
     {
     }
 
     void OnObject(T* t) override {
-        I_ += 1;
-        Callback_(t);
+        Index_++;
+        Data_.push_back(*t);
     }
 
     void OnFinish() override {
-        UNIT_ASSERT(I_ > 0);
+        UNIT_ASSERT_GT(Index_, 0);
     }
 };
 
 
 using ExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
-using ExecBatchConsumerImpl = TCallbackConsumer<arrow::compute::ExecBatch>;
+using ExecBatchConsumerImpl = TVectorConsumer<arrow::compute::ExecBatch>;
 
 
-static constexpr i64 value = 19;
-static constexpr ui64 bsize = 9;
-
-arrow::compute::ExecBatch MakeBatch() {
+arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value) {
     TVector<ui64> data(bsize);
     TVector<bool> valid(bsize);
     std::iota(data.begin(), data.end(), 1);
@@ -74,27 +69,50 @@ arrow::compute::ExecBatch MakeBatch() {
     return arrow::compute::ExecBatch(std::move(batchArgs), bsize);
 }
 
-void AssertBatch(const arrow::compute::ExecBatch* batch) {
-    arrow::Datum first = batch->values[0];
-    arrow::Datum second = batch->values[1];
+TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBatch>& batches) {
+    TVector<std::tuple<ui64, i64>> result;
+    for (const auto& batch : batches) {
+        const auto bsize = batch.length;
 
-    UNIT_ASSERT(first.is_array());
-    const auto& array = *first.array();
-    UNIT_ASSERT_VALUES_EQUAL(array.length, bsize);
-    UNIT_ASSERT_VALUES_EQUAL(array.GetNullCount(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(array.buffers.size(), 2);
+        Y_ENSURE(batch.num_values() == 2,
+            "ExecBatch layout doesn't respect the schema");
+        arrow::Datum first = batch.values[0];
+        arrow::Datum second = batch.values[1];
 
-    TVector<ui64> data(bsize);
-    std::iota(data.begin(), data.end(), 1);
-    ui8* expected = reinterpret_cast<ui8*>(data.data());
-    const ui8* got = array.buffers[1]->data();
-    UNIT_ASSERT(std::memcpy(expected, got, bsize * sizeof(i64)));
 
-    UNIT_ASSERT(second.is_scalar());
-    const auto& scalar = second.scalar();
-    UNIT_ASSERT(scalar->is_valid);
-    const auto& i64scalar = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*scalar);
-    UNIT_ASSERT_VALUES_EQUAL(i64scalar.value, value);
+        Y_ENSURE(first.is_array(),
+            "ExecBatch layout doesn't respect the schema");
+
+        const auto& array = *first.array();
+        Y_ENSURE(array.length == bsize,
+            "Array Datum size differs from the given ExecBatch size");
+        Y_ENSURE(array.GetNullCount() == 0,
+            "Null values conversion is not supported");
+        Y_ENSURE(array.buffers.size() == 2,
+            "Array Datum layout doesn't respect the schema");
+
+        const ui64* adata = array.GetValuesSafe<ui64>(1);
+        TVector<ui64> avec(adata, adata + bsize);
+
+
+        Y_ENSURE(second.is_scalar(),
+            "ExecBatch layout doesn't respect the schema");
+
+        const auto& scalar = second.scalar();
+        Y_ENSURE(scalar->is_valid,
+            "Null values conversion is not supported");
+
+        const auto& sdata = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*scalar);
+        TVector<i64> svec(bsize);
+        std::fill(svec.begin(), svec.end(), sdata.value);
+
+
+        for (auto i = 0; i < bsize; i++) {
+            result.push_back(std::make_tuple(avec[i], svec[i]));
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 } // namespace
@@ -117,15 +135,18 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
                 ETranslationMode::SQL
             );
 
-            ExecBatchStreamImpl items({MakeBatch()});
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
 
             auto stream = program->Apply(&items);
 
-            arrow::compute::ExecBatch* batch;
-
-            UNIT_ASSERT(batch = stream->Fetch());
-            AssertBatch(batch);
-            UNIT_ASSERT(!stream->Fetch());
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         }
     }
 
@@ -149,19 +170,25 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
                 ETranslationMode::SQL
             );
 
-            ExecBatchStreamImpl items0({MakeBatch()});
-            ExecBatchStreamImpl items1({MakeBatch()});
+            TVector<arrow::compute::ExecBatch> inputs = {
+                MakeBatch(9, 19),
+                MakeBatch(7, 17)
+            };
+            const auto canonInputs = CanonBatches(inputs);
+
+            ExecBatchStreamImpl items0({inputs[0]});
+            ExecBatchStreamImpl items1({inputs[1]});
+
             const TVector<IStream<arrow::compute::ExecBatch*>*> items({&items0, &items1});
 
             auto stream = program->Apply(items);
 
-            arrow::compute::ExecBatch* batch;
-
-            UNIT_ASSERT(batch = stream->Fetch());
-            AssertBatch(batch);
-            UNIT_ASSERT(batch = stream->Fetch());
-            AssertBatch(batch);
-            UNIT_ASSERT(!stream->Fetch());
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            UNIT_ASSERT_EQUAL(canonInputs, canonOutput);
         }
     }
 }
@@ -184,15 +211,18 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
                 ETranslationMode::SQL
             );
 
-            TVector<arrow::compute::ExecBatch> items = {MakeBatch()};
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
 
-            auto stream = program->Apply(MakeHolder<ExecBatchStreamImpl>(items));
+            auto stream = program->Apply(&items);
 
-            arrow::compute::ExecBatch* batch;
-
-            UNIT_ASSERT(batch = stream->Fetch());
-            AssertBatch(batch);
-            UNIT_ASSERT(!stream->Fetch());
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         }
     }
 }
@@ -215,12 +245,17 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
                 ETranslationMode::SQL
             );
 
-            arrow::compute::ExecBatch item = MakeBatch();
+            arrow::compute::ExecBatch input = MakeBatch(9, 19);
+            const auto canonInput = CanonBatches({input});
+            TVector<arrow::compute::ExecBatch> output;
 
-            auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(AssertBatch));
+            auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(output));
 
-            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnObject(&item); }());
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnObject(&input); }());
             UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnFinish(); }());
+
+            const auto canonOutput = CanonBatches(output);
+            UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         }
     }
 }

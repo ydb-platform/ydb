@@ -76,8 +76,9 @@ namespace NKikimr::NDataStreams::V1 {
                     return "max_active_partitions must be great than 0";
                 }
 
-                if (s.min_active_partitions() <= s.max_active_partitions()) {
-                    return "max_active_partitions must be great than min_active_partitions";
+                if (s.min_active_partitions() > s.max_active_partitions()) {
+                    return TStringBuilder() << "max_active_partitions must be great or equals than min_active_partitions but "
+                        << s.max_active_partitions() << " less then  " << s.min_active_partitions();
                 }
 
                 auto& ws = s.auto_partitioning_settings().partition_write_speed();
@@ -792,8 +793,8 @@ namespace NKikimr::NDataStreams::V1 {
             pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(ps.GetScaleUpPartitionWriteSpeedThresholdPercent());
             pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(ps.GetScaleDownPartitionWriteSpeedThresholdPercent());
         } else {
-            pt->set_min_active_partitions(1);
-            pt->set_max_active_partitions(1);
+            pt->set_min_active_partitions(PQGroup.GetPartitions().size());
+            pt->set_max_active_partitions(PQGroup.GetPartitions().size());
             pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
             pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(300);
             pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(90);

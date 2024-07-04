@@ -91,8 +91,10 @@ void AssertBatch(const arrow::compute::ExecBatch* batch) {
     UNIT_ASSERT(std::memcpy(expected, got, bsize * sizeof(i64)));
 
     UNIT_ASSERT(second.is_scalar());
-    const auto& scalar = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*second.scalar());
-    UNIT_ASSERT_VALUES_EQUAL(scalar.value, value);
+    const auto& scalar = second.scalar();
+    UNIT_ASSERT(scalar->is_valid);
+    const auto& i64scalar = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*scalar);
+    UNIT_ASSERT_VALUES_EQUAL(i64scalar.value, value);
 }
 
 } // namespace

@@ -5479,6 +5479,9 @@ struct TBlockRules {
 
     // all kernels whose name begins with capital letter are YQL kernel
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
+        {"Abs", { "Abs" } },
+        {"Minus", { "Minus" } },
+
         {"+", { "Add" } },
         {"-", { "Sub" } },
         {"*", { "Mul" } },

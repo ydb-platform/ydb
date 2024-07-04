@@ -6,17 +6,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-namespace Ydb::Topic {
-    class UpdateTokenResponse;
-    class StreamDirectReadMessage;
-    class StreamDirectReadMessage_FromServer;
-    class StreamDirectReadMessage_FromClient;
-    class StreamDirectReadMessage_InitResponse;
-    class StreamDirectReadMessage_StartDirectReadPartitionSessionResponse;
-    class StreamDirectReadMessage_DirectReadResponse;
-    class StreamDirectReadMessage_StopDirectReadPartitionSession;
-}
 
 namespace NYdb::NTopic {
 
@@ -35,8 +26,8 @@ using TPartitionSessionId = ui64;
 using TServerSessionId = TString;
 using TDirectReadId = i64;
 
-using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage_FromServer;
-using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage_FromClient;
+using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage::FromServer;
+using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage::FromClient;
 using IDirectReadProcessorFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
 using IDirectReadProcessorFactoryPtr = std::shared_ptr<IDirectReadProcessorFactory>;
 using IDirectReadProcessor = IDirectReadProcessorFactory::IProcessor;
@@ -139,10 +130,10 @@ private:
     void ReadFromProcessorImpl(TDeferredActions<false>&);
     void OnReadDone(NYdbGrpc::TGrpcStatus&&, size_t connectionGeneration);
 
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_InitResponse&&, TDeferredActions<false>&);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StartDirectReadPartitionSessionResponse&&, TDeferredActions<false>&);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_DirectReadResponse&&, TDeferredActions<false>&);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StopDirectReadPartitionSession&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::InitResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&&, TDeferredActions<false>&);
     void OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&&, TDeferredActions<false>&);
 
     void OnConnect(
@@ -179,8 +170,6 @@ private:
         CLOSING,
         CLOSED
     };
-
-    friend void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state);
 
 private:
     TAdaptiveLock Lock;

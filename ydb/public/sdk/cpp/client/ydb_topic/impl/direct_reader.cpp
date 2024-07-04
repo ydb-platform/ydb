@@ -3,47 +3,6 @@
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-template<>
-void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state) {
-    #define DIRECT_READ_SESSION_STATE_NAME_OUT(state) case NYdb::NTopic::TDirectReadSession::EState::state: o << #state; break;
-
-    switch (state) {
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CREATED)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CONNECTING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CONNECTED)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(INITIALIZING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(WORKING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CLOSING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CLOSED)
-    }
-
-    #undef DIRECT_READ_SESSION_STATE_NAME_OUT
-}
-
-template<>
-void Out<NYdb::NTopic::TDirectReadPartitionSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadPartitionSession::EState state) {
-    #define DIRECT_READ_SESSION_STATE_NAME_OUT(state) case NYdb::NTopic::TDirectReadPartitionSession::EState::state: o << #state; break;
-
-    switch (state) {
-    DIRECT_READ_SESSION_STATE_NAME_OUT(IDLE)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(STARTING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(WORKING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(DELAYED)
-    }
-
-#undef DIRECT_READ_SESSION_STATE_NAME_OUT
-}
-
-
-template<>
-void Out<NYdb::NTopic::TDirectReadPartitionSession>(IOutputStream& o, NYdb::NTopic::TDirectReadPartitionSession const& session) {
-    o << "{ PartitionSessionId: \"" << session.PartitionSessionId << "\"";
-    o << ", Location: " << session.Location << "";
-    o << ", State: " << session.State << "";
-    o << ", NextDirectReadId: " << session.NextDirectReadId << "";
-    o << ", LastDirectReadId: " << session.LastDirectReadId << "";
-    o << " }";
-}
 
 namespace NYdb::NTopic {
 
@@ -240,7 +199,7 @@ void TDirectReadSessionManager::Close() {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     auto nodeId = partitionSession.Location.GetNodeId();
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession.PartitionSessionId);
     TDirectReadSessionContextPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
@@ -555,12 +514,12 @@ void TDirectReadSession::SendStartRequestImpl(TDirectReadPartitionSession& parti
             bool transitioned = partitionSession.TransitionTo(TDirectReadPartitionSession::EState::IDLE);
             Y_ABORT_UNLESS(transitioned);
         } // Otherwise, the session is already IDLE.
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartRequestImpl bail out 1, State=" << State);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartRequestImpl bail out 1");
         return;
     }
 
     if (State > EState::WORKING) {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartRequestImpl: the session is not usable anymore, State=" << State);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartRequestImpl: the session is not usable anymore");
         return;
     }
 

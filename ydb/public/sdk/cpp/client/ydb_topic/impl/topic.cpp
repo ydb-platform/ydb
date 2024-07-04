@@ -9,12 +9,6 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-template<>
-void Out<NYdb::NTopic::TPartitionLocation>(IOutputStream& o, NYdb::NTopic::TPartitionLocation const& location) {
-    o << "{ NodeId: \"" << location.GetNodeId() << "\"";
-    o << ", Generation: " << location.GetGeneration() << "";
-    o << " }";
-}
 
 namespace NYdb::NTopic {
 

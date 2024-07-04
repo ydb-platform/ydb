@@ -11,7 +11,11 @@
 
 namespace NYdb::NDataStreams::V1 {
 
-    TPartitioningSettingsBuilder TCreateStreamSettings::BeginConfigurePartitioningSettings() {
+    TPartitioningSettingsBuilder<TCreateStreamSettings> TCreateStreamSettings::BeginConfigurePartitioningSettings() {
+        return { *this };
+    }
+
+    TPartitioningSettingsBuilder<TUpdateStreamSettings> TUpdateStreamSettings::BeginConfigurePartitioningSettings() {
         return { *this };
     }
 
@@ -404,6 +408,35 @@ namespace NYdb::NDataStreams::V1 {
                                 req.mutable_stream_mode_details()->set_stream_mode(
                                         *settings.StreamMode_ == ESM_PROVISIONED ? Ydb::DataStreams::V1::StreamMode::PROVISIONED
                                                                                 : Ydb::DataStreams::V1::StreamMode::ON_DEMAND);
+                            }
+
+                            if (settings.PartitioningSettings_.Defined()) {
+                                auto& ps = *settings.PartitioningSettings_;
+                                auto* pt = req.mutable_partitioning_settings();
+
+                                pt->set_max_active_partitions(ps.GetMaxActivePartitions());
+                                pt->set_min_active_partitions(ps.GetMinActivePartitions());
+
+                                ::Ydb::DataStreams::V1::AutoPartitioningStrategy strategy;
+                                switch (ps.GetAutoPartitioningSettings().GetStrategy()) {
+                                    case EAutoPartitioningStrategy::Unspecified:
+                                    case EAutoPartitioningStrategy::Disabled:
+                                        strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED;
+                                        break;
+                                    case EAutoPartitioningStrategy::ScaleUp:
+                                        strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
+                                        break;
+                                    case EAutoPartitioningStrategy::ScaleUpAndDown:
+                                        strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+                                        break;
+                                }
+                                pt->mutable_auto_partitioning_settings()->set_strategy(strategy);
+                                pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()
+                                    ->mutable_stabilization_window()->set_seconds(ps.GetAutoPartitioningSettings().GetStabilizationWindow().Seconds());
+                                pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()
+                                    ->set_up_utilization_percent(ps.GetAutoPartitioningSettings().GetUpUtilizationPercent());
+                                pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()
+                                    ->set_down_utilization_percent(ps.GetAutoPartitioningSettings().GetDownUtilizationPercent());
                             }
                         });
         }

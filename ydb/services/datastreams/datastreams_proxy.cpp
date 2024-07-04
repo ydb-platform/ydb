@@ -426,12 +426,14 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
-        {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error, ctx);
-        }
+        if (!GetProtoRequest()->has_partitioning_settings()) {
+            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
+            {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error, ctx);
+            }
 
-        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+        }
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(

@@ -468,9 +468,10 @@ public:
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
+            const auto& hostsArray = databaseInfo.GetMap().at("hosts").GetArraySafe();
 
-        for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-            const auto& hostMap = host.GetMap();
+            for (const auto& host : hostsArray) {
+                const auto& hostMap = host.GetMap();
 
             if (!hostMap.contains("services")) {
                 // indicates that cluster is down
@@ -478,12 +479,12 @@ public:
             }
 
             // check if all services of a particular host are alive
-            bool alive = std::all_of(
-            hostMap.at("services").GetArraySafe().begin(),
-            hostMap.at("services").GetArraySafe().end(),
-            [](const auto& service) {
-                return service["health"].GetString() == "ALIVE";
-            }
+            const bool alive = std::all_of(
+                hostMap.at("services").GetArraySafe().begin(),
+                hostMap.at("services").GetArraySafe().end(),
+                [](const auto& service) {
+                    return service["health"].GetString() == "ALIVE";
+                }
             );
 
             if (alive) {
@@ -496,10 +497,10 @@ public:
         }
 
         NYql::IMdbEndpointGenerator::TParams params = {
-        .DatabaseType = NYql::EDatabaseType::MySQL,
-        .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-        .UseTls = useTls,
-        .Protocol = protocol,
+            .DatabaseType = NYql::EDatabaseType::MySQL,
+            .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+            .UseTls = useTls,
+            .Protocol = protocol,
         };
 
         endpoint = mdbEndpointGenerator->ToEndpoint(params);

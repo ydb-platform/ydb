@@ -4,6 +4,7 @@
 #include "datashard_write_operation.h"
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <openssl/sha.h>
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 
@@ -155,10 +156,87 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
     return true;
 }
 
+std::string PointToString(const TConstArrayRef<TCell>& point) {
+    std::string result;
+    result.resize(SHA_DIGEST_LENGTH);
+
+    SHA_CTX sha1;
+    if (!SHA1_Init(&sha1)) {
+        return "";
+    }
+
+    for (size_t i = 0; i < point.size(); ++i) {
+        const TCell& cell = point[i];
+        if (!SHA1_Update(&sha1, cell.Data(), cell.Size())) {
+            return "";
+        }
+    }
+
+    if (!SHA1_Final(reinterpret_cast<unsigned char*>(&result[0]), &sha1)) {
+        return "";
+    }
+
+    return result;
+}
+
+std::string RangeToString(const NKikimr::TTableRange &range) {
+    TString result;
+
+    if (range.Point) {
+        result = PointToString(range.From);
+    } else {
+        result = TStringBuilder()
+            << (range.InclusiveFrom ? "[" : "(")
+            << PointToString(range.From)
+            << " ; "
+            << PointToString(range.To)
+            << (range.InclusiveTo ? "]" : ")");
+    }
+    
+    return Base64Encode(result);
+}
+
 void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
 
     if (Op) {
+        TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(Op);
+
+        const NMiniKQL::IEngineFlat::TValidationInfo& keys = writeOp->GetKeysInfo();
+
+        if (keys.HasWrites()) {
+            auto logKeyOp = [&](const std::unique_ptr<TKeyDesc>& keyDef) -> std::string {
+                auto& range = keyDef->Range;
+                TString rowOp;
+                switch (keyDef->RowOperation) {
+                    case TKeyDesc::ERowOperation::Unknown:
+                        rowOp = "Unknown";
+                        break;
+                    case TKeyDesc::ERowOperation::Read:
+                        rowOp = "Read";
+                        break;
+                    case TKeyDesc::ERowOperation::Update:
+                        rowOp = "Update";
+                        break;
+                    case TKeyDesc::ERowOperation::Erase:
+                        rowOp = "Erase";
+                        break;
+                    default:                   
+                        rowOp = "Invalid operation";
+                        break;
+                }
+                std::stringstream ss;
+                ss << "op# " << rowOp << " key#" << RangeToString(range);
+                return ss.str();
+            };
+
+            for (auto& key : keys.Keys) {
+                if (key.IsWrite) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, logKeyOp(key.Key));
+                }
+            }
+        }
+
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;

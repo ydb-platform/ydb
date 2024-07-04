@@ -999,7 +999,7 @@ message TIndexDescription {
 
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
-    repeated TTableDescription IndexImplTableDescription = 10;
+    repeated TTableDescription IndexImplTableDescriptions = 10;
 }
 
 message TIndexCreationConfig {

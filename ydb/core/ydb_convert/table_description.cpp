@@ -868,19 +868,19 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
             FillGlobalIndexSettings(
                 *index->mutable_global_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescription()
+                tableIndex.GetIndexImplTableDescriptions()
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             FillGlobalIndexSettings(
                 *index->mutable_global_async_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescription()
+                tableIndex.GetIndexImplTableDescriptions()
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             FillGlobalIndexSettings(
                 *index->mutable_global_unique_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescription()
+                tableIndex.GetIndexImplTableDescriptions()
             );
             break;
         default:

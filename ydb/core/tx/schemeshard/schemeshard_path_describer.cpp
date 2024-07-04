@@ -1238,7 +1238,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto& tableStats = indexImplTable->GetStats().Aggregated;
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
 
-    *entry.AddIndexImplTableDescription() = indexImplTable->TableDescription;
+    *entry.AddIndexImplTableDescriptions() = indexImplTable->TableDescription;
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

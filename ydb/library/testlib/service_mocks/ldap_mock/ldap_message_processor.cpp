@@ -417,26 +417,22 @@ void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSe
         lastCheckedField = 1;
     }
 
-    if (lastCheckedField == 1) {
-        if (limit > ReadBytes) {
-            elementType = GetByte();
-        }
+    if (lastCheckedField == 1 && ReadBytes < limit) {
+        elementType = GetByte();
     }
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_TYPE) {
         filter->Attribute = GetString();
         lastCheckedField = 2;
     }
 
-    if (lastCheckedField == 2) {
-        if (limit > ReadBytes) {
-            elementType = GetByte();
-        }
+    if (lastCheckedField == 2 && ReadBytes < limit) {
+        elementType = GetByte();
     }
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_VALUE) {
         filter->Value = GetString();
     }
 
-    if (limit > ReadBytes) {
+    if (ReadBytes < limit) {
         elementType = GetByte();
         if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_DNATTRS) {
             size_t length = GetLength();

@@ -150,7 +150,7 @@ private:
             allUserGroups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
             if (allUserGroups.empty()) {
                 allUserGroups = std::move(directUserGroups);
-                TraverseTree(ld, &allUserGroups);
+                GetNestedGroups(ld, &allUserGroups);
             }
         }
         // Cerr << "+++ After TraverseTree" << Endl;
@@ -333,7 +333,7 @@ private:
         return groups;
     }
 
-    void TraverseTree(LDAP* ld, std::vector<TString>* groups) {
+    void GetNestedGroups(LDAP* ld, std::vector<TString>* groups) {
         // Cerr << "+++ TraverseTree" << Endl;
         std::unordered_set<TString> viewedGroups(groups->cbegin(), groups->cend());
         std::queue<TString> queue;
@@ -346,6 +346,7 @@ private:
             filter << "(|";
             filter << "(entryDn=" << queue.front() << ')';
             queue.pop();
+            //should filter string is divided into several batches
             while (!queue.empty()) {
                 filter << "(entryDn=" << queue.front() << ')';
                 queue.pop();

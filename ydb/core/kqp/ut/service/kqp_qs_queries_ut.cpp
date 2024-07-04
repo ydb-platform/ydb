@@ -2969,6 +2969,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         void Execute() {
             AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
             AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+            AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+            AppConfig.MutableTableServiceConfig()->SetOldLookupJoinBehaviour(false);
             auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);

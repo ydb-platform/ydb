@@ -477,6 +477,13 @@ public:
         }
     }
 
+    void PassAway() override {
+        GlobalInFly->Set(0);
+        GlobalDelayedRequests->Set(0);
+
+        TBase::PassAway();
+    }
+
 protected:
     bool ShouldResign() const override {
         return InFlightLimit == 0 || InFlightLimit == std::numeric_limits<ui64>::max();

@@ -164,6 +164,7 @@ enum EServiceKikimr {
     READ_TABLE_API = 414; // deprecated, use RPC_REQUEST
     RPC_REQUEST = 416;
     GRPC_LIBRARY = 418;
+    DATA_INTEGRITY = 419;
 
     // KEY VALUE section
     KEYVALUE = 420;

@@ -130,6 +130,8 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             return;
         }
 
+        WriteSessionPtrs.clear();
+
         // BAD_REQUEST may be returned from FederationDiscovery:
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
@@ -178,6 +180,14 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         PromiseToInitState.SetValue();
     }
 }
+
+
+bool TFederatedDbObserverImpl::StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
+    with_lock(Lock) {
+        WriteSessionPtrs.push_back(ptr);
+    }
+}
+
 
 IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
     out << "{ Status: " << state.Status.GetStatus();

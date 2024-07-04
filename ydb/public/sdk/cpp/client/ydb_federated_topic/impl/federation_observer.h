@@ -75,6 +75,8 @@ public:
 
     bool IsStale() const;
 
+    bool StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession>);
+
 private:
     Ydb::FederationDiscovery::ListFederationDatabasesRequest ComposeRequest() const;
     void RunFederationDiscoveryImpl();
@@ -90,6 +92,8 @@ private:
     NTopic::IRetryPolicy::TPtr FederationDiscoveryRetryPolicy;
     NTopic::IRetryPolicy::IRetryState::TPtr FederationDiscoveryRetryState;
     NYdbGrpc::IQueueClientContextPtr FederationDiscoveryDelayContext;
+
+    TVector<std::shared_ptr<NTopic::IWriteSession>> WriteSessionPtrs;
 
     bool Stopping = false;
 };
@@ -119,6 +123,10 @@ public:
 
     inline bool IsStale() const {
         return TryGetImpl()->IsStale();
+    }
+
+    inline bool StoreWriteSessionPtr(std::shared_ptr<NTopic::IWriteSession> ptr) {
+        return TryGetImpl()->StoreWriteSessionPtr(ptr);
     }
 };
 

@@ -138,6 +138,7 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                 }
 
                 deferred.DoWrite();
+                self->Observer->StoreWriteSessionPtr(deferred.Writer);
             }
         })
         .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
@@ -378,7 +379,7 @@ void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token
 }
 
 void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
-    TDeferredWrite deferred(Subsession);
+    TDeferredWrite deferred;
 
     with_lock(Lock) {
         ClientHasToken = false;

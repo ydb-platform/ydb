@@ -133,7 +133,7 @@ int TLdapRequestProcessor::ExtractMessageId() {
 
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
     unsigned char protocolOp = GetByte();
-    Cerr << "+++ protocolOp: " << static_cast<int>(protocolOp) << Endl;
+    // Cerr << "+++ protocolOp: " << static_cast<int>(protocolOp) << Endl;
     switch (protocolOp) {
         case EProtocolOp::BIND_OP_REQUEST: {
             return ProcessBindRequest(responses.BindResponses);
@@ -293,13 +293,13 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     requestInfo.TypesOnly = GetByte();
 
     requestInfo.Filter = ProcessFilter();
-    Cerr << "+++LdapMock: filter: " << requestInfo.Filter.Attribute << ", " << requestInfo.Filter.Value << Endl;
+    // Cerr << "+++LdapMock: filter: " << requestInfo.Filter.Attribute << ", " << requestInfo.Filter.Value << Endl;
 
     // Extract Attributes
     elementType = GetByte();
     if (elementType != EElementType::SEQUENCE) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-        Cerr << "+++ type is not sequence" << Endl;
+        // Cerr << "+++ type is not sequence" << Endl;
         return {responseOpData};
     }
     length = GetLength();
@@ -308,7 +308,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
             responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-            Cerr << "+++ Cannot get attributes" << Endl;
+            // Cerr << "+++ Cannot get attributes" << Endl;
             return {responseOpData};
         }
         requestInfo.Attributes.push_back(GetString());
@@ -320,7 +320,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     });
 
     if (it == responses.end()) {
-        Cerr << "+++ it == responses.end()" << Endl;
+        // Cerr << "+++ it == responses.end()" << Endl;
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
@@ -450,7 +450,7 @@ void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* f
     const size_t limit = ReadBytes + lengthFilter;
     while (ReadBytes < limit) {
         filter->NestedFilters.push_back(std::make_shared<TSearchRequestInfo::TSearchFilter>(ProcessFilter()));
-        Cerr << "+++LdapMock: filter: " << filter->NestedFilters.back()->Attribute << ", " << filter->NestedFilters.back()->Value << Endl;
+        // Cerr << "+++LdapMock: filter: " << filter->NestedFilters.back()->Attribute << ", " << filter->NestedFilters.back()->Value << Endl;
     }
 }
 

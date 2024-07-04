@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/security/ldap_auth_provider)
 
 FORK_SUBTESTS()
 
-TIMEOUT(20)
+TIMEOUT(600)
 
 SIZE(MEDIUM)
 

@@ -119,8 +119,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
 
     if (!Self->ChangesQueue) {
         if (!Self->ChangeExchangeSplitter.Done()) {
-            Self->KillChangeSender(ctx);
-            Self->ChangeExchangeSplitter.DoSplit(ctx);
+            Self->ChangeExchangeSplitter.TryDoSplit(ctx);
         } else {
             for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
                 if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {

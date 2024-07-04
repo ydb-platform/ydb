@@ -2397,7 +2397,7 @@ private:
 
     class TChangeExchangeSplitter {
     public:
-        explicit TChangeExchangeSplitter(const TDataShard* self)
+        explicit TChangeExchangeSplitter(TDataShard* self)
             : Self(self)
         {
         }
@@ -2406,7 +2406,17 @@ private:
             DstTabletIds.insert(dstTabletId);
         }
 
-        void DoSplit(const TActorContext& ctx) {
+        void TryDoSplit(const TActorContext& ctx) {
+            if (Self->State == TShardState::SplitSrcMakeSnapshot) {
+                // dst tablet list is incomplete
+                return;
+            }
+
+            if (Worker) {
+                return;
+            }
+
+            Self->KillChangeSender(ctx);
             Y_ABORT_UNLESS(DstTabletIds);
             Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end())));
             Acked = false;
@@ -2427,7 +2437,7 @@ private:
         }
 
     private:
-        const TDataShard* Self;
+        TDataShard* Self;
 
         THashSet<ui64> DstTabletIds;
         TActorId Worker;

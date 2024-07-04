@@ -280,20 +280,6 @@ private:
 }; // TTxRequestChangeRecords
 
 class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
-    void FillActivationList() {
-        if (!Self->ChangesQueue) {
-            if (!Self->ChangeExchangeSplitter.Done()) {
-                ChangeExchangeSplit = true;
-            } else {
-                for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
-                        ActivationList.insert(dstTabletId);
-                    }
-                }
-            }
-        }
-    }
-
 public:
     explicit TTxRemoveChangeRecords(TDataShard* self)
         : TTransactionBase(self)
@@ -310,7 +296,6 @@ public:
             << ", at tablet# " << Self->TabletID());
 
         if (!Self->ChangeRecordsToRemove) {
-            FillActivationList();
             return true;
         }
 
@@ -324,7 +309,6 @@ public:
             ++RemovedCount;
         }
 
-        FillActivationList();
         return true;
     }
 
@@ -340,14 +324,15 @@ public:
             Self->RemoveChangeRecordsInFly = false;
         }
 
-        if (ChangeExchangeSplit) {
-            Self->KillChangeSender(ctx);
-            Self->ChangeExchangeSplitter.DoSplit(ctx);
-        }
-
-        for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+        if (!Self->ChangesQueue) {
+            if (!Self->ChangeExchangeSplitter.Done()) {
+                Self->ChangeExchangeSplitter.TryDoSplit(ctx);
+            } else {
+                for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
+                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
+                        Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+                    }
+                }
             }
         }
 
@@ -357,8 +342,6 @@ public:
 private:
     static constexpr size_t BucketSize = 1000;
     size_t RemovedCount = 0;
-    THashSet<ui64> ActivationList;
-    bool ChangeExchangeSplit = false;
 
 }; // TTxRemoveChangeRecords
 
@@ -382,12 +365,6 @@ public:
         Self->ChangeExchangeSplitter.Ack();
         Y_ABORT_UNLESS(Self->ChangeExchangeSplitter.Done());
 
-        for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
-                ActivationList.insert(dstTabletId);
-            }
-        }
-
         return true;
     }
 
@@ -395,15 +372,12 @@ public:
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Complete"
             << ", at tablet# " << Self->TabletID());
 
-        for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
+        for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
+            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                 Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
             }
         }
     }
-
-private:
-    THashSet<ui64> ActivationList;
 
 }; // TTxChangeExchangeSplitAck
 

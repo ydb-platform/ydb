@@ -243,13 +243,11 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxStartSplit() {
 class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
-    bool ChangeExchangeSplit;
 
 public:
     TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , SnapContext(snapContext)
-        , ChangeExchangeSplit(false)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_SNASHOT_COMPLETE; }
@@ -378,7 +376,7 @@ public:
                     proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds());
                 }
 
-                if (Self->ChangesQueue || tableInfo.HasCdcStreams()) {
+                if (tableInfo.HasAsyncIndexes() || tableInfo.HasCdcStreams()) {
                     snapshot->SetWaitForActivation(true);
                     Self->ChangeSenderActivator.AddDst(dstTablet);
                     db.Table<Schema::SrcChangeSenderActivations>().Key(dstTablet).Update();
@@ -403,8 +401,6 @@ public:
             }
         }
 
-        ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
-
         if (needToReadPages) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
             return false;
@@ -421,9 +417,8 @@ public:
     void Complete(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
-        if (ChangeExchangeSplit) {
-            Self->KillChangeSender(ctx);
-            Self->ChangeExchangeSplitter.DoSplit(ctx);
+        if (!Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done()) {
+            Self->ChangeExchangeSplitter.TryDoSplit(ctx);
         }
     }
 };
@@ -438,14 +433,12 @@ class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTra
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
-    bool Activate;
 
 public:
     TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
-        , Activate(false)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
@@ -469,10 +462,6 @@ public:
         // Remove the row for acked snapshot
         db.Table<Schema::SplitSrcSnapshots>().Key(dstTabletId).Delete();
 
-        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) {
-            Activate = !Self->ChangeSenderActivator.Acked(dstTabletId);
-        }
-
         return true;
     }
 
@@ -485,7 +474,7 @@ public:
             }
         }
 
-        if (Activate) {
+        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) {
             const ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
             if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
                 Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);

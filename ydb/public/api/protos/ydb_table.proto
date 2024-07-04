@@ -385,7 +385,7 @@ message ColumnMeta {
     oneof default_value {
         TypedValue from_literal = 5;
         SequenceDescription from_sequence = 6;
-        google.protobuf.NullValue drop_default = 7;
+        google.protobuf.NullValue empty_default = 7;
     }
 }
 

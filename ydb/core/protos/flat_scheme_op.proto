@@ -91,7 +91,7 @@ message TColumnDescription {
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
-        google.protobuf.NullValue DropDefault = 12; // Drop default case
+        google.protobuf.NullValue EmptyDefault = 12; // Drop default case
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build

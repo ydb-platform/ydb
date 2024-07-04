@@ -335,7 +335,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasDropDefault()) {
+            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -348,7 +348,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     }
                     break;
                 }
-                case NKikimrSchemeOp::TColumnDescription::kDropDefault: {
+                case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                     break;
                 }
                 default: {
@@ -384,7 +384,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     column.DefaultValue = col.GetDefaultFromSequence();
                     break;
                 }
-                case NKikimrSchemeOp::TColumnDescription::kDropDefault: {
+                case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                     column.DefaultKind = ETableColumnDefaultKind::None;
                     column.DefaultValue = "";
                     break;

@@ -1404,7 +1404,7 @@ public:
                                         TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
                                     return SyncError();
                                 }
-                                alter_columns->set_drop_default(google::protobuf::NullValue());
+                                alter_columns->set_empty_default(google::protobuf::NullValue());
                             } else {
                                 auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
                                 auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());

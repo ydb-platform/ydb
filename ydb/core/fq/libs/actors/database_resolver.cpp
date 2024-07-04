@@ -473,39 +473,39 @@ public:
             for (const auto& host : hostsArray) {
                 const auto& hostMap = host.GetMap();
 
-            if (!hostMap.contains("services")) {
-                // indicates that cluster is down
-                continue;
-            }
-
-            // check if all services of a particular host are alive
-            const bool alive = std::all_of(
-                hostMap.at("services").GetArraySafe().begin(),
-                hostMap.at("services").GetArraySafe().end(),
-                [](const auto& service) {
-                    return service["health"].GetString() == "ALIVE";
+                if (!hostMap.contains("services")) {
+                    // indicates that cluster is down
+                    continue;
                 }
-            );
 
-            if (alive) {
-                aliveHosts.push_back(host["name"].GetString());
+                // check if all services of a particular host are alive
+                const bool alive = std::all_of(
+                    hostMap.at("services").GetArraySafe().begin(),
+                    hostMap.at("services").GetArraySafe().end(),
+                    [](const auto& service) {
+                        return service["health"].GetString() == "ALIVE";
+                    }
+                );
+
+                if (alive) {
+                    aliveHosts.push_back(host["name"].GetString());
+                }
             }
-        }
 
-        if (aliveHosts.empty()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
-        }
+            if (aliveHosts.empty()) {
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+            }
 
-        NYql::IMdbEndpointGenerator::TParams params = {
-            .DatabaseType = NYql::EDatabaseType::MySQL,
-            .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-            .UseTls = useTls,
-            .Protocol = protocol,
-        };
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::MySQL,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
 
-        endpoint = mdbEndpointGenerator->ToEndpoint(params);
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
 
-        return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
     }
 

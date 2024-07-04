@@ -17,7 +17,7 @@ public:
     TSpillingTransformProvider(const TSpillingSettings& spillingSettings): SpillingSettings(spillingSettings){};
 
     TCallableVisitFunc operator()(TInternName name) {
-        if (RuntimeVersion >= 50U && SpillingSettings.EnableSpillingInGraceJoin && (name == "GraceJoin" || name == "GraceSelfJoin")) {
+        if (RuntimeVersion >= 50U && SpillingSettings.IsGraceJoinSpillingEnabled() && (name == "GraceJoin" || name == "GraceSelfJoin")) {
             return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",

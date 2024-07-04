@@ -1171,13 +1171,13 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 
-    return WrapGraceJoinCommon(callable, ctx, false, callable.IsSpillingSupported());
+    return WrapGraceJoinCommon(callable, ctx, false, HasSpillingFlag(callable));
 }
 
 IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
     
-    return WrapGraceJoinCommon(callable, ctx, true, callable.IsSpillingSupported());
+    return WrapGraceJoinCommon(callable, ctx, true, HasSpillingFlag(callable));
 }
 
 }

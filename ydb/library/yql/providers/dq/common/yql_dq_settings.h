@@ -30,7 +30,7 @@ struct TDqSettings {
 
     enum class EEnabledSpillingNodes : ui64 {
         GraceJoin   = 1ULL      /* "GraceJoin" */,
-        All         = 64ULL     /* "All" */,
+        All         = ~0ULL     /* "All" */,
     };
 
     struct TDefault {
@@ -223,9 +223,9 @@ struct TDqSettings {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
     }
 
-    bool IsSpillingInGraceJoinEnabled() const {
-        ui64 mask = EnableSpillingNodes.Get().GetOrElse(0);
-        return IsSpillingEnabled() && (mask & ui64(EEnabledSpillingNodes::GraceJoin));
+    ui64 GetEnabledSpillingNodes() const {
+        if (!IsSpillingEnabled()) return 0;
+        return EnableSpillingNodes.Get().GetOrElse(0);
     }
 
     bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {

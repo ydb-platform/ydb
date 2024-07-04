@@ -676,7 +676,7 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
-            TSpillingSettings spillingSettings{Settings->IsSpillingInGraceJoinEnabled()};
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,

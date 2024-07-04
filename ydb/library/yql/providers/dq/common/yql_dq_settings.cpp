@@ -109,9 +109,6 @@ TDqConfiguration::TDqConfiguration() {
                     throw yexception() << "Empty value item";
                 }
                 auto value = FromString<EEnabledSpillingNodes>(s);
-                if (value == EEnabledSpillingNodes::All) {
-                    return ui64(-1);
-                }
                 res |= ui64(value);
             }
             return res;

@@ -877,8 +877,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     const TRichYPath& producerPath,
     const TRichYPath& queuePath,
-    const TString& sessionId,
-    const std::optional<TYsonString>& userMeta,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
     const TCreateQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -889,19 +888,19 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     ToProto(req->mutable_producer_path(), producerPath);
     ToProto(req->mutable_queue_path(), queuePath);
     ToProto(req->mutable_session_id(), sessionId);
-    if (userMeta) {
-        ToProto(req->mutable_user_meta(), userMeta->AsStringBuf());
+    if (options.UserMeta) {
+        ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
-        std::optional<TYsonString> userMeta;
+        INodePtr userMeta;
         if (rsp->has_user_meta()) {
-            userMeta = TYsonString(FromProto<TString>(rsp->user_meta()));
+            userMeta = ConvertTo<INodePtr>(TYsonString(FromProto<TString>(rsp->user_meta())));
         }
 
         return TCreateQueueProducerSessionResult{
-            .SequenceNumber = FromProto<i64>(rsp->sequence_number()),
-            .Epoch = FromProto<i64>(rsp->epoch()),
+            .SequenceNumber = FromProto<TQueueProducerSequenceNumber>(rsp->sequence_number()),
+            .Epoch = FromProto<TQueueProducerEpoch>(rsp->epoch()),
             .UserMeta = std::move(userMeta),
         };
     }));
@@ -910,7 +909,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
 TFuture<void> TClient::RemoveQueueProducerSession(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
     const TRemoveQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

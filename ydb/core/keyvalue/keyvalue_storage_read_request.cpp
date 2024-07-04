@@ -226,11 +226,11 @@ public:
 
         TGetBatch &batch = Batches[ev->Cookie];
 
-        if (result->GroupId.GetRawId() != batch.GroupId) {
+        if (result->GroupId != batch.GroupId) {
             STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV318,
                     "Received EvGetResult from an unexpected storage group.",
                     (KeyValue, TabletInfo->TabletID),
-                    (GroupId, result->GroupId.GetRawId()),
+                    (GroupId, result->GroupId),
                     (ExpecetedGroupId, batch.GroupId),
                     (Status, result->Status),
                     (Deadline, IntermediateResult->Deadline.MilliSeconds()),

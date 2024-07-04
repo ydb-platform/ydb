@@ -30,7 +30,6 @@ SRCS(
     yql_yt_optimize.cpp
     yql_yt_peephole.cpp
     yql_yt_physical_finalizing.cpp
-    yql_yt_transformer.cpp
     yql_yt_physical_optimize.cpp
     yql_yt_provider_impl.cpp
     yql_yt_provider.cpp
@@ -38,25 +37,28 @@ SRCS(
     yql_yt_provider_impl.h
     yql_yt_table_desc.cpp
     yql_yt_table.cpp
-    yql_yt_transformer_helper.cpp
     yql_yt_dq_integration.cpp
     yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
 
-    transformer/yql_yt_transformer_content.cpp
-    transformer/yql_yt_transformer_fuse.cpp
-    transformer/yql_yt_transformer_join.cpp
-    transformer/yql_yt_transformer_key_range.cpp
-    transformer/yql_yt_transformer_lambda.cpp
-    transformer/yql_yt_transformer_map_reduce.cpp
-    transformer/yql_yt_transformer_merge.cpp
-    transformer/yql_yt_transformer_misc.cpp
-    transformer/yql_yt_transformer_partition.cpp
-    transformer/yql_yt_transformer_push.cpp
-    transformer/yql_yt_transformer_read_write.cpp
-    transformer/yql_yt_transformer_sort.cpp
-    transformer/yql_yt_transformer_weak_fields.cpp
+    phy_opt/yql_yt_phy_opt.cpp
+    phy_opt/yql_yt_phy_opt_content.cpp
+    phy_opt/yql_yt_phy_opt_fuse.cpp
+    phy_opt/yql_yt_phy_opt_helper.h
+    phy_opt/yql_yt_phy_opt_lambda.cpp
+    phy_opt/yql_yt_phy_opt_misc.cpp
+    phy_opt/yql_yt_phy_opt_sort.cpp
+    phy_opt/yql_yt_phy_opt_join.cpp
+    phy_opt/yql_yt_phy_opt_map.cpp
+    phy_opt/yql_yt_phy_opt_partition.cpp
+    phy_opt/yql_yt_phy_opt_weak_fields.cpp
+    phy_opt/yql_yt_phy_opt_field_subset.cpp
+    phy_opt/yql_yt_phy_opt_helper.cpp
+    phy_opt/yql_yt_phy_opt_key_range.cpp
+    phy_opt/yql_yt_phy_opt_merge.cpp
+    phy_opt/yql_yt_phy_opt_push.cpp
+    phy_opt/yql_yt_phy_opt_write.cpp
 )
 
 PEERDIR(

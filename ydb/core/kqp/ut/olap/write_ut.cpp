@@ -1,5 +1,8 @@
 #include "helpers/local.h"
 #include "helpers/writer.h"
+#include "helpers/typed_local.h"
+#include "helpers/query_executor.h"
+#include "helpers/get_value.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -74,7 +77,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         {
             const auto startInstant = TMonotonic::Now();
-            AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
+                ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {
                     kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
@@ -86,6 +90,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             }
         }
 
+        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        const auto writesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount();
+        const auto deletesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount();
         {
             const auto startInstant = TMonotonic::Now();
             while (TMonotonic::Now() - startInstant < TDuration::Seconds(10)) {
@@ -97,11 +104,31 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Sleep(TDuration::MilliSeconds(500));
             }
         }
+        AFL_VERIFY(writesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount())
+            ("writes", writesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount());
+        AFL_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount())
+            ("deletes", deletesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+    }
 
-        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
-        const auto writesCount = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount();
-        const auto deletesCount = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount();
-        AFL_VERIFY(deletesCount <= writesCount + 1)("writes", writesCount)("deletes", deletesCount);
+    Y_UNIT_TEST(DefaultValues) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`, `DEFAULT_VALUE`=`abcde`);");
+        helper.FillPKOnly(0, 800000);
+
+        auto selectQuery = TString(R"(
+                SELECT
+                    count(*) as count,
+                FROM `/Root/olapStore/olapTable`
+                WHERE field = 'abcde'
+            )");
+
+        auto tableClient = kikimr.GetTableClient();
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 800000);
     }
 
 }

@@ -127,15 +127,14 @@ public:
     DELEGATE_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options),
-        (producerPath, queuePath, sessionId, userMeta, options))
+        (producerPath, queuePath, sessionId, options))
 
     DELEGATE_METHOD(TFuture<void>, RemoveQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options),
         (producerPath, queuePath, sessionId, options))
 

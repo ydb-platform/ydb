@@ -153,6 +153,7 @@ namespace NLs {
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamAwsRegion(const TString& value);
+    TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
 
     TCheckFunc HasBackupInFly(ui64 txId);

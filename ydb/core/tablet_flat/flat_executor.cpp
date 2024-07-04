@@ -1193,7 +1193,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run()) {
+        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -1935,6 +1935,17 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
+                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
+                for (auto i : xrange(pages.size())) {
+                    if (i != 0) logl << ", ";
+                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
+                }
+                logl << "]";
+            }
+            
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -3469,7 +3480,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, true).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -4771,6 +4782,10 @@ void TExecutor::ApplyCompactionChanges(
             }
         }
     }
+}
+
+void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
+    PreloadTablesData = std::move(tables);
 }
 
 }

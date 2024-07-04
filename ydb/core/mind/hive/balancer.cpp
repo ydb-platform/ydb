@@ -245,7 +245,7 @@ protected:
             for (TTabletInfo* tablet : nodeTablets) {
                 if (tablet->IsGoodForBalancer(now) && 
                     (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
-                    tablet->HasAllowedMetric(Settings.ResourceToBalance)) {
+                    tablet->HasMetric(Settings.ResourceToBalance)) {
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }

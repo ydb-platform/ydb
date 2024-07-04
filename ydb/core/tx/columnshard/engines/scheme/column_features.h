@@ -34,20 +34,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
 public:
     TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted)
+        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted,
+        const std::shared_ptr<arrow::Scalar>& defaultValue)
+        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, defaultValue)
         , Operator(bOperator)
     {
         AFL_VERIFY(Operator);
 
-    }
-
-    std::shared_ptr<arrow::Scalar> GetDefaultWriteValue() const {
-        return nullptr;
-    }
-
-    std::shared_ptr<arrow::Scalar> GetDefaultReadValue() const {
-        return nullptr;
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const std::shared_ptr<IStoragesManager>& storagesManager) {

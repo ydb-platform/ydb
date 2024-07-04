@@ -51,7 +51,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("tablet", Self->TabletID());
 
     if (!ReadMetadataRange) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
 
         auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, Self->TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);

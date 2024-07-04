@@ -197,7 +197,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
     if (!ReadMetadataRange) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
 
         auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);

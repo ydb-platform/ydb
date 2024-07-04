@@ -31,6 +31,10 @@ items:
   include:
     mode: link
     path: ydb-dstool/toc_p.yaml
+- name: ydbops
+  include:
+    mode: link
+    path: ydbops/toc_p.yaml
 - name: Observability
   include:
     mode: link

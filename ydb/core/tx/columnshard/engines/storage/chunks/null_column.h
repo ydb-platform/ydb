@@ -6,9 +6,10 @@
 
 namespace NKikimr::NOlap::NChunks {
 
-class TNullChunkPreparation: public IPortionColumnChunk {
+class TDefaultChunkPreparation: public IPortionColumnChunk {
 private:
     using TBase = IPortionColumnChunk;
+    const std::shared_ptr<arrow::Scalar> DefaultValue;
     const ui32 RecordsCount;
     TString Data;
 protected:
@@ -31,19 +32,21 @@ protected:
         return TSimpleChunkMeta(nullptr, false, false);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
-        return nullptr;
+        return DefaultValue;
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
-        return nullptr;
+        return DefaultValue;
     }
 
 public:
-    TNullChunkPreparation(const ui32 columnId, const ui32 recordsCount, const std::shared_ptr<arrow::Field>& f, const TColumnSaver& saver)
+    TDefaultChunkPreparation(const ui32 columnId, const ui32 recordsCount, const std::shared_ptr<arrow::Field>& f, 
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const TColumnSaver& saver)
         : TBase(columnId)
+        , DefaultValue(defaultValue)
         , RecordsCount(recordsCount)
-        , Data(saver.Apply(NArrow::TThreadSimpleArraysCache::GetNull(f->type(), recordsCount), f))
     {
         Y_ABORT_UNLESS(RecordsCount);
+        Data = saver.Apply(NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, RecordsCount), f);
         SetChunkIdx(0);
     }
 };

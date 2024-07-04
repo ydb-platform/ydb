@@ -75,6 +75,9 @@ struct TEvStatistics {
         EvGetScanStatus,
         EvGetScanStatusResponse,
 
+        EvStatisticsRequest,
+        EvStatisticsResponse,
+
         EvAggregateStatistics,
         EvAggregateStatisticsResponse,
         EvAggregateKeepAlive,
@@ -119,7 +122,7 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
-    
+
     struct TEvConfigureAggregator : public TEventPB<
         TEvConfigureAggregator,
         NKikimrStat::TEvConfigureAggregator,
@@ -234,6 +237,17 @@ struct TEvStatistics {
         EvGetScanStatusResponse>
     {};
 
+    struct TEvStatisticsRequest : public TEventPB<
+        TEvStatisticsRequest,
+        NKikimrStat::TEvStatisticsRequest,
+        EvStatisticsRequest>
+    {};
+
+    struct TEvStatisticsResponse : public TEventPB<
+        TEvStatisticsResponse,
+        NKikimrStat::TEvStatisticsResponse,
+        EvStatisticsResponse>
+    {};
 };
 
 } // NStat

@@ -264,7 +264,7 @@ namespace NActors::NQueueBench {
         TStatsCollector *StatsCollector;
     };
 
-    void RunThreads(const std::vector<ISimpleThread*> &threads) {
+    inline void RunThreads(const std::vector<ISimpleThread*> &threads) {
         for (auto &thread : threads) {
             thread->Start();
         }
@@ -273,7 +273,7 @@ namespace NActors::NQueueBench {
         }
     }
 
-    void RunThreads(const std::vector<std::unique_ptr<ISimpleThread>> &threads) {
+    inline void RunThreads(const std::vector<std::unique_ptr<ISimpleThread>> &threads) {
         for (auto &thread : threads) {
             thread->Start();
         }
@@ -283,7 +283,7 @@ namespace NActors::NQueueBench {
     }
 
     template <typename ...TThreads>
-    void RunThreads(std::unique_ptr<TThreads>&& ...threads) {
+    inline void RunThreads(std::unique_ptr<TThreads>&& ...threads) {
         RunThreads(std::vector<ISimpleThread*>{threads.release()...});
     }
 

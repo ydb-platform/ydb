@@ -52,14 +52,18 @@ public:
 class TWritingBlob {
 private:
     std::vector<TWideSerializedBatch*> Ranges;
-    YDB_READONLY_DEF(TString, BlobData);
+    std::vector<TString> BlobData;
+    ui64 BlobSize = 0;
+    bool Extracted = false;
 public:
     TWritingBlob() = default;
     bool AddData(TWideSerializedBatch& batch) {
-        if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
+        AFL_VERIFY(!Extracted);
+        if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
-            BlobData += batch.GetSplittedBlobs().GetData();
+            BlobSize += batch.GetSplittedBlobs().GetSize();
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
             AFL_VERIFY(BlobData.size());
@@ -73,8 +77,10 @@ public:
         }
     }
 
+    TString ExtractBlobData();
+
     ui64 GetSize() const {
-        return BlobData.size();
+        return BlobSize;
     }
 };
 

@@ -236,11 +236,13 @@ public:
         }
     }
 
-    void PassRequestToWorkloadPool() {
+    void PassRequestToResourcePool() {
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
-            SessionId, QueryState->UserRequestContext->PoolId, QueryState->UserToken
-        ));
-        QueryState->PlacedInWorkloadPool = true;
+            QueryState->Database,
+            SessionId,
+            QueryState->UserRequestContext->PoolId,
+            QueryState->UserToken
+        ), IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpSessionActor::ExecuteState);
     }
@@ -452,26 +454,27 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId) {
-            PassRequestToWorkloadPool();
-            return;
-        }
+        PassRequestToResourcePool();
+    }
 
-        CompileQuery();
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
+            LOG_I("Failed to deliver request to workload service");
+            CompileQuery();
+        }
     }
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
-            LOG_N("Failed to place request in resource pool, feature flag is disabled");
+            LOG_T("Failed to place request in resource pool, feature flag is disabled");
             QueryState->UserRequestContext->PoolId.clear();
-            QueryState->PlacedInWorkloadPool = false;
             CompileQuery();
             return;
         }
 
-        const TString& poolId = QueryState->UserRequestContext->PoolId;
+        const TString& poolId = ev->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
@@ -480,6 +483,8 @@ public:
         }
 
         LOG_D("continue request, pool id: " << poolId);
+        QueryState->PoolHandlerActor = ev->Sender;
+        QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
         CompileQuery();
     }
@@ -1086,7 +1091,6 @@ public:
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
-
                     if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
@@ -1197,7 +1201,7 @@ public:
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
-        } else if (QueryState->ShouldAcquireLocks()) {
+        } else if (QueryState->ShouldAcquireLocks(tx)) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
@@ -1232,7 +1236,7 @@ public:
 
         auto userToken = QueryState->UserToken;
         const TString requestType = QueryState->GetRequestType();
-        bool temporary = GetTemporaryTableInfo(tx).has_value();
+        const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
@@ -1373,6 +1377,9 @@ public:
         }
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx - 1);
         if (!tx) {
+            return;
+        }
+        if (QueryState->IsCreateTableAs()) {
             return;
         }
 
@@ -2047,14 +2054,15 @@ public:
             SendRollbackRequest(CleanupCtx->TransactionsToBeAborted.front().Get());
         }
 
-        if (QueryState && QueryState->PlacedInWorkloadPool) {
+        if (QueryState && QueryState->PoolHandlerActor) {
             if (!CleanupCtx) {
                 CleanupCtx.reset(new TKqpCleanupCtx);
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
-            QueryState->PlacedInWorkloadPool = false;
-            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvCleanupRequest(SessionId, QueryState->UserRequestContext->PoolId));
+            auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
+            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
+            QueryState->PoolHandlerActor = Nothing();
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
@@ -2111,7 +2119,7 @@ public:
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
 
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
             LOG_E("Failed to cleanup workload service " << ev->Get()->Status << ": " << ev->Get()->Issues.ToOneLineString());
         }
 
@@ -2280,6 +2288,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
 
+                hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(NWorkload::TEvContinueRequest, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
@@ -2298,7 +2307,6 @@ public:
                 hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvKqp::TEvSplitResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);

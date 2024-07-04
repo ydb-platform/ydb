@@ -1,17 +1,18 @@
 #include "kqp_workload_service.h"
-#include "kqp_workload_service_impl.h"
-#include "kqp_workload_service_tables.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
+
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
-#include <ydb/core/protos/console_config.pb.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
+#include <ydb/core/kqp/workload_service/common/helpers.h>
+#include <ydb/core/kqp/workload_service/tables/table_queries.h>
+
+#include <ydb/core/protos/console_config.pb.h>
 
 
 namespace NKikimr::NKqp {
@@ -20,18 +21,9 @@ namespace NWorkload {
 
 namespace {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << stream)
-
 using namespace NActors;
 
-
-TWorkloadManagerConfig DefaultWorkloadManagerConfig;
+constexpr TDuration IDLE_DURATION = TDuration::Seconds(15);
 
 
 class TKqpWorkloadService : public TActorBootstrapped<TKqpWorkloadService> {
@@ -42,11 +34,53 @@ class TKqpWorkloadService : public TActorBootstrapped<TKqpWorkloadService> {
         Finished,
     };
 
+    struct TPoolState {
+        TActorId PoolHandler;
+        TActorContext ActorContext;
+
+        std::queue<TEvPrivate::TEvResolvePoolResponse::TPtr> PendingRequests = {};
+        bool WaitingInitialization = false;
+        bool PlaceRequestRunning = false;
+        std::optional<TActorId> NewPoolHandler = std::nullopt;
+
+        ui64 InFlightRequests = 0;
+        TInstant LastUpdateTime = TInstant::Now();
+
+        void UpdateHandler() {
+            if (PlaceRequestRunning || WaitingInitialization || !NewPoolHandler) {
+                return;
+            }
+
+            ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+            PoolHandler = *NewPoolHandler;
+            NewPoolHandler = std::nullopt;
+            InFlightRequests = 0;
+        }
+
+        void StartPlaceRequest() {
+            if (PlaceRequestRunning || PendingRequests.empty()) {
+                return;
+            }
+
+            PlaceRequestRunning = true;
+            InFlightRequests++;
+            ActorContext.Send(PendingRequests.front()->Forward(PoolHandler));
+            PendingRequests.pop();
+        }
+
+        void OnRequestFinished() {
+            Y_ENSURE(InFlightRequests);
+            InFlightRequests--;
+            LastUpdateTime = TInstant::Now();
+        }
+    };
+
 public:
     explicit TKqpWorkloadService(NMonitoring::TDynamicCounterPtr counters)
-        : WorkloadManagerConfig(DefaultWorkloadManagerConfig)
-        , Counters(counters)
-    {}
+        : Counters(counters)
+    {
+        RegisterCounters();
+    }
 
     void Bootstrap() {
         Become(&TKqpWorkloadService::MainState);
@@ -62,25 +96,36 @@ public:
         }
     }
 
-    void HandleSetConfigSubscriptionResponse() {
+    void HandlePoison() {
+        LOG_W("Got poison, stop workload service");
+
+        for (const auto& [_, poolState] : PoolIdToState) {
+            Send(poolState.PoolHandler, new TEvents::TEvPoison());
+            if (poolState.NewPoolHandler) {
+                Send(*poolState.NewPoolHandler, new TEvents::TEvPoison());
+            }
+        }
+
+        PassAway();
+    }
+
+    void HandleSetConfigSubscriptionResponse() const {
         LOG_D("Subscribed for config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-        auto &event = ev->Get()->Record;
-        
-        auto featureFlags = event.GetConfig().GetFeatureFlags();
-        if (featureFlags.GetEnableResourcePools()) {
-            LOG_N("Resource pools was enanbled");
-            EnabledResourcePools = true;
+        const auto& event = ev->Get()->Record;
+
+        EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
+        if (EnabledResourcePools) {
+            LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
         } else {
-            LOG_N("Resource pools was disabled");
-            EnabledResourcePools = false;
+            LOG_I("Resource pools was disabled");
         }
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        auto responseEvent = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEvent.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
@@ -91,11 +136,6 @@ public:
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
-                break;
-
-            case TKqpWorkloadServiceEvents::EvContinueRequest:
-            case TKqpWorkloadServiceEvents::EvCleanupResponse:
-                LOG_E("Failed to deliver event " << ev->Get()->SourceType << " to worker acrtor, session was lost");
                 break;
 
             default:
@@ -111,67 +151,150 @@ public:
             return;
         }
 
-        const TString& poolId = ev->Get()->PoolId;
-        auto poolState = GetPoolStateSafe(poolId);
-        if (!poolState) {
-            ReplyContinueError(workerActorId, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
-            return;
-        }
+        // Add AllAuthenticatedUsers group SID into user token
+        ev->Get()->UserToken = GetUserToken(ev->Get()->UserToken);
 
-        if (poolState->PlaceRequest(workerActorId, ev->Get()->SessionId) && poolState->TablesRequired()) {
-            ScheduleLeaseUpdate();
-            PrepareWorkloadServiceTables();
-        }
+        LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
+        bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
+        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool));
     }
 
-    void Handle(TEvCleanupRequest::TPtr& ev) const {
-        auto poolState = GetPoolStateSafe(ev->Get()->PoolId);
+    void Handle(TEvCleanupRequest::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        auto poolState = GetPoolState(database, poolId);
         if (!poolState) {
-            ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << ev->Get()->PoolId << " not found");
+            ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
             return;
         }
 
-        poolState->CleanupRequest(ev->Sender, ev->Get()->SessionId);
+        LOG_D("Finished request with worker actor " << ev->Sender << ", Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+        Send(ev->Forward(poolState->PoolHandler));
+    }
+
+    void HandleWakeup() {
+        IdleChecksStarted = false;
+
+        std::vector<TString> poolsToDelete;
+        poolsToDelete.reserve(PoolIdToState.size());
+        for (const auto& [poolKey, poolState] : PoolIdToState) {
+            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
+                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                poolsToDelete.emplace_back(poolKey);
+            }
+        }
+        for (const auto& poolKey : poolsToDelete) {
+            PoolIdToState.erase(poolKey);
+            ActivePools->Dec();
+        }
+
+        if (!PoolIdToState.empty()) {
+            StartIdleChecks();
+        }
     }
 
     STRICT_STFUNC(MainState,
+        sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
+
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
 
-        sFunc(TEvPrivate::TEvUpdatePoolsLeases, HandleUpdatePoolsLeases);
+        hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
+        hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
         hFunc(TEvPrivate::TEvRefreshPoolState, Handle);
+        hFunc(TEvPrivate::TEvFinishRequestInPool, Handle);
+        hFunc(TEvPrivate::TEvPrepareTablesRequest, Handle);
         hFunc(TEvPrivate::TEvCleanupTablesFinished, Handle);
         hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
-
-        hFunc(TEvPrivate::TEvCancelRequest, ForwardEvent);
-        hFunc(TEvPrivate::TEvRefreshPoolStateResponse, ForwardEvent);
-        hFunc(TEvPrivate::TEvDelayRequestResponse, ForwardEvent);
-        hFunc(TEvPrivate::TEvStartRequestResponse, ForwardEvent);
-        hFunc(TEvPrivate::TEvCleanupRequestsResponse, ForwardEvent);
-
-        IgnoreFunc(TEvKqp::TEvCancelQueryResponse);
+        hFunc(TEvPrivate::TEvResignPoolHandler, Handle);
     )
 
 private:
-    void HandleUpdatePoolsLeases() {
-        ScheduledLeaseUpdate = false;
-        LOG_T("Try to start refresh for all pools");
-
-        ui64 localPoolsSize = 0;
-        for (auto& [_, poolState] : PoolIdToState) {
-            poolState->RefreshState();
-            localPoolsSize += poolState->GetLocalPoolSize();
+    void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
+        const auto& event = ev->Get()->Event;
+        const TString& database = event->Get()->Database;
+        if (ev->Get()->DefaultPoolCreated) {
+            DatabasesWithDefaultPool.insert(CanonizePath(database));
         }
-        if (localPoolsSize) {
-            ScheduleLeaseUpdate();
+
+        const TString& poolId = event->Get()->PoolId;
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
+            return;
+        }
+
+        LOG_D("Successfully fetched pool " << poolId << ", Database: " << database << ", SessionId: " << event->Get()->SessionId);
+
+        auto poolState = GetPoolState(database, poolId);
+        if (!poolState) {
+            TString poolKey = GetPoolKey(database, poolId);
+            LOG_I("Creating new handler for pool " << poolKey);
+
+            auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, ev->Get()->PoolConfig, Counters));
+            poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
+
+            ActivePools->Inc();
+            StartIdleChecks();
+        }
+
+        poolState->PendingRequests.emplace(std::move(ev));
+        poolState->StartPlaceRequest();
+    }
+
+    void Handle(TEvPrivate::TEvPlaceRequestIntoPoolResponse::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId);
+
+        if (auto poolState = GetPoolState(database, poolId)) {
+            poolState->PlaceRequestRunning = false;
+            poolState->UpdateHandler();
+            poolState->StartPlaceRequest();
         }
     }
 
-    void Handle(TEvPrivate::TEvRefreshPoolState::TPtr& ev) const {
-        GetPoolState(ev->Get()->Record.GetPoolId())->RefreshState(true);
+    void Handle(TEvPrivate::TEvRefreshPoolState::TPtr& ev) {
+        const auto& event = ev->Get()->Record;
+        const TString& database = event.GetDatabase();
+        const TString& poolId = event.GetPoolId();
+        LOG_T("Got remote refresh request, Database: " << database << ", PoolId: " << poolId << ", NodeId: " << ev->Sender.NodeId());
+
+        if (auto poolState = GetPoolState(database, poolId)) {
+            Send(ev->Forward(poolState->PoolHandler));
+        }
+    }
+
+    void Handle(TEvPrivate::TEvFinishRequestInPool::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Request finished in pool, Database: " << database << ", PoolId: " << poolId);
+
+        if (auto poolState = GetPoolState(database, poolId)) {
+            poolState->OnRequestFinished();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvPrepareTablesRequest::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Got create teables request, Database: " << database << ", PoolId: " << poolId);
+
+        auto poolState = GetPoolState(database, poolId);
+        if (!poolState) {
+            return;
+        }
+
+        if (TablesCreationStatus == ETablesCreationStatus::Finished) {
+            Send(poolState->PoolHandler, new TEvPrivate::TEvTablesCreationFinished(true, {}));
+        } else {
+            poolState->WaitingInitialization = true;
+            PendingHandlers.emplace(GetPoolKey(database, poolId));
+            PrepareWorkloadServiceTables();
+        }
     }
 
     void Handle(TEvPrivate::TEvCleanupTablesFinished::TPtr& ev) {
@@ -184,8 +307,8 @@ private:
         TablesCreationStatus = ETablesCreationStatus::NotStarted;
         if (ev->Get()->TablesExists) {
             TablesCreationStatus = ETablesCreationStatus::Finished;
-            OnPreparingFinished(Ydb::StatusIds::SUCCESS);
-        } else if (TablesCreationRequired) {
+            OnTabelsCreated(true);
+        } else {
             PrepareWorkloadServiceTables();
         }
     }
@@ -194,23 +317,28 @@ private:
         TablesCreationStatus = ev->Get()->Success ? ETablesCreationStatus::Finished : ETablesCreationStatus::NotStarted;
 
         if (ev->Get()->Success) {
-            LOG_D("Succefully created tables, start refresh requests");
-            OnPreparingFinished(Ydb::StatusIds::SUCCESS);
+            LOG_D("Succefully created tables, send response to handlers");
+            OnTabelsCreated(true);
             return;
         }
 
         LOG_E("Failed to create tables, issues: " << ev->Get()->Issues.ToOneLineString());
-
-        NYql::TIssue rootIssue("Failed to create workload service tables");
-        for (const NYql::TIssue& issue : ev->Get()->Issues) {
-            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-        }
-        OnPreparingFinished(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
+        NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to create workload service tables");
+        OnTabelsCreated(false, issues);
     }
 
-    template<typename TEvent>
-    void ForwardEvent(TEvent ev) const {
-        GetPoolState(ev->Get()->PoolId)->Handle(std::move(ev));
+    void Handle(TEvPrivate::TEvResignPoolHandler::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Got resign request, Database: " << database << ", PoolId: " << poolId);
+
+        if (auto poolState = GetPoolState(database, poolId)) {
+            if (poolState->NewPoolHandler) {
+                Send(*poolState->NewPoolHandler, new TEvPrivate::TEvStopPoolHandler());
+            }
+            poolState->NewPoolHandler = ev->Get()->NewHandler;
+            poolState->UpdateHandler();
+        }
     }
 
 private:
@@ -218,42 +346,55 @@ private:
         if (ServiceInitialized) {
             return;
         }
-        LOG_D("Started workload service initialization");
         ServiceInitialized = true;
 
-        PoolIdToState.reserve(WorkloadManagerConfig.Pools.size());
-        for (const auto& [poolId, poolConfig] : WorkloadManagerConfig.Pools) {
-            PoolIdToState.insert({poolId, NQueue::CreateState(ActorContext(), poolId, poolConfig, Counters->GetSubgroup("pool", poolId))});
-        }
-
+        LOG_I("Started workload service initialization");
         Register(CreateCleanupTablesActor());
     }
 
-    void ScheduleLeaseUpdate() {
-        if (ScheduledLeaseUpdate) {
+    void PrepareWorkloadServiceTables() {
+        if (PendingHandlers.empty()) {
             return;
         }
-        ScheduledLeaseUpdate = true;
-        Schedule(LEASE_DURATION / 2, new TEvPrivate::TEvUpdatePoolsLeases());
-    }
 
-    void PrepareWorkloadServiceTables() {
-        TablesCreationRequired = true;
         if (TablesCreationStatus == ETablesCreationStatus::NotStarted) {
+            LOG_I("Started workload service tables creation");
             TablesCreationStatus = ETablesCreationStatus::Pending;
             Register(CreateTablesCreator());
         }
     }
 
-    void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) const {
-        for (auto& [_, poolState] : PoolIdToState) {
-            poolState->OnPreparingFinished(status, issues);
+    void OnTabelsCreated(bool success, NYql::TIssues issues = {}) {
+        for (const TString& poolKey : PendingHandlers) {
+            auto poolState = GetPoolState(poolKey);
+            if (!poolState) {
+                continue;
+            }
+
+            Send(poolState->PoolHandler, new TEvPrivate::TEvTablesCreationFinished(success, issues));
+            poolState->WaitingInitialization = false;
+            poolState->UpdateHandler();
         }
+        PendingHandlers.clear();
     }
 
+    void StartIdleChecks() {
+        if (IdleChecksStarted) {
+            return;
+        }
+        IdleChecksStarted = true;
+
+        Schedule(IDLE_DURATION, new TEvents::TEvWakeup());
+    }
+
+private:
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
-        LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << message);
-        Send(replyActorId, new TEvContinueRequest(status, {}, {NYql::TIssue(message)}));
+        ReplyContinueError(replyActorId, status, {NYql::TIssue(message)});
+    }
+
+    void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
+        LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
+        Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
     }
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
@@ -261,38 +402,65 @@ private:
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
     }
 
-    NQueue::TStatePtr GetPoolState(const TString& poolId) const {
-        auto poolIt = PoolIdToState.find(poolId);
-        Y_ENSURE(poolIt != PoolIdToState.end(), "Invalid pool id " << poolId);
-        return poolIt->second;
+    static TIntrusivePtr<NACLib::TUserToken> GetUserToken(TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+        auto token = MakeIntrusive<NACLib::TUserToken>(userToken ? userToken->GetUserSID() : NACLib::TSID(), TVector<NACLib::TSID>{});
+
+        bool hasAllAuthenticatedUsersSID = false;
+        const auto& allAuthenticatedUsersSID = AppData()->AllAuthenticatedUsers;
+        if (userToken) {
+            for (const auto& groupSID : userToken->GetGroupSIDs()) {
+                token->AddGroupSID(groupSID);
+                hasAllAuthenticatedUsersSID = hasAllAuthenticatedUsersSID || groupSID == allAuthenticatedUsersSID;
+            }
+        }
+
+        if (!hasAllAuthenticatedUsersSID) {
+            token->AddGroupSID(allAuthenticatedUsersSID);
+        }
+
+        return token;
     }
 
-    NQueue::TStatePtr GetPoolStateSafe(const TString& poolId) const {
-        auto poolIt = PoolIdToState.find(poolId);
+    TPoolState* GetPoolState(const TString& database, const TString& poolId) {
+        return GetPoolState(GetPoolKey(database, poolId));
+    }
+
+    TPoolState* GetPoolState(const TString& key) {
+        auto poolIt = PoolIdToState.find(key);
         if (poolIt != PoolIdToState.end()) {
-            return poolIt->second;
+            return &poolIt->second;
         }
         return nullptr;
     }
 
+    static TString GetPoolKey(const TString& database, const TString& poolId) {
+        return CanonizePath(TStringBuilder() << database << "/" << poolId);
+    }
+
+    TString LogPrefix() const {
+        return "[Service] ";
+    }
+
+    void RegisterCounters() {
+        ActivePools = Counters->GetCounter("ActivePools", false);
+    }
+
 private:
-    const TWorkloadManagerConfig WorkloadManagerConfig;
     NMonitoring::TDynamicCounterPtr Counters;
 
     bool EnabledResourcePools = false;
     bool ServiceInitialized = false;
-    bool ScheduledLeaseUpdate = false;
-    bool TablesCreationRequired = false;
+    bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
+    std::unordered_set<TString> PendingHandlers;
 
-    std::unordered_map<TString, NQueue::TStatePtr> PoolIdToState;
+    std::unordered_set<TString> DatabasesWithDefaultPool;
+    std::unordered_map<TString, TPoolState> PoolIdToState;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ActivePools;
 };
 
 }  // anonymous namespace
-
-void SetWorkloadManagerConfig(const TWorkloadManagerConfig& workloadManagerConfig) {
-    DefaultWorkloadManagerConfig = workloadManagerConfig;
-}
 
 }  // namespace NWorkload
 

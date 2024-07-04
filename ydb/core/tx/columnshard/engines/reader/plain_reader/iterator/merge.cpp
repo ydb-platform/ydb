@@ -30,8 +30,7 @@ void TBaseMergeTask::PrepareResultBatch() {
         return;
     }
     {
-        ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
-        AFL_VERIFY(ResultBatch);
+        ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
     }
@@ -74,8 +73,7 @@ bool TStartMergeTask::DoExecute() {
         if (container && container->num_rows()) {
             ResultBatch = container->BuildTable();
             LastPK = Sources.begin()->second->GetLastPK();
-            ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
-            AFL_VERIFY(ResultBatch)("info", Context->GetProgramInputColumns()->GetSchema()->ToString());
+            ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
             Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
             if (Context->GetCommonContext()->IsReverse()) {
                 ResultBatch = NArrow::ReverseRecords(ResultBatch);
@@ -89,15 +87,21 @@ bool TStartMergeTask::DoExecute() {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::COMMON", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!Merger);
     Merger = Context->BuildMerger();
-    for (auto&& [_, i] : Sources) {
-        if (auto rb = i->GetStageResult().GetBatch()) {
-            Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+    {
+        bool isEmpty = true;
+        for (auto&& [_, i] : Sources) {
+            if (auto rb = i->GetStageResult().GetBatch()) {
+                if (!i->GetStageResult().IsEmpty()) {
+                    isEmpty = false;
+                }
+                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+            }
         }
-    }
-    AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
-    if (Merger->GetSourcesCount() == 0) {
-        ResultBatch = nullptr;
-        return true;
+        AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
+        if (Merger->GetSourcesCount() == 0 || isEmpty) {
+            ResultBatch = nullptr;
+            return true;
+        }
     }
     Merger->PutControlPoint(MergingContext->GetFinish());
     Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());

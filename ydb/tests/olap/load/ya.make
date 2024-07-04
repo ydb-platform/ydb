@@ -23,12 +23,13 @@ PY3TEST()
     )
     IF(NOT OPENSOURCE)
         DATA (
-            sbr://6563908726
+            sbr://6581137886
         )
     ENDIF()
 
-    DEPENDS (
-        ydb/apps/ydb
-    )
-
+    IF(NOT NOT_INCLUDE_CLI)
+        DEPENDS (
+            ydb/apps/ydb
+        )
+    ENDIF()
 END()

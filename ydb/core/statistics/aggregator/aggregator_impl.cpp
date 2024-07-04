@@ -478,7 +478,7 @@ void TStatisticsAggregator::NextRange() {
     }
 
     auto& range = ShardRanges.front();
-    auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
+    auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
     auto& record = request->Record;
     record.MutableTableId()->SetOwnerId(ScanTableId.PathId.OwnerId);
     record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);

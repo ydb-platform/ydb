@@ -1203,6 +1203,61 @@ TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx)
     return ctx.NewCallable(node->Pos(), "AsStruct", std::move(items));
 }
 
+TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TStructExprType& type, TExprContext& ctx) {
+    TExprNode::TListType result;
+    for (const auto& item : type.GetItems())
+        if (ETypeAnnotationKind::Optional == item->GetItemType()->GetKind())
+            result.emplace_back(ctx.NewAtom(pos, item->GetName()));
+    return result;
+}
+
+TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprType& type, TExprContext& ctx) {
+    TExprNode::TListType result;
+    if (const auto& items = type.GetItems(); !items.empty())
+        for (ui32 i = 0U; i < items.size(); ++i)
+            if (ETypeAnnotationKind::Optional == items[i]->GetKind())
+                result.emplace_back(ctx.NewAtom(pos, i));
+    return result;
+}
+
+TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable({"SkipNullMembers", "SkipNullElements"}));
+    YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
+    const bool isTuple = node->IsCallable("SkipNullElements");
+    TExprNode::TListType fields;
+    if (node->ChildrenSize() > 1) {
+        fields = node->Child(1)->ChildrenList();
+    } else if (isTuple) {
+        fields = GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<TTupleExprType>(), ctx);
+    } else {
+        fields = GetOptionals(node->Pos(), *GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>(), ctx);
+    }
+    if (fields.empty()) {
+        return node->HeadPtr();
+    }
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedFilter")
+            .Add(0, node->HeadPtr())
+            .Lambda(1)
+                .Param("item")
+                .Callable("And")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < fields.size(); ++i) {
+                            parent
+                                .Callable(i, "Exists")
+                                    .Callable(0, isTuple ? "Nth" : "Member")
+                                        .Arg(0, "item")
+                                        .Add(1, std::move(fields[i]))
+                                    .Seal()
+                                .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
@@ -2125,5 +2180,35 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 
 template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& body, const TExprNode& arg);
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
+
+TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
+    YQL_ENSURE(prefix.StartsWith("_yql"));
+    TSet<size_t> existing;
+    for (auto& item : source.GetItems()) {
+        TStringBuf column = item->GetName();
+        if (column.SkipPrefix(prefix)) {
+            size_t idx;
+            if (TryFromString(column, idx)) {
+                existing.insert(idx);
+            }
+        }
+    }
+
+    size_t current = 0;
+    TVector<TString> result;
+    auto it = existing.cbegin();
+    while (count) {
+        if (it == existing.cend() || current < *it) {
+            result.push_back(TStringBuilder() << prefix << current);
+            --count;
+        } else {
+            ++it;
+        }
+        YQL_ENSURE(!count || (current + 1 > current));
+        ++current;
+    }
+    return result;
+}
+
 
 }

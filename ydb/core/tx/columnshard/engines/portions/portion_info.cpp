@@ -713,11 +713,11 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
 }
 
 TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        auto emptyBatch = NArrow::MakeEmptyBatch(loader->GetExpectedSchema(), NullRowsCount);
-        AFL_VERIFY(emptyBatch->num_columns() == 1);
-        return TDeserializeChunkedArray::TChunk(emptyBatch->column(0));
+        AFL_VERIFY(loader->GetExpectedSchema()->num_fields() == 1);
+        auto col = NArrow::TThreadSimpleArraysCache::Get(loader->GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount);
+        return TDeserializeChunkedArray::TChunk(col);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
@@ -725,9 +725,11 @@ TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeseriali
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
+        AFL_VERIFY(loader.GetExpectedSchema()->num_fields() == 1);
+        return arrow::RecordBatch::Make(loader.GetExpectedSchema(), DefaultRowsCount,
+            { NArrow::TThreadSimpleArraysCache::Get(loader.GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount) });
     } else {
         auto result = loader.Apply(Data);
         if (!result.ok()) {
@@ -762,12 +764,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
         std::shared_ptr<arrow::Scalar> scalar;
         if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
             auto type = i.GetField()->type();
-            std::shared_ptr<arrow::Array> arr;
-            if (scalar) {
-                arr = NArrow::TThreadSimpleArraysCache::GetConst(type, scalar, RowsCount);
-            } else {
-                arr = NArrow::TThreadSimpleArraysCache::GetNull(type, RowsCount);
-            }
+            std::shared_ptr<arrow::Array> arr = NArrow::TThreadSimpleArraysCache::Get(type, scalar, RowsCount);
             columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
         } else {
             columns.emplace_back(i.Assemble());

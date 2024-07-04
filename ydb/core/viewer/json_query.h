@@ -39,6 +39,7 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Stats;
     TString Syntax;
     TString QueryId;
+    TString TransactionMode;
     bool Direct = false;
     bool IsBase64Encode = true;
 
@@ -82,6 +83,7 @@ public:
         Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
         QueryId = params.Get("query_id");
+        TransactionMode = params.Get("transaction_mode");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
@@ -97,6 +99,7 @@ public:
             Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
             Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
             QueryId = QueryId.empty() ? requestData["query_id"].GetStringSafe({}) : QueryId;
+            TransactionMode = TransactionMode.empty() ? requestData["transaction_mode"].GetStringSafe({}) : TransactionMode;
         }
         return success;
     }
@@ -119,7 +122,7 @@ public:
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
             if (!ParsePostContent(content)) {
-                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content recieved"));
+                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content received"));
             }
         }
         if (Query.empty() && Action != "cancel-query") {
@@ -202,6 +205,22 @@ public:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
+    void SetTransactionMode(NKikimrKqp::TQueryRequest& request) {
+        if (TransactionMode == "serializable-read-write") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "online-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_online_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "stale-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_stale_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        } else if (TransactionMode == "snapshot-read-only") {
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_snapshot_read_only();
+            request.mutable_txcontrol()->set_commit_tx(true);
+        }
+    }
+
     void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
         if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             return ReplyAndPassAway(
@@ -236,6 +255,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
+            SetTransactionMode(request);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
@@ -247,9 +267,8 @@ public:
         } else if (Action == "execute-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
+            SetTransactionMode(request);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -684,6 +703,17 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `full`
             type: string
             enum: [profile, full]
+            required: false
+          - name: transaction_mode
+            in: query
+            description: >
+              transaction mode:
+               * `serializable-read-write`
+               * `online-read-only`
+               * `stale-read-only`
+               * `snapshot-read-only`
+            type: string
+            enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
             required: false
           - name: direct
             in: query

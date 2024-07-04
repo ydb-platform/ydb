@@ -70,6 +70,7 @@ struct TTotalStatistics {
     TAggregate ResultBytes;
     TAggregate ResultRows;
     TAggregate IngressBytes;
+    TAggregate IngressDecompressedBytes;
     TAggregate IngressRows;
     TAggregate EgressBytes;
     TAggregate EgressRows;
@@ -288,6 +289,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.ResultRows.Add(*sum);
                     } else if (name == "IngressBytes") {
                         totals.IngressBytes.Add(*sum);
+                    } else if (name == "IngressDecompressedBytes") {
+                        totals.IngressDecompressedBytes.Add(*sum);
                     } else if (name == "IngressRows") {
                         totals.IngressRows.Add(*sum);
                     } else if (name == "EgressBytes") {
@@ -457,6 +460,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                         totals.ResultBytes.Write(writer, "ResultBytes");
                         totals.ResultRows.Write(writer, "ResultRows");
                         totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.IngressDecompressedBytes.Write(writer, "IngressDecompressedBytes");
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
@@ -504,6 +508,11 @@ struct TStatsAggregator {
             Aggregates[source + ".Bytes"] += ingress->GetIntegerSafe();
             success = true;
         }
+        if (auto ingress = node.GetValueByPath("Ingress.DecompressedBytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".DecompressedBytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
         if (auto ingress = node.GetValueByPath("Ingress.Rows.Sum")) {
             auto source = name.substr(prefix.size());
             Aggregates[source + ".Rows"] += ingress->GetIntegerSafe();
@@ -519,6 +528,7 @@ struct TStatsAggregator {
 
     THashMap<TString, i64> Aggregates{std::pair<TString, i64>
         {"IngressBytes", 0},
+        {"IngressDecompressedBytes", 0},
         {"EgressBytes", 0},
         {"IngressRows", 0},
         {"EgressRows", 0},
@@ -959,6 +969,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.DecompressedBytes", "DecompressedBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
@@ -979,6 +990,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "Tasks", "Tasks");
                     RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressDecompressedBytes", "IngressDecompressedBytes");
                     RemapNode(writer, p.second, "IngressRows", "IngressRows");
                     RemapNode(writer, p.second, "InputBytes", "InputBytes");
                     RemapNode(writer, p.second, "InputRows", "InputRows");

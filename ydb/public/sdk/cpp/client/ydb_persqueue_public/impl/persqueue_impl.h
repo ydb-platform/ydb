@@ -54,6 +54,35 @@ public:
 
         props.set_partitions_count(settings.PartitionsCount_);
 
+        bool autoPartitioningSettingsDefined = false;
+        if (settings.MaxPartitionsCount_.Defined()) {
+            props.mutable_auto_partitioning_settings()->set_max_active_partitions(settings.PartitionsCount_);
+            autoPartitioningSettingsDefined = true;
+        }
+        if (settings.AutoPartitioningStrategy_.Defined()) {
+            props.mutable_auto_partitioning_settings()->set_strategy(*settings.AutoPartitioningStrategy_);
+            autoPartitioningSettingsDefined = true;
+        }
+        if (settings.DownUtilizationPercent_.Defined()) {
+            props.mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(*settings.DownUtilizationPercent_);
+            autoPartitioningSettingsDefined = true;
+        }
+        if (settings.UpUtilizationPercent_.Defined()) {
+            props.mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(*settings.UpUtilizationPercent_);
+            autoPartitioningSettingsDefined = true;
+        }
+        if (settings.StabilizationWindow_.Defined()) {
+            props.mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds((*settings.StabilizationWindow_).Seconds());
+            autoPartitioningSettingsDefined = true;
+        }
+
+        if (!autoPartitioningSettingsDefined) {
+            props.set_partitions_count(settings.PartitionsCount_);
+        } else {
+            props.mutable_auto_partitioning_settings()->set_min_active_partitions(settings.PartitionsCount_);
+        }
+
+
         props.set_retention_period_ms(settings.RetentionPeriod_.MilliSeconds());
         props.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(settings.SupportedFormat_));
         for (const auto& codec : settings.SupportedCodecs_) {

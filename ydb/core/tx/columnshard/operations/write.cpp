@@ -1,4 +1,4 @@
-#include "slice_builder.h"
+#include "batch_builder/builder.h"
 #include "write.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -94,7 +94,7 @@ namespace NKikimr::NColumnShard {
         if (proto.HasModificationType()) {
             ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
         } else {
-            ModificationType = NEvWrite::EModificationType::Upsert;
+            ModificationType = NEvWrite::EModificationType::Replace;
         }
     }
 

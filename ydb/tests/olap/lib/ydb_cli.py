@@ -59,7 +59,7 @@ class YdbCliHelper:
                 '--executer', 'generic',
                 '--include', str(query_num),
                 '--iterations', str(iterations),
-                '--query-settings', "PRAGMA ydb.HashJoinMode='grace';",
+                '--query-settings', "PRAGMA ydb.HashJoinMode='grace';" + get_external_param('query-prefix', ''),
                 '--plan', plan_path
             ]
             err = None

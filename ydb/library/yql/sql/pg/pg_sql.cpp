@@ -2835,7 +2835,6 @@ public:
 
         for (int i = 0; i < ListLength(value->options); ++i) {
             auto rawNode = ListNodeNth(value->options, i);
-
             switch (NodeTag(rawNode)) {
                 case T_DefElem: {
                     const auto* defElem = CAST_NODE(DefElem, rawNode);
@@ -2903,6 +2902,10 @@ public:
                 case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
                     const auto* def = cmd->def;
                     const auto* colName = cmd->name;
+                    if (def == nullptr) {
+                        alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("Null")))));
+                        break;
+                    }
                     switch (NodeTag(def)) {
                         case T_FuncCall: {
                             const auto* newDefault = CAST_NODE(FuncCall, def);

@@ -1397,15 +1397,25 @@ public:
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
-                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
-                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
-                            if (func != "nextval") {
-                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
-                                    TStringBuilder() << "Unsupported function to set default: " << func));
-                                return SyncError();
+                            if (setDefault.Size() == 1) {
+                                auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
+                                if (defaultExpr != "Null") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                        TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                    return SyncError();
+                                }
+                                alter_columns->set_drop_default(google::protobuf::NullValue());
+                            } else {
+                                auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                                auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                                if (func != "nextval") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                        TStringBuilder() << "Unsupported function to set default: " << func));
+                                    return SyncError();
+                                }
+                                auto fromSequence = alter_columns->mutable_from_sequence();
+                                fromSequence->set_name(arg);
                             }
-                            auto fromSequence = alter_columns->mutable_from_sequence();
-                            fromSequence->set_name(arg);
                         } else if (alterColumnAction == "setFamily") {
                             auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {

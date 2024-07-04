@@ -324,9 +324,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         bool isAlterColumn = (source && colName2Id.contains(colName));
         if (isAlterColumn) {
-            if (keys.contains(colName2Id.at(colName))) {
+            if (keys.contains(colName2Id.at(colName)) && columnFamily) {
                 errStr = TStringBuilder()
-                    << "Cannot alter key column ' " << colName << "' with id " << colName2Id.at(colName);
+                    << "Cannot set family for key column ' " << colName << "' with id " << colName2Id.at(colName);
                 return nullptr;
             }
 
@@ -335,18 +335,23 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence()) {
+            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasDropDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
 
-            if (col.HasDefaultFromSequence()) {
-                if (!localSequences.contains(col.GetDefaultFromSequence())) {
-                    errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
-                    return nullptr;
+            switch (col.GetDefaultValueCase()) {
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                    if (!localSequences.contains(col.GetDefaultFromSequence())) {
+                        errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+                        return nullptr;
+                    }
+                    break;
                 }
-            } else {
-                if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
+                case NKikimrSchemeOp::TColumnDescription::kDropDefault: {
+                    break;
+                }
+                default: {
                     errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
                     return nullptr;
                 }
@@ -373,12 +378,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
-            if (col.HasDefaultFromSequence()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromSequence;
-                column.DefaultValue = col.GetDefaultFromSequence();
-            } else if (col.HasDefaultFromLiteral()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
-                column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            switch (col.GetDefaultValueCase()) {
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromSequence;
+                    column.DefaultValue = col.GetDefaultFromSequence();
+                    break;
+                }
+                case NKikimrSchemeOp::TColumnDescription::kDropDefault: {
+                    column.DefaultKind = ETableColumnDefaultKind::None;
+                    column.DefaultValue = "";
+                    break;
+                }
+                default: break;
             }
         } else {
             if (colName2Id.contains(colName)) {

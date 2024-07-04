@@ -134,7 +134,6 @@ void TOperator::DoFillStatisticsData(const THashMap<ui32, std::vector<std::share
     auto it = data.find(EntityId);
     AFL_VERIFY(it != data.end());
     auto loader = index.GetColumnLoaderVerified(EntityId);
-    std::shared_ptr<arrow::Scalar> result;
     TDifferentElementsAggregator aggregator;
     for (auto&& i : it->second) {
         auto rb = NArrow::TStatusValidator::GetValid(loader->Apply(i->GetData()));

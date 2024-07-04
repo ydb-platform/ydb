@@ -22,6 +22,8 @@ message TScalar {
         TTimestamp Timestamp = 11;
 
         float Float = 12;
+
+        bytes Binary = 13;
     }
 }
 

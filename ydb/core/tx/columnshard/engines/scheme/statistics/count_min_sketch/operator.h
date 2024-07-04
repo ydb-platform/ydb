@@ -26,30 +26,8 @@ protected:
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const override;
 public:
 
-    static bool IsAvailableType(const NScheme::TTypeInfo type) {
-        switch (type.GetTypeId()) {
-            case NScheme::NTypeIds::Int8:
-            case NScheme::NTypeIds::Uint8:
-            case NScheme::NTypeIds::Int16:
-            case NScheme::NTypeIds::Uint16:
-            case NScheme::NTypeIds::Int32:
-            case NScheme::NTypeIds::Uint32:
-            case NScheme::NTypeIds::Int64:
-            case NScheme::NTypeIds::Uint64:
-            case NScheme::NTypeIds::Timestamp:
-            case NScheme::NTypeIds::Double:
-            case NScheme::NTypeIds::Float:
-            case NScheme::NTypeIds::Datetime:
-            case NScheme::NTypeIds::Date:
-            case NScheme::NTypeIds::Date32:
-            case NScheme::NTypeIds::Datetime64:
-            case NScheme::NTypeIds::Timestamp64:
-            case NScheme::NTypeIds::Interval64:
-                return true;
-            default:
-                break;
-        }
-        return false;
+    static bool IsAvailableType(const NScheme::TTypeInfo) {
+        return true;
     }
 
     TOperator()

@@ -111,6 +111,7 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
         OldSubsession = std::move(Subsession);
         OldSubsession->Close(TDuration::Zero());
     }
+    ++SubsessionGeneration;
 
     auto clientSettings = SubclientSettings;
     clientSettings
@@ -120,16 +121,20 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+        .ReadyToAcceptHandler([selfCtx = SelfContext, generation = SubsessionGeneration](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             if (auto self = selfCtx->LockShared()) {
                 TDeferredWrite deferred;
+
                 with_lock(self->Lock) {
-                    // If the PendingToken is not empty, ignore the event, as it is from the old subsession.
-                    if (self->PendingToken.Empty()) {
-                        self->PendingToken = std::move(ev.ContinuationToken);
-                        self->PrepareDeferredWriteImpl(deferred);
+                    if (generation != self->SubsessionGeneration) {
+                        return;
                     }
+
+                    Y_ABORT_UNLESS(self->PendingToken.Empty());
+                    self->PendingToken = std::move(ev.ContinuationToken);
+                    self->PrepareDeferredWriteImpl(deferred);
                 }
+
                 deferred.DoWrite();
             }
         })
@@ -152,7 +157,7 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                 self->IssueTokenIfAllowed();
             }
         })
-        .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
+        .SessionClosedHandler([selfCtx = SelfContext, generation = SubsessionGeneration](const NTopic::TSessionClosedEvent & ev) {
             if (ev.IsSuccess()) {
                 // The subsession was closed by the federated write session itself while creating a new subsession.
                 // In this case we get SUCCESS status and don't need to propagate it further.
@@ -160,6 +165,9 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
             }
             if (auto self = selfCtx->LockShared()) {
                 with_lock (self->Lock) {
+                    if (generation != self->SubsessionGeneration) {
+                        return;
+                    }
                     self->CloseImpl(ev);
                 }
             }

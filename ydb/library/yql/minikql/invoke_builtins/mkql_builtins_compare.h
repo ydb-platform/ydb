@@ -13,9 +13,9 @@ struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRi
     }
 
     static void DoPtr(
-        const TPrimitiveDataType<TLeft>::TLayout* left,
-        const TPrimitiveDataType<TRight>::TLayout* right,
-        TPrimitiveDataType<bool>::TLayout* res) {
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<bool>::TLayout* res) {
         *res = TImpl::Do(*left, *right);
     }
 

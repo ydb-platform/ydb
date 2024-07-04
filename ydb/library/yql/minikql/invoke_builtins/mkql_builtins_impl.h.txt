@@ -133,8 +133,8 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
     }
 
     static void DoPtr(
-        const TPrimitiveDataType<TInput>::TLayout* arg,
-        TPrimitiveDataType<TOutput>::TLayout* res) {
+        const typename TPrimitiveDataType<TInput>::TLayout* arg,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
         *res = TImpl::Do(*arg);
     }
 
@@ -157,9 +157,9 @@ struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRig
     }
 
     static void DoPtr(
-        const TPrimitiveDataType<TLeft>::TLayout* left,
-        const TPrimitiveDataType<TRight>::TLayout* right,
-        TPrimitiveDataType<TOutput>::TLayout* res) {
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
         *res = TImpl::Do(*left, *right);
     }
 
@@ -1056,9 +1056,9 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ScalarArrayCore(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         int64_t length, int64_t offset1, int64_t offset2) {
         TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
         Y_UNUSED(offset1);
@@ -1077,9 +1077,9 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ArrayScalarCore(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         int64_t length, int64_t offset1, int64_t offset2) {
         TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
         Y_UNUSED(offset2);
@@ -1098,9 +1098,9 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ArrayArrayCore(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         int64_t length, int64_t offset1, int64_t offset2) {
         TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
         val1Ptr += offset1;
@@ -1143,9 +1143,9 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     );
 
     static bool ScalarScalarCoreOpt(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr) {
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr) {
         auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
         if (!resPod) {
             return false;
@@ -1156,11 +1156,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ScalarArrayCoreOpt(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
         const ui8* valid1,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
         const ui8* valid2,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         ui8* resValid,
         int64_t length,
         int64_t offset1,
@@ -1183,11 +1183,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ArrayScalarCoreOpt(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
         const ui8* valid1,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
         const ui8* valid2,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         ui8* resValid,
         int64_t length,
         int64_t offset1,
@@ -1210,11 +1210,11 @@ struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFun
     }
 
     static void ArrayArrayCoreOpt(
-        const TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
         const ui8* valid1,
-        const TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
         const ui8* valid2,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         ui8* resValid,
         int64_t length,
         int64_t offset1,
@@ -1307,8 +1307,8 @@ struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, T
     }
 
     static void ArrayCore(
-        const TPrimitiveDataType<TInput>::TLayout* valPtr,
-        TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        const typename TPrimitiveDataType<TInput>::TLayout* valPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
         int64_t length, int64_t offset) {
         TTypedUnaryScalarFuncPtr func = &TFuncInstance::DoPtr;
         valPtr += offset;

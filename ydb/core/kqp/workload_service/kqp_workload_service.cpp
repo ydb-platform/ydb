@@ -393,7 +393,11 @@ private:
     }
 
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
-        LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
+        if (status == Ydb::StatusIds::UNSUPPORTED) {
+            LOG_T("Reply unsupported to " << replyActorId << ": " << issues.ToOneLineString());
+        } else {
+            LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
+        }
         Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
     }
 

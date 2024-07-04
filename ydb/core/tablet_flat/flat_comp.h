@@ -271,7 +271,7 @@ namespace NTable {
          * Overload factor must be in the [0, 1] range, where 0 means writes
          * are unrestricted and 1 means new writes must no longer be accepted
          */
-        virtual float GetOverloadFactor() = 0;
+        float GetOverloadFactor() { return OverloadFactor; }
 
         /**
          * Backing size returns total size of all currently active parts
@@ -376,6 +376,8 @@ namespace NTable {
          * Called to render current state as html
          */
         virtual void OutputHtml(IOutputStream& out) = 0;
+    protected:
+        float OverloadFactor = 0.0;
     };
 
 }

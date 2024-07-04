@@ -1081,6 +1081,8 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
             } else if (settings.Mode().Cast().StringValue() == "delete") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+            } else if (settings.Mode().Cast().StringValue() == "update") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }

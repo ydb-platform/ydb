@@ -263,6 +263,19 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect
 ) {
+    int dummyEquiJoinCounter;
+    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter);
+}
+
+TExprBase DqOptimizeEquiJoinWithCosts(
+    const TExprBase& node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    ui32 optLevel,
+    IOptimizerNew& opt,
+    const TProviderCollectFunction& providerCollect,
+    int& equiJoinCounter
+) {
     if (optLevel == 0) {
         return node;
     }
@@ -290,6 +303,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
+
+    equiJoinCounter++;
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
 

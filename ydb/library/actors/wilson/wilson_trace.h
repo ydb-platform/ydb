@@ -170,6 +170,7 @@ namespace NWilson {
         }
 
         static TTraceId FromTraceparentHeader(const TStringBuf header, ui8 verbosity = 15);
+        TString ToTraceresponseHeader() const;
 
         TTraceId Span(ui8 verbosity) const {
             Validate();

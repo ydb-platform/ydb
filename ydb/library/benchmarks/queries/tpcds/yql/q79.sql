@@ -24,6 +24,7 @@ select
     group by store_sales.ss_ticket_number,store_sales.ss_customer_sk,store_sales.ss_addr_sk,store.s_city) ms cross join {{customer}} as customer
     where ss_customer_sk = c_customer_sk
  order by c_last_name,c_first_name,bla, profit
+        , ss_ticket_number, amt
 limit 100;
 
 -- end query 1 in stream 0 using template query79.tpl

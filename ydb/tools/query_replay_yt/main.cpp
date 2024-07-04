@@ -4,6 +4,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -45,6 +46,7 @@ class TQueryReplayMapper
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> ModuleResolverState;
 
+    NYql::IHTTPGateway::TPtr HttpGateway;
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
 
@@ -72,6 +74,8 @@ class TQueryReplayMapper
                 return "write_columns_mismatch";
             case TQueryReplayEvents::UncategorizedPlanMismatch:
                 return "uncategorized_plan_mismatch";
+            case TQueryReplayEvents::MissingTableMetadata:
+                return "missing_table_metadata";
             default:
                 return "unspecified";
         }
@@ -107,6 +111,7 @@ public:
         ActorSystem->Start();
         ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
         ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
+        HttpGateway = NYql::IHTTPGateway::Make();
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
@@ -120,7 +125,16 @@ public:
                 json.InsertValue(key, NJson::TJsonValue(child.AsString()));
             }
 
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get()));
+            TString queryType = row["query_type"].AsString();
+            if (queryType == "QUERY_TYPE_AST_SCAN") {
+                continue;
+            }
+
+            if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
+                continue;
+            }
+
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
@@ -132,7 +146,7 @@ public:
 
             TString failReason = GetFailReason(status);
 
-            if (failReason == "unspecified") {
+            if (failReason == "unspecified" || status == TQueryReplayEvents::MissingTableMetadata) {
                 continue;
             }
 

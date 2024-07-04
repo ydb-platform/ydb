@@ -29,7 +29,7 @@ namespace NTestUtils {
     extern const TString TEST_SCHEMA;
     extern const TString TEST_SCHEMA_IDS;
 
-    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt);
+    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt, const TString& domainRoot = "Root");
 
     Aws::S3::S3Client MakeS3Client();
 

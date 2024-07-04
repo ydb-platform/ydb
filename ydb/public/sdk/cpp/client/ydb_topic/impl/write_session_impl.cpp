@@ -307,8 +307,12 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
         TRACE_KV("pl_node_id", partition.partition_location().node_id()),
         TRACE_KV("pl_generation", partition.partition_location().generation()));
 
-    if (partition.partition_id() != Settings.PartitionId_ && Settings.PartitionId_.Defined() ||
-        !partition.has_partition_location() || partition.partition_location().node_id() == 0 || partition.partition_location().generation() == 0) {
+    if (
+        partition.partition_id() != Settings.PartitionId_ && Settings.PartitionId_.Defined() ||
+        !partition.has_partition_location() ||
+        partition.partition_location().node_id() == 0 ||
+        partition.partition_location().generation() == 0
+    ) {
         with_lock (Lock) {
             handleResult = OnErrorImpl({EStatus::INTERNAL_ERROR, "Wrong partition location"});
         }
@@ -346,13 +350,10 @@ TMaybe<TEndpointKey> TWriteSessionImpl::GetPreferredEndpointImpl(ui32 partitionI
     TEndpointKey preferredEndpoint{"", partitionNodeId};
 
     bool nodeIsKnown = (bool)DbDriverState->EndpointPool.GetEndpoint(preferredEndpoint, true);
-    if (nodeIsKnown)
-    {
+    if (nodeIsKnown) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "GetPreferredEndpoint: partitionId " << partitionId << ", partitionNodeId " << partitionNodeId << " exists in the endpoint pool.");
         return preferredEndpoint;
-    }
-    else
-    {
+    } else {
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "GetPreferredEndpoint: partitionId " << partitionId << ", nodeId " << partitionNodeId << " does not exist in the endpoint pool.");
         DbDriverState->EndpointPool.UpdateAsync();
         return {};
@@ -415,9 +416,9 @@ NThreading::TFuture<ui64> TWriteSessionImpl::GetInitSeqNo() {
         if (AutoSeqNoMode.Defined() && *AutoSeqNoMode) {
             LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Cannot call GetInitSeqNo in Auto SeqNo mode");
             ThrowFatalError("Cannot call GetInitSeqNo in Auto SeqNo mode");
-        }
-        else
+        } else {
             AutoSeqNoMode = false;
+        }
     }
     return InitSeqNoPromise.GetFuture();
 }
@@ -446,7 +447,6 @@ ui64 TWriteSessionImpl::GetSeqNoImpl(ui64 id) {
     Y_ABORT_UNLESS(AutoSeqNoMode.Defined());
     Y_ABORT_UNLESS(InitSeqNo.Defined());
     return *AutoSeqNoMode ? id + *InitSeqNo : id;
-
 }
 
 ui64 TWriteSessionImpl::GetNextIdImpl(const TMaybe<ui64>& seqNo) {
@@ -583,8 +583,9 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         ConnectionFactory = connectionFactory;
 
         connectContext = ClientContext->CreateContext();
-        if (delay)
+        if (delay) {
             connectDelayContext = ClientContext->CreateContext();
+        }
         connectTimeoutContext = ClientContext->CreateContext();
 
         // Previous operations contexts.
@@ -654,10 +655,7 @@ void TWriteSessionImpl::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr&
         description << "Failed to establish connection to server. Attempts done: " << ConnectionAttemptsDone;
         handleResult = RestartImpl(TPlainStatus(EStatus::TIMEOUT, description));
         if (handleResult.DoStop) {
-            CloseImpl(
-                    EStatus::TIMEOUT,
-                    description
-            );
+            CloseImpl(EStatus::TIMEOUT, description);
         }
     }
     ProcessHandleResult(handleResult);
@@ -697,8 +695,9 @@ void TWriteSessionImpl::OnConnect(
             }
         }
     }
-    if (st.Ok())
+    if (st.Ok()) {
         ReadFromProcessor(); // Out of Init
+    }
     ProcessHandleResult(handleResult);
 }
 
@@ -1286,8 +1285,9 @@ bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
     if (!SessionEstablished) {
         return false;
     }
-    if (Aborting)
+    if (Aborting) {
         return false;
+    }
     if (PackedMessagesToSend.empty()) {
         return false;
     }
@@ -1419,8 +1419,9 @@ bool TWriteSessionImpl::Close(TDuration closeTimeout) {
             if (OriginalMessagesToSend.empty() && SentOriginalMessages.empty()) {
                 ready = true;
             }
-            if (AtomicGet(Aborting))
+            if (AtomicGet(Aborting)) {
                 break;
+            }
         }
         if (ready) {
             break;
@@ -1524,8 +1525,9 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
-        if (Processor)
+        if (Processor) {
             Processor->Cancel();
+        }
 
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.

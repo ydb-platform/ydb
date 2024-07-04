@@ -29,7 +29,7 @@ struct TPqClusterConfigurationSettings {
     ui32 TvmId = 0;
     TString AuthToken;
     bool AddBearerToToken = false;
-    bool UseRowDispatcher = true;
+    bool UseRowDispatcher = false;
 };
 
 struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher {

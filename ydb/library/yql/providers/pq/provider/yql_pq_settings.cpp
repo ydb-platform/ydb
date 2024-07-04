@@ -43,6 +43,7 @@ void TPqConfiguration::Init(
         clusterSettings.TvmId = cluster.GetTvmId();
         clusterSettings.UseSsl = cluster.GetUseSsl();
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
+        clusterSettings.UseRowDispatcher = cluster.GetUseRowDispatcher();
 
         const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;

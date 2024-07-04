@@ -37,8 +37,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NConfig::TCommonConfig CommonConfig;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
-    TActorId CoordinatorActorId;
-    TMaybe<TActorId> LeaderActorId;
+    //TActorId CoordinatorActorId;
+    TMaybe<TActorId> CoordinatorActorId;
     TSet<TActorId> CoordinatorChangedSubscribers;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const TString LogPrefix;
@@ -129,7 +129,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
     if (!CoordinatorActorId) {
 
     }
-    Send(CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     for (auto actorId : CoordinatorChangedSubscribers) {
         Send(
             actorId,
@@ -154,8 +154,11 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup, send start session to " << *LeaderActorId);
-    Send(*LeaderActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    if (!CoordinatorActorId) {
+        return;
+    }
+    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup, send start session to " << *CoordinatorActorId);
+    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
@@ -164,7 +167,10 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr &) {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvRowDispatcherRequest ");
-    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    if (!CoordinatorActorId) {
+        return;
+    }
+    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     CoordinatorChangedSubscribers.insert(ev->Sender);
 }
 

@@ -85,6 +85,10 @@ public:
                 .Value(pqReadTopic.Format())
                 .Done());
 
+            auto format = pqReadTopic.Format().Ref().Content();
+
+         //   std::cerr << "FormatFormatFormatFormat " << pqReadTopic.Format(). << std::endl;
+
             TVector<TCoNameValueTuple> innerSettings;
             if (pqReadTopic.Compression() != "") {
                 innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
@@ -133,7 +137,7 @@ public:
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columns))
-                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -195,7 +199,8 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
-                [[maybe_unused]] bool useRowDispatcher = false;
+                bool useRowDispatcher = false;
+                TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);
@@ -206,6 +211,8 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == UseRowDispatcher) {
                         useRowDispatcher = FromString<bool>(Value(setting));
+                    } else if (name == Format) {
+                        format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
@@ -233,20 +240,14 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
-                std::cerr << "FillSourceSettings" << std::endl;
-
                 for (const auto& column : topicSource.Columns().Cast<TCoAtomList>()) {
-                    std::cerr << "  " <<  column.StringValue()<< std::endl;
                     srcDesc.AddColumns(column.StringValue());
                 }
 
-                // for (const auto metadata : topic.Columns()) {
-                //     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
-                // }
 
                 protoSettings.PackFrom(srcDesc);
+                useRowDispatcher = useRowDispatcher && (format == "json_each_row");
                 sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
-              //  sourceType = "PqSource";
             }
         }
     }
@@ -293,6 +294,7 @@ public:
         const TString& cluster,
         const TDqSettings& dqSettings,
         TPositionHandle pos,
+        std::string_view format,
         TExprContext& ctx) const
     {
         TVector<TCoNameValueTuple> props;
@@ -311,6 +313,9 @@ public:
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         Add(props, UseRowDispatcher, ToString(clusterConfiguration->UseRowDispatcher), pos, ctx);
+        Add(props, Format, format, pos, ctx);
+
+        
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
         }

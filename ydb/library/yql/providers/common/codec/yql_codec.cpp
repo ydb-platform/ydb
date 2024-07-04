@@ -2216,13 +2216,26 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
 
     case TType::EKind::Struct: {
         auto structType = static_cast<TStructType*>(type);
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            buf.Write(BeginMapSymbol);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                buf.Write(StringMarker);
+                auto key = structType->GetMemberName(i);
+                buf.WriteVarI32(key.Size());
+                buf.WriteMany(key);
+                buf.Write(KeyValueSeparatorSymbol);
+                WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
+                buf.Write(KeyedItemSeparatorSymbol);
+            }
+            buf.Write(EndMapSymbol);
+        } else {
         buf.Write(BeginListSymbol);
         for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
             WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
             buf.Write(ListItemSeparatorSymbol);
         }
-
         buf.Write(EndListSymbol);
+        }
         break;
     }
 
@@ -2240,6 +2253,19 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
 
     case TType::EKind::Optional: {
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            if (value) {
+                if (itemType->GetKind() == TType::EKind::Optional) {
+                    buf.Write(BeginListSymbol);
+                }
+                WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
+                if (itemType->GetKind() == TType::EKind::Optional) {
+                    buf.Write(EndListSymbol);
+                }
+            } else {
+                buf.Write(EntitySymbol);
+            }
+        } else {
         if (!value) {
             if (topLevel) {
                 buf.Write(BeginListSymbol);
@@ -2255,7 +2281,7 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
             buf.Write(ListItemSeparatorSymbol);
             buf.Write(EndListSymbol);
         }
-
+        }
         break;
     }
 

@@ -340,13 +340,15 @@ public:
             Self->RemoveChangeRecordsInFly = false;
         }
 
-        if (ChangeExchangeSplit) {
-            Self->KillChangeSender(ctx);
-            Self->ChangeExchangeSplitter.DoSplit(ctx);
-        }
+        if (!Self->ChangesQueue) { // double check queue
+            if (ChangeExchangeSplit) {
+                Self->KillChangeSender(ctx);
+                Self->ChangeExchangeSplitter.DoSplit(ctx);
+            }
 
-        for (const auto dstTabletId : ActivationList) {
-            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+            for (const auto dstTabletId : ActivationList) {
+                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+            }
         }
 
         Self->CheckStateChange(ctx);

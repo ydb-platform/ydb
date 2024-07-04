@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{""},
                 TString{"rc1b-eyt6dtobu96rwydq.db.yandex.net"},
-                6432,
+                3306,
                 TString(""),
                 true
                 },
@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     "/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
                     "etn021us5r9rhld1vgbh",
                     NYql::EDatabaseType::MySQL
-                ) << NoPermissionStr << " Please check that your service account has role `managed-mysql.viewer`."
+                ) << NoPermissionStr
             )
         };
 

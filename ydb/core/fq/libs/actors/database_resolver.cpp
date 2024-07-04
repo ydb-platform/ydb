@@ -468,43 +468,43 @@ public:
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
-            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-                const auto& hostMap = host.GetMap();
 
-                if (!hostMap.contains("services")) {
-                    // indicates that cluster is down
-                    continue;
-                }
+        for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
+            const auto& hostMap = host.GetMap();
 
-                // all services of a particular host must be alive
-                bool alive = true;
-
-                for (const auto& service: hostMap.at("services").GetArraySafe()) {
-                    if (service["health"].GetString() != "ALIVE") {
-                        alive = false;
-                        break;
-                    }
-                }
-
-                if (alive) {
-                    aliveHosts.push_back(host["name"].GetString());
-                }
-            }
-            
-            if (aliveHosts.empty()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+            if (!hostMap.contains("services")) {
+                // indicates that cluster is down
+                continue;
             }
 
-            NYql::IMdbEndpointGenerator::TParams params = {
-                .DatabaseType = NYql::EDatabaseType::MySQL,
-                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                .UseTls = useTls,
-                .Protocol = protocol,
-            };
+            // check if all services of a particular host are alive
+            bool alive = std::all_of(
+            hostMap.at("services").GetArraySafe().begin(),
+            hostMap.at("services").GetArraySafe().end(),
+            [](const auto& service) {
+                return service["health"].GetString() == "ALIVE";
+            }
+            );
 
-            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+            if (alive) {
+                aliveHosts.push_back(host["name"].GetString());
+            }
+        }
 
-            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        if (aliveHosts.empty()) {
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+        }
+
+        NYql::IMdbEndpointGenerator::TParams params = {
+        .DatabaseType = NYql::EDatabaseType::MySQL,
+        .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+        .UseTls = useTls,
+        .Protocol = protocol,
+        };
+
+        endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+        return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
     }
 

@@ -387,8 +387,7 @@ private:
                         }
                         Y_ABORT_UNLESS(currentKeyRowCountOpens <= openedRowCount);
                         ui64 currentKeyPointerRowCount = closedRowCount + (openedRowCount - currentKeyRowCountOpens) / 2;
-                        currentKeyPointerRowCount = Min(currentKeyPointerRowCount, stats.RowCount);
-                        if (currentKeyPointerRowCount > (stats.RowCountHistogram.empty() ? 0 : stats.RowCountHistogram.back().Value)) {
+                        if ((stats.RowCountHistogram.empty() ? 0 : stats.RowCountHistogram.back().Value) < currentKeyPointerRowCount && currentKeyPointerRowCount < stats.RowCount) {
                             AddKey(stats.RowCountHistogram, currentKeyPointer.Key, currentKeyPointerRowCount);
                             nextHistogramRowCount = Max(currentKeyPointerRowCount + 1, nextHistogramRowCount + RowCountResolution);
                             if (nextHistogramRowCount + RowCountResolutionGap > stats.RowCount) {
@@ -407,8 +406,7 @@ private:
                         }
                         Y_ABORT_UNLESS(currentKeyDataSizeOpens <= openedDataSize);
                         ui64 currentKeyPointerDataSize = closedDataSize + (openedDataSize - currentKeyDataSizeOpens) / 2;
-                        currentKeyPointerDataSize = Min(currentKeyPointerDataSize, stats.DataSize.Size);
-                        if (currentKeyPointerDataSize > (stats.DataSizeHistogram.empty() ? 0 : stats.DataSizeHistogram.back().Value)) {
+                        if ((stats.DataSizeHistogram.empty() ? 0 : stats.DataSizeHistogram.back().Value) < currentKeyPointerDataSize && currentKeyPointerDataSize < stats.DataSize.Size) {
                             AddKey(stats.DataSizeHistogram, currentKeyPointer.Key, currentKeyPointerDataSize);
                             nextHistogramDataSize = Max(currentKeyPointerDataSize + 1, nextHistogramDataSize + DataSizeResolution);
                             if (nextHistogramDataSize + DataSizeResolutionGap > stats.DataSize.Size) {

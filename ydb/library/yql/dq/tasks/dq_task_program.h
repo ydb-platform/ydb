@@ -10,6 +10,10 @@
 namespace NYql::NDq {
 
 struct TSpillingSettings {
+    operator bool() const {
+        return EnableSpillingInGraceJoin;
+    }
+    
     bool EnableSpillingInGraceJoin = false;
 };
 

@@ -78,9 +78,11 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
     TRuntimeNode rootNode = MkqlBuildExpr(program.Body().Ref(), ctx);
 
     TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), typeEnv);
-    bool wereChanges = false;
-    rootNode = SinglePassVisitCallables(rootNode, explorer, TSpillingTransformProvider(spillingSettings), typeEnv, true, wereChanges);
+    if (spillingSettings) {
+        explorer.Walk(rootNode.GetNode(), typeEnv);
+        bool wereChanges = false;
+        rootNode = SinglePassVisitCallables(rootNode, explorer, TSpillingTransformProvider(spillingSettings), typeEnv, true, wereChanges);
+    }
 
     TStructLiteralBuilder structBuilder(typeEnv);
     structBuilder.Add("Program", rootNode);

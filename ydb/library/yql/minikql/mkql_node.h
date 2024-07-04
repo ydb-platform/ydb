@@ -1075,6 +1075,10 @@ public:
         UniqueId = uniqueId;
     }
 
+    bool IsSpillingSupported() const {
+        return TStringBuf(GetType()->GetName()).EndsWith("WithSpilling"_sb);
+    }
+
 private:
     TCallable(ui32 inputsCount, TRuntimeNode* inputs, TCallableType* type, bool validate = true);
     TCallable(TRuntimeNode result, TCallableType* type, bool validate = true);

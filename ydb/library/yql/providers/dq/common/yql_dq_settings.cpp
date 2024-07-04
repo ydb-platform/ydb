@@ -98,7 +98,7 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _MaxAttachmentsSize);
     REGISTER_SETTING(*this, DisableCheckpoints);
-    REGISTER_SETTING(*this, EnableSpillingInGraceJoin);
+    REGISTER_SETTING(*this, EnabledSpillingNodes).Parser([](const TString& v) { return FromString<EEnabledSpillingNodes>(v); });;
 }
 
 } // namespace NYql

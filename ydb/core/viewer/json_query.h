@@ -398,13 +398,14 @@ private:
         if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
+            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
+                jsonResponse = std::move(jsonResponse["result"]);
+            }
         } else {
             QueryResponse.Error("QueryError");
-            MakeErrorReply(jsonResponse, ev->Get()->Record.GetRef().MutableResponse()->MutableQueryIssues());
-        }
-
-        if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
-            jsonResponse = std::move(jsonResponse["result"]);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetRef().GetYdbStatus()), std::move(issues)));
         }
 
         TStringStream stream;
@@ -421,7 +422,9 @@ private:
         auto& record(ev->Get()->Record);
         NJson::TJsonValue jsonResponse;
         if (record.IssuesSize() > 0) {
-            MakeErrorReply(jsonResponse, record.MutableIssues());
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), std::move(issues)));
         }
 
         TStringStream stream;
@@ -472,26 +475,11 @@ private:
     }
 
 private:
-    void MakeErrorReply(NJson::TJsonValue& jsonResponse, google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues) {
-        NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
-
-        // find first deepest error
-        std::stable_sort(protoIssues->begin(), protoIssues->end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-            return a.severity() < b.severity();
-        });
-        while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
-            protoIssues = (*protoIssues)[0].mutable_issues();
-        }
+    void MakeErrorReply(NJson::TJsonValue& jsonResponse, const NYdb::TStatus& status) {
         TString message;
-        if (protoIssues->size() > 0) {
-            const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
-            NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-            message = issue.message();
-        }
-        for (const auto& queryIssue : *protoIssues) {
-            NJson::TJsonValue& issue = jsonIssues.AppendValue({});
-            NProtobufJson::Proto2Json(queryIssue, issue);
-        }
+
+        NViewer::MakeErrorReply(jsonResponse, message, status);
+
         if (Span) {
             Span.EndError("Error");
         }
@@ -513,11 +501,9 @@ private:
                 }
             }
             catch (const std::exception& ex) {
-                google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
-                Ydb::Issue::IssueMessage* issue = protoIssues.Add();
-                issue->set_message(TStringBuilder() << "Convert error: " << ex.what());
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(jsonResponse, &protoIssues);
+                NYql::TIssues issues;
+                issues.AddIssue(TStringBuilder() << "Convert error: " << ex.what());
+                MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues)));
                 return;
             }
         }

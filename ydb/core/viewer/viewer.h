@@ -11,6 +11,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -194,7 +195,7 @@ public:
 
     virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORBIDDEN(const TRequestState& request) = 0;
+    virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
@@ -259,6 +260,8 @@ template <typename ValueType>
 void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& values) {
     GenericSplitIds<ValueType>(source, delim, std::inserter(values, values.end()));
 }
+
+void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
 
 TString GetHTTPOKJSON();
 TString GetHTTPGATEWAYTIMEOUT();

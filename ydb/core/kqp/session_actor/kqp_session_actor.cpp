@@ -568,8 +568,10 @@ public:
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             if (QueryState->CompileResult->NeedToSplit) {
+                Cerr << "GOT NEED TO SPLIT" << Endl;
                 YQL_ENSURE(!QueryState->HasTxControl() && QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
                 auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
+                Cerr << "SENDING SPLIT REQUEST " << ev->Split << Endl;
                 Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                     QueryState->KqpSessionSpan.GetTraceId());
             } else {
@@ -1206,12 +1208,15 @@ public:
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (QueryState->ShouldAcquireLocks(tx)) {
+            Cerr << "ShouldAcquireLocks >> " << Endl;
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
                 YQL_ENSURE(txCtx.EnableImmediateEffects);
                 request.UseImmediateEffects = true;
             }
+        } else {
+            Cerr << "ShouldAcquireLocks >> false" << Endl;   
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,
@@ -1304,6 +1309,7 @@ public:
                 }
 
                 if (txCtx->GetSnapshot().IsValid()) {
+                    Cerr << "Mark broken lock: " << issues.back().GetMessage() << Endl;
                     txCtx->Locks.MarkBroken(issues.back());
                 }
             }

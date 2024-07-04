@@ -232,6 +232,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
+        Cerr << "compSTATEMENT: " << statementAst->Ast->Root->ToString() << Endl;
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), keepInCache,
@@ -279,6 +280,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
+        Cerr << "reSTATEMENT: " << statementAst->Ast->Root->ToString() << Endl;
     }
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, query, isQueryActionPrepare,
@@ -321,6 +323,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
+        Cerr << "spltSTATEMENT: " << statementAst->Ast->Root->ToString() << Endl;
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid, std::move(query), false,

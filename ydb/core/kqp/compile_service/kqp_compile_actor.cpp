@@ -172,6 +172,7 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
+        Cerr << "SPLITTING" << Endl;
         YQL_ENSURE(PerStatementResult);
 
         const auto prepareSettings = PrepareCompilationSettings(ctx);
@@ -183,6 +184,7 @@ private:
     }
 
     void StartParsing(const TActorContext &ctx) {
+        Cerr << "PARSING" << Endl;
         Become(&TKqpCompileActor::CompileState);
         ReplyParseResult(ctx, GetAstStatements(ctx));
     }

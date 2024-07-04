@@ -165,7 +165,7 @@ def main():
             }), file=outj)
             outj.flush()
             if args.perf:
-                exitcode, rusage, elapsed = run(
+                exitcode, rusage, elapsed, iostat = run(
                     ['{}/ya'.format(args.arc_path), 'tool', 'perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '--'] +
                     argv + [
                         '--result-file', '/dev/null',

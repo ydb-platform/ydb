@@ -301,8 +301,9 @@ private:
 
 class TRowsToYdbResult : public TRowsToResult {
 public:
-    TRowsToYdbResult(const NKikimrTxDataShard::TReadTableTransaction& request)
+    TRowsToYdbResult(const NKikimrTxDataShard::TReadTableTransaction& request, bool allowNotNull)
         : TRowsToResult(request)
+        , AllowNotNull(allowNotNull)
     {
         BuildResultCommonPart(request);
         StartNewMessage();
@@ -345,16 +346,16 @@ private:
                 pg->set_typlen(0);
                 pg->set_typmod(0);
             } else {
+                bool notNullResp = AllowNotNull && col.GetNotNull();
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
+                auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                 if (id == NYql::NProto::Decimal) {
-                    auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
-                        ->mutable_decimal_type();
+                    auto decimalType = xType->mutable_decimal_type();
                     //TODO: Pass decimal params here
                     decimalType->set_precision(22);
                     decimalType->set_scale(9);
                 } else {
-                    meta->mutable_type()->mutable_optional_type()->mutable_item()
-                        ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                    xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                 }
             }
         }
@@ -363,6 +364,7 @@ private:
     }
 
     Ydb::ResultSet YdbResultSet;
+    const bool AllowNotNull;
 };
 
 class TReadTableScan : public TActor<TReadTableScan>, public NTable::IScan {
@@ -390,8 +392,14 @@ public:
         , PendingAcks(0)
         , Finished(false)
     {
-        if (tx.HasApiVersion() && tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
-            Writer = MakeHolder<TRowsToYdbResult>(tx);
+        if (tx.HasApiVersion()) {
+            if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
+                Writer = MakeHolder<TRowsToYdbResult>(tx, false);
+            } else if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V2) {
+                Writer = MakeHolder<TRowsToYdbResult>(tx, true);
+            } else {
+                Writer = MakeHolder<TRowsToOldResult>(tx); 
+            }
         } else {
             Writer = MakeHolder<TRowsToOldResult>(tx);
         }

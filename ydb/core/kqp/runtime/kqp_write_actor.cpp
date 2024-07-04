@@ -614,6 +614,8 @@ private:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
         default:
             RuntimeError(
                 TStringBuilder() << "Unknown operation.",

@@ -27,10 +27,7 @@ using namespace NNodeWhiteboard;
 class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient<TJsonQuery>;
-    IViewer* Viewer;
     TJsonSettings JsonSettings;
-    NMon::TEvHttpInfo::TPtr Event;
-    TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
     ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;
     TString Query;
@@ -50,6 +47,8 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
         Ydb,
     };
     ESchemaType Schema = ESchemaType::Classic;
+    TRequestResponse<NKqp::TEvKqp::TEvCreateSessionResponse> CreateSessionResponse;
+    TRequestResponse<NKqp::TEvKqp::TEvQueryResponse> QueryResponse;
     TString SessionId;
 
 public:
@@ -109,9 +108,7 @@ public:
     }
 
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(ev)
-        , Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {
     }
 
@@ -122,11 +119,11 @@ public:
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
             if (!ParsePostContent(content)) {
-                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Bad content received"));
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Bad content received"), "BadRequest");
             }
         }
         if (Query.empty() && Action != "cancel-query") {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Query is empty"));
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
 
         Direct |= Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
@@ -143,7 +140,7 @@ public:
 
     void HandleReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         BLOG_TRACE("Received TEvBoardInfo");
-        ReplyAndPassAway(Viewer->MakeForward(Event->Get(), GetNodesFromBoardReply(ev)));
+        TBase::ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ev)));
     }
 
     void PassAway() override {
@@ -184,11 +181,11 @@ public:
                 Send(actorId, event.release());
 
                 if (Action == "cancel-query") {
-                    return ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Query was cancelled"));
+                    return TBase::ReplyAndPassAway(GetHTTPOK("text/plain", "Query was cancelled"));
                 }
             } else {
                 if (Action == "cancel-query") {
-                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Query not found"));
+                    return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query not found"), "BadRequest");
                 }
             }
             Viewer->AddRunningQuery(QueryId, SelfId());
@@ -202,7 +199,7 @@ public:
             }
         }
         BLOG_TRACE("Creating session");
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
     void SetTransactionMode(NKikimrKqp::TQueryRequest& request) {
@@ -222,12 +219,15 @@ public:
     }
 
     void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
-        if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            return ReplyAndPassAway(
-                Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain",
-                    TStringBuilder() << "Failed to create session, error " << ev->Get()->Record.GetYdbStatus()));
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            CreateSessionResponse.Set(std::move(ev));
+        } else {
+            CreateSessionResponse.Error("FailedToCreateSession");
+            return TBase::ReplyAndPassAway(
+                GetHTTPINTERNALERROR("text/plain",
+                    TStringBuilder() << "Failed to create session, error " << ev->Get()->Record.GetYdbStatus()), "InternalError");
         }
-        SessionId = ev->Get()->Record.GetResponse().GetSessionId();
+        SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
         BLOG_TRACE("Session created " << SessionId);
 
         {
@@ -292,7 +292,7 @@ public:
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+        QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
         BLOG_TRACE("Query sent");
     }
 
@@ -394,12 +394,13 @@ private:
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_TRACE("Query response received");
-        auto& record(ev->Get()->Record.GetRef());
         NJson::TJsonValue jsonResponse;
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            MakeOkReply(jsonResponse, record);
+        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            QueryResponse.Set(std::move(ev));
+            MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
         } else {
-            MakeErrorReply(jsonResponse, record.MutableResponse()->MutableQueryIssues());
+            QueryResponse.Error("QueryError");
+            MakeErrorReply(jsonResponse, ev->Get()->Record.GetRef().MutableResponse()->MutableQueryIssues());
         }
 
         if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
@@ -412,10 +413,11 @@ private:
             .WriteNanAsString = true,
         });
 
-        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), stream.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
+        QueryResponse.Error("Aborted");
         auto& record(ev->Get()->Record);
         NJson::TJsonValue jsonResponse;
         if (record.IssuesSize() > 0) {
@@ -428,7 +430,7 @@ private:
             .WriteNanAsString = true,
         });
 
-        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), stream.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
@@ -466,15 +468,7 @@ private:
         NJson::TJsonValue& issue = json["issues"].AppendValue({});
         issue["severity"] = NYql::TSeverityIds::S_ERROR;
         issue["message"] = error;
-        ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
-    }
-
-    void ReplyAndPassAway(TString data) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        if (Span) {
-            Span.End();
-        }
-        PassAway();
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(NJson::WriteJson(json, false)));
     }
 
 private:
@@ -499,7 +493,7 @@ private:
             NProtobufJson::Proto2Json(queryIssue, issue);
         }
         if (Span) {
-            Span.EndError(message);
+            Span.EndError("Error");
         }
     }
 
@@ -519,10 +513,11 @@ private:
                 }
             }
             catch (const std::exception& ex) {
-                Ydb::Issue::IssueMessage* issue = record.MutableResponse()->AddQueryIssues();
+                google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
+                Ydb::Issue::IssueMessage* issue = protoIssues.Add();
                 issue->set_message(TStringBuilder() << "Convert error: " << ex.what());
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(jsonResponse, record.MutableResponse()->MutableQueryIssues());
+                MakeErrorReply(jsonResponse, &protoIssues);
                 return;
             }
         }
@@ -629,9 +624,6 @@ private:
         }
         if (response.HasQueryStats()) {
             NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
-        }
-        if (Span) {
-            Span.EndOk();
         }
     }
 };

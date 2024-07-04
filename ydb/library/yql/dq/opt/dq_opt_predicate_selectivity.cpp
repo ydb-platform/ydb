@@ -54,90 +54,66 @@ namespace {
         }
     }
 
-    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType, const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
         if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
             maybeLiteral = maybeJust.Cast().Input();
         }
 
         if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
             auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
-
-            auto type = literal.Ref().GetTypeAnn();
-            auto slot = type->Cast<NYql::TDataExprType>()->GetSlot();
             auto value = literal.Literal().Value();
 
-            switch (slot) {
-                case NYql::NUdf::EDataSlot::Bool: {
-                    ui8 v = FromString<bool>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Uint8: {
-                    ui8 v = FromString<ui8>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Int8: {
-                    i8 v = FromString<i8>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Uint32: {
-                    ui32 v = FromString<ui32>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Int32: {
-                    i32 v = FromString<i32>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Uint64: {
-                    ui64 v = FromString<ui64>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Int64: {
-                    i64 v = FromString<i64>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Float: {
-                    float v = FromString<float>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Double: {
-                    double v = FromString<double>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Date: {
-                    ui16 v = FromString<ui32>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Datetime: {
-                    ui32 v = FromString<ui32>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Utf8:
-                case NYql::NUdf::EDataSlot::String:
-                case NYql::NUdf::EDataSlot::Yson:
-                case NYql::NUdf::EDataSlot::Json: {
-                    return countMinSketch->Probe(value.Data(), value.Size());
-                }
-                case NYql::NUdf::EDataSlot::Interval:
-                case NYql::NUdf::EDataSlot::Timestamp64:
-                case NYql::NUdf::EDataSlot::Interval64: {
-                    i64 v = FromString<i64>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Timestamp: {
-                    ui64 v = FromString<ui64>(value);
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                case NYql::NUdf::EDataSlot::Uuid: {
-                    const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            if (columnType == "Bool") {
+                ui8 v = FromString<bool>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint8") {
+                ui8 v = FromString<ui8>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int8") {
+                i8 v = FromString<i8>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint32") {
+                ui32 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int32") {
+                i32 v = FromString<i32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint64") {
+                ui64 v = FromString<ui64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int64") {
+                i64 v = FromString<i64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Float") {
+                float v = FromString<float>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Double") {
+                double v = FromString<double>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Date") {
+                ui16 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Datetime") {
+                ui32 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
+                return countMinSketch->Probe(value.Data(), value.Size());
+            } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
+                i64 v = FromString<i64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Timestamp") {
+                ui64 v = FromString<ui64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uuid") {
+                const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+                std::pair<ui64, ui64> v{};
+                v.first = uuidData[0]; // low128
+                v.second = uuidData[1]; // high128
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else {
+                return std::nullopt;
+            }
 
-                    std::pair<ui64,ui64> v{};
-                    v.first = uuidData[0]; // low128
-                    v.second = uuidData[1]; // high128
-                    return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
-                }
-                default:
-                    return std::nullopt;
-            }  
         }
 
         return std::nullopt;
@@ -166,7 +142,8 @@ namespace {
                 }
                 
                 if (auto countMinSketch = stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
-                    std::optional<ui32> countMinEstimation = EstimateCountMin(right, countMinSketch);
+                    auto columnType = stats->ColumnStatistics->Data[attributeName].Type;
+                    std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType,  countMinSketch);
                     if (!countMinEstimation.has_value()) {
                         return DefaultSelectivity(stats, attributeName);
                     }

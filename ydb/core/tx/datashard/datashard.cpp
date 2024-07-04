@@ -1564,6 +1564,21 @@ TUserTable::TPtr TDataShard::AlterTableAddIndex(
     return tableInfo;
 }
 
+TUserTable::TPtr TDataShard::AlterTableSwitchIndexState(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion,
+    const TPathId& streamPathId, NKikimrSchemeOp::EIndexState state)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->SwitchIndexState(streamPathId, state);
+
+    // This isn't really necessary now, because no one rely on index state
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
 TUserTable::TPtr TDataShard::AlterTableDropIndex(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,

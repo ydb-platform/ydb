@@ -42,8 +42,8 @@ TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
         << " OwnerCookie: " << OwnerCookie
         << " SourceIdInfo: " << SourceIdInfo.ShortDebugString();
-    if (WriteId != INVALID_WRITE_ID) {
-        out << " WriteId: " << WriteId;
+    if (WriteId.Defined()) {
+        out << " WriteId: " << *WriteId;
     }
     out << " }";
     return out;
@@ -171,7 +171,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         BecomeZombie(EErrorCode::InternalError, "Init error");
     }
 
-    void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, ui64 writeId) {
+    void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, const TMaybe<TWriteId>& writeId) {
         SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
@@ -253,7 +253,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult("Invalid KQP session", record);
         }
 
-        WriteId = record.GetResponse().GetTopicOperations().GetWriteId();
+        WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
                     "SessionId: " << Opts.SessionId <<
@@ -304,7 +304,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& request) {
         if (HasWriteId()) {
-            request.SetWriteId(WriteId);
+            NPQ::SetWriteId(request, *WriteId);
         }
     }
 
@@ -881,7 +881,7 @@ public:
 
 private:
     bool HasWriteId() const {
-        return WriteId != INVALID_WRITE_ID;
+        return WriteId.Defined();
     }
 
     bool HasSupportivePartitionId() const {
@@ -922,7 +922,7 @@ private:
 
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
-    ui64 WriteId = INVALID_WRITE_ID;
+    TMaybe<NPQ::TWriteId> WriteId;
     ui32 SupportivePartitionId = INVALID_PARTITION_ID;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;

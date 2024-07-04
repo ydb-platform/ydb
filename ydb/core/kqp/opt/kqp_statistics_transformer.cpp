@@ -40,6 +40,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path->Content());
     int totalAttrs = tableData.Metadata->Columns.size();
     nRows = tableData.Metadata->RecordsCount;
+
     double byteSize = tableData.Metadata->DataSize * (nAttrs / (double)totalAttrs);
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
@@ -47,6 +48,13 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     if (kqpCtx.Config->OverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path->Content(), *kqpCtx.Config->OverrideStatistics.Get());
     }
+
+    if (stats->ColumnStatistics) {
+        for (const auto& [columnName, metaData]: tableData.Metadata->Columns) {
+            stats->ColumnStatistics->Data[columnName].Type = metaData.Type;
+        }
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols;
 
     typeCtx->SetStats(input.Get(), stats);

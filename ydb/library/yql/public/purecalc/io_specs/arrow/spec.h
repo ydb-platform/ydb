@@ -36,7 +36,7 @@ private:
 public:
     explicit TArrowInputSpec(const TVector<NYT::TNode>& schemas);
     const TVector<NYT::TNode>& GetSchemas() const override;
-    const NYT::TNode& GetSchema(ui32) const;
+    const NYT::TNode& GetSchema(ui32 index) const;
     static constexpr bool ProvidesBlocks = true;
 };
 

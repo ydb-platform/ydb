@@ -459,6 +459,7 @@ public:
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
+<<<<<<< HEAD
         Parsers[NYql::EDatabaseType::MySQL] = [](
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
@@ -507,6 +508,8 @@ public:
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
+=======
+>>>>>>> parent of a6924c2247 (lol)
     }
 
     static constexpr char ActorName[] = "YQ_DATABASE_RESOLVER";

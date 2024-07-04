@@ -356,9 +356,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString allowedProxyHost {"ydb.viewer.page"};
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
-            .AuthRequest = "/oauth2/authorize",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {allowedProxyHost}
         };
@@ -389,10 +389,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net:443/oauth2/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
         UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
@@ -475,9 +475,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Initialize();
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
-            .AuthRequest = "/oauth2/authorize",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef"
         };
 
@@ -508,10 +508,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(headers.Has("Location"));
         TString location = TString(headers.Get("Location"));
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net:443/oauth2/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
         UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
     }
 
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -584,9 +584,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Initialize();
 
         TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
-            .AuthRequest = "/oauth2/authorize",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -625,10 +625,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net:443/oauth2/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
         UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
         UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
         UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://oidcproxy.net/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
@@ -659,7 +659,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "123456789abcdef"
         };
 
@@ -773,7 +773,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net:443",
+            .AuthorizationServerAddress = "https://auth.test.net",
             .ClientSecret = "0123456789abcdef",
             .AllowedProxyHosts = {
                 "*.viewer.page",

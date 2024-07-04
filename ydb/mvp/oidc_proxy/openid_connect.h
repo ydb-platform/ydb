@@ -10,21 +10,43 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 struct TOpenIdConnectSettings {
-    static const inline TString CLIENT_ID = "yc.oauth.ydb-viewer";
+    enum ESchemaVersion {
+        V1 = 1,
+        V2 = 2
+    };
+
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
+
+    static const inline TString AUTH_REQUEST_V1 = "/oauth/authorize";
+    static const inline TString AUTH_REQUEST_V2 = "/oauth2/authorize";
+    static const inline TString TOKEN_REQUEST_V1 = "/oauth/token";
+    static const inline TString TOKEN_REQUEST_V2 = "/oauth2/token";
+    static const inline TString EXCHANGE_REQUEST = "/oauth/session/exchange";
+
+    TString ClientId;
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
-    TString AuthRequest;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
+    ESchemaVersion SchemaVersion = TOpenIdConnectSettings::ESchemaVersion::V1;
 
     TString GetAuthorizationString() const {
-        return Base64Encode(CLIENT_ID + ":" + ClientSecret);
+        return Base64Encode(ClientId + ":" + ClientSecret);
     }
 
-    TString GetAuthRequestEndpoint(const TString& address = "") const {
-        return (address.empty() ? AuthorizationServerAddress : address) + AuthRequest;
+    TString GetAuthEndpoint() const {
+        return AuthorizationServerAddress +
+            (SchemaVersion == ESchemaVersion::V1 ? AUTH_REQUEST_V1 : AUTH_REQUEST_V2);
+    }
+
+    TString GetTokenEndpoint() const {
+        return AuthorizationServerAddress +
+            (SchemaVersion == ESchemaVersion::V1 ? TOKEN_REQUEST_V1 : TOKEN_REQUEST_V2);
+    }
+
+    TString GetExchangeEndpoint() const {
+        return AuthorizationServerAddress + EXCHANGE_REQUEST;
     }
 };
 

@@ -225,10 +225,14 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     }
 
     SecretName = oidc["secret_name"].as<std::string>("");
+    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>("yc.oauth.ydb-viewer"); // ??????????????
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
-    OpenIdConnectSettings.AuthRequest = oidc["auth_request"].as<std::string>("");
+    auto chemaVersion = oidc["schema_version"].as<std::string>("");
+    OpenIdConnectSettings.SchemaVersion = chemaVersion != "v2"
+        ? TOpenIdConnectSettings::ESchemaVersion::V1
+        : TOpenIdConnectSettings::ESchemaVersion::V2;
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -321,10 +325,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
-    }
-
-    if (!OpenIdConnectSettings.AuthRequest) {
-        OpenIdConnectSettings.AuthRequest = "/oauth/token";
     }
 
     if (mlock) {

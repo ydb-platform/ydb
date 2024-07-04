@@ -24,24 +24,32 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
+    TOpenIdConnectSettings::ESchemaVersion SchemaVersion;
 };
+
+bool TryAppendAuthEndpointFromDetailsV1(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
+    if (parameters.SchemaVersion != TOpenIdConnectSettings::ESchemaVersion::V1) {
+        return false;
+    }
+    const auto& eventDetails = parameters.SessionServerCheckDetails;
+    size_t posAuthUrl = eventDetails.find(TOpenIdConnectSettings::AUTH_REQUEST_V1);
+    if (posAuthUrl != TStringBuf::npos) {
+        size_t pos = eventDetails.rfind("https://", posAuthUrl);
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) + TOpenIdConnectSettings::AUTH_REQUEST_V1;
+        return true;
+    }
+    return false;
+}
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    TStringBuf authUrl = parameters.OidcSettings.AuthRequest;
-    const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(authUrl);
-    if (posAuthUrl != TStringBuf::npos) {
-        size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        auto address = TString(eventDetails.substr(pos, posAuthUrl - pos));
-        locationHeaderValue << parameters.OidcSettings.GetAuthRequestEndpoint(address);
-    } else {
-        locationHeaderValue << parameters.OidcSettings.GetAuthRequestEndpoint();
+    if (!TryAppendAuthEndpointFromDetailsV1(parameters, locationHeaderValue)) {
+        locationHeaderValue << parameters.OidcSettings.GetAuthEndpoint();
     }
     locationHeaderValue << "?response_type=code"
                         << "&scope=openid"
                         << "&state=" << parameters.State
-                        << "&client_id=" << parameters.OidcSettings.CLIENT_ID
+                        << "&client_id=" << parameters.OidcSettings.ClientId
                         << "&redirect_uri=" << parameters.Scheme << parameters.Host << parameters.CallbackUrl;
     return locationHeaderValue;
 }
@@ -114,7 +122,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .CallbackUrl = GetAuthCallbackUrl(),
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
-                                                    .Host = request->Host});
+                                                    .Host = request->Host,
+                                                    .SchemaVersion = settings.SchemaVersion});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)

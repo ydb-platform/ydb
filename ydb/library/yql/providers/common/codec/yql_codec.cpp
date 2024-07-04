@@ -1123,7 +1123,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 if (pos && cmd != '#') {
                     auto memberType = structType->GetMemberType(*pos);
                     auto unwrappedType = memberType;
-                    if (isTableFormat && unwrappedType->IsOptional()) {
+                    if (!(nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) && isTableFormat && unwrappedType->IsOptional()) {
                         unwrappedType = static_cast<TOptionalType*>(unwrappedType)->GetItemType();
                     }
 
@@ -1176,26 +1176,41 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
         if (cmd == EntitySymbol) {
             return NUdf::TUnboxedValuePod();
         }
-
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
-        if (cmd != BeginListSymbol) {
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            if (itemType->GetKind() == TType::EKind::Optional) {
+                CHECK_EXPECTED(cmd, BeginListSymbol);
+                cmd = buf.Read();
+                auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
+                cmd = buf.Read();
+                if (cmd == ListItemSeparatorSymbol) {
+                    cmd = buf.Read();
+                }
+                CHECK_EXPECTED(cmd, EndListSymbol);
+                return value.Release().MakeOptional();
+            } else {
+                return ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat).Release().MakeOptional();
+            }
+        } else {
+            if (cmd != BeginListSymbol) {
+                auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
+                return value.Release().MakeOptional();
+            }
+
+            cmd = buf.Read();
+            if (cmd == EndListSymbol) {
+                return NUdf::TUnboxedValuePod();
+            }
+
             auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+
+            CHECK_EXPECTED(cmd, EndListSymbol);
             return value.Release().MakeOptional();
         }
-
-        cmd = buf.Read();
-        if (cmd == EndListSymbol) {
-            return NUdf::TUnboxedValuePod();
-        }
-
-        auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
-        cmd = buf.Read();
-        if (cmd == ListItemSeparatorSymbol) {
-            cmd = buf.Read();
-        }
-
-        CHECK_EXPECTED(cmd, EndListSymbol);
-        return value.Release().MakeOptional();
     }
 
     case TType::EKind::Dict: {
@@ -2229,12 +2244,12 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
             }
             buf.Write(EndMapSymbol);
         } else {
-        buf.Write(BeginListSymbol);
-        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-            WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
-            buf.Write(ListItemSeparatorSymbol);
-        }
-        buf.Write(EndListSymbol);
+            buf.Write(BeginListSymbol);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
+                buf.Write(ListItemSeparatorSymbol);
+            }
+            buf.Write(EndListSymbol);
         }
         break;
     }
@@ -2266,21 +2281,21 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
                 buf.Write(EntitySymbol);
             }
         } else {
-        if (!value) {
-            if (topLevel) {
-                buf.Write(BeginListSymbol);
-                buf.Write(EndListSymbol);
+            if (!value) {
+                if (topLevel) {
+                    buf.Write(BeginListSymbol);
+                    buf.Write(EndListSymbol);
+                }
+                else {
+                    buf.Write(EntitySymbol);
+                }
             }
             else {
-                buf.Write(EntitySymbol);
+                buf.Write(BeginListSymbol);
+                WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
+                buf.Write(ListItemSeparatorSymbol);
+                buf.Write(EndListSymbol);
             }
-        }
-        else {
-            buf.Write(BeginListSymbol);
-            WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
-            buf.Write(ListItemSeparatorSymbol);
-            buf.Write(EndListSymbol);
-        }
         }
         break;
     }

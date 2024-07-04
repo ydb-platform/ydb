@@ -125,7 +125,7 @@ runs:
         # to be sure
         set -o pipefail
         
-        ./ya make --cache-size 2TB --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
+        ./ya make --thinlto  --cache-size 2TB --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --link-threads "${{ inputs.link_threads }}" \
           "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (

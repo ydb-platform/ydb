@@ -36,6 +36,19 @@ class Settings:
     clickhouse: ClickHouse
 
     @dataclass
+    class MySQL:
+        dbname: str
+        cluster_name: str
+        username: str
+        password: Optional[str]  # TODO: why optional?
+        host_external: str
+        host_internal: str
+        port_external: int
+        port_internal: int
+
+    postgresql: MySQL
+
+    @dataclass
     class PostgreSQL:
         dbname: str
         cluster_name: str
@@ -84,6 +97,20 @@ class Settings:
                         username='user',
                         password='password',
                         protocol='native',
+                    )
+                case EDataSourceKind.MYSQL:
+                    data_sources[data_source_kind] = cls.MySQL(
+                        cluster_name='mysql_integration_test',
+                        host_external='0.0.0.0',
+                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # Previously we used container names instead of container ips:
+                        # host_internal=docker_compose_file['services']['mysql']['container_name'],
+                        host_internal=endpoint_determiner.get_internal_ip('mysql'),
+                        port_external=endpoint_determiner.get_external_port('mysql', 5432),
+                        port_internal=5432,
+                        dbname='db',
+                        username='user',
+                        password='password',
                     )
                 case EDataSourceKind.POSTGRESQL:
                     data_sources[data_source_kind] = cls.PostgreSQL(

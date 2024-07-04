@@ -136,28 +136,30 @@ private:
         }
         LDAPMessage* entry = NKikimrLdap::FirstEntry(ld, searchUserResponse.SearchMessage);
         BerElement* ber = nullptr;
-        std::vector<TString> groupsDn;
+        std::vector<TString> directUserGroups;
         char* attribute = NKikimrLdap::FirstAttribute(ld, entry, &ber);
         if (attribute != nullptr) {
-            groupsDn = NKikimrLdap::GetAllValuesOfAttribute(ld, entry, attribute);
+            directUserGroups = NKikimrLdap::GetAllValuesOfAttribute(ld, entry, attribute);
             NKikimrLdap::MemFree(attribute);
         }
         if (ber) {
             NKikimrLdap::BerFree(ber, 0);
         }
-        if (!groupsDn.empty()) {
-            std::vector<TString> groups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
-            if (groups.empty()) {
-                TraverseTree(ld, groupsDn);
+        std::vector<TString> allUserGroups;
+        if (!directUserGroups.empty()) {
+            allUserGroups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
+            if (allUserGroups.empty()) {
+                allUserGroups = std::move(directUserGroups);
+                TraverseTree(ld, &allUserGroups);
             }
         }
-        Cerr << "+++ After TraverseTree" << Endl;
-        for (const auto& group: groupsDn) {
-            Cerr << "+++: " << group << Endl;
-        }
+        // Cerr << "+++ After TraverseTree" << Endl;
+        // for (const auto& group: allUserGroups) {
+        //     Cerr << "+++: " << group << Endl;
+        // }
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
-        Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, groupsDn));
+        Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, allUserGroups));
     }
 
     TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
@@ -325,20 +327,21 @@ private:
         groups.reserve(countEntries);
         for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
             groups.push_back(NKikimrLdap::GetDn(ld, groupEntry));
+            Cerr << "+++Ad G: " << groups.back() << Endl;
         }
         NKikimrLdap::MsgFree(searchMessage);
         return groups;
     }
 
-    void TraverseTree(LDAP* ld, std::vector<TString>& groups) {
-        Cerr << "+++ TraverseTree" << Endl;
-        std::unordered_set<TString> viewedGroups(groups.cbegin(), groups.cend());
+    void TraverseTree(LDAP* ld, std::vector<TString>* groups) {
+        // Cerr << "+++ TraverseTree" << Endl;
+        std::unordered_set<TString> viewedGroups(groups->cbegin(), groups->cend());
         std::queue<TString> queue;
-        for (const auto& group : groups) {
+        for (const auto& group : *groups) {
             queue.push(group);
         }
         while (!queue.empty()) {
-            Cerr << "+++ !queue.empty" << Endl;
+            // Cerr << "+++ !queue.empty" << Endl;
             TStringBuilder filter;
             filter << "(|";
             filter << "(entryDn=" << queue.front() << ')';
@@ -349,13 +352,13 @@ private:
             }
             filter << ')';
             LDAPMessage* searchMessage = nullptr;
-            Cerr << "+++Filter: " << filter << Endl;
+            // Cerr << "+++Filter: " << filter << Endl;
             int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
             if (!NKikimrLdap::IsSuccess(result)) {
                 return;
             }
             const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
-            Cerr << "+++ CountEntries: " << countEntries << Endl;
+            // Cerr << "+++ CountEntries: " << countEntries << Endl;
             if (countEntries < 1) {
                 NKikimrLdap::MsgFree(searchMessage);
                 return;
@@ -371,13 +374,13 @@ private:
                 if (ber) {
                     NKikimrLdap::BerFree(ber, 0);
                 }
-                Cerr << "+++FoundGroups:" << Endl;
+                // Cerr << "+++FoundGroups:" << Endl;
                 for (const auto& newGroup : foundGroups) {
-                    Cerr << "+++G: " << newGroup << Endl;
+                    // Cerr << "+++G: " << newGroup << Endl;
                     if (!viewedGroups.contains(newGroup)) {
                         viewedGroups.insert(newGroup);
                         queue.push(newGroup);
-                        groups.push_back(newGroup);
+                        groups->push_back(newGroup);
                     }
                 }
             }

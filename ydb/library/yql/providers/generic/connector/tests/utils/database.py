@@ -17,6 +17,8 @@ class Database:
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
                 self.name = name[:255]
+            case EDataSourceKind.MYSQL:
+                self.name = name[:63]
             case EDataSourceKind.YDB:
                 # We use a different way of initialization when working with YDB.
                 # There is only one preinstalled database called

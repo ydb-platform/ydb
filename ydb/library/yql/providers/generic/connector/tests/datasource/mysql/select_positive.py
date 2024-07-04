@@ -180,6 +180,7 @@ class Factory:
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
+            data_in=None,
             data_out_=[
                 [
                     0,
@@ -422,115 +423,115 @@ class Factory:
 
         return [tc]
 
-    def _pushdown(self) -> TestCase:
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col_int32',
-                    ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(my=mysql.Int4()),
-                ),
-                Column(
-                    name='col_int64',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(my=mysql.Int8()),
-                ),
-                Column(
-                    name='col_string',
-                    ydb_type=Type.UTF8,
-                    data_source_type=DataSourceType(my=mysql.Text()),
-                ),
-                Column(
-                    name='col_float',
-                    ydb_type=Type.FLOAT,
-                    data_source_type=DataSourceType(my=mysql.Float4()),
-                ),
-            ),
-        )
+    # def _pushdown(self) -> TestCase:
+    #     schema = Schema(
+    #         columns=ColumnList(
+    #             Column(
+    #                 name='col_int32',
+    #                 ydb_type=Type.INT32,
+    #                 data_source_type=DataSourceType(my=mysql.Int4()),
+    #             ),
+    #             Column(
+    #                 name='col_int64',
+    #                 ydb_type=Type.INT64,
+    #                 data_source_type=DataSourceType(my=mysql.Int8()),
+    #             ),
+    #             Column(
+    #                 name='col_string',
+    #                 ydb_type=Type.UTF8,
+    #                 data_source_type=DataSourceType(my=mysql.Text()),
+    #             ),
+    #             Column(
+    #                 name='col_float',
+    #                 ydb_type=Type.FLOAT,
+    #                 data_source_type=DataSourceType(my=mysql.Float4()),
+    #             ),
+    #         ),
+    #     )
 
-        data_in = [
-            [1, 2, 'one', 1.1],
-            [2, 2, 'two', 1.23456789],
-            [3, 5, 'three', 0.00000012],
-        ]
+    #     data_in = [
+    #         [1, 2, 'one', 1.1],
+    #         [2, 2, 'two', 1.23456789],
+    #         [3, 5, 'three', 0.00000012],
+    #     ]
 
-        data_out_1 = [
-            ['one'],
-        ]
+    #     data_out_1 = [
+    #         ['one'],
+    #     ]
 
-        data_out_2 = [
-            ['two'],
-        ]
+    #     data_out_2 = [
+    #         ['two'],
+    #     ]
 
-        data_source_kind = EDataSourceKind.mysql
+    #     data_source_kind = EDataSourceKind.mysql
 
-        test_case_name = 'pushdown'
+    #     test_case_name = 'pushdown'
 
-        return [
-            TestCase(
-                name_=test_case_name,
-                data_in=data_in,
-                data_out_=data_out_1,
-                protocol=EProtocol.NATIVE,
-                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-                select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-                select_where=SelectWhere('col_int32 = 1'),
-                data_source_kind=data_source_kind,
-                schema=schema,
-            ),
-            TestCase(
-                name_=test_case_name,
-                data_in=data_in,
-                data_out_=data_out_2,
-                protocol=EProtocol.NATIVE,
-                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-                select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-                select_where=SelectWhere('col_int32 = col_int64'),
-                data_source_kind=data_source_kind,
-                schema=schema,
-            ),
-        ]
+    #     return [
+    #         TestCase(
+    #             name_=test_case_name,
+    #             data_in=data_in,
+    #             data_out_=data_out_1,
+    #             protocol=EProtocol.NATIVE,
+    #             pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+    #             select_what=SelectWhat(SelectWhat.Item(name='col_string')),
+    #             select_where=SelectWhere('col_int32 = 1'),
+    #             data_source_kind=data_source_kind,
+    #             schema=schema,
+    #         ),
+    #         TestCase(
+    #             name_=test_case_name,
+    #             data_in=data_in,
+    #             data_out_=data_out_2,
+    #             protocol=EProtocol.NATIVE,
+    #             pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+    #             select_what=SelectWhat(SelectWhat.Item(name='col_string')),
+    #             select_where=SelectWhere('col_int32 = col_int64'),
+    #             data_source_kind=data_source_kind,
+    #             schema=schema,
+    #         ),
+    #     ]
 
-    def _json(self) -> TestCase:
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col_json',
-                    ydb_type=Type.JSON,
-                    data_source_type=DataSourceType(my=mysql.Json()),
-                ),
-            ),
-        )
+    # def _json(self) -> TestCase:
+    #     schema = Schema(
+    #         columns=ColumnList(
+    #             Column(
+    #                 name='col_json',
+    #                 ydb_type=Type.JSON,
+    #                 data_source_type=DataSourceType(my=mysql.Json()),
+    #             ),
+    #         ),
+    #     )
 
-        data_in = [
-            ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-            ['{ "TODO" : "unicode" }'],
-            [None],
-        ]
+    #     data_in = [
+    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
+    #         ['{ "TODO" : "unicode" }'],
+    #         [None],
+    #     ]
 
-        data_out_1 = [
-            ['{"age":35,"name":"James Holden"}'],
-            [None],
-            [None],
-        ]
+    #     data_out_1 = [
+    #         ['{"age":35,"name":"James Holden"}'],
+    #         [None],
+    #         [None],
+    #     ]
 
-        data_source_kind = EDataSourceKind.mysql
+    #     data_source_kind = EDataSourceKind.mysql
 
-        test_case_name = 'json'
+    #     test_case_name = 'json'
 
-        return [
-            TestCase(
-                name_=test_case_name,
-                data_in=data_in,
-                data_out_=data_out_1,
-                protocol=EProtocol.NATIVE,
-                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
-                select_where=None,
-                data_source_kind=data_source_kind,
-                pragmas=dict(),
-                schema=schema,
-            ),
-        ]
+    #     return [
+    #         TestCase(
+    #             name_=test_case_name,
+    #             data_in=data_in,
+    #             data_out_=data_out_1,
+    #             protocol=EProtocol.NATIVE,
+    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
+    #             select_where=None,
+    #             data_source_kind=data_source_kind,
+    #             pragmas=dict(),
+    #             schema=schema,
+    #         ),
+    #     ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(

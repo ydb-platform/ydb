@@ -87,6 +87,20 @@ Generic {
 }}
 {% endfor %}
 
+{% for cluster in generic_settings.mysql_clusters %}
+{{ data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NATIVE,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
 {% for cluster in generic_settings.postgresql_clusters %}
 {{ data_source(
     POSTGRESQL,

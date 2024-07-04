@@ -66,13 +66,15 @@ class BaseTestCase:
                     clickhouse_clusters=[
                         GenericSettings.ClickHouseCluster(database=self.database.name, protocol=EProtocol.NATIVE)
                     ],
-                    postgresql_clusters=[],
                 )
-
+            case EDataSourceKind.MYSQL:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    mysql_clusters=[GenericSettings.MySQLCluster(database=self.database.name)],
+                )
             case EDataSourceKind.POSTGRESQL:
                 return GenericSettings(
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
-                    clickhouse_clusters=[],
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
                 )
             case EDataSourceKind.YDB:

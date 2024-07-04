@@ -12,6 +12,7 @@ ENDIF()
 
 PY_SRCS(
     clickhouse.py
+    mysql.py
     postgresql.py
     ydb.py
 )

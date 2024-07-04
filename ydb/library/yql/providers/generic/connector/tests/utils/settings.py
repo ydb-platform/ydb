@@ -46,7 +46,7 @@ class Settings:
         port_external: int
         port_internal: int
 
-    postgresql: MySQL
+    mysql: MySQL
 
     @dataclass
     class PostgreSQL:
@@ -106,8 +106,8 @@ class Settings:
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['mysql']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('mysql'),
-                        port_external=endpoint_determiner.get_external_port('mysql', 5432),
-                        port_internal=5432,
+                        port_external=endpoint_determiner.get_external_port('mysql', 3306),
+                        port_internal=3306,
                         dbname='db',
                         username='user',
                         password='password',
@@ -139,13 +139,14 @@ class Settings:
                     raise Exception(f'invalid data source: {data_source_kind}')
 
         return cls(
+            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
             connector=cls.Connector(
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_external_port('fq-connector-go', 2130),
                 paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
-            clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
+            mysql=data_sources.get(EDataSourceKind.MYSQL),
             postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
             ydb=data_sources.get(EDataSourceKind.YDB),
         )
@@ -154,6 +155,8 @@ class Settings:
         match data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
                 return self.clickhouse.cluster_name
+            case EDataSourceKind.MYSQL:
+                return self.mysql.cluster_name
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
             case EDataSourceKind.YDB:
@@ -175,6 +178,15 @@ class GenericSettings:
         protocol: EProtocol
 
     clickhouse_clusters: Sequence[ClickHouseCluster] = field(default_factory=list)
+
+    @dataclass
+    class MySQLCluster:
+        def __hash__(self) -> int:
+            return hash(self.database) 
+
+        database: str
+
+    mysql_clusters: Sequence[MySQLCluster] = field(default_factory=list)
 
     @dataclass
     class PostgreSQLCluster:

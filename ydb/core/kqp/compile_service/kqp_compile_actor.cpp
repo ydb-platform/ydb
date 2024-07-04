@@ -172,12 +172,13 @@ private:
     }
 
     void StartSplitting(const TActorContext &ctx) {
-        Cerr << "SPLITTING" << Endl;
+        Cerr << "StartSplitting" << Endl;
         YQL_ENSURE(PerStatementResult);
 
         const auto prepareSettings = PrepareCompilationSettings(ctx);
 
-        auto result = KqpHost->SplitQuery(QueryId.Text, prepareSettings);
+        Cerr << "KqpHost->SplitQuery" << Endl;
+        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));
@@ -238,7 +239,7 @@ private:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings); // TODO: SplitExpr
                 break;
 
             default:

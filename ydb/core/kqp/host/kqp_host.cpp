@@ -1221,6 +1221,7 @@ private:
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
+            Cerr << "COMPILE FROM TEXT" << Endl;
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().EnablePgConstsToParams)
@@ -1232,6 +1233,7 @@ private:
             }
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
+            Cerr << "COMPILE FROM AST" << Endl;
             queryAst = query.AstResult->Ast;
             result.KeepInCache = query.AstResult->KeepInCache;
             result.CommandTagName = query.AstResult->CommandTagName;
@@ -1272,6 +1274,9 @@ private:
     TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         SetupYqlTransformer(EKikimrQueryType::Query);
         auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
+
+        Cerr << "IN SPLIT QUERY" << Endl;
+        Cerr << "SplitQuery: " << query.AstResult->Ast->Root->ToString(NYql::TAstPrintFlags::PerLine) << Endl;
 
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder

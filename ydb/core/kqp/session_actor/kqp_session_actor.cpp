@@ -511,6 +511,7 @@ public:
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
         LOG_D("Sending CompileQuery request");
+        Cerr << "Sending CompileQuery request" << Endl;
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
@@ -521,6 +522,7 @@ public:
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings);
         LOG_D("Sending CompileSplittedQuery request");
+        Cerr << "Sending CompileSplittedQuery request" << Endl;
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());

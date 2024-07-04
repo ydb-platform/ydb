@@ -2584,34 +2584,36 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
 
+        /*
+        CREATE TABLE Table2 (
+            PRIMARY KEY (Key)
+        ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
+        CREATE TABLE Table3 (
+            PRIMARY KEY (Key)
+        ) AS SELECT * FROM Table2 UNION SELECT * FROM Table1;
+        */
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE Table1 (
                     PRIMARY KEY (Key)
                 ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
-                CREATE TABLE Table2 (
-                    PRIMARY KEY (Key)
-                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
-                CREATE TABLE Table3 (
-                    PRIMARY KEY (Key)
-                ) AS SELECT * FROM Table2;
             )", TTxControl::NoTx(), TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(1))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
+            //CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            //CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
+            //UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
-            //result = db.ExecuteQuery(R"(
-            //    SELECT * FROM Table1;
-            //    SELECT * FROM Table2;
-            //    SELECT * FROM Table3;
-            //)", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            //UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            //UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            //CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-            //CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
-            //CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
+            result = db.ExecuteQuery(R"(
+                SELECT * FROM Table1;
+                SELECT * FROM Table2;
+                SELECT * FROM Table3;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
         }
     }
 

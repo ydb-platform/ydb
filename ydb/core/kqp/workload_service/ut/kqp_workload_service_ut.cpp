@@ -152,10 +152,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
 
         // Check that queue is free
-        auto firstRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
-        auto secondRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
-        TSampleQueries::TSelect42::CheckResult(firstRequest.GetResult());
-        TSampleQueries::TSelect42::CheckResult(secondRequest.GetResult());
+        UNIT_ASSERT_VALUES_EQUAL(ydb->GetPoolDescription().AmountRequests(), 0);
     }
 
     Y_UNIT_TEST(TestStartQueryAfterCancel) {

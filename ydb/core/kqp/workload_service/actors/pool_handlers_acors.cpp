@@ -712,7 +712,7 @@ private:
             return;
         }
 
-        if (!PendingRequests.empty() && DelayedRequests.empty() && GlobalState.DelayedRequests == 0 && GlobalState.RunningRequests < InFlightLimit) {
+        if (!PendingRequests.empty() && QueueSizeLimit == 0 && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
             this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, CountersSubgroup));

@@ -932,8 +932,7 @@ TFuture<void> TTransaction::DoAbort(
                 } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
                     YT_LOG_DEBUG("Transaction has expired or was already aborted, ignored");
                 } else {
-                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction, considered detached");
-                    State_ = ETransactionState::Detached;
+                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction");
                     THROW_ERROR_EXCEPTION("Error aborting transaction %v",
                         GetId())
                         << rspOrError;

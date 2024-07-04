@@ -131,13 +131,15 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) {
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
     Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
+    Y_UNUSED(joinKind);
 
     return joinAlgo == EJoinAlgoType::MapJoin;
 }

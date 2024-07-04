@@ -172,7 +172,8 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo)  {
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind)  {
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin:
@@ -182,7 +183,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
 
         case EJoinAlgoType::MapJoin:
-            return right->Stats->ByteSize < 5e8;
+            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats->ByteSize < 5e8;
         case EJoinAlgoType::GraceJoin:
             return true;
         default:

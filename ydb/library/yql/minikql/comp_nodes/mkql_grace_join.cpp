@@ -835,10 +835,14 @@ private:
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
+    ui32 cnt = 0;
     while (*HaveMoreLeftRows || *HaveMoreRightRows) {
-        if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
-            bool isWaitingForReduce = TryToReduceMemoryAndWait();
-            if (isWaitingForReduce) return;
+        if ((cnt++ % GraceJoin::SpillingRowLimit) == 0) {
+            if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
+                bool isWaitingForReduce = TryToReduceMemoryAndWait();
+     
+                if (isWaitingForReduce) return;
+            }
         }
         bool isYield = FetchAndPackData(ctx);
         if (isYield) return;

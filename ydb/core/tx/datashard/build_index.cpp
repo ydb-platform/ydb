@@ -31,6 +31,7 @@ using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
 
 static TColumnsTags GetAllTags(const TUserTable::TCPtr tableInfo) {
     TColumnsTags result;
+    result.reserve(tableInfo->Columns.size());
 
     for (const auto& it: tableInfo->Columns) {
         result[it.second.Name] = it.first;
@@ -41,6 +42,7 @@ static TColumnsTags GetAllTags(const TUserTable::TCPtr tableInfo) {
 
 static TColumnsTypes GetAllTypes(const TUserTable::TCPtr tableInfo) {
     TColumnsTypes result;
+    result.reserve(tableInfo->Columns.size());
 
     for (const auto& it: tableInfo->Columns) {
         result[it.second.Name] = it.second.Type;
@@ -75,23 +77,33 @@ static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo t
     }
 }
 
-static std::shared_ptr<TTypes> BuildTypes(const TColumnsTypes& types, const TUserTable::TCPtr& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
+static std::shared_ptr<TTypes> BuildTypes (
+    const TColumnsTypes& types,
+    const TUserTable::TCPtr& tableInfo,
+    const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings,
+    const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns
+)
+{
     auto result = std::make_shared<TTypes>();
     result->reserve(indexColumns.size());
 
     if (buildSettings.columnSize() > 0) {
-        for(const auto& keyColId : tableInfo->KeyColumnIds) {
+        for (const auto& keyColId : tableInfo->KeyColumnIds) {
             auto it = tableInfo->Columns.at(keyColId);
             Ydb::Type type;
             ProtoYdbTypeFromTypeInfo(&type, it.Type);
             result->emplace_back(it.Name, type);
         }
 
-        for(size_t i = 0; i < buildSettings.columnSize(); i++) {
+        for (size_t i = 0; i < buildSettings.columnSize(); i++) {
             const auto& column = buildSettings.column(i);
             result->emplace_back(column.GetColumnName(), column.default_from_literal().type());   
         }
 
+    } else if (checkingNotNullSettings.columnSize() > 0) {
+        // nothing
     } else {
         for (const auto& colName: indexColumns) {
             Ydb::Type type;
@@ -113,7 +125,7 @@ static std::shared_ptr<TTypes> BuildTypes(const TColumnsTypes& types, const TUse
 bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings, TString& err, TMemoryPool& valueDataPool) {
     cells.clear();
     cells.reserve(buildSettings.columnSize());
-    for(size_t i = 0; i < buildSettings.columnSize(); i++) {
+    for (size_t i = 0; i < buildSettings.columnSize(); i++) {
         const auto& column = buildSettings.column(i);
 
         NScheme::TTypeInfo typeInfo;
@@ -131,6 +143,33 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 
         cells.push_back({});
         if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), cells.back(), err, valueDataPool)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CheckNotNullConstraint(
+    const NTable::IScan::TRow& row,
+    const TColumnsTags& AllTags,
+    const NKikimrIndexBuilder::TCheckingNotNullSettings& CheckingNotNullSettings,
+    TString& err
+)
+{
+    for (size_t i = 0; i < CheckingNotNullSettings.columnSize(); i++) {
+        const auto& colName = CheckingNotNullSettings.column(i).GetColumnName();
+
+        if (!AllTags.contains(colName)) {
+            err = "DATASHARD: Table hasn\'t column " + colName + ".";
+            return false;
+        }
+
+        const auto& tag = AllTags.at(colName);
+        const TCell& cell = row.Get(tag);
+
+        if (cell.IsNull()) {
+            err = "DATASHARD: Column " + colName + " contains null value, so not-null constraint was not set.";
             return false;
         }
     }
@@ -243,7 +282,11 @@ private:
 
 class TBuildIndexScan : public TActor<TBuildIndexScan>, public NTable::IScan {
     const TUploadLimits Limits;
+
     const NKikimrIndexBuilder::TColumnBuildSettings ColumnBuildSettings;
+
+    const NKikimrIndexBuilder::TCheckingNotNullSettings CheckingNotNullSettings;
+    const TColumnsTags AllTags;
 
     const ui64 BuildIndexId;
     const TString TargetTable;
@@ -290,26 +333,28 @@ public:
                     const TVector<TString> targetIndexColumns,
                     const TVector<TString> targetDataColumns,
                     NKikimrIndexBuilder::TColumnBuildSettings&& columnsToBuild,
+                    NKikimrIndexBuilder::TCheckingNotNullSettings&& columnsToCheck,
                     TUserTable::TCPtr tableInfo,
                     TUploadLimits limits)
         : TActor(&TThis::StateWork)
         , Limits(limits)
         , ColumnBuildSettings(std::move(columnsToBuild))
+        , CheckingNotNullSettings(std::move(columnsToCheck))
+        , AllTags(GetAllTags(tableInfo))
         , BuildIndexId(buildIndexId)
         , TargetTable(target)
         , SeqNo(seqNo)
         , DataShardId(dataShardId)
         , DatashardActorId(datashardActorId)
         , SchemeShardActorID(schemeshardActorId)
-        , ScanTags(BuildTags(GetAllTags(tableInfo), targetIndexColumns, targetDataColumns))
-        , UploadColumnsTypes(BuildTypes(GetAllTypes(tableInfo), tableInfo, ColumnBuildSettings, targetIndexColumns, targetDataColumns))
+        , ScanTags(BuildTags(AllTags, targetIndexColumns, targetDataColumns))
+        , UploadColumnsTypes(BuildTypes(GetAllTypes(tableInfo), tableInfo, ColumnBuildSettings, CheckingNotNullSettings, targetIndexColumns, targetDataColumns))
         , TargetDataColumnPos(targetIndexColumns.size())
         , KeyColumnIds(tableInfo->KeyColumnIds)
         , KeyTypes(tableInfo->KeyColumnTypes)
         , TableRange(tableInfo->Range)
         , RequestedRange(range)
     {
-        
     }
 
     ~TBuildIndexScan() override = default;
@@ -386,6 +431,9 @@ public:
                 TSerializedCellVec(key),
                 std::move(keyCopy),
                 std::move(serializedValue));
+        } else if (CheckingNotNullSettings.columnSize() > 0) {
+            TString err;
+            Y_ABORT_UNLESS(CheckNotNullConstraint(row, AllTags, CheckingNotNullSettings, err));
         } else {
             ReadBuf.AddRow(
                 TSerializedCellVec(key),
@@ -619,11 +667,26 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         const TVector<TString>& targetIndexColumns,
         const TVector<TString>& targetDataColumns,
         NKikimrIndexBuilder::TColumnBuildSettings&& columnsToBuild,
+        NKikimrIndexBuilder::TCheckingNotNullSettings&& columnsToCheck,
         TUserTable::TCPtr tableInfo,
-        TUploadLimits limits)
+        TUploadLimits limits
+)
 {
-    return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, datashardActorId, schemeshardActorId, range, targetIndexColumns, targetDataColumns, std::move(columnsToBuild), tableInfo, limits);
+    return new TBuildIndexScan (
+        buildIndexId,
+        target,
+        seqNo,
+        dataShardId,
+        datashardActorId,
+        schemeshardActorId,
+        range,
+        targetIndexColumns,
+        targetDataColumns,
+        std::move(columnsToBuild),
+        std::move(columnsToCheck),
+        tableInfo,
+        limits
+    );
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -695,7 +758,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     TUserTable::TCPtr userTable = GetUserTables().at(tableId.PathId.LocalPathId);
 
-
     if (BuildIndexManager.Contains(buildIndexId)) {
         TBuildIndexRecord recCard = BuildIndexManager.Get(buildIndexId);
         if (recCard.SeqNo == seqNo) {
@@ -706,7 +768,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
         CancelScan(userTable->LocalTid, recCard.ScanId);
     }
-
 
     TSerializedTableRange requestedRange;
     requestedRange.Load(record.GetKeyRange());
@@ -767,6 +828,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     NKikimrIndexBuilder::TColumnBuildSettings columnsToBuild;
     columnsToBuild.Swap(ev->Get()->Record.MutableColumnBuildSettings());
 
+    NKikimrIndexBuilder::TCheckingNotNullSettings columnsToCheckNotNull;
+
     const auto scanId = QueueScan(userTable->LocalTid,
                             CreateBuildIndexScan(buildIndexId,
                                                  record.GetTargetName(),
@@ -778,6 +841,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                  targetIndexColumns,
                                                  targetDataColumns,
                                                  std::move(columnsToBuild),
+                                                 std::move(columnsToCheckNotNull),
                                                  userTable,
                                                  limits),
                             ev->Cookie,

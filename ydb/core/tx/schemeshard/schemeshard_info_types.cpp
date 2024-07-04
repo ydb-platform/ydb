@@ -374,7 +374,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = sourceColumn;
 
             if (isSetNullable) {
-                column.NotNull = col.GetNotNull();
+                bool NotNull = col.GetNotNull();
+
+                if (NotNull) {
+                    column.IsCheckingNotNullInProgress = true;
+                } else {
+                    column.NotNull = false;
+                }
             }
 
             if (columnFamily) {
@@ -1458,7 +1464,14 @@ void TTableInfo::FinishAlter() {
             oldCol->Family = cinfo.Family;
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
-            oldCol->NotNull = cinfo.NotNull;
+
+            if (cinfo.IsCheckingNotNullInProgress) {
+                oldCol->NotNull = true;
+            } else {
+                oldCol->NotNull = cinfo.NotNull;
+            }
+
+            oldCol->IsCheckingNotNullInProgress = false;
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {
@@ -2127,10 +2140,19 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumn());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
-    for(const auto& column : BuildColumns) {
+    for (const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }
 }
+
+void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* result) const {
+    Y_ABORT_UNLESS(IsCheckingNotNull());
+    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+    for (const auto& column : CheckNotNullColumns) {
+        column.SerializeToProto(result->add_column());
+    }
+}
+
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)

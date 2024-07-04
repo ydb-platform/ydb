@@ -10,8 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
+TVector<ISubOperation::TPtr> CreateBuildOrCheckColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild || tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCheckingNotNull);
 
     const auto& op = tx.GetInitiateColumnBuild();
 
@@ -30,7 +30,6 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
     }
 
     return result;
-
 }
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

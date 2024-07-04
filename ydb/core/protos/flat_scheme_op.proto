@@ -94,6 +94,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional bool IsCheckingNotNullInProgress = 12 [default = false];
 }
 
 message TStorageSettings {
@@ -1558,6 +1559,7 @@ enum EOperationType {
     ESchemeOpDropExternalDataSource = 90;
     ESchemeOpAlterExternalDataSource = 91;
 
+    // Build Column
     ESchemeOpCreateColumnBuild = 92;
 
     // View
@@ -1574,6 +1576,9 @@ enum EOperationType {
     ESchemeOpAlterContinuousBackup = 98;
     // Drop
     ESchemeOpDropContinuousBackup = 99;
+
+    // Checking values on not-null constraint in column
+    ESchemeOpCheckingNotNull = 100;
 }
 
 message TApplyIf {
@@ -1749,6 +1754,8 @@ message TModifyScheme {
     optional TCreateContinuousBackup CreateContinuousBackup = 68;
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
+
+    optional NKikimrIndexBuilder.TCheckingNotNullSettings InitiateCheckingNotNull = 71;
 }
 
 message TCopySequence {

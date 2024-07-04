@@ -1435,13 +1435,6 @@ public:
 
                             auto value = TString(constraint.Item(0).Cast<TCoAtom>());
                             auto notNull = (value == "not_null");
-
-                            if (notNull) {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder() 
-                                    << "SET NOT NULL is currently not supported."));
-                                return SyncError();
-                            }
-
                             alter_columns->set_not_null(notNull);
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),

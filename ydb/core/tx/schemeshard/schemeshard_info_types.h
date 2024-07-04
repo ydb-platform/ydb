@@ -338,6 +338,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
         bool IsBuildInProgress = false;
+        bool IsCheckingNotNullInProgress = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
@@ -2861,10 +2862,23 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
     };
 
+    struct TColumnCheckingInfo {
+        TString ColumnName;
+
+        TColumnCheckingInfo(const TString& name)
+            : ColumnName(name)
+        {}
+
+        void SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const {
+            setting->SetColumnName(ColumnName);
+        }
+    };
+
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
         BuildIndex = 10,
-        BuildColumn = 20
+        BuildColumn = 20,
+        CheckingNotNull = 30
     };
 
     TActorId CreateSender;
@@ -2884,6 +2898,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TVector<TString> DataColumns;
 
     TVector<TColumnBuildInfo> BuildColumns;
+    TVector<TColumnCheckingInfo> CheckNotNullColumns;
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
@@ -3157,6 +3172,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return BuildKind == EBuildKind::BuildColumn;
     }
 
+    bool IsCheckingNotNull() const {
+        return BuildKind == EBuildKind::CheckingNotNull;
+    }
+
     bool IsDone() const {
         return State == EState::Done;
     }
@@ -3183,6 +3202,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return 0.0;
     }
 
+    void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 

@@ -35,6 +35,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
         buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
     } else if (buildInfo->IsBuildColumn()) {
         buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
+    } else if (buildInfo->IsCheckingNotNull()) {
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateCheckingNotNull());
     } else {
         Y_ABORT("Unknown operation kind while building LockPropose");
     }
@@ -65,6 +67,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
 
         buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
+    } else if (buildInfo->IsCheckingNotNull()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCheckingNotNull);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
+
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateCheckingNotNull());
     } else {
         Y_ABORT("Unknown operation kind while building InitiatePropose");
     }
@@ -337,7 +346,7 @@ public:
                 ev->Record.SetOwnerId(buildInfo->TablePathId.OwnerId);
                 ev->Record.SetPathId(buildInfo->TablePathId.LocalPathId);
 
-                if (buildInfo->IsBuildColumn()) {
+                if (buildInfo->IsBuildColumn() || buildInfo->IsCheckingNotNull()) {
                     ev->Record.SetTargetName(TPath::Init(buildInfo->TablePathId, Self).PathString());
                 } else if (buildInfo->IsBuildIndex()) {
                     ev->Record.SetTargetName(buildInfo->ImplTablePath);
@@ -354,6 +363,8 @@ public:
                     }
                 } else if (buildInfo->IsBuildColumn()) {
                     buildInfo->SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
+                } else if (buildInfo->IsCheckingNotNull()) {
+                    buildInfo->SerializeToProto(Self, ev->Record.MutableCheckingNotNullSettings());
                 }
 
                 TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);

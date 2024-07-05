@@ -605,8 +605,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     ]
                 }
             )",
-            NYql::TDatabaseResolverResponse::TDatabaseDescription{
-                },
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{},
                 issues
             );
     }

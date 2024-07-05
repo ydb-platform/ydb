@@ -256,6 +256,9 @@ def on_ts_configure(unit):
     _setup_eslint(unit)
     _setup_tsc_typecheck(unit)
 
+    if unit.get("TS_YNDEXING") == "yes":
+        unit.on_do_ts_yndexing()
+
 
 @_with_report_configure_error
 def on_setup_build_env(unit):  # type: (Unit) -> None

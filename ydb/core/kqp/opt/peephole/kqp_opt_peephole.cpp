@@ -240,7 +240,7 @@ bool CanPropagateWideBlockThroughChannel(
 
     const auto& program = programs.at(output.Stage().Ref().UniqueId());
 
-    // TODO(ilezhankin): fails with "Cannot cast type Void to Stream".
+    // TODO: enable this check.
     // auto outputItemType = program.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
     // if (IsWideBlockType(*outputItemType)) {
     //     // output is already wide block
@@ -265,92 +265,6 @@ bool CanPropagateWideBlockThroughChannel(
     }
 
     return true;
-}
-
-TKqpProgram PropagateWideBlockThroughChannels(const TDqPhyStage& stage, THashMap<ui64, TKqpProgram>& programs, const THashSet<ui64>& optimizedStages, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-    TVector<TCoArgument> newArgs;
-    newArgs.reserve(stage.Inputs().Size());
-    TNodeOnNodeOwnedMap argsMap;
-
-    YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
-
-    bool needRebuild = false;
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        auto oldArg = stage.Program().Args().Arg(i);
-        auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
-        newArgs.emplace_back(newArg);
-
-        auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>();
-
-        if (connection &&
-            CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
-        {
-            needRebuild = true;
-
-            // Update current stage with: FromFlow(WideFromBlocks(ToFlow($input)))
-            TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
-                .Callable("FromFlow")
-                    .Callable(0, "WideFromBlocks")
-                        .Callable(0, "ToFlow")
-                            .Add(0, newArg.Ptr())
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-            argsMap.emplace(oldArg.Raw(), newArgNode);
-
-            const auto stageId = connection.Cast().Output().Stage().Ref().UniqueId();
-            auto program = programs.at(stageId);
-
-            YQL_ENSURE(optimizedStages.contains(stageId), "Input stage must be already optimized");
-
-            // Update input stage with: FromFlow(WideFromBlocks($1)) → FromFlow($1)
-            if (program.Lambda().Body().Maybe<TCoFromFlow>() &&
-                program.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-            {
-                auto newBody = Build<TCoFromFlow>(ctx, program.Lambda().Body().Cast<TCoFromFlow>().Pos())
-                    .Input(program.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
-                    .Done();
-
-                programs.at(stageId) = Build<TKqpProgram>(ctx, program.Pos())
-                    .Lambda()
-                        .Args(program.Lambda().Args())
-                        .Body(newBody)
-                    .Build()
-                    .ArgsType(program.ArgsType())
-                    .Done();
-            }
-        } else {
-            argsMap.emplace(oldArg.Raw(), newArg.Ptr());
-        }
-
-        argsMap.at(oldArg.Raw())->SetTypeAnn(oldArg.Raw()->GetTypeAnn());
-    }
-
-    TDqPhyStage newStage = stage;
-
-    if (needRebuild) {
-        // TODO(ilezhankin): can we avoid rebuilding new stage - and build new program directly?
-        newStage = Build<TDqPhyStage>(ctx, stage.Pos())
-            .InitFrom(stage)
-            .Program()
-                .Args(newArgs)
-                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
-            .Build()
-            .Done();
-    }
-
-    TVector<const TTypeAnnotationNode*> argTypes;
-    for (const auto& [_, arg] : argsMap) {
-        YQL_ENSURE(arg->GetTypeAnn());
-        argTypes.push_back(arg->GetTypeAnn());
-    }
-
-    // TODO: get rid of TKqpProgram-callable (YQL-10078)
-    return Build<TKqpProgram>(ctx, newStage.Pos())
-        .Lambda(newStage.Program())
-        .ArgsType(ExpandType(newStage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
-        .Done();
 }
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
@@ -415,18 +329,107 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         }
     }
 
-    THashMap<ui64 /*stage unique id*/, TKqpProgram> stagePrograms;
+    THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
     THashMap<TString, TKqpParamBinding> nonDetParamBindings;
 
-    // Optimize only KqpPrograms based on the stage's lambda, otherwise we'll have to do a lot intermediate rebuilds.
     for (const auto& stage : topSortedStages) {
         YQL_ENSURE(!optimizedStages.contains(stage.Ref().UniqueId()));
 
-        // Stage inputs point to channels, while channels' outputs still point to old stages.
-        auto program = PropagateWideBlockThroughChannels(stage, stagePrograms, optimizedStages, ctx, typesCtx);
+        // Propagate "WideFromBlock" through connections.
+        {
+            TVector<TCoArgument> newArgs;
+            newArgs.reserve(stage.Inputs().Size());
+            TNodeOnNodeOwnedMap argsMap;
 
-        // TODO(ilezhankin): should use |program| because somehow WideBlock propagation may change original program?
-        bool allowNonDeterministicFunctions = !stage.Program().Body().Maybe<TKqpEffects>();
+            YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
+
+            bool needRebuild = false;
+            for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                auto oldArg = stage.Program().Args().Arg(i);
+                auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
+                newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArgs.emplace_back(newArg);
+
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); connection &&
+                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
+                {
+                    needRebuild = true;
+
+                    TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
+                        .Callable("FromFlow")
+                            .Callable(0, "WideFromBlocks")
+                                .Callable(0, "ToFlow")
+                                    .Add(0, newArg.Ptr())
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                    argsMap.emplace(oldArg.Raw(), newArgNode);
+
+                    auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
+
+                    // Update input program with: FromFlow(WideFromBlocks($1)) → FromFlow($1)
+                    {
+                        const auto& inputProgram = programs.at(stageUid);
+
+                        auto newBody = Build<TCoFromFlow>(ctx, inputProgram.Lambda().Body().Cast<TCoFromFlow>().Pos())
+                            .Input(inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
+                            .Done();
+
+                        auto newInputProgram = Build<TKqpProgram>(ctx, inputProgram.Pos())
+                            .Lambda()
+                                .Args(inputProgram.Lambda().Args())
+                                .Body(newBody)
+                            .Build()
+                            .ArgsType(inputProgram.ArgsType())
+                            .Done();
+
+                        // Run the peephole optimization on new program again to update type annotations.
+                        bool allowNonDeterministicFunctions = !newInputProgram.Lambda().Body().Maybe<TKqpEffects>();
+                        TExprNode::TPtr newInputProgramNode;
+
+                        auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typeAnnTransformer, typesCtx, config,
+                            allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
+                        if (status != TStatus::Ok) {
+                            ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
+                            return {};
+                        }
+
+                        programs.at(stageUid) = TKqpProgram(newInputProgramNode);
+                    }
+
+                    // Update the type annotation for an argument with return value of the input program.
+                    newArg.MutableRef().SetTypeAnn(programs.at(stageUid).Lambda().Body().Ref().GetTypeAnn());
+                } else {
+                    argsMap.emplace(oldArg.Raw(), newArg.Ptr());
+                }
+            }
+
+            TCoLambda lambda = stage.Program();
+            if (needRebuild) {
+                lambda = Build<TCoLambda>(ctx, lambda.Pos())
+                    .Args(newArgs)
+                    .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+                .Done();
+            }
+
+            TVector<const TTypeAnnotationNode*> argTypes;
+            for (const auto& arg : newArgs) {
+                YQL_ENSURE(arg.Ref().GetTypeAnn());
+                argTypes.push_back(arg.Ref().GetTypeAnn());
+            }
+
+            // TODO: get rid of TKqpProgram-callable (YQL-10078)
+            auto program = Build<TKqpProgram>(ctx, stage.Pos())
+                .Lambda(lambda)
+                .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+                .Done();
+
+            YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), program).second);
+        }
+
+        const auto& program = programs.at(stage.Ref().UniqueId());
+        const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
 
         TExprNode::TPtr newProgram;
         auto status = PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer, typesCtx, config,
@@ -447,7 +450,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         }
 
         optimizedStages.emplace(stage.Ref().UniqueId());
-        stagePrograms.emplace(stage.Ref().UniqueId(), newProgram);
+        programs.at(stage.Ref().UniqueId()) = TKqpProgram(newProgram);
     }
 
     TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
@@ -456,25 +459,24 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         bindings.emplace_back(std::move(binding));
     }
 
-    TVector<TDqPhyStage> stages;
+    TVector<TDqPhyStage> newStages;
     TNodeOnNodeOwnedMap stagesMap;
 
+    // Rebuild stages only after all new programs are ready.
     for (const auto& stage : topSortedStages) {
-        // TODO(ilezhankin): add note about why creating new stage here with current |stagesMap| should work correctly.
         auto newStage = Build<TDqPhyStage>(ctx, stage.Pos())
+            .InitFrom(stage)
             .Inputs(ctx.ReplaceNodes(stage.Inputs().Ptr(), stagesMap))
-            .Program(ctx.DeepCopyLambda(stagePrograms.at(stage.Ref().UniqueId()).Lambda().Ref()))
-            .Settings(stage.Settings())
-            .Outputs(stage.Outputs())
+            .Program(ctx.DeepCopyLambda(programs.at(stage.Ref().UniqueId()).Lambda().Ref()))
             .Done();
 
-        stages.emplace_back(newStage);
+        newStages.emplace_back(newStage);
         stagesMap.emplace(stage.Raw(), newStage.Ptr());
     }
 
     return Build<TKqpPhysicalTx>(ctx, tx.Pos())
         .Stages()
-            .Add(stages)
+            .Add(newStages)
             .Build()
         .Results(ctx.ReplaceNodes(tx.Results().Ptr(), stagesMap))
         .ParamBindings().Add(bindings).Build()

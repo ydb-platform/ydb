@@ -1,5 +1,7 @@
 #include "actors.h"
 
+#include <ydb/core/base/path.h>
+
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
@@ -46,7 +48,7 @@ public:
     TPoolHandlerActorBase(void (TDerived::* requestFunc)(TAutoPtr<IEventHandle>& ev), const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters)
         : TBase(requestFunc)
         , CountersRoot(counters)
-        , CountersSubgroup(counters->GetSubgroup("pool", TStringBuilder() << database << "/" << poolId))
+        , CountersSubgroup(counters->GetSubgroup("pool", CanonizePath(TStringBuilder() << database << "/" << poolId)))
         , Database(database)
         , PoolId(poolId)
         , QueueSizeLimit(GetMaxQueueSize(poolConfig))
@@ -475,6 +477,13 @@ public:
         }
     }
 
+    void PassAway() override {
+        GlobalInFly->Set(0);
+        GlobalDelayedRequests->Set(0);
+
+        TBase::PassAway();
+    }
+
 protected:
     bool ShouldResign() const override {
         return InFlightLimit == 0 || InFlightLimit == std::numeric_limits<ui64>::max();
@@ -519,6 +528,7 @@ protected:
         RemoveFinishedRequests();
         RefreshRequired |= !PendingRequests.empty();
         RefreshRequired |= (GetLocalInFlight() || !DelayedRequests.empty()) && TInstant::Now() - LastRefreshTime > LEASE_DURATION / 4;
+        RefreshRequired |= GlobalState.AmountRequests() && TInstant::Now() - LastRefreshTime > LEASE_DURATION;
         if (RefreshRequired) {
             RefreshRequired = false;
             RunningOperation = true;
@@ -532,7 +542,7 @@ private:
         LOG_T("Try to start scheduled refresh");
 
         RefreshState();
-        if (GetLocalInFlight() + DelayedRequests.size() > 0) {
+        if (GetLocalSessionsCount() || GlobalState.AmountRequests()) {
             ScheduleRefresh();
         }
     }
@@ -564,6 +574,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("refresh pool state failed " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             RefreshRequired = true;
+            ScheduleRefresh();
             return;
         }
 
@@ -573,6 +584,9 @@ private:
         LastRefreshTime = TInstant::Now();
 
         GlobalState = ev->Get()->PoolState;
+        if (GlobalState.AmountRequests()) {
+            ScheduleRefresh();
+        }
         GlobalInFly->Set(GlobalState.RunningRequests);
         GlobalDelayedRequests->Set(GlobalState.DelayedRequests);
         LOG_T("succefully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);
@@ -598,10 +612,12 @@ private:
 
         DoDelayRequest();
         DoStartDelayedRequest();
+        RefreshState();
     };
 
     void Handle(TEvPrivate::TEvDelayRequestResponse::TPtr& ev) {
         RunningOperation = false;
+        ScheduleRefresh();
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             LOG_E("failed to delay request " << ev->Get()->Status << ", session id: " << ev->Get()->SessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
@@ -617,7 +633,6 @@ private:
         GlobalDelayedRequests->Inc();
         LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
 
-        ScheduleRefresh();
         DoStartDelayedRequest();
         RefreshState();
     };
@@ -637,12 +652,13 @@ private:
             return;
         }
 
-        if (!sessionId) {
-            LOG_D("first request in queue is remote, send notification to node " << ev->Get()->NodeId);
+        const ui32 nodeId = ev->Get()->NodeId;
+        if (SelfId().NodeId() != nodeId) {
+            LOG_D("first request in queue is remote, send notification to node " << nodeId);
             auto event = std::make_unique<TEvPrivate::TEvRefreshPoolState>();
             event->Record.SetPoolId(PoolId);
             event->Record.SetDatabase(Database);
-            this->Send(MakeKqpWorkloadServiceId(ev->Get()->NodeId), std::move(event));
+            this->Send(MakeKqpWorkloadServiceId(nodeId), std::move(event));
             RefreshState();
             return;
         }
@@ -680,7 +696,7 @@ private:
         }
 
         for (const TString& sessionId : ev->Get()->SesssionIds) {
-            LOG_T("succefully cleanuped request, session id: " << sessionId);
+            LOG_T("cleanuped request, session id: " << sessionId);
             if (TRequest* request = GetRequestSafe(sessionId)) {
                 FinalReply(request, ev->Get()->Status, ev->Get()->Issues);
             }
@@ -696,7 +712,7 @@ private:
             return;
         }
 
-        if (!PendingRequests.empty() && DelayedRequests.empty() && GlobalState.DelayedRequests == 0 && GlobalState.RunningRequests < InFlightLimit) {
+        if (!PendingRequests.empty() && QueueSizeLimit == 0 && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
             this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, CountersSubgroup));

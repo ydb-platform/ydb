@@ -5,9 +5,38 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
 using namespace NWorkload;
 using namespace NYdb;
 
+
+void StartTestConcurrentQueryLimit(const ui64 activeCountLimit, const ui64 queueSize, const ui64 nodeCount = 1) {
+    auto ydb = TYdbSetupSettings()
+        .NodeCount(nodeCount)
+        .ConcurrentQueryLimit(activeCountLimit)
+        .QueueSize(queueSize)
+        .QueryCancelAfter(FUTURE_WAIT_TIMEOUT * queueSize)
+        .Create();
+
+    auto settings = TQueryRunnerSettings()
+        .InFlightCoordinatorActorId(ydb->CreateInFlightCoordinator(queueSize, activeCountLimit))
+        .HangUpDuringExecution(true);
+
+    // Initialize queue
+    std::vector<TQueryRunnerResultAsync> asyncResults;
+    for (size_t i = 0; i < queueSize; ++i) {
+        asyncResults.emplace_back(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings.NodeIndex(i % nodeCount)));
+    }
+
+    for (const auto& asyncResult : asyncResults) {
+        TSampleQueries::TSelect42::CheckResult(asyncResult.GetResult());
+    }
+
+    ydb->ValidateWorkloadServiceCounters();
+}
+
+}  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlag) {
@@ -123,10 +152,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CANCELLED, result.GetIssues().ToString());
 
         // Check that queue is free
-        auto firstRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
-        auto secondRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query);
-        TSampleQueries::TSelect42::CheckResult(firstRequest.GetResult());
-        TSampleQueries::TSelect42::CheckResult(secondRequest.GetResult());
+        UNIT_ASSERT_VALUES_EQUAL(ydb->GetPoolDescription().AmountRequests(), 0);
     }
 
     Y_UNIT_TEST(TestStartQueryAfterCancel) {
@@ -145,28 +171,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TSampleQueries::CheckCancelled(hangingRequest.GetResult());
     }
 
-    Y_UNIT_TEST(TestConcurrentQueryLimit) {
-        const ui64 activeCountLimit = 5;
-        const ui64 queueSize = 50;
-        auto ydb = TYdbSetupSettings()
-            .ConcurrentQueryLimit(activeCountLimit)
-            .QueueSize(queueSize)
-            .QueryCancelAfter(FUTURE_WAIT_TIMEOUT * queueSize)
-            .Create();
+    Y_UNIT_TEST(TestLargeConcurrentQueryLimit) {
+        StartTestConcurrentQueryLimit(5, 100);
+    }
 
-        auto settings = TQueryRunnerSettings()
-            .InFlightCoordinatorActorId(ydb->CreateInFlightCoordinator(queueSize, activeCountLimit))
-            .HangUpDuringExecution(true);
-
-        // Initialize queue
-        std::vector<TQueryRunnerResultAsync> asyncResults;
-        for (size_t i = 0; i < queueSize; ++i) {
-            asyncResults.emplace_back(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings));
-        }
-
-        for (const auto& asyncResult : asyncResults) {
-            TSampleQueries::TSelect42::CheckResult(asyncResult.GetResult());
-        }
+    Y_UNIT_TEST(TestLessConcurrentQueryLimit) {
+        StartTestConcurrentQueryLimit(1, 100);
     }
 
     Y_UNIT_TEST(TestZeroConcurrentQueryLimit) {
@@ -255,30 +265,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceDistributed) {
         TSampleQueries::TSelect42::CheckResult(request.GetResult(TDuration::Seconds(50)));
     }
 
-    Y_UNIT_TEST(TestDistributedConcurrentQueryLimit) {
-        const ui64 nodeCount = 3;
-        const ui64 activeCountLimit = 5;
-        const ui64 queueSize = 50;
-        auto ydb = TYdbSetupSettings()
-            .NodeCount(nodeCount)
-            .ConcurrentQueryLimit(activeCountLimit)
-            .QueueSize(queueSize)
-            .QueryCancelAfter(FUTURE_WAIT_TIMEOUT * queueSize)
-            .Create();
+    Y_UNIT_TEST(TestDistributedLargeConcurrentQueryLimit) {
+        StartTestConcurrentQueryLimit(5, 100, 3);
+    }
 
-        auto settings = TQueryRunnerSettings()
-            .InFlightCoordinatorActorId(ydb->CreateInFlightCoordinator(queueSize, activeCountLimit))
-            .HangUpDuringExecution(true);
-
-        // Initialize queue
-        std::vector<TQueryRunnerResultAsync> asyncResults;
-        for (size_t i = 0; i < queueSize; ++i) {
-            asyncResults.emplace_back(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings.NodeIndex(i % nodeCount)));
-        }
-
-        for (const auto& asyncResult : asyncResults) {
-            TSampleQueries::TSelect42::CheckResult(asyncResult.GetResult());
-        }
+    Y_UNIT_TEST(TestDistributedLessConcurrentQueryLimit) {
+        StartTestConcurrentQueryLimit(1, 100, 5);
     }
 }
 

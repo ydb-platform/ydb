@@ -10,6 +10,7 @@ struct TTableSchemaCompatibilityOptions
 {
     bool IgnoreSortOrder;
     bool ForbidExtraComputedColumns = true;
+    bool IgnoreStableNamesDifference = false;
 };
 
 // Validates that values from table with inputSchema also match outputSchema.

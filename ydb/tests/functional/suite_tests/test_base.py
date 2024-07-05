@@ -350,7 +350,7 @@ class BaseSuiteRunner(object):
                 self.remove_optimizer_estimates(p)
         if 'Operators' in query_plan:
             for op in query_plan['Operators']:
-                for key in ['A-Cpu','A-Rows','E-Cost','E-Rows','E-Size']:
+                for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
                     if key in op:
                         del op[key]
 

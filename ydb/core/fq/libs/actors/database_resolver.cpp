@@ -487,7 +487,7 @@ public:
                     }
                 );
 
-                                if (alive) {
+                if (alive) {
                     aliveHosts.push_back(host["name"].GetString());
                 }
             }

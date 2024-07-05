@@ -474,6 +474,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 issues
             );
     }
+
     Y_UNIT_TEST(Greenplum_MasterNode) {
         Test(
             NYql::EDatabaseType::Greenplum,
@@ -505,7 +506,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     TString(""),
                     true},
                 {});
-        }
+    }
 
     Y_UNIT_TEST(Greenplum_PermissionDenied) {
             NYql::TIssues issues{
@@ -536,7 +537,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             )",
                 NYql::TDatabaseResolverResponse::TDatabaseDescription{},
                 issues);
-        }
+    }
+
     Y_UNIT_TEST(MySQL) {
         Test(
             NYql::EDatabaseType::MySQL,
@@ -571,8 +573,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 TString(""),
                 true
                 },
-                {}
-            );
+                {});
     }
 
     Y_UNIT_TEST(MySQL_PermissionDenied) {

@@ -52,8 +52,9 @@ private:
     TCurrentCompaction ActiveCompactionInfo;
     THashMap<ui64, THashSet<NOlap::TPortionAddress>> CompactionInfoPortions;
 
-    bool ActiveCleanup = false;
-    THashSet<NOlap::TPortionAddress> TtlPortions;
+    bool ActiveCleanupPortions = false;
+    bool ActiveCleanupTables = false;
+    bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -100,6 +101,21 @@ public:
     }
     bool IsTtlActive() const {
         return !TtlPortions.empty();
+    }
+    bool IsCleanupTablesActive() const {
+        return ActiveCleanupTables;
+    }
+
+    void StartCleanupInsertTable() {
+        Y_ABORT_UNLESS(!ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = true;
+    }
+    void FinishCleanupInsertTable() {
+        Y_ABORT_UNLESS(ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = false;
+    }
+    bool IsCleanupInsertTableActive() const {
+        return ActiveCleanupInsertTable;
     }
 };
 

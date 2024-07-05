@@ -21,8 +21,9 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
 }
 void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
     Y_ABORT_UNLESS(BlobsAction);
-    BlobsAction->OnCompleteTxAfterRemoving(*Self, true);
-    Self->EnqueueBackgroundActivities();
+    BlobsAction->OnCompleteTxAfterRemoving(true);
+    Self->BackgroundController.FinishCleanupInsertTable();
+    Self->SetupCleanupInsertTable();
 }
 
 }

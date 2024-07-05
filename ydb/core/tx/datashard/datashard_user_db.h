@@ -180,7 +180,6 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
-    void EnsureMissingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);

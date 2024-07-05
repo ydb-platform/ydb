@@ -139,7 +139,8 @@ void TDataShardUserDb::InsertRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
-    EnsureMissingRow(tableId, key);
+    if (RowExists(tableId, key))
+        throw TUniqueConstrainException();
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
@@ -230,27 +231,6 @@ void TDataShardUserDb::UpsertRowInt(
     }
 
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
-}
-
-void TDataShardUserDb::EnsureMissingRow (
-    const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key) 
-{
-    NTable::TRowState rowState;
-    const auto ready = SelectRow(tableId, key, {}, rowState);
-    switch (ready) {
-        case NTable::EReady::Page: {
-            throw TNotReadyTabletException();
-        }
-        case NTable::EReady::Data: {
-            if (rowState == NTable::ERowOp::Upsert)
-                throw TUniqueConstrainException();
-            break;
-        }
-        case NTable::EReady::Gone: {
-            break;
-        }
-    }
 }
 
 bool TDataShardUserDb::RowExists (

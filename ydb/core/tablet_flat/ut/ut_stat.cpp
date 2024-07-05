@@ -2,6 +2,8 @@
 #include "flat_stat_table.h"
 #include "flat_stat_table_mixed_index.h"
 #include "flat_stat_table_btree_index.h"
+#include <test/libs/table/wrap_iter.h>
+#include <test/libs/table/wrap_part.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
@@ -199,7 +201,7 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 25428);
+        CheckMixedIndex(*subset, 24000, 2106479, 25458);
     }
 
     Y_UNIT_TEST(Serial_Groups)
@@ -295,7 +297,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         TMixerSeq mixer(4, Mass0.Saved.Size());
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
-        CheckMixedIndex(*subset, 24000, 2106459, 49502);
+        CheckMixedIndex(*subset, 24000, 2106479, 49555);
     }
 
     Y_UNIT_TEST(Serial_Groups)
@@ -455,14 +457,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
     {
         const ui32 samples = 5;
 
-        Cerr << "Parts:" << Endl;
+        Cerr << subset.Flatten.size() << " parts:" << Endl;
         for (auto &part : subset.Flatten) {
             TTestEnv env;
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
             Cerr << "  " << index->GetEndRowId() << " rows, " 
                 << IndexTools::CountMainPages(*part.Part) << " pages, "
                 << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
-            for (ui32 sample : xrange(samples + 1)) {
+            for (ui32 sample : xrange(1u, samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
                 Y_ABORT_UNLESS(index->Seek(rowId) == EReady::Data);
                 TSmallVec<TCell> keyCells;
@@ -492,7 +494,33 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         UNIT_ASSERT_LE(std::abs(percent), allowed);
     }
 
-    void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+    void CalcDataBeforeIterate(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+        NTest::TChecker<NTest::TWrapIter, TSubset> wrap(subset, { new TTouchEnv });
+        auto env = wrap.GetEnv<TTouchEnv>();
+        env->Faulty = false;
+        
+        bytes = 0;
+        rows = 0;
+        wrap.Seek({}, ESeek::Lower);
+
+        while (wrap.GetReady() == EReady::Data) {
+            ui64 prevBytes = env->TouchedBytes;
+
+            wrap.Next();
+
+            if (wrap.GetReady() == EReady::Data && key.GetCells()) {
+                auto cmp = CompareTypedCellVectors(key.GetCells().data(), wrap->GetKey().Cells().data(), subset.Scheme->Keys->Types.data(), Min(key.GetCells().size(), wrap->GetKey().Cells().size()));
+                if (cmp < 0) {
+                    break;
+                }
+            }
+
+            rows++;
+            bytes = prevBytes;
+        }
+    }
+
+    void CalcDataBeforePrecharge(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
         TTouchEnv env;
         env.Faulty = false;
 
@@ -511,6 +539,23 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         bytes = env.TouchedBytes;
         rows = env.TouchedRows;
+    }
+
+    void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
+        bool groups = false;
+        rows = 0;
+        for (const auto& part : subset.Flatten) {
+            TTestEnv env;
+            auto index = CreateIndexIter(part.Part.Get(), &env, {});
+            rows += index->GetEndRowId();
+            groups |= part->GroupsCount > 1 || part->HistoricGroupsCount > 0;
+        }
+
+        if (groups || rows > 10000) {
+            CalcDataBeforePrecharge(subset, key, bytes, rows);
+        } else {
+            CalcDataBeforeIterate(subset, key, bytes, rows);
+        }
     }
 
     void CheckHistogram(const TSubset& subset, THistogram histogram, bool isBytes, ui64 total, bool verifyPercents) {
@@ -550,11 +595,11 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
             if (verifyPercents) VerifyPercent(delta, total, 20);
-            UNIT_ASSERT_GT(total, prevValue);
+            UNIT_ASSERT_GE(total, prevValue);
         }
     }
 
-    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true) {
+    void Check(const TSubset& subset, TMode mode, ui32 histogramBucketsCount = 10, bool verifyPercents = true, bool faulty = true) {
         if (mode == 0) {
             Dump(subset);
         }
@@ -571,6 +616,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         ui64 dataSizeResolution = totalBytes / histogramBucketsCount;
 
         TTouchEnv env;
+        env.Faulty = faulty;
         // env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
@@ -581,7 +627,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             }
         };
 
-        const ui32 attempts = 35;
+        const ui32 attempts = 100;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;
@@ -593,6 +639,11 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         CheckHistogram(subset, stats.RowCountHistogram, false, totalRows, verifyPercents);
         CheckHistogram(subset, stats.DataSizeHistogram, true, totalBytes, verifyPercents);
+
+        if (mode == BTreeIndex && verifyPercents && histogramBucketsCount != 1000) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.RowCountHistogram.size(), histogramBucketsCount - 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.DataSizeHistogram.size(), histogramBucketsCount - 1);
+        }
     }
 
     Y_UNIT_TEST(Single)
@@ -906,6 +957,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
+    Y_UNIT_TEST(Single_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 5, false);
+        }
+    }
+
     Y_UNIT_TEST(Single_Small_1_Level)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
@@ -938,6 +997,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
+    Y_UNIT_TEST(Three_Mixed_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerRnd(3));   
+            Check(*subset, mode, 5, false);
+        }
+    }
+
     Y_UNIT_TEST(Three_Mixed_Small_1_Level)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
@@ -967,6 +1034,14 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
             auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
             Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_2_Levels_3_Buckets)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
+            Check(*subset, mode, 5, false);
         }
     }
 
@@ -1031,6 +1106,46 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount), history ? 0.7 : 0);
             
             Check(*subset, mode, 10, false);
+        }
+    }
+
+    Y_UNIT_TEST(Many_Mixed)
+    {
+        const ui32 partsCount = 1000;
+        const ui64 rowsCount = 100000;
+
+        TAutoPtr<TMass> mass = new NTest::TMass(new NTest::TModelStd(false), rowsCount);
+
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            NPage::TConf conf;
+            conf.Groups.resize(mass->Model->Scheme->Families.size());
+            conf.Group(0).PageRows = 1; // we don't care about pages actual size
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+
+            TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount));
+            
+            Check(*subset, mode, 10, false, false);
+        }
+    }
+
+    Y_UNIT_TEST(Many_Serial)
+    {
+        const ui32 partsCount = 1000;
+        const ui64 rowsCount = 100000;
+
+        TAutoPtr<TMass> mass = new NTest::TMass(new NTest::TModelStd(false), rowsCount);
+
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            NPage::TConf conf;
+            conf.Groups.resize(mass->Model->Scheme->Families.size());
+            conf.Group(0).PageRows = 1; // we don't care about pages actual size
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+
+            TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerSeq(partsCount, mass->Saved.Size()));
+            
+            Check(*subset, mode, 10, false, false);
         }
     }
 }

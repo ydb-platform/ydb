@@ -44,7 +44,7 @@
 #define BLCKSZ 8192
 
 /* Saved arguments from configure */
-#define CONFIGURE_ARGS " '--prefix=/var/empty/postgresql-14.2' '--with-openssl' '--with-libxml' '--sysconfdir=/etc' '--libdir=$(lib)/lib' '--with-system-tzdata=/var/empty/tzdata-2021c/share/zoneinfo' '--enable-debug' '--with-systemd' '--with-ossp-uuid' '--with-icu' '--with-lz4' '--with-gssapi' '--without-gssapi' '--without-systemd' 'CC=cc' 'CXX=g++' 'PKG_CONFIG=pkg-config' 'PKG_CONFIG_PATH=/var/empty/zlib-1.2.11-dev/lib/pkgconfig:/var/empty/ncurses-6.2-dev/lib/pkgconfig:/var/empty/openssl-1.1.1l-dev/lib/pkgconfig:/var/empty/libxml2-2.9.12-dev/lib/pkgconfig:/var/empty/icu4c-70.1-dev/lib/pkgconfig:/var/empty/lz4-1.9.3-dev/lib/pkgconfig:/var/empty/systemd-249.5-dev/lib/pkgconfig:/var/empty/systemd-249.5-dev/share/pkgconfig:/var/empty/libkrb5-1.18-dev/lib/pkgconfig:/var/empty/libossp-uuid-1.6.2/lib/pkgconfig'"
+#define CONFIGURE_ARGS " '--with-openssl' '--with-icu' '--with-libxml' '--enable-debug' '--without-systemd' '--without-gssapi' '--with-lz4' '--with-ossp-uuid' 'CC=clang' 'CFLAGS=-ffunction-sections -fdata-sections'"
 
 /* Define to the default TCP port number on which the server listens and to
    which clients will try to connect. This can be overridden at run-time, but

@@ -30,7 +30,8 @@ void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
 
     Y_ABORT_UNLESS(BlobsAction);
     BlobsAction->OnCompleteTxAfterRemoving(true);
-    Self->EnqueueBackgroundActivities();
+    Self->BackgroundController.FinishCleanupInsertTable();
+    Self->SetupCleanupInsertTable();
 }
 
 }

@@ -138,7 +138,6 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                 }
 
                 deferred.DoWrite();
-                self->Observer->StoreWriteSessionPtr(deferred.Writer);
             }
         })
         .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {

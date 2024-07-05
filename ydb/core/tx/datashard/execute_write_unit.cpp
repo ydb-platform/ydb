@@ -91,12 +91,22 @@ public:
         return EExecutionStatus::Restart;
     }
 
-    EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+    EExecutionStatus OnDuplicateKeyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
             return EExecutionStatus::Continue;
         
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
         writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        ResetChanges(userDb, writeOp, txc);
+        return EExecutionStatus::Executed;
+    }
+
+    EExecutionStatus OnMissingKeyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
+            return EExecutionStatus::Continue;
+        
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an missing key");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an missing key");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }
@@ -147,7 +157,7 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     fillOps(rowIdx);
-                    userDb.UpdateRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -164,6 +174,11 @@ public:
                     userDb.InsertRow(fullTableId, key, ops);
                     break;
                 }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+                    fillOps(rowIdx);
+                    userDb.UpdateRow(fullTableId, key, ops);
+                    break;
+                }
                 default:
                     // Checked before in TWriteOperation
                     Y_FAIL_S(operationType << " operation is not supported now");
@@ -173,7 +188,8 @@ public:
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -463,8 +479,10 @@ public:
                 txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Executed;
-        } catch (const TUniqueConstrainException&) {
-            return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
+        } catch (const TDuplicateKeyException&) {
+            return OnDuplicateKeyException(userDb, *writeOp, txc, ctx);
+        } catch (const TMissingKeyException&) {
+            return OnMissingKeyException(userDb, *writeOp, txc, ctx);
         }
 
         Pipeline.AddCommittingOp(op);

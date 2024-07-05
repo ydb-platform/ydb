@@ -15,7 +15,8 @@ namespace NKikimr::NMiniKQL {
 
 namespace NKikimr::NDataShard {
 
-class TUniqueConstrainException: public yexception {};
+class TDuplicateKeyException: public yexception {};
+class TMissingKeyException: public yexception {};
 
 class IDataShardUserDb {
 protected:
@@ -37,7 +38,7 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) = 0;
 
-    virtual void UpdateRow(
+    virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
@@ -48,6 +49,11 @@ public:
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
     
     virtual void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
+    virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
@@ -107,7 +113,7 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) override;
 
-    void UpdateRow(
+    void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
@@ -122,6 +128,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
             
+    void UpdateRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
@@ -169,8 +180,9 @@ public:
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
     void EnsureMissingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
+    void EnsureExistingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:

@@ -463,7 +463,6 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (const auto maybeJsonExists = node.Maybe<TKqpOlapJsonExists>()) {
         return CompileJsonExists(maybeJsonExists.Cast(), ctx).Id;
     }
-
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ref().Content());
 }
 
@@ -784,8 +783,9 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonValue.Cast(), ctx);
     }
-
     return {GetOrCreateColumnId(node, ctx), ctx.GetArgType(node)};
 }
 

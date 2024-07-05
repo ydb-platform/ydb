@@ -43,18 +43,18 @@ on j.s_nationkey = n.n_nationkey
 $profit = (select 
     n_name as nation,
     DateTime::GetYear(cast(o_orderdate as timestamp)) as o_year,
-    l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
+    l_extendedprice * ($z1_12 - l_discount) - ps_supplycost * l_quantity as amount
 from $j5);
 
 select
-    nation,
-    o_year,
-    sum(amount) as sum_profit
+	nation,
+	o_year,
+	sum(amount) as sum_profit
 from $profit
 group by
-    nation,
-    o_year
+	nation,
+	o_year
 order by
-    nation,
-    o_year desc;
+	nation,
+	o_year desc;
 

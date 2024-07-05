@@ -49,6 +49,16 @@ class LoadSuiteBase:
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
+            begin_text = 'Query text:\n'
+            begin_pos = result.stdout.find(begin_text)
+            if begin_pos >= 0:
+                begin_pos += len(begin_text)
+                end_pos = result.stdout.find("\n\n\titeration")
+                if end_pos < 0:
+                    end_pos = len(result.stdout)
+                query_text = result.stdout[begin_pos:end_pos]
+                allure.attach(query_text, 'Query text', attachment_type=allure.attachment_type.TEXT)
+
         if result.stderr is not None:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
         for p in ['Min', 'Max', 'Mean', 'Median']:

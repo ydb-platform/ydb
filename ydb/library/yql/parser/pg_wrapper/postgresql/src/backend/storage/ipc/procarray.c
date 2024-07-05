@@ -263,6 +263,11 @@ static __thread ProcArrayStruct *procArray;
 static __thread PGPROC *allProcs;
 
 /*
+ * Cache to reduce overhead of repeated calls to TransactionIdIsInProgress()
+ */
+static __thread TransactionId cachedXidIsNotInProgress = InvalidTransactionId;
+
+/*
  * Bookkeeping for tracking emulated transactions in recovery
  */
 static __thread TransactionId *KnownAssignedXids;
@@ -1404,7 +1409,7 @@ TransactionIdIsInProgress(TransactionId xid)
 	 * already known to be completed, we can fall out without any access to
 	 * shared memory.
 	 */
-	if (TransactionIdIsKnownCompleted(xid))
+	if (TransactionIdEquals(cachedXidIsNotInProgress, xid))
 	{
 		xc_by_known_xact_inc();
 		return false;
@@ -1562,6 +1567,7 @@ TransactionIdIsInProgress(TransactionId xid)
 	if (nxids == 0)
 	{
 		xc_no_overflow_inc();
+		cachedXidIsNotInProgress = xid;
 		return false;
 	}
 
@@ -1576,7 +1582,10 @@ TransactionIdIsInProgress(TransactionId xid)
 	xc_slow_answer_inc();
 
 	if (TransactionIdDidAbort(xid))
+	{
+		cachedXidIsNotInProgress = xid;
 		return false;
+	}
 
 	/*
 	 * It isn't aborted, so check whether the transaction tree it belongs to
@@ -1594,6 +1603,7 @@ TransactionIdIsInProgress(TransactionId xid)
 		}
 	}
 
+	cachedXidIsNotInProgress = xid;
 	return false;
 }
 
@@ -1667,13 +1677,7 @@ TransactionIdIsActive(TransactionId xid)
  * relations that's not required, since only backends in my own database could
  * ever see the tuples in them. Also, we can ignore concurrently running lazy
  * VACUUMs because (a) they must be working on other tables, and (b) they
- * don't need to do snapshot-based lookups.  Similarly, for the non-catalog
- * horizon, we can ignore CREATE INDEX CONCURRENTLY and REINDEX CONCURRENTLY
- * when they are working on non-partial, non-expressional indexes, for the
- * same reasons and because they can't run in transaction blocks.  (They are
- * not possible to ignore for catalogs, because CIC and RC do some catalog
- * operations.)  Do note that this means that CIC and RC must use a lock level
- * that conflicts with VACUUM.
+ * don't need to do snapshot-based lookups.
  *
  * This also computes a horizon used to truncate pg_subtrans. For that
  * backends in all databases have to be considered, and concurrently running
@@ -1723,6 +1727,9 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 	bool		in_recovery = RecoveryInProgress();
 	TransactionId *other_xids = ProcGlobal->xids;
 
+	/* inferred after ProcArrayLock is released */
+	h->catalog_oldest_nonremovable = InvalidTransactionId;
+
 	LWLockAcquire(ProcArrayLock, LW_SHARED);
 
 	h->latest_completed = ShmemVariableCache->latestCompletedXid;
@@ -1742,7 +1749,6 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 
 		h->oldest_considered_running = initial;
 		h->shared_oldest_nonremovable = initial;
-		h->catalog_oldest_nonremovable = initial;
 		h->data_oldest_nonremovable = initial;
 
 		/*
@@ -1834,25 +1840,10 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 			MyDatabaseId == InvalidOid || proc->databaseId == MyDatabaseId ||
 			proc->databaseId == 0)	/* always include WalSender */
 		{
-			/*
-			 * We can ignore this backend if it's running CREATE INDEX
-			 * CONCURRENTLY or REINDEX CONCURRENTLY on a "safe" index -- but
-			 * only on vacuums of user-defined tables.
-			 */
-			if (!(statusFlags & PROC_IN_SAFE_IC))
-				h->data_oldest_nonremovable =
-					TransactionIdOlder(h->data_oldest_nonremovable, xmin);
-
-			/* Catalog tables need to consider all backends in this db */
-			h->catalog_oldest_nonremovable =
-				TransactionIdOlder(h->catalog_oldest_nonremovable, xmin);
-
+			h->data_oldest_nonremovable =
+				TransactionIdOlder(h->data_oldest_nonremovable, xmin);
 		}
 	}
-
-	/* catalog horizon should never be later than data */
-	Assert(TransactionIdPrecedesOrEquals(h->catalog_oldest_nonremovable,
-										 h->data_oldest_nonremovable));
 
 	/*
 	 * If in recovery fetch oldest xid in KnownAssignedXids, will be applied
@@ -1875,8 +1866,6 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 			TransactionIdOlder(h->shared_oldest_nonremovable, kaxmin);
 		h->data_oldest_nonremovable =
 			TransactionIdOlder(h->data_oldest_nonremovable, kaxmin);
-		h->catalog_oldest_nonremovable =
-			TransactionIdOlder(h->catalog_oldest_nonremovable, kaxmin);
 		/* temp relations cannot be accessed in recovery */
 	}
 	else
@@ -1903,9 +1892,6 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 		h->data_oldest_nonremovable =
 			TransactionIdRetreatedBy(h->data_oldest_nonremovable,
 									 vacuum_defer_cleanup_age);
-		h->catalog_oldest_nonremovable =
-			TransactionIdRetreatedBy(h->catalog_oldest_nonremovable,
-									 vacuum_defer_cleanup_age);
 		/* defer doesn't apply to temp relations */
 	}
 
@@ -1928,9 +1914,7 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 	h->shared_oldest_nonremovable =
 		TransactionIdOlder(h->shared_oldest_nonremovable,
 						   h->slot_catalog_xmin);
-	h->catalog_oldest_nonremovable =
-		TransactionIdOlder(h->catalog_oldest_nonremovable,
-						   h->slot_xmin);
+	h->catalog_oldest_nonremovable = h->data_oldest_nonremovable;
 	h->catalog_oldest_nonremovable =
 		TransactionIdOlder(h->catalog_oldest_nonremovable,
 						   h->slot_catalog_xmin);
@@ -2686,12 +2670,13 @@ ProcArrayInstallRestoredXmin(TransactionId xmin, PGPROC *proc)
 		TransactionIdIsNormal(xid) &&
 		TransactionIdPrecedesOrEquals(xid, xmin))
 	{
-		/* Install xmin */
+		/*
+		 * Install xmin and propagate the statusFlags that affect how the
+		 * value is interpreted by vacuum.
+		 */
 		MyProc->xmin = TransactionXmin = xmin;
-
-		/* Flags being copied must be valid copy-able flags. */
-		Assert((proc->statusFlags & (~PROC_COPYABLE_FLAGS)) == 0);
-		MyProc->statusFlags = proc->statusFlags;
+		MyProc->statusFlags = (MyProc->statusFlags & ~PROC_XMIN_FLAGS) |
+			(proc->statusFlags & PROC_XMIN_FLAGS);
 		ProcGlobal->statusFlags[MyProc->pgxactoff] = MyProc->statusFlags;
 
 		result = true;

@@ -701,7 +701,9 @@ struct TDiskFormat {
             }
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);
-            bool isOk = (Hash == hashCalculator.GetHashResult());
+
+            const bool isOk = ReadUnaligned<THash>(reinterpret_cast<const std::byte*>(this) + DiskFormatSize -
+                sizeof(THash)) == hashCalculator.GetHashResult();
             return isOk;
         }
     }
@@ -768,8 +770,8 @@ struct TDiskFormat {
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
         Y_ABORT_UNLESS(format.Version <= Version);
-        Y_ABORT_UNLESS(format.GetUsedSize() <= sizeof(TDiskFormat));
-        memcpy(this, &format, format.GetUsedSize());
+        memcpy(this, &format, std::min(format.GetUsedSize(), sizeof(TDiskFormat)));
+        SetHash(); // we may need to update hash if we reduce buffer size
     }
 
     bool IsDiskSmall() {

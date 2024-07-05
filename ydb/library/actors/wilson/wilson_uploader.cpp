@@ -108,6 +108,7 @@ namespace NWilson {
 
             TString CollectorUrl;
             TString ServiceName;
+            TMap<TString, TString> Headers;
 
             TRegisterMonPageCallback RegisterMonPage;
 
@@ -141,6 +142,7 @@ namespace NWilson {
                 , MaxExportInflight(params.MaxExportRequestsInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
+                , Headers(params.Headers)
                 , RegisterMonPage(params.RegisterMonPage)
                 , GrpcSigner(std::move(params.GrpcSigner))
                 , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
@@ -302,6 +304,9 @@ namespace NWilson {
                 if (GrpcSigner) {
                     GrpcSigner->SignClientContext(*context);
                 }
+                for (const auto& [key, value] : Headers) {
+                    context->AddMetadata(key, value);
+                }
                 auto reader = Stub->AsyncExport(context.get(), std::move(batch.Request), &CQ);
                 auto uploadData =  std::unique_ptr<TExportRequestData>(new TExportRequestData {
                     .Context = std::move(context),
@@ -433,6 +438,10 @@ namespace NWilson {
                         str << "MaxExportInflight# " << MaxExportInflight << '\n';
                         str << "CollectorUrl# " << CollectorUrl << '\n';
                         str << "ServiceName# " << ServiceName << '\n';
+                        str << "Headers# " << '\n';
+                        for (const auto& [key, value] : Headers) {
+                            str << '\t' << key << ": " << value << '\n';
+                        }
                     }
                 }
 

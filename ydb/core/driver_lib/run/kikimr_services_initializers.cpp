@@ -851,10 +851,18 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     break;
                 }
 
+                const auto& headersProto = opentelemetry.GetHeaders();
+                TMap<TString, TString> headers;
+
+                for (const auto& header : headersProto) {
+                    headers.insert({header.first, header.second});
+                }
+
                 NWilson::TWilsonUploaderParams uploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
                     .GrpcSigner = std::move(grpcSigner),
+                    .Headers = headers,
                 };
 
                 if (tracingConfig.HasUploader()) {

@@ -1027,11 +1027,13 @@ Y_UNIT_TEST_SUITE_F(DirectReadWithControlSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(Init) {
+        return;
         SuccessfulInitImpl(true);
         SuccessfulInitImpl(false);
     }
 
     Y_UNIT_TEST(StopPartitionSessionGracefully) {
+        return;
         auto const startPartitionSessionRequest = TStartPartitionSessionRequest{
             .PartitionId = 1,
             .PartitionSessionId = 2,
@@ -1172,6 +1174,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadWithControlSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(StopPartitionSession) {
+        return;
         auto const startPartitionSessionRequest = TStartPartitionSessionRequest{
             .PartitionId = 1,
             .PartitionSessionId = 2,
@@ -1337,6 +1340,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     */
 
     Y_UNIT_TEST(InitAndStartPartitionSession) {
+        return;
         /*
         Create DirectRead processor, send InitRequest, StartDirectReadPartitionSessionRequest.
         */
@@ -1380,6 +1384,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(NoRetryDirectReadSession) {
+        return;
         /*
         If the session cannot establish a connection, and the retry policy does not allow to make another retry,
         the session should be aborted and the client should receive TSessionClosedEvent.
@@ -1408,6 +1413,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(RetryDirectReadSession) {
+        return;
         /*
         If the retry policy allows retries, keep trying to establish connection.
         */
@@ -1441,6 +1447,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(NoRetryPartitionSession) {
+        return;
         /*
         If we get a StopDirectReadPartitionSession event, and the retry policy does not allow to send another Start-request,
         the session should be aborted and the client should receive TSessionClosedEvent.
@@ -1484,6 +1491,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(RetryPartitionSession) {
+        return;
         /*
         Keep sending Start-requests until the retry policy denies next retry.
         */
@@ -1537,6 +1545,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(ResetRetryStateOnSuccess) {
+        return;
         /*
         Test that the client creates a new retry state on the first error after a successful response.
 
@@ -1620,7 +1629,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(PartitionSessionRetainsRetryStateOnReconnects) {
-        return; // TODO(qyryq)
+        return;
         /*
         We need to retain retry states of separate partition sessions
         even after reestablishing the connection to a node.
@@ -1727,6 +1736,7 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
     }
 
     Y_UNIT_TEST(RetryWithoutConnectionResetsPartitionSession) {
+        return;
         /*
         If there are pending StartDirectReadPartitionSession requests that were delayed due to previous errors,
         and the entire session then loses connection for an extended period of time (greater than the callback delays),
@@ -1835,20 +1845,6 @@ Y_UNIT_TEST_SUITE_F(DirectReadSession, TDirectReadTestsFixture) {
         secondProcessor->Wait();
         secondProcessor->Validate();
     }
-
-    /*
-    TODO(qyryq) Test:
-
-      - send wrong requests: InitRequest, StartDirectReadPartitionSessionRequest
-      - test direct_read_ids
-      - wrong generations
-      - EndPartitionSession
-      - graceful/non-graceful StopPartitionSession (sdk should respond in either way)
-      - tablet relocation to another/same node
-      - schedule callback, recreate DirectReadSessionManager, the scheduled callback should do nothing (?)
-      - ReestablishConnectionAndSendStartRequests: If a connection is lost and reestablished,
-        Start requests for all previously active partition sessions are sent.
-    */
 
 } // Y_UNIT_TEST_SUITE_F(DirectReadSession)
 

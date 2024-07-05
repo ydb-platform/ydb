@@ -69,7 +69,7 @@ class Factory:
                 ),
                 Column(
                     name='col_08_integer_unsigned',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UINT32),
                     data_source_type=DataSourceType(my=mysql.IntegerUnsigned()),
                 ),
                 Column(
@@ -89,7 +89,7 @@ class Factory:
                 ),
                 Column(
                     name='col_12_double',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.FLOAT),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DOUBLE),
                     data_source_type=DataSourceType(my=mysql.Double()),
                 ),
                 Column(
@@ -99,7 +99,7 @@ class Factory:
                 ),
                 Column(
                     name='col_14_datetime',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(my=mysql.Datetime()),
                 ),
                 Column(
@@ -137,14 +137,15 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(my=mysql.LongText()),
                 ),
+                # Don't be surprised - binary types look like UTF8 strings in Go
                 Column(
                     name='col_22_binary',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(my=mysql.Binary()),
                 ),
                 Column(
                     name='col_23_varbinary',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(my=mysql.VarBinary()),
                 ),
                 Column(
@@ -169,7 +170,7 @@ class Factory:
                 ),
                 Column(
                     name='col_28_bool',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UINT8),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.BOOL),
                     data_source_type=DataSourceType(my=mysql.Bool()),
                 ),
                 Column(
@@ -210,7 +211,7 @@ class Factory:
                     'az',
                     'az',
                     'az',
-                    'az',
+                    'az\x00\x00\x00\x00\x00\x00',
                     'az',
                     'az',
                     'az',

@@ -606,7 +606,6 @@ private:
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
 
-        Cerr << "CompileService: " << request.Split << Endl;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received compile request"
             << ", sender: " << ev->Sender
             << ", queryUid: " << (request.Uid ? *request.Uid : "<empty>")
@@ -708,7 +707,6 @@ private:
             std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-            Cerr << "COMPILE BY AST" << Endl;
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
         }
 
@@ -763,13 +761,16 @@ private:
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
-            Cerr << "RECOMPILE" << Endl;
             TKqpCompileSettings compileSettings(
                 true,
                 request.IsQueryActionPrepare,
                 false,
                 request.Deadline,
-                TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+                ev->Get()->Split
+                    ? ECompileActorAction::SPLIT
+                    : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                        ? ECompileActorAction::PARSE
+                        : ECompileActorAction::COMPILE);
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, request.Query ? *request.Query : *compileResult->Query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
@@ -778,7 +779,6 @@ private:
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-                Cerr << "PerformRequest CompileByAst" << Endl;
                 return CompileByAst(*request.QueryAst, compileRequest, ctx);
             }
 
@@ -820,8 +820,6 @@ private:
         auto& compileResult = ev->Get()->CompileResult;
         auto& compileStats = ev->Get()->Stats;
 
-        Cerr << "Compile Response " << compileResult->NeedToSplit << Endl;
-
         Y_ABORT_UNLESS(compileResult->Query);
 
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
@@ -834,7 +832,6 @@ private:
             << ", compileActor: " << ev->Sender);
 
         if (compileResult->NeedToSplit) {
-            Cerr << "REPLY Compile Response " << compileResult->NeedToSplit << Endl;
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
             ProcessQueue(ctx);
@@ -957,7 +954,6 @@ private:
         }
 
         if (compileResult) {
-            Cerr << "FROM CACHE" << Endl;
             Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from ast"

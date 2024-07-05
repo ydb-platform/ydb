@@ -1221,7 +1221,6 @@ private:
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
-            Cerr << "COMPILE FROM TEXT" << Endl;
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().EnablePgConstsToParams)
@@ -1233,7 +1232,6 @@ private:
             }
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
-            Cerr << "COMPILE FROM AST" << Endl;
             queryAst = query.AstResult->Ast;
             result.KeepInCache = query.AstResult->KeepInCache;
             result.CommandTagName = query.AstResult->CommandTagName;

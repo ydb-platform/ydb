@@ -30,7 +30,6 @@ TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMayb
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
     TKqpTransactionContext& txCtx)
 {
-    Cerr << "Merge Locks " << value.GetList().size() << " " << txCtx.Locks.Size() << Endl;
     std::pair<bool, std::vector<TIssue>> res;
     auto& locks = txCtx.Locks;
 
@@ -59,20 +58,16 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
         if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
             switch (counter) {
                 case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:
-                    Cerr << "Locks already broken 1" << Endl;
                 case NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken:
-                    Cerr << "Locks invalidated 1" << Endl;
                     res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
                     break;
                 default:
-                    Cerr << "Locks invalidated 2" << Endl;
                     res.second.emplace_back(YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE));
                     break;
             }
             res.first = false;
 
         } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
-            Cerr << "Locks invalidated 3" << Endl;
             if (txLock.HasWrites()) {
                 curTxLock->SetHasWrites();
             }
@@ -82,7 +77,6 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
                 res.first = false;
             }
         } else {
-            Cerr << "Locks invalidated 4" << Endl;
             // despite there were some errors we need to proceed merge to erase remaining locks properly
             locks.LocksMap.insert(std::make_pair(txLock.GetKey(), txLock));
         }

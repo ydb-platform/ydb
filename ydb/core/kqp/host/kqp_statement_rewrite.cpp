@@ -300,7 +300,6 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
         const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
-    Cerr << "RewriteExpression:: " << NYql::NCommon::ExprToPrettyString(exprCtx, *root) << Endl;
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {

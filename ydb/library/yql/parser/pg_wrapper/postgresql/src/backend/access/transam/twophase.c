@@ -476,6 +476,7 @@ MarkAsPreparingGuts(GlobalTransaction gxact, TransactionId xid, const char *gid,
 	Assert(proc->xmin == InvalidTransactionId);
 	proc->delayChkpt = false;
 	proc->statusFlags = 0;
+	proc->delayChkptEnd = false;
 	proc->pid = 0;
 	proc->databaseId = databaseid;
 	proc->roleId = owner;
@@ -1167,6 +1168,7 @@ EndPrepare(GlobalTransaction gxact)
 
 	START_CRIT_SECTION();
 
+	Assert(!MyProc->delayChkpt);
 	MyProc->delayChkpt = true;
 
 	XLogBeginInsert();
@@ -2277,6 +2279,7 @@ RecordTransactionCommitPrepared(TransactionId xid,
 	START_CRIT_SECTION();
 
 	/* See notes in RecordTransactionCommit */
+	Assert(!MyProc->delayChkpt);
 	MyProc->delayChkpt = true;
 
 	/*

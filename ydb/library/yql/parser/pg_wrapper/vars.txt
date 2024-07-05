@@ -854,6 +854,7 @@ got_SIGUSR2
 got_STOPPING
 got_deadlock_timeout
 got_standby_deadlock_timeout
+got_standby_delay_timeout
 got_standby_lock_timeout
 guc_dirty
 guc_variables

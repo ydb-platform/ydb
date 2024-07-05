@@ -473,6 +473,9 @@ pgstat_get_wait_timeout(WaitEventTimeout w)
 		case WAIT_EVENT_BASE_BACKUP_THROTTLE:
 			event_name = "BaseBackupThrottle";
 			break;
+		case WAIT_EVENT_CHECKPOINT_WRITE_DELAY:
+			event_name = "CheckpointWriteDelay";
+			break;
 		case WAIT_EVENT_PG_SLEEP:
 			event_name = "PgSleep";
 			break;
@@ -481,6 +484,9 @@ pgstat_get_wait_timeout(WaitEventTimeout w)
 			break;
 		case WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL:
 			event_name = "RecoveryRetrieveRetryInterval";
+			break;
+		case WAIT_EVENT_REGISTER_SYNC_REQUEST:
+			event_name = "RegisterSyncRequest";
 			break;
 		case WAIT_EVENT_VACUUM_DELAY:
 			event_name = "VacuumDelay";

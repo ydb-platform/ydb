@@ -1779,7 +1779,7 @@ partitioning_settings {
             IndexDescription {
                 Name: "ByValue"
                 KeyColumnNames: ["value"]
-                IndexImplTableDescription {
+                IndexImplTableDescriptions: [ {
                     PartitionConfig {
                         PartitioningPolicy {
                             MinPartitionsCount: 10
@@ -1788,7 +1788,7 @@ partitioning_settings {
                             }
                         }
                     }
-                }
+                } ]
             }
         )");
         env.TestWaitNotification(runtime, txId);

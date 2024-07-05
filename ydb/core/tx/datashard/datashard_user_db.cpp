@@ -244,7 +244,7 @@ bool TDataShardUserDb::RowExists (
             throw TNotReadyTabletException();
         }
         case NTable::EReady::Data: {
-            return rowState == NTable::ERowOp::Upsert;
+            return true;
         }
         case NTable::EReady::Gone: {
             return false;

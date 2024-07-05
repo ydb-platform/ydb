@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#set -eux
+set -eu
 
 VERSION="14.2"
 

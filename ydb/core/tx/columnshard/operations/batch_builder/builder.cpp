@@ -13,7 +13,7 @@ namespace NKikimr::NOlap {
 
 void TBuildBatchesTask::ReplyError(const TString& message) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
         NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
     TActorContext::AsActorContext().Send(ParentActorId, result.release());

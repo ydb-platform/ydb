@@ -1006,7 +1006,7 @@ message TIndexCreationConfig {
     optional string Name = 1;
     repeated string KeyColumnNames = 2;
     optional EIndexType Type = 3;
-    optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
+    repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
 }

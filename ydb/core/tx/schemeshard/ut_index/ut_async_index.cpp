@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                   Name: "UserDefinedIndex"
                   KeyColumnNames: ["indexed"]
                   Type: EIndexTypeGlobalAsync
-                  IndexImplTableDescription {
+                  IndexImplTableDescriptions: [ {
                     SplitBoundary {
                       KeyPrefix {
                         Tuple { Optional { Uint32: 50 } }
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                         MinPartitionsCount: 1
                       }
                     }
-                  }
+                  } ]
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                   Name: "UserDefinedIndex"
                   KeyColumnNames: ["indexed"]
                   Type: EIndexTypeGlobalAsync
-                  IndexImplTableDescription {
+                  IndexImplTableDescriptions: [ {
                     SplitBoundary {
                       KeyPrefix {
                         Tuple { Optional { Uint32: 50 } }
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                         MinPartitionsCount: 1
                       }
                     }
-                  }
+                  } ]
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);

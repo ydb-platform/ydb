@@ -952,7 +952,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
         }
 
-        if (!FillIndexTablePartitioning(*indexDesc->MutableIndexImplTableDescription(), index, status, error)) {
+        if (!FillIndexTablePartitioning(*indexDesc->AddIndexImplTableDescriptions(), index, status, error)) {
             return false;
         }
     }

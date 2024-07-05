@@ -2034,9 +2034,9 @@
     ],
     "test.test[lineage-window_many-default.txt-Debug]": [
         {
-            "checksum": "5777f80def74c86b6ba3659a5c7f4d94",
-            "size": 6007,
-            "uri": "https://{canondata_backend}/1777230/71c6479f8613e2c300e7fdbc85b0b12269149d01/resource.tar.gz#test.test_lineage-window_many-default.txt-Debug_/opt.yql"
+            "checksum": "a1b2ac70d47e2c7fc2474d11eaf73faf",
+            "size": 6039,
+            "uri": "https://{canondata_backend}/1600758/25bdd20bed9b8d98fc2e8e04152634acbff47a10/resource.tar.gz#test.test_lineage-window_many-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[lineage-window_many-default.txt-Lineage]": [

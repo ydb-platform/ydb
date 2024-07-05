@@ -2601,7 +2601,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(500))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            // Yeah, results are empty. Snapshot was taken before tables were created, so we don't see changes after snapshot.
+            // Results are empty. Snapshot was taken before tables were created, so we don't see changes after snapshot.
             // This will be fixed in future, for example, by implicit commit before/after each ddl statement.
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));

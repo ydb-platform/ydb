@@ -35,7 +35,10 @@ Index table will have name like `<table>_<index_type>_<index_quantizer>`
 
 ### Flat Index
 
-It uses scalar quantization to speedup ANN search
+It uses scalar quantization to speedup ANN search:
+* an approximate search is performed using quantization
+* an approximate list of primary keys is obtained
+* we search this list without using quantization
 
 #### Create Flat Bit Index
 

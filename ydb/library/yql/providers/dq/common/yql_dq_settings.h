@@ -28,6 +28,11 @@ struct TDqSettings {
         File        /* "file" */,
     };
 
+    enum class EEnabledSpillingNodes : ui64 {
+        GraceJoin   = 1ULL      /* "GraceJoin" */,
+        All         = ~0ULL     /* "All" */,
+    };
+
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -60,6 +65,7 @@ struct TDqSettings {
         static constexpr ui32 MaxDPccpDPTableSize = 40000U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
+        static constexpr ui64 EnableSpillingNodes = 0;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -130,6 +136,8 @@ struct TDqSettings {
     NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
     NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
+
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
@@ -213,6 +221,11 @@ struct TDqSettings {
 
     bool IsSpillingEnabled() const {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
+    }
+
+    ui64 GetEnabledSpillingNodes() const {
+        if (!IsSpillingEnabled()) return 0;
+        return EnableSpillingNodes.Get().GetOrElse(0);
     }
 
     bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {

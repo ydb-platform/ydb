@@ -272,14 +272,13 @@ runs:
       if: inputs.testman_token
       shell: bash
       env:
-        COMMIT_SHA: ${{github.event.pull_request.head.sha}}
         PR_NUMBER: ${{ github.event.number }}
       run: |
         set -x
         .github/scripts/upload_tests_results.py \
           --result-file "$JUNIT_REPORT_XML" \
           --run-time ${{ env.CURRENT_TIME }} \
-          --commit "$COMMIT_SHA" \
+          --commit "$(git rev-parse HEAD)" \
           --build-type "${BUILD_PRESET}" \
           --pull "${PR_NUMBER}" \
           --job-name "{{ job.name }}"

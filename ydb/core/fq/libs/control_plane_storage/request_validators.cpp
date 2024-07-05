@@ -85,9 +85,9 @@ NYql::TIssues ValidateConnectionSetting(
         break;
     }
     case FederatedQuery::ConnectionSetting::kMysqlCluster: {
-        const FederatedQuery::GreenplumCluster database = setting.greenplum_cluster(); 
+        const FederatedQuery::MySQLCluster database = setting.mysql_cluster(); 
         if (!database.has_auth() || database.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.auth field is not specified"));
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.mysql_database.auth field is not specified"));
         }
 
         if (database.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
@@ -95,7 +95,7 @@ NYql::TIssues ValidateConnectionSetting(
         }
 
         if (!database.database_id() && !database.database_name()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.{database_id or database_name} field is not specified"));
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.mysql_database.{database_id or database_name} field is not specified"));
         }
         break;
     }

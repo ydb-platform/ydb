@@ -255,7 +255,6 @@ TString MakeCreateExternalDataSourceQuery(
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
                     USE_TLS="{use_tls}"
-                    {schema}
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),

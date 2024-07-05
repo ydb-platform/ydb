@@ -166,7 +166,7 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return setting.greenplum_cluster().login();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
-            return setting.greenplum_cluster().login();
+            return setting.mysql_cluster().login();
     }
 }
 

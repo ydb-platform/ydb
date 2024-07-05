@@ -287,9 +287,9 @@ void AddClustersFromConnections(
             FillGenericClusterConfig(
                 common,
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
-                conn.content().setting().greenplum_cluster(),
+                conn.content().setting().mysql_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::GREENPLUM,
+                NYql::NConnector::NApi::EDataSourceKind::MYSQL,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);

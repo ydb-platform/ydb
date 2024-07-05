@@ -31,7 +31,7 @@ TOOL_DIR=$(dirname $COMPILER)
 export PATH="$TOOL_DIR:$PATH"
 export CC=clang
 export AR=llvm-ar
-export CFLAGS="-ffunction-sections -fdata-sections"
+export CFLAGS="-ffunction-sections -fdata-sections -DWAIT_USE_SELF_PIPE"
 
 echo configuring
 ./configure \

@@ -31,6 +31,7 @@ namespace NWilson {
         TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
+        TMap<TString, TString> Headers;
 
         ui64 MaxExportedSpansPerSecond = Max<ui64>();
         ui64 MaxSpansInBatch = 150;

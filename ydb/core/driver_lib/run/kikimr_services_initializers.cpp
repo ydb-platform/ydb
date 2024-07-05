@@ -901,6 +901,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 #undef GET_FIELD_FROM_CONFIG
                 }
 
+                if (const auto& mon = appData->Mon) {
+                    uploaderParams.RegisterMonPage = [mon](TActorSystem *actorSystem, const TActorId& actorId) {
+                        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+                        mon->RegisterActorPage(actorsMonPage, "wilson_uploader", "Wilson Trace Uploader", false, actorSystem, actorId);
+                    };
+                }
+
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;
             }

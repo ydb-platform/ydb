@@ -154,7 +154,8 @@ void TDataShardUserDb::UpdateRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    EnsureExistingRow(tableId, key);
+    if (!RowExists(tableId, key))
+        return;
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
@@ -243,7 +244,7 @@ void TDataShardUserDb::EnsureMissingRow (
         }
         case NTable::EReady::Data: {
             if (rowState == NTable::ERowOp::Upsert)
-                throw TDuplicateKeyException();
+                throw TUniqueConstrainException();
             break;
         }
         case NTable::EReady::Gone: {
@@ -252,7 +253,7 @@ void TDataShardUserDb::EnsureMissingRow (
     }
 }
 
-void TDataShardUserDb::EnsureExistingRow (
+bool TDataShardUserDb::RowExists (
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key) 
 {
@@ -263,10 +264,10 @@ void TDataShardUserDb::EnsureExistingRow (
             throw TNotReadyTabletException();
         }
         case NTable::EReady::Data: {
-            break;
+            return rowState == NTable::ERowOp::Upsert;
         }
         case NTable::EReady::Gone: {
-            throw TMissingKeyException();
+            return false;
         }
     }
 }

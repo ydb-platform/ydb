@@ -412,10 +412,16 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         ui64 txId = 100;
 
-        Cout << "========= Send immediate update to empty table, it should fail =========\n";
+        Cout << "========= Send immediate update to empty table, it should be no op =========\n";
         {
-            Update(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        }      
+            Update(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }     
+        
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, "");
+        }         
 
         Cout << "========= Send immediate insert =========\n";
         {

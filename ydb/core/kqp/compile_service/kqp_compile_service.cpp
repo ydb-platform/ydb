@@ -950,7 +950,6 @@ private:
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
-        Cerr << "CompileByAst: " << queryAst.Ast->Root->ToString(NYql::TAstPrintFlags::PerLine) << Endl;
         auto compileResult = QueryCache.FindByAst(compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache);
 
         if (HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
@@ -1009,6 +1008,7 @@ private:
             return;
         }
 
+        compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
         CompileByAst(astStatements.front(), compileRequest, ctx);
     }
 

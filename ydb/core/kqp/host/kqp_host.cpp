@@ -1275,9 +1275,6 @@ private:
         SetupYqlTransformer(EKikimrQueryType::Query);
         auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
 
-        Cerr << "IN SPLIT QUERY" << Endl;
-        Cerr << "SplitQuery: " << query.AstResult->Ast->Root->ToString(NYql::TAstPrintFlags::PerLine) << Endl;
-
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)

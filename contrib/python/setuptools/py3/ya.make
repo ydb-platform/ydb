@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(70.0.0)
+VERSION(70.1.0)
 
 LICENSE(MIT)
 
@@ -191,6 +191,11 @@ PY_SRCS(
     setuptools/_vendor/tomli/_parser.py
     setuptools/_vendor/tomli/_re.py
     setuptools/_vendor/tomli/_types.py
+    setuptools/_vendor/wheel/__init__.py
+    setuptools/_vendor/wheel/macosx_libfile.py
+    setuptools/_vendor/wheel/metadata.py
+    setuptools/_vendor/wheel/util.py
+    setuptools/_vendor/wheel/wheelfile.py
     setuptools/_vendor/zipp.py
     setuptools/archive_util.py
     setuptools/build_meta.py
@@ -199,6 +204,7 @@ PY_SRCS(
     setuptools/command/alias.py
     setuptools/command/bdist_egg.py
     setuptools/command/bdist_rpm.py
+    setuptools/command/bdist_wheel.py
     setuptools/command/build.py
     setuptools/command/build_clib.py
     setuptools/command/build_ext.py

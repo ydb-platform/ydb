@@ -409,6 +409,7 @@ static const const struct config_enum_entry backslash_quote_options[] = {
  */
 static const struct config_enum_entry compute_query_id_options[] = {
 	{"auto", COMPUTE_QUERY_ID_AUTO, false},
+	{"regress", COMPUTE_QUERY_ID_REGRESS, false},
 	{"on", COMPUTE_QUERY_ID_ON, false},
 	{"off", COMPUTE_QUERY_ID_OFF, false},
 	{"true", COMPUTE_QUERY_ID_ON, true},
@@ -1310,13 +1311,13 @@ valid_custom_variable_name(const char *name)
 			name_start = true;
 		}
 		else if (strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-						"abcdefghijklmnopqrstuvwxyz", *p) != NULL ||
+						"abcdefghijklmnopqrstuvwxyz_", *p) != NULL ||
 				 IS_HIGHBIT_SET(*p))
 		{
 			/* okay as first or non-first character */
 			name_start = false;
 		}
-		else if (!name_start && strchr("0123456789_$", *p) != NULL)
+		else if (!name_start && strchr("0123456789$", *p) != NULL)
 			 /* okay as non-first character */ ;
 		else
 			return false;
@@ -5521,7 +5522,7 @@ GetConfigOptionByNum(int varnum, const char **values, bool *noshow)
 	values[4] = _(conf->short_desc);
 
 	/* extra_desc */
-	values[5] = _(conf->long_desc);
+	values[5] = conf->long_desc != NULL ? _(conf->long_desc) : NULL;
 
 	/* context */
 	values[6] = GucContext_Names[conf->context];

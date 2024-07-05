@@ -86,6 +86,13 @@ struct XidCache
  */
 #define INVALID_PGPROCNO		PG_INT32_MAX
 
+/*
+ * Flags used only for type of internal functions
+ * GetVirtualXIDsDelayingChkptGuts and HaveVirtualXIDsDelayingChkptGuts.
+ */
+#define DELAY_CHKPT_START		(1<<0)
+#define DELAY_CHKPT_COMPLETE	(1<<1)
+
 typedef enum
 {
 	PROC_WAIT_STATUS_OK,
@@ -196,6 +203,7 @@ struct PGPROC
 	uint8		statusFlags;	/* this backend's status flags, see PROC_*
 								 * above. mirrored in
 								 * ProcGlobal->statusFlags[pgxactoff] */
+	bool		delayChkptEnd;	/* true if this proc delays checkpoint end */
 
 	/*
 	 * Info to allow us to wait for synchronous replication, if needed.

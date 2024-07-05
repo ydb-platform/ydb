@@ -644,6 +644,9 @@
 /* Define to 1 if you have the <sys/shm.h> header file. */
 #define HAVE_SYS_SHM_H 1
 
+/* Define to 1 if you have the <sys/signalfd.h> header file. */
+#define HAVE_SYS_SIGNALFD_H 1
+
 /* Define to 1 if you have the <sys/sockio.h> header file. */
 /* #undef HAVE_SYS_SOCKIO_H */
 
@@ -749,6 +752,9 @@
 /* Define to 1 if your compiler understands __builtin_ctz. */
 #define HAVE__BUILTIN_CTZ 1
 
+/* Define to 1 if your compiler understands __builtin_frame_address. */
+#define HAVE__BUILTIN_FRAME_ADDRESS 1
+
 /* Define to 1 if your compiler understands __builtin_$op_overflow. */
 #define HAVE__BUILTIN_OP_OVERFLOW 1
 
@@ -802,7 +808,7 @@
 #define PACKAGE_NAME "PostgreSQL"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PostgreSQL 14.2"
+#define PACKAGE_STRING "PostgreSQL 14.3"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "postgresql"
@@ -811,7 +817,7 @@
 #define PACKAGE_URL "https://www.postgresql.org/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "14.2"
+#define PACKAGE_VERSION "14.3"
 
 /* Define to the name of a signed 128-bit integer type. */
 #define PG_INT128_TYPE __int128
@@ -830,7 +836,7 @@
 #define PG_MAJORVERSION_NUM 14
 
 /* PostgreSQL minor version number */
-#define PG_MINORVERSION_NUM 2
+#define PG_MINORVERSION_NUM 3
 
 /* Define to best printf format archetype, usually gnu_printf if available. */
 #define PG_PRINTF_ATTRIBUTE gnu_printf
@@ -839,13 +845,13 @@
 #define PG_USE_STDBOOL 1
 
 /* PostgreSQL version as a string */
-#define PG_VERSION "14.2"
+#define PG_VERSION "14.3"
 
 /* PostgreSQL version as a number */
-#define PG_VERSION_NUM 140002
+#define PG_VERSION_NUM 140003
 
 /* A string containing the version number, platform, and C compiler */
-#define PG_VERSION_STR "PostgreSQL 14.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.3.0, 64-bit"
+#define PG_VERSION_STR "PostgreSQL 14.3 on x86_64-pc-linux-gnu, compiled by clang version 16.0.6, 64-bit"
 
 /* Define to 1 to allow profiling output to be saved separately for each
    process. */

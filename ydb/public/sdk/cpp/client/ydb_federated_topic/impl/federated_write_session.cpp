@@ -111,6 +111,10 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
 
     if (Subsession) {
         PendingToken.Clear();
+        // Delay destruction of the subsession until after releasing the TFederatedWriteSessionImpl::Lock.
+        // If you try to destruct the subsession here, it will deadlock with SessionClosedHandler,
+        // which holds a shared lock on the subsession context, and waits to lock TFederatedWriteSessionImpl::Lock.
+        // At the same time, ~TWriteSession waits to lock subsession context in exclusive mode.
         OldSubsession = std::move(Subsession);
         OldSubsession->Close(TDuration::Zero());
     }
@@ -138,6 +142,16 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                 }
 
                 deferred.DoWrite();
+
+                // Before calling the handler, a shared lock on the session context is acquired (see TWriteSessionImpl::Start).
+                // When we're switching to another datacenter,
+                // deferred.Writer may become the last shared_ptr to the old TWriteSession instance.
+                // In that case the ~TWriteSession dtor is called, which attempts to acquire
+                // an exclusive lock on the session context, causing a deadlock.
+                // To prevent this, move deferred.Writer to the map in the federated session.
+                // It will be removed in ScheduleFederationStateUpdateImpl after the SessionClosedHandler sets the boolean in the pair to true.
+                // This is safe as no more events occur after receiving a TSessionClosedEvent.
+                self->ReadyToAcceptSubsessions[generation].first = std::move(deferred.Writer);
             }
         })
         .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
@@ -160,12 +174,13 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
             }
         })
         .SessionClosedHandler([selfCtx = SelfContext, generation = SubsessionGeneration](const NTopic::TSessionClosedEvent & ev) {
-            if (ev.IsSuccess()) {
-                // The subsession was closed by the federated write session itself while creating a new subsession.
-                // In this case we get SUCCESS status and don't need to propagate it further.
-                return;
-            }
             if (auto self = selfCtx->LockShared()) {
+                self->ReadyToAcceptSubsessions[generation].second = true;
+                if (ev.IsSuccess()) {
+                    // The subsession was closed by the federated write session itself while creating a new subsession.
+                    // In this case we get SUCCESS status and don't need to propagate it further.
+                    return;
+                }
                 with_lock (self->Lock) {
                     if (generation != self->SubsessionGeneration) {
                         return;
@@ -316,6 +331,7 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
                 with_lock(self->Lock) {
                     self->UpdateFederationStateImpl();
                     old = std::move(self->OldSubsession);
+                    std::erase_if(self->ReadyToAcceptSubsessions, [](auto const& item) { return item.second.second; });
                 }
             }
         }

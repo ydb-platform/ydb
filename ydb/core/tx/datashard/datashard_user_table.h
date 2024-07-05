@@ -339,6 +339,11 @@ struct TUserTable : public TThrRefBase {
         bool HasStrongConsistency() const {
             return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
         }
+
+        void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistency(Consistency);
+        }
     };
 
     struct TStats {

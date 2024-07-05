@@ -27,7 +27,7 @@ def run(argv, out, err, timeout=30*60, hard_timeout=5):
     oldmask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGCHLD})
     try:
         start_time = time_ns()
-        pid = os.posix_spawn(argv[0], argv, {}, setsigmask=oldmask, file_actions=(
+        pid = os.posix_spawn(argv[0], argv, os.environ, setsigmask=oldmask, file_actions=(
             ([(os.POSIX_SPAWN_OPEN, 1, out, os.O_WRONLY | os.O_CREAT, 0o666)] if out else []) +
             ([(os.POSIX_SPAWN_OPEN, 2, err, os.O_WRONLY | os.O_CREAT, 0o666)] if err else [])
             ))

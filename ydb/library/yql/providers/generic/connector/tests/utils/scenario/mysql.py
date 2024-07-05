@@ -23,6 +23,7 @@ def select_positive(
             cluster_name=settings.mysql.cluster_name,
             table_name=test_case.qualified_table_name,
         )
+
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}

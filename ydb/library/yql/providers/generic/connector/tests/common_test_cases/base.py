@@ -15,32 +15,56 @@ class BaseTestCase:
     name_: str
     data_source_kind: EDataSourceKind.ValueType
     pragmas: Dict[str, str]
-    protocol: EProtocol
+    protocol: EProtocol 
 
     @property
     def name(self) -> str:
-        return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+        match self.data_source_kind:
+            case EDataSourceKind.CLICKHOUSE:
+                # We check both protocols only for ClickHouse
+                return f'{self.name_}_{EProtocol.Name(self.protocol)}'
+            case EDataSourceKind.MYSQL:
+                return self.name_
+            case EDataSourceKind.POSTGRESQL:
+                return self.name_
+            case EDataSourceKind.YDB:
+                return self.name_
+            case _:
+                raise Exception(f'invalid data source: {self.data_source_kind}')
 
     @property
     def database(self) -> Database:
         '''
-        We want to create a distinct database on every test case
+        For PG/CH we create a distinct database on every test case.
+        For YDB/MySQL we use single predefined database.
         '''
-        return Database(self.name, self.data_source_kind)
+        match self.data_source_kind:
+            case EDataSourceKind.CLICKHOUSE:
+                return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.MYSQL:
+                return Database("db", self.data_source_kind)
+            case EDataSourceKind.POSTGRESQL:
+                return Database(self.name, self.data_source_kind)
+            case EDataSourceKind.YDB:
+                return Database("local", self.data_source_kind)
 
     @functools.cached_property
     def _table_name(self) -> str:
         '''
-        In general, we cannot use test case name as table name because of special symbols,
-        so we provide a random table name instead.
+        For some database we cannot use test case name as table name because of special symbols,
+        so we provide a random table name instead were necessary.
         '''
         match self.data_source_kind:
-            case EDataSourceKind.POSTGRESQL:
-                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
             case EDataSourceKind.CLICKHOUSE:
+                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+            case EDataSourceKind.MYSQL:
+                return self.name
+            case EDataSourceKind.POSTGRESQL:
                 return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
             case EDataSourceKind.YDB:
                 return self.name
+            case _:
+                raise Exception(f'invalid data source: {self.data_source_kind}')
 
     @property
     def sql_table_name(self) -> str:

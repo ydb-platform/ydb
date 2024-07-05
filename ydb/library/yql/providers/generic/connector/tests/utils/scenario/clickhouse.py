@@ -30,7 +30,7 @@ def prepare_table(
     dbTable = f"{database.name}.{table_name}"
 
     # create database
-    create_database_stmt = database.create()
+    create_database_stmt = database.query_create()
     LOGGER.debug(create_database_stmt)
     client.command(create_database_stmt)
 
@@ -139,7 +139,7 @@ def select_missing_table(
     client: Client,
 ):
     # create database, but don't create table
-    create_database_stmt = test_case.database.create()
+    create_database_stmt = test_case.database.query_create()
     LOGGER.debug(create_database_stmt)
     client.command(create_database_stmt)
 

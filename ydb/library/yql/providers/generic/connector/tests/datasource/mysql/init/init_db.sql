@@ -1,9 +1,7 @@
-CREATE DATABASE primitive_types_NATIVE;
+DROP TABLE IF EXISTS primitives;
 
-
-DROP TABLE IF EXISTS primitive_types_NATIVE.primitives;
-CREATE TABLE primitive_types_NATIVE.primitives (
-    id INT NOT NULL, 
+CREATE TABLE primitives (
+    col_00_id INT NOT NULL, 
     col_01_tinyint TINYINT,
     col_02_tinyint_unsigned TINYINT UNSIGNED,
     col_03_smallint SMALLINT ,
@@ -33,10 +31,10 @@ CREATE TABLE primitive_types_NATIVE.primitives (
     col_27_longblob LONGBLOB,
     col_28_bool BOOL,
     col_29_json JSON,
-    PRIMARY KEY (id)
+    PRIMARY KEY (col_00_id)
 );
 
-INSERT INTO primitive_types_NATIVE.primitives VALUES 
+INSERT INTO primitives VALUES 
        (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11.11, 12.12, 
        '1988-11-20', '1988-11-20T12:34:56.777777', '1988-11-20T12:34:56.777777',
        'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az', 'az',

@@ -33,6 +33,7 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set MYSQL = 'MYSQL' %}
 
 {% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
     ClusterMapping {

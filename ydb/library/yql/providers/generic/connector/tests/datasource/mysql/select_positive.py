@@ -28,6 +28,11 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
+                    name='col_00_id',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(my=mysql.Integer()),
+                ),
+                Column(
                     name='col_01_tinyint',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT8),
                     data_source_type=DataSourceType(my=mysql.TinyInt()),
@@ -176,7 +181,7 @@ class Factory:
         )
 
         tc = TestCase(
-            name_='primitive_types',
+            name_='primitives',
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,

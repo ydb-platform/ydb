@@ -6,10 +6,10 @@
 
 $border = Date("1994-08-01");
 select
-	$z100_35 * sum(case
+    $z100_35 * sum(case
         when p.p_type like 'PROMO%'
             then l.l_extendedprice * ($z1_12 - l.l_discount)
-		else $z0_12
+        else $z0_12
     end) / sum(l.l_extendedprice * ($z1_12 - l.l_discount)) as promo_revenue
 from
     {{lineitem}} as l

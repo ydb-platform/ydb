@@ -6,15 +6,15 @@
 
 $border = Date("1997-03-01");
 $revenue0 = (
-	select
+    select
         l_suppkey as supplier_no,
         $round(sum(l_extendedprice * ($z1_12 - l_discount)), -8) as total_revenue
-	from
+    from
         {{lineitem}}
-	where
+    where
         l_shipdate  >= $border
         and l_shipdate < ($border + Interval("P92D"))
-	group by
+    group by
         l_suppkey
 );
 $max_revenue = (
@@ -24,7 +24,7 @@ from
     $revenue0
 );
 $join1 = (
-		select
+        select
     s.s_suppkey as s_suppkey,
     s.s_name as s_name,
     s.s_address as s_address,
@@ -51,5 +51,5 @@ join
 on
     j.total_revenue = m.max_revenue
 order by
-	s_suppkey;
+    s_suppkey;
 

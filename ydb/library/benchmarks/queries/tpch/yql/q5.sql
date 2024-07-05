@@ -83,6 +83,6 @@ select
 from
     $j5
 group by
-	n_name
+    n_name
 order by
-	revenue desc;
+    revenue desc;

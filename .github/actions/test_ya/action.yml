@@ -262,6 +262,26 @@ runs:
       shell: bash
       run: |
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+    
+    - name: Set up environment variables
+      run: |
+        echo "CURRENT_TIME=$(date +%s)" >> $GITHUB_ENV
+
+    - name: Test history upload results to YDB
+      if: inputs.testman_token
+      shell: bash
+      env:
+        COMMIT_SHA: ${{github.event.pull_request.head.sha}}
+        PR_NUMBER: ${{ github.event.number }}
+      run: |
+        set -x
+        .github/scripts/upload_tests_results.py \
+          --result-file "$JUNIT_REPORT_XML" \
+          --run-time ${{ env.CURRENT_TIME }} \
+          --commit "$COMMIT_SHA" \
+          --build-type "${BUILD_PRESET}" \
+          --pull "${PR_NUMBER}" \
+          --job-name "{{ job.name }}"
 
     - name: Unit test history upload results
       if: inputs.testman_token

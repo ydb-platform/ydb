@@ -58,7 +58,7 @@ def parse_test_name(name):
     return rawname, filename, testname, fixture
 
 
-def parse_junit_xml(xml_file, build_type, commit, pull, run_time):
+def parse_junit_xml(xml_file, build_type, job_name, commit, pull, run_time):
     tree = ET.parse(xml_file)
     root = tree.getroot()
 
@@ -70,14 +70,18 @@ def parse_junit_xml(xml_file, build_type, commit, pull, run_time):
             name = testcase.get("name")
             rawname, filename, testname, fixture = parse_test_name(name)
             time = testcase.get("time")
-
+            
+            status_description = ""
             status = "passed"
             if testcase.find("failure") is not None:
                 status = "failure"
+                status_description = testcase.find("failure").text
             elif testcase.find("error") is not None:
                 status = "error"
+                status_description = testcase.find("error").text
             elif testcase.find("skipped") is not None:
                 status = "skipped"
+                status_description = testcase.find("skipped").text
 
             results.append(
                 {
@@ -85,6 +89,7 @@ def parse_junit_xml(xml_file, build_type, commit, pull, run_time):
                     "commit": commit,
                     "pull": pull,
                     "run_time": run_time,
+                    "job_name": job_name,
                     "suite_name": suite_name,
                     "raw_test_name": rawname,
                     "file": filename,
@@ -92,6 +97,8 @@ def parse_junit_xml(xml_file, build_type, commit, pull, run_time):
                     "fixture": fixture,
                     "time": float(time),
                     "status": status,
+                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")
+
                 }
             )
     return results
@@ -155,6 +162,7 @@ def create_tests_table(session, table_path):
     --!syntax_v1
     CREATE TABLE IF NOT EXISTS `{table_path}` (
         build_type Utf8,
+        job_name Utf8,
         commit Utf8,
         pull Utf8,
         run_time Timestamp,
@@ -166,6 +174,7 @@ def create_tests_table(session, table_path):
         fixture Utf8,
         time Double,
         status Utf8,
+        status_description Utf8,
         owners Utf8,
         PRIMARY KEY(test_id)
     );
@@ -194,12 +203,12 @@ def prepare_and_upload_tests(pool, path, results, batch_size):
             batch = results[start:end]
 
             sql = f"""--!syntax_v1
-             UPSERT INTO `{path}` (build_type, commit, pull, run_time, test_id, suite_name, raw_test_name, file, test_name, fixture, time, status, owners) VALUES"""
+             UPSERT INTO `{path}` (build_type, job_name, commit, pull, run_time, test_id, suite_name, raw_test_name, file, test_name, fixture, time, status, owners, status_description) VALUES"""
             values = []
             for index, result in enumerate(batch):
                 values.append(
                     f"""
-                ("{result['build_type']}", "{result['commit']}", "{result['pull']}", DateTime::FromSeconds({result['run_time']}), "{result['pull']}_{result['run_time']}_{start+index}", "{result['suite_name']}", "{result['raw_test_name']}", "{result['file']}", "{result['test_name']}", "{result['fixture']}", {result['time']}, "{result['status']}", "{result['owners']}")
+                ("{result['build_type']}", "{result['job_name']}", "{result['commit']}", "{result['pull']}", DateTime::FromSeconds({result['run_time']}), "{result['pull']}_{result['run_time']}_{start+index}", "{result['suite_name']}", "{result['raw_test_name']}", "{result['file']}", "{result['test_name']}", "{result['fixture']}", {result['time']}, "{result['status']}", "{result['status_description']}", "{result['owners']}")
                 """
                 )
             sql += ", ".join(values) + ";"
@@ -231,6 +240,7 @@ def main():
     parser.add_argument('--commit', default='store', dest="commit", required=True, help='commit sha')
     parser.add_argument('--pull', action='store', dest="pull",required=True, help='pull number')
     parser.add_argument('--run-time', action='store', dest="run_time",required=True, help='time of test run start')
+    parser.add_argument('--job-name', action='store', dest="job_name",required=True, help='job name where launched')
 
     args = parser.parse_args()
 
@@ -239,6 +249,7 @@ def main():
     commit=args.commit
     pull=args.pull
     run_time=args.run_time
+    job_name=args.job_name
 
     path_in_database = "test_results"
     batch_size_default=200
@@ -269,7 +280,7 @@ def main():
         create_tests_table(session, f"{path_in_database}/tests")
 
     # Parse and upload
-    results = parse_junit_xml(result_file, build_type, commit, pull, run_time)
+    results = parse_junit_xml(result_file, build_type, job_name, commit, pull, run_time)
     result_with_owners = get_codeowners_for_tests(parse_codeowners(codeowners), results)
     prepare_and_upload_tests(pool, f"{path_in_database}/tests", results, batch_size=batch_size_default)
 

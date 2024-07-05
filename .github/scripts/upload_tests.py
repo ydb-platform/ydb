@@ -55,6 +55,48 @@ def parse_junit_xml(xml_file):
             })
     return results
 
+def parse_codeowners(codeowners_file):
+    # Чтение файла CODEOWNERS
+    entries = []
+
+    with open(codeowners_file, 'r') as file:
+        for line in file:
+            if not line.strip():
+                continue
+            path, *owners = line.split()
+            entries.append((path, owners))
+
+    return entries
+
+# Создание таблицы
+def create_table_codeowners(session, table_path):
+    table= f"{table_path}/codeowners"
+    create_table_query = f"""
+    CREATE TABLE `{table}` (
+        path STRING,
+        owners STRING,
+        PRIMARY KEY (path)
+    );
+    """
+    try:
+        session.execute_scheme(sql)
+    except (ydb.issues.AlreadyExists):
+        pass
+    except Exception as e:
+        print("Error creating table: {}, sql:\n{}".format(e, sql), file=sys.stderr)
+        raise e
+
+def upload_codeowners(session, entries):
+
+    # Вставка данных в таблицу
+    for entry in entries:
+        path, owners = entry
+        sql = f"""
+        UPSERT INTO codeowners (path, owners) VALUES 
+            ("{path}", {str(owners).replace("'", '"')});
+        """
+        session.transaction().execute(sql, commit_tx=True)
+
 
 def create_table(session, table_path):
          # Создание таблицы, если ее еще нет
@@ -88,7 +130,35 @@ def create_table(session, table_path):
 def upload_results(session, sql):
     session.transaction().execute(sql, commit_tx=True)
 
-    
+def prepare_and_upload_tests(pool,path,results, batch_size):
+     # Вставка данных
+    table= f"{path}/temp"
+    total_records = len(results)
+    for start in range(0, total_records, batch_size):
+        end = min(start + batch_size, total_records)
+        batch = results[start:end]
+
+        # Вставка данных батчами
+        #with session.transaction() as tx:
+        for index, result in enumerate(batch):
+            relative_index = start + index
+            sql= f"""
+                --!syntax_v1
+                UPSERT INTO `{table}` 
+                (test_id, pull, run_time, suite_name, raw_test_name, file, test_name, fixture, time, status)
+                VALUES ('{pull}_{run_time}_{relative_index}', 
+                '{pull}', 
+                DateTime::FromSeconds({run_time}),
+                '{result["suite_name"]}', 
+                '{result["raw_test_name"]}', 
+                '{result["file"]}', 
+                '{result["test_name"]}', 
+                '{result["fixture"]}', 
+                {result["time"]}, 
+                '{result["status"]}'
+                );
+                """
+            pool.retry_operation_sync(lambda session: upload_results(session, sql))
     
 
 def save_to_db(endpoint, database, path, token, results, batch_size):
@@ -112,35 +182,10 @@ def save_to_db(endpoint, database, path, token, results, batch_size):
        
 
         with ydb.SessionPool(driver) as pool:
-            pool.retry_operation_sync(lambda session: create_table(session, path))
-            # Вставка данных
-            table= f"{path}/temp"
-            total_records = len(results)
-            for start in range(0, total_records, batch_size):
-                end = min(start + batch_size, total_records)
-                batch = results[start:end]
-
-                # Вставка данных батчами
-                #with session.transaction() as tx:
-                for index, result in enumerate(batch):
-                    relative_index = start + index
-                    sql= f"""
-                        --!syntax_v1
-                        UPSERT INTO `{table}` 
-                        (test_id, pull, run_time, suite_name, raw_test_name, file, test_name, fixture, time, status)
-                        VALUES ('{pull}_{run_time}_{relative_index}', 
-                        '{pull}', 
-                        DateTime::FromSeconds({run_time}),
-                        '{result["suite_name"]}', 
-                        '{result["raw_test_name"]}', 
-                        '{result["file"]}', 
-                        '{result["test_name"]}', 
-                        '{result["fixture"]}', 
-                        {result["time"]}, 
-                        '{result["status"]}'
-                        );
-                        """
-                    pool.retry_operation_sync(lambda session: upload_results(session, sql))
+            #pool.retry_operation_sync(lambda session: create_table(session, path))
+            pool.retry_operation_sync(lambda session: create_table_codeowners(session, path))
+            pool.retry_operation_sync(lambda session: upload_codeowners(session, entries))
+            #prepare_and_upload_tests(pool,path, results, batch_size)
                 
                # time.sleep(1)
 
@@ -161,5 +206,6 @@ if __name__ == '__main__':
         sys.exit(1)
 
     results = parse_junit_xml(xml_file)
+    owners=parse_codeowners("/home/kirrysin/fork/ydb/.github/CODEOWNERS")
     save_to_db(DATABASE_ENDPOINT, DATABASE_PATH, path, token, results, batch_size=10)
     print("JUnit XML результаты успешно загружены в YDB!")

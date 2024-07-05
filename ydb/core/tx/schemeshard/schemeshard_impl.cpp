@@ -6675,7 +6675,9 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
             case NKikimrSchemeOp::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(Indexes.contains(childPathId));
                 auto info = Indexes.at(childPathId);
-                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, *tableDescr->MutableTableIndexes()->Add());
+                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, false, false,
+                    *tableDescr->MutableTableIndexes()->Add()
+                );
                 break;
             }
 

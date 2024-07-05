@@ -264,6 +264,7 @@ runs:
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
     
     - name: Set up environment variables
+      if: inputs.testman_token
       run: |
         echo "CURRENT_TIME=$(date +%s)" >> $GITHUB_ENV
 

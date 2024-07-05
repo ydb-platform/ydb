@@ -5,7 +5,7 @@
 
 namespace NYdbWorkload {
 
-class TTpcWorkloadParams: public TWorkloadBaseParams {
+class TTpcBaseWorkloadParams: public TWorkloadBaseParams {
 public:
     enum class EFloatMode {
         FLOAT /* "float" */,
@@ -16,15 +16,15 @@ public:
     YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);
 };
 
-class TTpcWorkloadGenerator: public TWorkloadGeneratorBase {
+class TTpcBaseWorkloadGenerator: public TWorkloadGeneratorBase {
 public:
-    explicit TTpcWorkloadGenerator(const TTpcWorkloadParams& params);
+    explicit TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParams& params);
 
 protected:
     void PatchQuery(TString& query) const;
 
 private:
-    const TTpcWorkloadParams& Params;
+    const TTpcBaseWorkloadParams& Params;
 };
 
 } // namespace NYdbWorkload

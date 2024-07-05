@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    tpc.cpp
+    tpc_base.cpp
 )
 
 RESOURCE(
@@ -16,6 +16,6 @@ PEERDIR(
     ydb/public/lib/scheme_types
 )
 
-GENERATE_ENUM_SERIALIZATION(tpc.h)
+GENERATE_ENUM_SERIALIZATION(tpc_base.h)
 
 END()

@@ -1,4 +1,4 @@
-#include "tpc.h"
+#include "tpc_base.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -8,21 +8,21 @@
 
 namespace NYdbWorkload {
 
-TTpcWorkloadGenerator::TTpcWorkloadGenerator(const TTpcWorkloadParams& params)
+TTpcBaseWorkloadGenerator::TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParams& params)
     : TWorkloadGeneratorBase(params)
     , Params(params)
 {}
 
-void TTpcWorkloadGenerator::PatchQuery(TString& query) const {
+void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     TString header;
     switch (Params.GetFloatMode()) {
-    case TTpcWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         header = NResource::Find("consts.yql");
         break;
-    case TTpcWorkloadParams::EFloatMode::DECIMAL:
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         header = NResource::Find("consts_decimal.yql");
         break;
-    case TTpcWorkloadParams::EFloatMode::DECIMAL_YDB: {
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB: {
             header = NResource::Find("consts_decimal.yql");
             header.to_lower();
             const TStringBuf dec("decimal(");
@@ -45,7 +45,7 @@ void TTpcWorkloadGenerator::PatchQuery(TString& query) const {
     SubstGlobal(query, "{% include 'header.sql.jinja' %}", header);
 }
 
-void TTpcWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:

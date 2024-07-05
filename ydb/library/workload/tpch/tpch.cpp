@@ -9,7 +9,7 @@
 namespace NYdbWorkload {
 
 TTpchWorkloadGenerator::TTpchWorkloadGenerator(const TTpchWorkloadParams& params)
-    : TTpcWorkloadGenerator(params)
+    : TTpcBaseWorkloadGenerator(params)
     , Params(params)
 {}
 
@@ -108,7 +108,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TTpchWorkloadGenerator::GetSuppo
 }
 
 void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TTpcWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
+    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")

@@ -515,7 +515,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
         TStringStream str;
         for (const auto& value : json.GetValue()) {
             SRC_LOG_D("value: " << value);
-            str << value << " ";
+            str << value;
         }
 
         sessionInfo.Data.emplace_back(str.Str());

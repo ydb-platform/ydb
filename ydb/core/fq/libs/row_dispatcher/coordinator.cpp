@@ -23,8 +23,6 @@ using NYql::TIssues;
 
 namespace {
 
-//#define LOG_D(s) LOG_ROW_DISPATCHER_DEBUG(LogPrefix << s)
-
 struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, TEventIds::EvDeleteRateLimiterResourceResponse> {
     NYdb::NCoordination::TResult<void> Result;
 

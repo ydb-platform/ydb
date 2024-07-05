@@ -925,7 +925,7 @@ int RunMain(int argc, const char* argv[])
             clusters.emplace(to_lower(cluster.GetName()), TString{PqProviderName});
         }
 
-        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, false, dbResolver));
+        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
     }
 
     if (gatewaysConfig.HasSolomon()) {

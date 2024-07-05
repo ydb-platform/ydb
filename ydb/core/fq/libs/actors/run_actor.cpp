@@ -1950,7 +1950,7 @@ private:
                 Params.FunctionRegistry
             );
             const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, false, dbResolver));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 
         {

@@ -1,8 +1,5 @@
 #pragma once
 
-//#include "checkpoint_storage.h"
-//#include "state_storage.h"
-
 #include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 

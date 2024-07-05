@@ -40,7 +40,6 @@ struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher
 
     void Init(
         const TPqGatewayConfig& config,
-        bool asdsda,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
         THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds);

@@ -12,9 +12,8 @@ namespace NYql {
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode,
-    bool asdasd,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver) {
-    return [gateway, supportRtmrMode, dbResolver, asdasd] (
+    return [gateway, supportRtmrMode, dbResolver] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -40,7 +39,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
             if (gatewaysConfig) {
-                state->Configuration->Init(gatewaysConfig->GetPq(), asdasd, typeCtx, dbResolver, state->DatabaseIds);
+                state->Configuration->Init(gatewaysConfig->GetPq(), typeCtx, dbResolver, state->DatabaseIds);
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);

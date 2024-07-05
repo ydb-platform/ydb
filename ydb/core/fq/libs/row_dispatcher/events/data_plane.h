@@ -37,22 +37,9 @@ struct TEvRowDispatcher {
         NActors::TActorId CoordinatorActorId;
     };
 
-    // struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
-    //     NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
-    //     TEvCoordinatorInfo() = default;
-    // };
-
-
     // Read actor <-> local row_dispatcher: get coordinator actor id.
 
     struct TEvRowDispatcherRequest : public NActors::TEventLocal<TEvRowDispatcherRequest, EEv::EvRowDispatcherRequest> {};
-
-    // struct TEvRowDispatcherResult : public NActors::TEventLocal<TEvRowDispatcherResult, EEv::EvRowDispatcherResult> {
-    //     TEvRowDispatcherResult(TMaybe<NActors::TActorId> coordinatorActorId)
-    //         : CoordinatorActorId(coordinatorActorId) {}
-
-    //     TMaybe<NActors::TActorId> CoordinatorActorId;
-    // };
 
     // Read actor <-> coordinator : get row_dispatcher actorId (which is responsible for processing) by topic/partition.
 

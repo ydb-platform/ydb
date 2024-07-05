@@ -16,7 +16,6 @@ TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
 
 void TPqConfiguration::Init(
     const TPqGatewayConfig& config,
-    bool /*asdsda*/,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)

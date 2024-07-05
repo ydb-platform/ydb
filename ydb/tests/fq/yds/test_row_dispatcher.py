@@ -82,21 +82,21 @@ class TestPqRowDispatcher(TestYdsBase):
         sql1 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+                WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
         sql2 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+            WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
         query_id1 = start_yds_query(kikimr, client, sql1)
         query_id2 = start_yds_query(kikimr, client, sql2)
 
         data = [
-            '{"time": 101}',
-            '{"time": 102}'
+            '{"time": "101a"}',
+            '{"time": "102a"}'
         ]
 
         self.write_stream(data)
-        expected = ['101', '102']
+        expected = ['101a', '102a']
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
 
@@ -110,16 +110,16 @@ class TestPqRowDispatcher(TestYdsBase):
         sql3 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+            WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
         data = [
-            '{"time": 103;}',
-            '{"time": 104;}'
+            '{"time": "103a"}',
+            '{"time": "104a"}'
         ]
 
         self.write_stream(data)
-        expected = ['103', '104']
+        expected = ['103a', '104a']
 
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected

@@ -87,8 +87,6 @@ public:
 
             auto format = pqReadTopic.Format().Ref().Content();
 
-         //   std::cerr << "FormatFormatFormatFormat " << pqReadTopic.Format(). << std::endl;
-
             TVector<TCoNameValueTuple> innerSettings;
             if (pqReadTopic.Compression() != "") {
                 innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())

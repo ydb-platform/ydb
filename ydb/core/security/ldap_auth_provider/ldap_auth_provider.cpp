@@ -312,14 +312,12 @@ private:
         TStringBuilder filter;
         filter << "(member:" << matchingRuleInChain << ":=" << NKikimrLdap::GetDn(ld, entry) << ')';
         LDAPMessage* searchMessage = nullptr;
-        Cerr << "+++AD filter: " << filter << Endl;
         int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
         if (!NKikimrLdap::IsSuccess(result)) {
             return {};
         }
         const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
-        Cerr << "+++ AD count entries: " << countEntries << Endl;
-        if (countEntries < 1) {
+        if (countEntries == 0) {
             NKikimrLdap::MsgFree(searchMessage);
             return {};
         }
@@ -327,21 +325,18 @@ private:
         groups.reserve(countEntries);
         for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
             groups.push_back(NKikimrLdap::GetDn(ld, groupEntry));
-            Cerr << "+++Ad G: " << groups.back() << Endl;
         }
         NKikimrLdap::MsgFree(searchMessage);
         return groups;
     }
 
     void GetNestedGroups(LDAP* ld, std::vector<TString>* groups) {
-        // Cerr << "+++ TraverseTree" << Endl;
         std::unordered_set<TString> viewedGroups(groups->cbegin(), groups->cend());
         std::queue<TString> queue;
         for (const auto& group : *groups) {
             queue.push(group);
         }
         while (!queue.empty()) {
-            // Cerr << "+++ !queue.empty" << Endl;
             TStringBuilder filter;
             filter << "(|";
             filter << "(entryDn=" << queue.front() << ')';
@@ -353,14 +348,11 @@ private:
             }
             filter << ')';
             LDAPMessage* searchMessage = nullptr;
-            // Cerr << "+++Filter: " << filter << Endl;
             int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
             if (!NKikimrLdap::IsSuccess(result)) {
                 return;
             }
-            const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
-            // Cerr << "+++ CountEntries: " << countEntries << Endl;
-            if (countEntries < 1) {
+            if (NKikimrLdap::CountEntries(ld, searchMessage) == 0) {
                 NKikimrLdap::MsgFree(searchMessage);
                 return;
             }
@@ -375,9 +367,7 @@ private:
                 if (ber) {
                     NKikimrLdap::BerFree(ber, 0);
                 }
-                // Cerr << "+++FoundGroups:" << Endl;
                 for (const auto& newGroup : foundGroups) {
-                    // Cerr << "+++G: " << newGroup << Endl;
                     if (!viewedGroups.contains(newGroup)) {
                         viewedGroups.insert(newGroup);
                         queue.push(newGroup);

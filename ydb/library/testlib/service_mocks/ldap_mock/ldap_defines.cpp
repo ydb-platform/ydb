@@ -8,29 +8,23 @@ namespace {
 
 bool checkFilters(const TSearchRequestInfo::TSearchFilter& filter1, const TSearchRequestInfo::TSearchFilter& filter2) {
     if (filter1.Type != filter2.Type) {
-        // Cerr << "+++  Different Type: " << static_cast<int>(f1.Type) << " " << static_cast<int>(f2.Type) << Endl;
         return false;
     }
     if (filter1.Attribute != filter2.Attribute) {
-        // Cerr << "+++  Different Attribute: " << f1.Attribute << " " << f2.Attribute << Endl;
         return false;
     }
     if (filter1.Value != filter2.Value) {
-        // Cerr << "+++  Different Value: " << f1.Value << " " << f2.Value << Endl;
         return false;
     }
     if (filter1.Type == EFilterType::LDAP_FILTER_EXT) {
         if (filter1.MatchingRule != filter2.MatchingRule) {
-            // Cerr << "+++  Different MatchingRule: " << f1.MatchingRule << " " << f2.MatchingRule << Endl;
             return false;
         }
         if (filter1.DnAttributes != filter2.DnAttributes) {
-            // Cerr << "+++  Different DnAttr: " << f1.DnAttributes << " " << f2.DnAttributes << Endl;
             return false;
         }
     }
     if (filter1.NestedFilters.size() != filter2.NestedFilters.size()) {
-        // Cerr << "+++  Different nestedFilters: " << f1.NestedFilters.size() << " " << f2.NestedFilters.size() << Endl;
         return false;
     }
     return true;
@@ -42,15 +36,12 @@ bool AreFiltersEqual(const TSearchRequestInfo::TSearchFilter& filter1, const TSe
     }
     std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q1;
     for (const auto& filter : filter1.NestedFilters) {
-        // Cerr << "+++q1: " << filter->Value << Endl;
         q1.push(filter);
     }
     std::queue<std::shared_ptr<TSearchRequestInfo::TSearchFilter>> q2;
     for (const auto& filter : filter2.NestedFilters) {
-        // Cerr << "+++q2: " << filter->Value << Endl;
         q2.push(filter);
     }
-    // Cerr << "+++Before while: " << q1.size() << " : " << q2.size() << Endl;
     while (!q1.empty() && !q2.empty()) {
         const auto filterQ1 = q1.front();
         q1.pop();
@@ -66,7 +57,6 @@ bool AreFiltersEqual(const TSearchRequestInfo::TSearchFilter& filter1, const TSe
             q2.push(filter);
         }
     }
-    // Cerr << "+++ TraverseFilter: true" << Endl;
     return true;
 }
 } // namespace

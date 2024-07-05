@@ -1,5 +1,6 @@
+# FIXME: this is actually a glibc (libc6-dev) headers listing.
+#        It should be disassembled and libc-to-nothing should be used instead.
 - includes:
-  - _G_config.h
   - a.out.h
   - aliases.h
   - ansidecl.h
@@ -23,9 +24,6 @@
   - gshadow.h
   - ieee754.h
   - libio.h
-  - linux/compiler.h
-  - linux/irda.h
-  - linux/smb.h
   - mcheck.h
   - netash/ash.h
   - netatalk/at.h

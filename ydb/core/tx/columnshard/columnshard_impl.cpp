@@ -845,6 +845,10 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 }
 
 void TColumnShard::SetupCleanupInsertTable() {
+    if (BackgroundController.IsCleanupInsertTableActive()) {
+        ACFL_DEBUG("background", "cleanup_insert_table")("skip_reason", "in_progress");
+        return;
+    }
     auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
 
     if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
@@ -852,6 +856,7 @@ void TColumnShard::SetupCleanupInsertTable() {
     }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
 
+    BackgroundController.StartCleanupInsertTable();
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 

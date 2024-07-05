@@ -402,6 +402,69 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }    
 
+    Y_UNIT_TEST(UpdateImmediate) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 3;
+
+        ui64 txId = 100;
+
+        Cout << "========= Send immediate update to empty table, it should be no op =========\n";
+        {
+            Update(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }     
+        
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, "");
+        }         
+
+        Cout << "========= Send immediate insert =========\n";
+        {
+            Insert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+
+        Cout << "========= Send immediate upsert, change one row =========\n";
+        {
+            UpsertOneKeyValue(runtime, sender, shard, tableId, opts.Columns_, 0, 555, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 555\nkey = 2, value = 3\nkey = 4, value = 5\n");
+        }
+
+        Cout << "========= Send immediate update, it should override all the rows =========\n";
+        {
+            const auto writeResult = Update(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetTableInfo().GetName(), "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+    }
 
     Y_UNIT_TEST_TWIN(UpsertPrepared, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();

@@ -5,6 +5,7 @@ import requests
 from ydb.tests.olap.lib.utils import get_external_param
 import ydb
 from copy import deepcopy
+from time import sleep, time
 
 LOGGER = logging.getLogger()
 
@@ -128,8 +129,6 @@ class YdbCluster:
     @classmethod
     @allure.step('Wait YDB alive')
     def wait_ydb_alive(cls, timeout=10):
-        from datetime import datetime
-        from time import sleep, time
         deadline = time() + timeout
         while time() < deadline:
             if cls.check_if_ydb_alive(deadline - time()):

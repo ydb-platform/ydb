@@ -1521,6 +1521,238 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
     }
 
+    Y_UNIT_TEST(TestReadTableNotNullBorder) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `Root/Test` (
+                Key Uint64 NOT NULL,
+                Value String,
+                Amount Decimal(22,9) NOT NULL,
+                PRIMARY KEY (Key)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(R"___(
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (0u, "Zero", UNWRAP(CAST("0.11" AS Decimal(22, 9))));
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (1u, "One", UNWRAP(CAST("1.11" AS Decimal(22, 9))));
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[1u;[\"One\"];\"1.11\"]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(Nothing())
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[0u];[\"Zero\"];[\"0.11\"]];[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Exclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
+                .From(TKeyBound::Exclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[]");
+        }
+    }
+
+    // Same but use reverce order of column in tuple
+    Y_UNIT_TEST(TestReadTableNotNullBorder2) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `Root/Test` (
+                aaa String,
+                zzz Uint64 NOT NULL,
+                PRIMARY KEY (zzz)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(R"___(
+            UPSERT INTO `Root/Test` (zzz, aaa) VALUES (1u, "One");
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            auto selectResult = session.ExecuteDataQuery(R"(
+                SELECT zzz, aaa FROM `Root/Test`;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SUCCESS);
+            auto text = FormatResultSetYson(selectResult.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL("[[1u;[\"One\"]]]", text);
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[\"One\"];[1u]]]");
+        }
+    }
+
     enum class EReadTableMultiShardMode {
         Normal,
         UseSnapshot,

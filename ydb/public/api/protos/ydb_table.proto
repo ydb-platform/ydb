@@ -1090,6 +1090,7 @@ message ReadTableRequest {
     // greater than any of the limits
     uint64 batch_limit_bytes = 8;
     uint64 batch_limit_rows = 9;
+    Ydb.FeatureFlag.Status return_not_null_data_as_optional = 10;
 }
 
 // ReadTable doesn't use Operation, returns result directly

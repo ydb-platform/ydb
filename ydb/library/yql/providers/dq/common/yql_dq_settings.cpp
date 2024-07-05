@@ -1,4 +1,5 @@
 #include "yql_dq_settings.h"
+#include <util/string/split.h>
 
 namespace NYql {
 
@@ -98,6 +99,20 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _MaxAttachmentsSize);
     REGISTER_SETTING(*this, DisableCheckpoints);
+    REGISTER_SETTING(*this, EnableSpillingNodes)
+        .Parser([](const TString& v) {
+            ui64 res = 0;
+            TVector<TString> vec;
+            StringSplitter(v).SplitBySet(",;| ").AddTo(&vec);
+            for (auto& s: vec) {
+                if (s.empty()) {
+                    throw yexception() << "Empty value item";
+                }
+                auto value = FromString<EEnabledSpillingNodes>(s);
+                res |= ui64(value);
+            }
+            return res;
+        });
 }
 
 } // namespace NYql

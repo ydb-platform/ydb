@@ -1739,8 +1739,9 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(newPathId.OwnerId);
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
-        newTableInfo->Indexes[newPathId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
+        auto node = newTableInfo->Indexes.extract(prevPathId);
+        node.key() = newPathId;
+        newTableInfo->Indexes.insert(std::move(node));
     }
     newTableInfo->SetSchema(schema);
 
@@ -1794,21 +1795,13 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
         newTableInfo->Indexes.erase(oldPathId);
 
-        size_t id = 0;
-        bool found = false;
-        for (auto& indexDesc: *schema.MutableTableIndexes()) {
-            Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
-            auto pathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
-            if (oldPathId == pathId) {
-                found = true;
+        auto& indexes = *schema.MutableTableIndexes();
+        for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+            Y_ABORT_UNLESS(it->HasPathOwnerId() && it->HasLocalPathId());
+            if (oldPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+                indexes.erase(it);
                 break;
-            } else {
-                id++;
             }
-        }
-
-        if (found) {
-            schema.MutableTableIndexes()->DeleteSubrange(id, 1);
         }
     }
 
@@ -1827,12 +1820,14 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(remapNewId.OwnerId);
         indexDesc.SetLocalPathId(remapNewId.LocalPathId);
 
-        newTableInfo->Indexes[remapNewId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
+
+        auto node = newTableInfo->Indexes.extract(prevPathId);
+        node.key() = remapNewId;
+        auto it = newTableInfo->Indexes.insert(std::move(node)).position;
 
         Y_ABORT_UNLESS(move.GetReMapIndex().HasDstName());
         indexDesc.SetName(dstIndexName);
-        newTableInfo->Indexes[remapNewId].Name = dstIndexName;
+        it->second.Name = dstIndexName;
     }
 
     newTableInfo->SetSchema(schema);

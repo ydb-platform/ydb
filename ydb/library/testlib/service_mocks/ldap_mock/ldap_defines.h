@@ -53,9 +53,7 @@ enum EElementType {
     ENUMERATED = 0x0A,
     SEQUENCE = 0x30,
     SET = 0x31,
-    FILTER_EXT_OID = 0x81,
 };
-
 
 struct TBindRequestInfo {
     struct TInitializeList {

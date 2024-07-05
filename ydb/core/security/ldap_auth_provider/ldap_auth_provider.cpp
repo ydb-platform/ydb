@@ -153,10 +153,6 @@ private:
                 GetNestedGroups(ld, &allUserGroups);
             }
         }
-        // Cerr << "+++ After TraverseTree" << Endl;
-        // for (const auto& group: allUserGroups) {
-        //     Cerr << "+++: " << group << Endl;
-        // }
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
         Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, allUserGroups));
@@ -242,10 +238,6 @@ private:
                         .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
-
-        // ldap debug
-        // int dl = 0x0001;
-        // NKikimrLdap::SetOption(nullptr, NKikimrLdap::EOption::DEBUG, &dl);
 
         return {};
     }
@@ -341,8 +333,9 @@ private:
             filter << "(|";
             filter << "(entryDn=" << queue.front() << ')';
             queue.pop();
-            //should filter string is divided into several batches
+            //should filter string is separated into several batches
             while (!queue.empty()) {
+                // entryDn specific for OpenLdap, may get this value from config
                 filter << "(entryDn=" << queue.front() << ')';
                 queue.pop();
             }

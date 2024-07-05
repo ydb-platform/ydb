@@ -1,5 +1,4 @@
 #include <queue>
-#include <util/stream/format.h>
 #include "ldap_defines.h"
 
 namespace LdapMock {

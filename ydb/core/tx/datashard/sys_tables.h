@@ -31,6 +31,7 @@ struct TSysTables {
         EDefaultKind DefaultKind;
         Ydb::TypedValue DefaultFromLiteral;
         bool IsBuildInProgress = false;
+        bool IsNotNullColumn = false; //maybe move into TTypeInfo?
 
         TTableColumnInfo() = default;
 
@@ -54,7 +55,7 @@ struct TSysTables {
             const TString& typeMod = {}, i32 keyOrder = -1,
             const TString& defaultFromSequence = {},
             EDefaultKind defaultKind = EDefaultKind::DEFAULT_UNDEFINED,
-            const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+            const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool isNotNullColumn = false)
             : Name(name)
             , Id(colId)
             , PType(type)
@@ -64,6 +65,7 @@ struct TSysTables {
             , DefaultKind(defaultKind)
             , DefaultFromLiteral(defaultFromLiteral)
             , IsBuildInProgress(isBuildInProgress)
+            , IsNotNullColumn(isNotNullColumn)
         {}
     };
 

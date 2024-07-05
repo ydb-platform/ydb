@@ -55,6 +55,25 @@ INSERT INTO primitives VALUES
        )
        ;
 
+
+DROP TABLE IF EXISTS upper_case_column;
+CREATE TABLE upper_case_column (
+    col_01 INTEGER NOT NULL,
+    PRIMARY KEY (col_01)
+);
+
+INSERT INTO upper_case_column VALUES (0), (1), (2);
+
+
+DROP TABLE IF EXISTS constant;
+CREATE TABLE constant (
+    col_01 INTEGER NOT NULL,
+    PRIMARY KEY (col_01)
+);
+
+INSERT INTO constant VALUES (0), (1), (2);
+
+
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
     id int,

@@ -295,14 +295,14 @@ class Factory:
 
     def _upper_case_column(self) -> Sequence[TestCase]:
         '''
-        In this test case set we check SELECT COL1 from a pg table.
-        https://st.yandex-team.ru/YQ-2264
+        Column has a name with lowercase letters: `col_01`.
+        Now we SELECT it in uppercase letters: `COL_01`.
         '''
 
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='"COL1"',
+                    name='col_01',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(my=mysql.Integer()),
                 ),
@@ -314,19 +314,17 @@ class Factory:
         tc = TestCase(
             name_=test_case_name,
             schema=schema,
-            select_what=SelectWhat(SelectWhat.Item(name='COL1')),
+            select_what=SelectWhat(SelectWhat.Item(name='COL_01')),
             select_where=None,
-            data_in=[
-                [
-                    3,
-                ]
-            ],
+            data_in=None,
             data_out_=[
                 [
-                    3,
+                    0,
+                    1,
+                    2,
                 ],
             ],
-            data_source_kind=EDataSourceKind.mysql,
+            data_source_kind=EDataSourceKind.MYSQL,
             protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
@@ -335,15 +333,15 @@ class Factory:
 
     def _constant(self) -> Sequence[TestCase]:
         '''
-        In this test case set we check SELECT 42 from a pg table.
+        In this test case set we check SELECT 42 from MySQL table.
         '''
 
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(my=mysql.Serial8()),
+                    name='col_01',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
                 ),
             )
         )
@@ -355,17 +353,7 @@ class Factory:
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
-            data_in=[
-                [
-                    1,
-                ],
-                [
-                    2,
-                ],
-                [
-                    3,
-                ],
-            ],
+            data_in=None,
             data_out_=[
                 [
                     42,
@@ -377,7 +365,7 @@ class Factory:
                     42,
                 ],
             ],
-            data_source_kind=EDataSourceKind.mysql,
+            data_source_kind=EDataSourceKind.MYSQL,
             protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
@@ -543,8 +531,9 @@ class Factory:
         return list(
             itertools.chain(
                 self._primitive_types(),
+                # TODO: check this later, looks like it works on PostgreSQL
                 # self._upper_case_column(),
-                # self._constant(),
+                self._constant(),
                 # self._count(),
                 # self._pushdown(),
                 # self._json(),

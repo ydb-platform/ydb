@@ -683,6 +683,7 @@ SRCS(
     postgresql/src/backend/utils/mmgr/slab.c
     postgresql/src/backend/utils/resowner/resowner.c
     postgresql/src/backend/utils/sort/logtape.c
+    postgresql/src/backend/utils/sort/qsort_interruptible.c
     postgresql/src/backend/utils/sort/sharedtuplestore.c
     postgresql/src/backend/utils/sort/sortsupport.c
     postgresql/src/backend/utils/sort/tuplesort.c

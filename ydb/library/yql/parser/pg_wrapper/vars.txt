@@ -587,6 +587,7 @@ all_timeouts
 all_timeouts_initialized
 allocatedDescs
 allowSystemTableMods
+allow_in_place_tablespaces
 amRegisteredListener
 am_autovacuum_launcher
 am_autovacuum_worker
@@ -676,6 +677,7 @@ bytesToHex.hex
 cachedCommitLSN
 cachedFetchXid
 cachedFetchXidStatus
+cachedXidIsNotInProgress
 cached_db_hash
 cached_expression_list
 cached_role

@@ -46,6 +46,7 @@
 #include "catalog/storage.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
+#include "commands/tablespace.h"
 #include "commands/trigger.h"
 #include "commands/user.h"
 #include "commands/vacuum.h"

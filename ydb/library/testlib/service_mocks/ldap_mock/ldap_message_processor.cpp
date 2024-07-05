@@ -133,7 +133,6 @@ int TLdapRequestProcessor::ExtractMessageId() {
 
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
     unsigned char protocolOp = GetByte();
-    // Cerr << "+++ protocolOp: " << static_cast<int>(protocolOp) << Endl;
     switch (protocolOp) {
         case EProtocolOp::BIND_OP_REQUEST: {
             return ProcessBindRequest(responses.BindResponses);

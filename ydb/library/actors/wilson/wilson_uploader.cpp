@@ -382,6 +382,11 @@ namespace NWilson {
                     PARA() {
                         str << (isBroken ? "Broken" : "Works");
                     }
+                    if (ErrStr) {
+                        PARA() {
+                            str << "Error: " << ErrStr;
+                        }
+                    }
                     if (LastCommitTraceErrStr) {
                         PARA() {
                             str << "Last commit traces error: " << LastCommitTraceErrStr;

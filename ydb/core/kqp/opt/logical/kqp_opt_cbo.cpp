@@ -113,6 +113,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     const TVector<TString>& rightJoinKeys,
     TKqpProviderContext& ctx) {
 
+    Y_UNUSED(joinConditions);
     Y_UNUSED(left);
     Y_UNUSED(leftJoinKeys);
 
@@ -125,12 +126,8 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     if (rightStats->Type != EStatisticsType::BaseTable) {
         return false;
     }
-    if (joinConditions.size() > rightStats->KeyColumns->Data.size()) {
-        return false;
-    }
 
     for (auto rightCol : rightJoinKeys) {
-        
         if (std::find(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), rightCol) == rightStats->KeyColumns->Data.end()) {
             return false;
         }

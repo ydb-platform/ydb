@@ -73,6 +73,7 @@ def execute_scan_query(driver, yql_text, table_path):
 
                 break
 
+
 def remove_optimizer_estimates(query_plan):
     if 'Plans' in query_plan:
         for p in query_plan['Plans']:
@@ -83,14 +84,16 @@ def remove_optimizer_estimates(query_plan):
                 if key in op:
                     del op[key]
 
+
 def sanitize_plan(query_plan):
     if 'queries' not in query_plan:
         return
-    for q in  query_plan['queries']:
+    for q in query_plan['queries']:
         if 'SimplifiedPlan' in q:
             del q['SimplifiedPlan']
         if 'Plan' in q:
             remove_optimizer_estimates(q['Plan'])
+
 
 def explain_scan_query(driver, yql_text, table_path):
     yql_text = yql_text.replace("$data", table_path)
@@ -101,8 +104,9 @@ def explain_scan_query(driver, yql_text, table_path):
     )
     res = json.loads(result.plan)
     sanitize_plan(res)
-    print (json.dumps(res))
+    print(json.dumps(res))
     return res
+
 
 def save_canonical_data(data, fname):
     path = os.path.join(yatest.common.output_path(), fname)

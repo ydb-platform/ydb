@@ -448,6 +448,7 @@ class BaseCanonicalTest(object):
                     )
                 )
             )
+
     def remove_optimizer_estimates(self, query_plan):
         if 'Plans' in query_plan:
             for p in query_plan['Plans']:

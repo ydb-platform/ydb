@@ -261,7 +261,7 @@ struct TUnaryStringExecs
         stringOffsets += offset;
         for (int64_t i = 0; i < length; ++i, ++stringOffsets, ++resPtr) {
             std::string_view val(data + stringOffsets[0], stringOffsets[1] - stringOffsets[0]);
-            resPtr[i] = TOp::Do(val);
+            *resPtr = TOp::Do(val);
         }
     }
 

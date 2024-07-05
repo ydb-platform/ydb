@@ -93,7 +93,7 @@ void UpdateFlat(TTableClient& client, const TOptions& options, std::string_view 
         DECLARE $rows AS Uint64;
 
         UPSERT INTO {1}
-        SELECT COALESCE(CAST({2} AS Uint32), 0) AS {2}, Untag(Knn::ToBinaryString{4}(CAST(Knn::FloatFromBinaryString(embedding) AS List<{5}>)), "{4}Vector") AS embedding
+        SELECT COALESCE(CAST({2} AS Uint32), 0) AS {2}, Untag(Knn::ToBinaryString{4}(CAST(Knn::FloatFromBinaryString({3}) AS List<{5}>)), "{4}Vector") AS {3}
         FROM {0}
         WHERE $begin <= {2} AND {2} < $begin + $rows;
     )",
@@ -192,21 +192,15 @@ void TopKFlat(TTableClient& client, const TOptions& options, std::string_view ty
     std::stringstream targetStrStream;
     targetStrStream << targetFileStream.rdbuf();
     query = std::format(R"($Target = CAST({0} AS List<Float>); {1})", targetStrStream.view(), query);
+    TExecDataQuerySettings settings;
+    settings.KeepInQueryCache(true);
     auto r = client.RetryOperationSync([&](TSession session) -> TStatus {
-        auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
-        if (!prepareResult.IsSuccess()) {
-            return prepareResult;
+        auto f = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),settings);
+        auto r = f.ExtractValueSync();
+        if (r.IsSuccess()) {
+            PrintTop(r.GetResultSetParser(0));
         }
-
-        auto query = prepareResult.GetQuery();
-        auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
-
-        if (result.IsSuccess()) {
-            PrintTop(result.GetResultSetParser(0));
-        }
-
-        return result;
+        return r;
     });
     if (!r.IsSuccess()) {
         ythrow TVectorException{r};

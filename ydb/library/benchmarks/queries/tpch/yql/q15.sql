@@ -24,7 +24,7 @@ from
     $revenue0
 );
 $join1 = (
-        select
+select
     s.s_suppkey as s_suppkey,
     s.s_name as s_name,
     s.s_address as s_address,

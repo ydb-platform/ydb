@@ -96,6 +96,10 @@ protected:
                 .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
             }) {}
 
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtrVal, BasicBlock*& genToBlock) const final {
+        return TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(ctx, statePtrVal, genToBlock);
+    }
+
 public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {

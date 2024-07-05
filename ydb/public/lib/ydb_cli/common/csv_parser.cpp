@@ -135,10 +135,13 @@ public:
             break;
         case EPrimitiveType::Date32:
             Builder.Date32(GetArithmetic<i32>(token));
+            break;
         case EPrimitiveType::Datetime64:
             Builder.Datetime64(GetArithmetic<i64>(token));
+            break;
         case EPrimitiveType::Timestamp64:
             Builder.Timestamp64(GetArithmetic<i64>(token));
+            break;
         case EPrimitiveType::Interval64:
             Builder.Interval64(GetArithmetic<i64>(token));
             break;            
@@ -152,7 +155,7 @@ public:
             Builder.TzTimestamp(token);
             break;
         default:
-            TMisuseException() << "Unsupported primitive type: " << Parser.GetPrimitive();
+            throw TMisuseException() << "Unsupported primitive type: " << Parser.GetPrimitive();
         }
     }
 

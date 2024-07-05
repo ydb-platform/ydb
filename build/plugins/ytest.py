@@ -792,7 +792,6 @@ def onadd_pytest_bin(fields, unit, *args):
         unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
 
     dart_record = create_dart_record(fields, unit, flat_args, spec_args)
-    dart_record[df.OldPytest.KEY] = 'no'
     if yt_spec:
         dart_record |= yt_spec
 
@@ -935,7 +934,6 @@ def onsetup_exectest(fields, unit, *args):
 
     dart_record = create_dart_record(fields, unit, (), {})
     dart_record[df.ScriptRelPath.KEY] = 'exectest'
-    dart_record[df.OldPytest.KEY] = 'no'
     if yt_spec:
         dart_record |= yt_spec
 

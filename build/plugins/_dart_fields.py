@@ -604,10 +604,6 @@ class NodeModulesBundleFilename:
     KEY = 'NODE-MODULES-BUNDLE-FILENAME'
 
 
-class OldPytest:
-    KEY = 'OLD_PYTEST'
-
-
 class PythonPaths:
     KEY = 'PYTHON-PATHS'
 

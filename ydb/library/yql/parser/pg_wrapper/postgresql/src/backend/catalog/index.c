@@ -3021,10 +3021,9 @@ index_build(Relation heapRelation,
 	 * relfilenode won't change, and nothing needs to be done here.
 	 */
 	if (indexRelation->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED &&
-		!smgrexists(indexRelation->rd_smgr, INIT_FORKNUM))
+		!smgrexists(RelationGetSmgr(indexRelation), INIT_FORKNUM))
 	{
-		RelationOpenSmgr(indexRelation);
-		smgrcreate(indexRelation->rd_smgr, INIT_FORKNUM, false);
+		smgrcreate(RelationGetSmgr(indexRelation), INIT_FORKNUM, false);
 		indexRelation->rd_indam->ambuildempty(indexRelation);
 	}
 
@@ -3475,9 +3474,8 @@ index_set_state_flags(Oid indexId, IndexStateFlagsAction action)
 			 * CONCURRENTLY that failed partway through.)
 			 *
 			 * Note: the CLUSTER logic assumes that indisclustered cannot be
-			 * set on any invalid index, so clear that flag too.  Similarly,
-			 * ALTER TABLE assumes that indisreplident cannot be set for
-			 * invalid indexes.
+			 * set on any invalid index, so clear that flag too.  For
+			 * cleanliness, also clear indisreplident.
 			 */
 			indexForm->indisvalid = false;
 			indexForm->indisclustered = false;

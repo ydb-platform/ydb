@@ -45,6 +45,7 @@
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/optimizer.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -67,6 +68,7 @@ static void ExecBatchInsert(ModifyTableState *mtstate,
 							int numSlots,
 							EState *estate,
 							bool canSetTag);
+static void ExecPendingInserts(EState *estate);
 static bool ExecOnConflictUpdate(ModifyTableState *mtstate,
 								 ResultRelInfo *resultRelInfo,
 								 ItemPointer conflictTid,
@@ -251,6 +253,101 @@ ExecCheckTIDVisible(EState *estate,
 }
 
 /*
+ * Initialize to compute stored generated columns for a tuple
+ *
+ * This fills the resultRelInfo's ri_GeneratedExprs field and makes an
+ * associated ResultRelInfoExtra struct to hold ri_extraUpdatedCols.
+ * (Currently, ri_extraUpdatedCols is consulted only in UPDATE, but we might
+ * as well fill it for INSERT too.)
+ */
+void
+ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
+						EState *estate,
+						CmdType cmdtype)
+{
+	Relation	rel = resultRelInfo->ri_RelationDesc;
+	TupleDesc	tupdesc = RelationGetDescr(rel);
+	int			natts = tupdesc->natts;
+	Bitmapset  *updatedCols;
+	ResultRelInfoExtra *rextra;
+	MemoryContext oldContext;
+
+	/* Don't call twice */
+	Assert(resultRelInfo->ri_GeneratedExprs == NULL);
+
+	/* Nothing to do if no generated columns */
+	if (!(tupdesc->constr && tupdesc->constr->has_generated_stored))
+		return;
+
+	/*
+	 * In an UPDATE, we can skip computing any generated columns that do not
+	 * depend on any UPDATE target column.  But if there is a BEFORE ROW
+	 * UPDATE trigger, we cannot skip because the trigger might change more
+	 * columns.
+	 */
+	if (cmdtype == CMD_UPDATE &&
+		!(rel->trigdesc && rel->trigdesc->trig_update_before_row))
+		updatedCols = ExecGetUpdatedCols(resultRelInfo, estate);
+	else
+		updatedCols = NULL;
+
+	/*
+	 * Make sure these data structures are built in the per-query memory
+	 * context so they'll survive throughout the query.
+	 */
+	oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+	resultRelInfo->ri_GeneratedExprs =
+		(ExprState **) palloc0(natts * sizeof(ExprState *));
+	resultRelInfo->ri_NumGeneratedNeeded = 0;
+
+	rextra = palloc_object(ResultRelInfoExtra);
+	rextra->rinfo = resultRelInfo;
+	rextra->ri_extraUpdatedCols = NULL;
+	estate->es_resultrelinfo_extra = lappend(estate->es_resultrelinfo_extra,
+											 rextra);
+
+	for (int i = 0; i < natts; i++)
+	{
+		if (TupleDescAttr(tupdesc, i)->attgenerated == ATTRIBUTE_GENERATED_STORED)
+		{
+			Expr	   *expr;
+
+			/* Fetch the GENERATED AS expression tree */
+			expr = (Expr *) build_column_default(rel, i + 1);
+			if (expr == NULL)
+				elog(ERROR, "no generation expression found for column number %d of table \"%s\"",
+					 i + 1, RelationGetRelationName(rel));
+
+			/*
+			 * If it's an update with a known set of update target columns,
+			 * see if we can skip the computation.
+			 */
+			if (updatedCols)
+			{
+				Bitmapset  *attrs_used = NULL;
+
+				pull_varattnos((Node *) expr, 1, &attrs_used);
+
+				if (!bms_overlap(updatedCols, attrs_used))
+					continue;	/* need not update this column */
+			}
+
+			/* No luck, so prepare the expression for execution */
+			resultRelInfo->ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
+			resultRelInfo->ri_NumGeneratedNeeded++;
+
+			/* And mark this column in rextra->ri_extraUpdatedCols */
+			rextra->ri_extraUpdatedCols =
+				bms_add_member(rextra->ri_extraUpdatedCols,
+							   i + 1 - FirstLowInvalidHeapAttributeNumber);
+		}
+	}
+
+	MemoryContextSwitchTo(oldContext);
+}
+
+/*
  * Compute stored generated columns for a tuple
  */
 void
@@ -261,58 +358,22 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	TupleDesc	tupdesc = RelationGetDescr(rel);
 	int			natts = tupdesc->natts;
+	ExprContext *econtext = GetPerTupleExprContext(estate);
 	MemoryContext oldContext;
 	Datum	   *values;
 	bool	   *nulls;
 
+	/* We should not be called unless this is true */
 	Assert(tupdesc->constr && tupdesc->constr->has_generated_stored);
 
 	/*
-	 * If first time through for this result relation, build expression
-	 * nodetrees for rel's stored generation expressions.  Keep them in the
-	 * per-query memory context so they'll survive throughout the query.
+	 * For relations named directly in the query, ExecInitStoredGenerated
+	 * should have been called already; but this might not have happened yet
+	 * for a partition child rel.  Also, it's convenient for outside callers
+	 * to not have to call ExecInitStoredGenerated explicitly.
 	 */
 	if (resultRelInfo->ri_GeneratedExprs == NULL)
-	{
-		oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
-
-		resultRelInfo->ri_GeneratedExprs =
-			(ExprState **) palloc(natts * sizeof(ExprState *));
-		resultRelInfo->ri_NumGeneratedNeeded = 0;
-
-		for (int i = 0; i < natts; i++)
-		{
-			if (TupleDescAttr(tupdesc, i)->attgenerated == ATTRIBUTE_GENERATED_STORED)
-			{
-				Expr	   *expr;
-
-				/*
-				 * If it's an update and the current column was not marked as
-				 * being updated, then we can skip the computation.  But if
-				 * there is a BEFORE ROW UPDATE trigger, we cannot skip
-				 * because the trigger might affect additional columns.
-				 */
-				if (cmdtype == CMD_UPDATE &&
-					!(rel->trigdesc && rel->trigdesc->trig_update_before_row) &&
-					!bms_is_member(i + 1 - FirstLowInvalidHeapAttributeNumber,
-								   ExecGetExtraUpdatedCols(resultRelInfo, estate)))
-				{
-					resultRelInfo->ri_GeneratedExprs[i] = NULL;
-					continue;
-				}
-
-				expr = (Expr *) build_column_default(rel, i + 1);
-				if (expr == NULL)
-					elog(ERROR, "no generation expression found for column number %d of table \"%s\"",
-						 i + 1, RelationGetRelationName(rel));
-
-				resultRelInfo->ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
-				resultRelInfo->ri_NumGeneratedNeeded++;
-			}
-		}
-
-		MemoryContextSwitchTo(oldContext);
-	}
+		ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
 
 	/*
 	 * If no generated columns have been affected by this change, then skip
@@ -333,14 +394,13 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 
-		if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED &&
-			resultRelInfo->ri_GeneratedExprs[i])
+		if (resultRelInfo->ri_GeneratedExprs[i])
 		{
-			ExprContext *econtext;
 			Datum		val;
 			bool		isnull;
 
-			econtext = GetPerTupleExprContext(estate);
+			Assert(attr->attgenerated == ATTRIBUTE_GENERATED_STORED);
+
 			econtext->ecxt_scantuple = slot;
 
 			val = ExecEvalExpr(resultRelInfo->ri_GeneratedExprs[i], econtext, &isnull);
@@ -645,6 +705,10 @@ ExecInsert(ModifyTableState *mtstate,
 	if (resultRelInfo->ri_TrigDesc &&
 		resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 	{
+		/* Flush any pending inserts, so rows are visible to the triggers */
+		if (estate->es_insert_pending_result_relations != NIL)
+			ExecPendingInserts(estate);
+
 		if (!ExecBRInsertTriggers(estate, resultRelInfo, slot))
 			return NULL;		/* "do nothing" */
 	}
@@ -678,6 +742,8 @@ ExecInsert(ModifyTableState *mtstate,
 		 */
 		if (resultRelInfo->ri_BatchSize > 1)
 		{
+			bool		flushed = false;
+
 			/*
 			 * When we've reached the desired batch size, perform the
 			 * insertion.
@@ -690,6 +756,7 @@ ExecInsert(ModifyTableState *mtstate,
 								resultRelInfo->ri_NumSlots,
 								estate, canSetTag);
 				resultRelInfo->ri_NumSlots = 0;
+				flushed = true;
 			}
 
 			oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
@@ -731,6 +798,28 @@ ExecInsert(ModifyTableState *mtstate,
 
 			ExecCopySlot(resultRelInfo->ri_PlanSlots[resultRelInfo->ri_NumSlots],
 						 planSlot);
+
+			/*
+			 * If these are the first tuples stored in the buffers, add the
+			 * target rel and the mtstate to the
+			 * es_insert_pending_result_relations and
+			 * es_insert_pending_modifytables lists respectively, execpt in
+			 * the case where flushing was done above, in which case they
+			 * would already have been added to the lists, so no need to do
+			 * this.
+			 */
+			if (resultRelInfo->ri_NumSlots == 0 && !flushed)
+			{
+				Assert(!list_member_ptr(estate->es_insert_pending_result_relations,
+										resultRelInfo));
+				estate->es_insert_pending_result_relations =
+					lappend(estate->es_insert_pending_result_relations,
+							resultRelInfo);
+				estate->es_insert_pending_modifytables =
+					lappend(estate->es_insert_pending_modifytables, mtstate);
+			}
+			Assert(list_member_ptr(estate->es_insert_pending_result_relations,
+								   resultRelInfo));
 
 			resultRelInfo->ri_NumSlots++;
 
@@ -1034,9 +1123,8 @@ ExecBatchInsert(ModifyTableState *mtstate,
 		slot = rslots[i];
 
 		/*
-		 * AFTER ROW Triggers or RETURNING expressions might reference the
-		 * tableoid column, so (re-)initialize tts_tableOid before evaluating
-		 * them.
+		 * AFTER ROW Triggers might reference the tableoid column, so
+		 * (re-)initialize tts_tableOid before evaluating them.
 		 */
 		slot->tts_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 
@@ -1106,6 +1194,10 @@ ExecDelete(ModifyTableState *mtstate,
 		resultRelInfo->ri_TrigDesc->trig_delete_before_row)
 	{
 		bool		dodelete;
+
+		/* Flush any pending inserts, so rows are visible to the triggers */
+		if (estate->es_insert_pending_result_relations != NIL)
+			ExecPendingInserts(estate);
 
 		dodelete = ExecBRDeleteTriggers(estate, epqstate, resultRelInfo,
 										tupleid, oldtuple, epqreturnslot);
@@ -1411,6 +1503,36 @@ ldelete:;
 }
 
 /*
+ * ExecPendingInserts -- flushes all pending inserts to the foreign tables
+ */
+static void
+ExecPendingInserts(EState *estate)
+{
+	ListCell   *l1,
+			   *l2;
+
+	forboth(l1, estate->es_insert_pending_result_relations,
+			l2, estate->es_insert_pending_modifytables)
+	{
+		ResultRelInfo *resultRelInfo = (ResultRelInfo *) lfirst(l1);
+		ModifyTableState *mtstate = (ModifyTableState *) lfirst(l2);
+
+		Assert(mtstate);
+		ExecBatchInsert(mtstate, resultRelInfo,
+						resultRelInfo->ri_Slots,
+						resultRelInfo->ri_PlanSlots,
+						resultRelInfo->ri_NumSlots,
+						estate, mtstate->canSetTag);
+		resultRelInfo->ri_NumSlots = 0;
+	}
+
+	list_free(estate->es_insert_pending_result_relations);
+	list_free(estate->es_insert_pending_modifytables);
+	estate->es_insert_pending_result_relations = NIL;
+	estate->es_insert_pending_modifytables = NIL;
+}
+
+/*
  * ExecCrossPartitionUpdate --- Move an updated tuple to another partition.
  *
  * This works by first deleting the old tuple from the current partition,
@@ -1634,6 +1756,10 @@ ExecUpdate(ModifyTableState *mtstate,
 	if (resultRelInfo->ri_TrigDesc &&
 		resultRelInfo->ri_TrigDesc->trig_update_before_row)
 	{
+		/* Flush any pending inserts, so rows are visible to the triggers */
+		if (estate->es_insert_pending_result_relations != NIL)
+			ExecPendingInserts(estate);
+
 		if (!ExecBRUpdateTriggers(estate, epqstate, resultRelInfo,
 								  tupleid, oldtuple, slot))
 			return NULL;		/* "do nothing" */
@@ -2361,9 +2487,6 @@ ExecModifyTable(PlanState *pstate)
 	ItemPointerData tuple_ctid;
 	HeapTupleData oldtupdata;
 	HeapTuple	oldtuple;
-	PartitionTupleRouting *proute = node->mt_partition_tuple_routing;
-	List	   *relinfos = NIL;
-	ListCell   *lc;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2620,21 +2743,8 @@ ExecModifyTable(PlanState *pstate)
 	/*
 	 * Insert remaining tuples for batch insert.
 	 */
-	if (proute)
-		relinfos = estate->es_tuple_routing_result_relations;
-	else
-		relinfos = estate->es_opened_result_relations;
-
-	foreach(lc, relinfos)
-	{
-		resultRelInfo = lfirst(lc);
-		if (resultRelInfo->ri_NumSlots > 0)
-			ExecBatchInsert(node, resultRelInfo,
-							resultRelInfo->ri_Slots,
-							resultRelInfo->ri_PlanSlots,
-							resultRelInfo->ri_NumSlots,
-							estate, node->canSetTag);
-	}
+	if (estate->es_insert_pending_result_relations != NIL)
+		ExecPendingInserts(estate);
 
 	/*
 	 * We're done, but fire AFTER STATEMENT triggers before exiting.
@@ -2883,6 +2993,15 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 					elog(ERROR, "could not find junk wholerow column");
 			}
 		}
+
+		/*
+		 * For INSERT and UPDATE, prepare to evaluate any generated columns.
+		 * We must do this now, even if we never insert or update any rows,
+		 * because we have to fill resultRelInfo->ri_extraUpdatedCols for
+		 * possible use by the trigger machinery.
+		 */
+		if (operation == CMD_INSERT || operation == CMD_UPDATE)
+			ExecInitStoredGenerated(resultRelInfo, estate, operation);
 	}
 
 	/*

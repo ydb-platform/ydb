@@ -216,6 +216,8 @@ IsForInput
 IsPostmasterEnvironment
 IsUnderPostmaster
 KnownAssignedXids
+KnownAssignedXidsCompress.lastCompressTs
+KnownAssignedXidsCompress.transactionEndsCounter
 KnownAssignedXidsValid
 LWLockTrancheNames
 LWLockTrancheNamesAllocated
@@ -887,7 +889,6 @@ in_remote_transaction
 in_restore_command
 in_streamed_transaction
 incoming_message
-int64_div_fast_to_numeric.pow10
 integer_datetimes
 internal_flush.last_reported_send_errno
 invalid_page_tab

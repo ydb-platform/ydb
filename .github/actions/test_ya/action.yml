@@ -281,16 +281,22 @@ runs:
       run: |
         set -x
         python3 -m pip install ydb ydb[yc]
-        script=.github/scripts/upload_tests_results.py \
-          --result-file "${JUNIT_REPORT_XML}" \
-          --run-time ${{ env.CURRENT_TIME }} \
-          --commit "$(git rev-parse HEAD)" \
-          --build-type "${BUILD_PRESET}" \
-          --pull "${PR_NUMBER}" \
-          --job-name "${JOB_NAME}"
+
+        # Debug variables
+        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
+        echo "CURRENT_TIME=${{ env.CURRENT_TIME }}"
+        echo "BUILD_PRESET=${BUILD_PRESET}"
+        echo "PR_NUMBER=${PR_NUMBER}"
+        echo "JOB_NAME=${JOB_NAME}"
+        
+        script=".github/scripts/upload_tests_results.py --result-file \"${JUNIT_REPORT_XML}\" --run-time \${{ env.CURRENT_TIME }}\ --commit \"$(git rev-parse HEAD)\" --build-type \"${BUILD_PRESET}\" --pull \"${PR_NUMBER}\" --job-name \"${JOB_NAME}\""
+
         printf "$script"
-        result=`$script`
+        
+        # Attempt to run the script
+        result=$(python3 $script)
         printf "$result"
+
 
         
 

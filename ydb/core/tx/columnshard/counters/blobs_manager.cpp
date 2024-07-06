@@ -7,19 +7,19 @@ namespace NKikimr::NColumnShard {
 
 TBlobsManagerCounters::TBlobsManagerCounters(const TString& module)
     : TCommonCountersOwner(module)
-    , GCCounters(*this, "GC")
-    , CurrentGen(TBase::GetValue("CurrentGen"))
-    , CurrentStep(TBase::GetValue("CurrentStep"))
-    , BlobsToKeepCount(TBase::GetValue("BlobsToKeep/Count"))
     , BlobsToDeleteCount(TBase::GetValue("BlobsToDelete/Count"))
     , BlobsToDeleteDelayedCount(TBase::GetValue("BlobsToDeleteDelayed/Count"))
+    , BlobsToKeepCount(TBase::GetValue("BlobsToKeep/Count"))
+    , CurrentGen(TBase::GetValue("CurrentGen"))
+    , CurrentStep(TBase::GetValue("CurrentStep"))
+    , GCCounters(*this, "GC")
 
 {
 
 }
 
 TBlobsManagerGCCounters::TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName)
-    : TBase(saveAs, componentName)
+    : TBase(sameAs, componentName)
     , SkipCollectionEmpty(TBase::GetDeriviative("Skip/Empty/Count"))
     , SkipCollectionThrottling(TBase::GetDeriviative("Skip/Throttling/Count"))
 {
@@ -42,11 +42,11 @@ void TBlobsManagerGCCounters::OnGCTask(const ui32 keepsCount, const ui32 keepByt
         FullGCTasks->Add(1);
     }
     KeepsCountTasks->Collect(keepsCount);
-    KeepsCountBlobs->Collect(keepsCount, keepsCount);
-    KeepsCountBytes->Collect(keepsCount, keepsBytes);
+    KeepsCountBlobs->Collect((i64)keepsCount, keepsCount);
+    KeepsCountBytes->Collect((i64)keepsCount, keepBytes);
     DeletesCountTasks->Collect(deleteCount);
-    DeletesCountBlobs->Collect(deleteCount, deleteCount);
-    DeletesCountBytes->Collect(keepsCount, deleteBytes);
+    DeletesCountBlobs->Collect((i64)deleteCount, deleteCount);
+    DeletesCountBytes->Collect((i64)deleteCount, deleteBytes);
     if (moveBarrier) {
         MoveBarriers->Add(1);
     } else {

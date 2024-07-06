@@ -88,7 +88,6 @@ void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlo
 }
 
 void TBlobBatch::OnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status) {
-    BatchInfo->Counters.OnPutResult(blobId.BlobSize());
     Y_ABORT_UNLESS(status == NKikimrProto::OK, "The caller must handle unsuccessful status");
     Y_ABORT_UNLESS(BatchInfo);
     Y_ABORT_UNLESS(blobId.Cookie() < BatchInfo->InFlight.size());
@@ -204,6 +203,22 @@ private:
     YDB_ACCESSOR_DEF(std::deque<TUnifiedBlobId>, KeepsToErase);
     YDB_READONLY_DEF(std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>, SharedBlobsManager);
 public:
+    ui64 GetKeepBytes() const {
+        ui64 size = 0;
+        for (auto&& i : KeepsToErase) {
+            size += i.BlobSize();
+        }
+        return size;
+    }
+
+    ui64 GetDeleteBytes() const {
+        ui64 size = 0;
+        for (TTabletsByBlob::TIterator it(ExtractedToRemoveFromDB); it.IsValid(); ++it) {
+            size += it.GetBlobId().BlobSize();
+        }
+        return size;
+    }
+
     TGCContext(const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsManager)
         : SharedBlobsManager(sharedBlobsManager)
     {
@@ -270,11 +285,11 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
         if (BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB())) {
             if (logoBlobId.Generation() == CurrentGen) {
                 AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep", keepUnified.ToStringNew());
-                continue;
+                return;
             }
             if (gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
                 AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep_not_direct", keepUnified.ToStringNew());
-                continue;
+                return;
             }
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("to_not_keep_old", keepUnified.ToStringNew());
             gcContext.MutablePerGroupGCListsInFlight()[bAddress].DontKeepList.insert(logoBlobId);
@@ -284,7 +299,7 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
         }
     };
 
-    return BlobsToKeep.ExtractFront(dest, gcContext.GetFreeSpace(), pred);
+    return BlobsToKeep.ExtractTo(dest, gcContext.GetFreeSpace(), pred);
 }
 
 std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId,
@@ -345,12 +360,13 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PreviousGCTime = TInstant::Zero();
     }
 
-    BlobsManagerCounters.OnGCTask(gcContext.GetKeepsToErase().size(), gcContext.GetExtractedToRemoveFromDB().GetSize(), gcContext.IsFull(), !!CollectGenStepInFlight);
+    BlobsManagerCounters.GCCounters.OnGCTask(gcContext.GetKeepsToErase().size(), gcContext.GetKeepBytes(),
+        gcContext.GetExtractedToRemoveFromDB().GetSize(), gcContext.GetDeleteBytes(), gcContext.IsFull(), !!CollectGenStepInFlight);
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), 
         CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
     if (result->IsEmpty()) {
-        BlobsManagerCounters.OnEmptyGCTask();
+        BlobsManagerCounters.GCCounters.OnEmptyGCTask();
         CollectGenStepInFlight = {};
         return nullptr;
     }

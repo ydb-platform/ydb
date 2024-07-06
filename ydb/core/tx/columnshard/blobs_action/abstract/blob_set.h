@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/util/gen_step.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/services/services.pb.h>
@@ -47,7 +48,7 @@ public:
 class TBlobsByGenStep {
 private:
     struct Comparator {
-        bool operator<(const TLogoBlobID& l, const TLogoBlobID& r) const {
+        bool operator()(const TLogoBlobID& l, const TLogoBlobID& r) const {
             TGenStep gsl(l);
             TGenStep gsr(l);
             if (gsl == gsr) {
@@ -65,6 +66,9 @@ public:
     [[nodiscard]] bool Remove(const TLogoBlobID& blobId) {
         return Blobs.erase(blobId);
     }
+    bool IsEmpty() const {
+        return Blobs.empty();
+    }
     ui32 GetSize() const {
         return Blobs.size();
     }
@@ -75,11 +79,11 @@ public:
     }
 
     template <class TActor>
-    bool ExtractFront(const TGenStep border, const ui32 countLimit, const TActor& actor) {
+    bool ExtractTo(const TGenStep includeBorder, const ui32 countLimit, const TActor& actor) {
         ui32 idx = 0;
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
             TGenStep gs(*it);
-            if (border < gs) {
+            if (includeBorder < gs) {
                 return true;
             }
             if (++idx > countLimit) {

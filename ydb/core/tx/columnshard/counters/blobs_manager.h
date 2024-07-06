@@ -2,6 +2,7 @@
 #include "common/owner.h"
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -15,6 +16,7 @@ namespace NKikimr::NColumnShard {
 
 class TBlobsManagerGCCounters: public TCommonCountersOwner {
 private:
+    using TBase = TCommonCountersOwner;
     NMonitoring::THistogramPtr KeepsCountBytes;
     NMonitoring::THistogramPtr KeepsCountBlobs;
     NMonitoring::THistogramPtr KeepsCountTasks;
@@ -32,13 +34,13 @@ public:
 
     TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
 
-    void OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes, 
+    void OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes,
         const bool isFull, const bool moveBarrier) const;
 
     void OnEmptyGCTask() const {
         EmptyGCTasks->Add(1);
     }
-}
+};
 
 class TBlobsManagerCounters: public TCommonCountersOwner {
 private:
@@ -51,13 +53,13 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentStep;
     const TBlobsManagerGCCounters GCCounters;
     TBlobsManagerCounters(const TString& module);
-    void OnBlobsToDelete(const TTabletsByBlob& blobs) const {
+    void OnBlobsToDelete(const NOlap::TTabletsByBlob& blobs) const {
         BlobsToDeleteCount->Set(blobs.GetSize());
     }
-    void OnBlobsToKeep(const TBlobsByGenStep& blobs) const {
-        BlobsToKeepCount->Set(blobs.GetBlobsCount());
+    void OnBlobsToKeep(const NOlap::TBlobsByGenStep& blobs) const {
+        BlobsToKeepCount->Set(blobs.GetSize());
     }
-    void OnBlobsToDeleteDelayed(const TTabletsByBlob& blobs) const {
+    void OnBlobsToDeleteDelayed(const NOlap::TTabletsByBlob& blobs) const {
         BlobsToDeleteDelayedCount->Set(blobs.GetSize());
     }
 };

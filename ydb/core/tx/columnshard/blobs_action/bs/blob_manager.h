@@ -173,7 +173,7 @@ private:
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) override;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
     void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
-    [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext, const bool controlCapacity = true);
+    [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 

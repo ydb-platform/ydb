@@ -5,58 +5,72 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 14,
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Limit",
+                        "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 12
+                                        "InternalOperatorId": 1
                                     }
                                 ],
-                                "Limit": "1001",
+                                "Name": "Aggregate"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 10
+                                    }
+                                ],
+                                "Limit": "1",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 13,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 12,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Aggregate-Filter-FullJoin (JoinDict)",
                                         "Operators": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Inputs": [],
+                                                "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = unique2",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 10
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Nth.unique2 == 42"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
                                                     },
                                                     {
                                                         "ExternalPlanNodeId": 4
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "FullJoin (JoinDict)"
                                             }
                                         ],
-                                        "PlanNodeId": 11,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
-                                                "Node Type": "Broadcast",
+                                                "KeyColumns": [
+                                                    "unique2"
+                                                ],
+                                                "Node Type": "HashShuffle",
                                                 "PlanNodeId": 4,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
@@ -76,9 +90,6 @@
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
-                                                                                    "thousand",
-                                                                                    "twothousand",
-                                                                                    "unique1",
                                                                                     "unique2"
                                                                                 ],
                                                                                 "ReadRanges": [
@@ -101,77 +112,19 @@
                                                 ]
                                             },
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 10,
+                                                "KeyColumns": [
+                                                    "unique2"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
-                                                        "Operators": [
-                                                            {
-                                                                "Condition": "unique1 = thousand",
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 8
-                                                                    },
-                                                                    {
-                                                                        "ExternalPlanNodeId": 6
-                                                                    }
-                                                                ],
-                                                                "Name": "LeftJoin (MapJoin)"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 9,
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 7,
                                                         "Plans": [
                                                             {
-                                                                "KeyColumns": [
-                                                                    "unique1"
-                                                                ],
-                                                                "Node Type": "HashShuffle",
-                                                                "PlanNodeId": 8,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "Filter-TableFullScan",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Inputs": [
-                                                                                    {
-                                                                                        "InternalOperatorId": 1
-                                                                                    }
-                                                                                ],
-                                                                                "Name": "Filter",
-                                                                                "Predicate": "item.unique2 < 10"
-                                                                            },
-                                                                            {
-                                                                                "Inputs": [],
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "thousand",
-                                                                                    "twothousand",
-                                                                                    "unique1",
-                                                                                    "unique2"
-                                                                                ],
-                                                                                "ReadRanges": [
-                                                                                    "unique1 (-\u221e, +\u221e)",
-                                                                                    "unique2 (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Scan": "Parallel",
-                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 7,
-                                                                        "Tables": [
-                                                                            "postgres_jointest/join0.test_plan/tenk1"
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                "KeyColumns": [
-                                                                    "thousand"
-                                                                ],
-                                                                "Node Type": "HashShuffle",
+                                                                "Node Type": "UnionAll",
                                                                 "PlanNodeId": 6,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -182,9 +135,6 @@
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
-                                                                                    "thousand",
-                                                                                    "twothousand",
-                                                                                    "unique1",
                                                                                     "unique2"
                                                                                 ],
                                                                                 "ReadRanges": [
@@ -226,9 +176,6 @@
             "reads": [
                 {
                     "columns": [
-                        "thousand",
-                        "twothousand",
-                        "unique1",
                         "unique2"
                     ],
                     "scan_by": [
@@ -239,22 +186,6 @@
                 },
                 {
                     "columns": [
-                        "thousand",
-                        "twothousand",
-                        "unique1",
-                        "unique2"
-                    ],
-                    "scan_by": [
-                        "unique1 (-\u221e, +\u221e)",
-                        "unique2 (-\u221e, +\u221e)"
-                    ],
-                    "type": "FullScan"
-                },
-                {
-                    "columns": [
-                        "thousand",
-                        "twothousand",
-                        "unique1",
                         "unique2"
                     ],
                     "scan_by": [

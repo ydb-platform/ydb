@@ -48,7 +48,7 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "hundred,ten = hundred,_equijoin_column_0",
+                                                "Condition": "hundred,ten = hundred,ten",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 10
@@ -64,8 +64,8 @@
                                         "Plans": [
                                             {
                                                 "KeyColumns": [
-                                                    "hundred",
-                                                    "_equijoin_column_0"
+                                                    "t2.hundred",
+                                                    "t3.ten"
                                                 ],
                                                 "Node Type": "HashShuffle",
                                                 "PlanNodeId": 8,
@@ -189,19 +189,17 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TableFullScan",
+                                                        "Node Type": "TableRangeScan",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Name": "TableFullScan",
+                                                                "Name": "TableRangeScan",
                                                                 "ReadColumns": [
                                                                     "hundred",
-                                                                    "ten",
-                                                                    "thousand",
-                                                                    "unique2"
+                                                                    "ten"
                                                                 ],
-                                                                "ReadRanges": [
-                                                                    "unique1 (-\u221e, +\u221e)",
+                                                                "ReadRange": [
+                                                                    "unique1 (1)",
                                                                     "unique2 (-\u221e, +\u221e)"
                                                                 ],
                                                                 "Scan": "Parallel",
@@ -262,15 +260,15 @@
                 {
                     "columns": [
                         "hundred",
-                        "ten",
-                        "thousand",
-                        "unique2"
+                        "ten"
+                    ],
+                    "lookup_by": [
+                        "unique1 (1)"
                     ],
                     "scan_by": [
-                        "unique1 (-\u221e, +\u221e)",
                         "unique2 (-\u221e, +\u221e)"
                     ],
-                    "type": "FullScan"
+                    "type": "Scan"
                 }
             ]
         }

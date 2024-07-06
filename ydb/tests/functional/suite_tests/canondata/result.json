@@ -118,6 +118,9 @@
         "query_15.plan": {
             "uri": "file://test_postgres.TestPGSQL.test_sql_suite_plan-jointest_join0.test_/query_15.plan"
         },
+        "query_16.plan": {
+            "uri": "file://test_postgres.TestPGSQL.test_sql_suite_plan-jointest_join0.test_/query_16.plan"
+        },
         "query_2.plan": {
             "uri": "file://test_postgres.TestPGSQL.test_sql_suite_plan-jointest_join0.test_/query_2.plan"
         },
@@ -670,6 +673,9 @@
         },
         "query_15": {
             "uri": "file://test_postgres.TestPGSQL.test_sql_suite_results-jointest_join0.test_/query_15"
+        },
+        "query_16": {
+            "uri": "file://test_postgres.TestPGSQL.test_sql_suite_results-jointest_join0.test_/query_16"
         },
         "query_2": {
             "uri": "file://test_postgres.TestPGSQL.test_sql_suite_results-jointest_join0.test_/query_2"

@@ -24,12 +24,12 @@
                         "PlanNodeId": 9,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
+                                "Node Type": "Merge",
                                 "PlanNodeId": 8,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -44,22 +44,20 @@
                                                     },
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.fault"
                                             },
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 2
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "item.b.thousand == item.a.q1 And item.a.q1 == item.b.hundred"
-                                            },
-                                            {
-                                                "Condition": "q1 = unique2",
+                                                "Condition": "q2 = unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
@@ -94,8 +92,7 @@
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
-                                                                                    "hundred",
-                                                                                    "thousand",
+                                                                                    "unique1",
                                                                                     "unique2"
                                                                                 ],
                                                                                 "ReadRanges": [
@@ -129,7 +126,8 @@
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "ReadColumns": [
-                                                                    "q1"
+                                                                    "q1",
+                                                                    "q2"
                                                                 ],
                                                                 "ReadRanges": [
                                                                     "q1 (-\u221e, +\u221e)",
@@ -148,6 +146,9 @@
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "fault (Asc)"
                                 ]
                             }
                         ]
@@ -166,7 +167,8 @@
             "reads": [
                 {
                     "columns": [
-                        "q1"
+                        "q1",
+                        "q2"
                     ],
                     "scan_by": [
                         "q1 (-\u221e, +\u221e)",
@@ -181,8 +183,7 @@
             "reads": [
                 {
                     "columns": [
-                        "hundred",
-                        "thousand",
+                        "unique1",
                         "unique2"
                     ],
                     "scan_by": [

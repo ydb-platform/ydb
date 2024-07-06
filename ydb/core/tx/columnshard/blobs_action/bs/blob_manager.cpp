@@ -237,7 +237,6 @@ public:
         // TODO: we need only actual channel history here
         for (ui32 channelIdx = 2; channelIdx < tabletInfo->Channels.size(); ++channelIdx) {
             const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
-
             for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
                 PerGroupGCListsInFlight[TBlobAddress(it->GroupID, channelIdx)];
             }
@@ -330,11 +329,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
     PreviousGCTime = AppData()->TimeProvider->Now();
     TGCContext gcContext(sharedBlobsInfo);
-    if (FirstGC) {
-        gcContext.InitializeFirst(TabletInfo);
-        FirstGC = false;
-    }
-
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("action_id", TGUID::CreateTimebased().AsGuidString());
     const std::deque<TGenStep> newCollectGenSteps = FindNewGCBarriers();
     AFL_VERIFY(newCollectGenSteps.size());
@@ -345,7 +339,9 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
                 if (!DrainKeepTo(newCollectGenStep, gcContext)) {
                     break;
                 }
-                CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+                if (newCollectGenStep.Generation() == CurrentGen) {
+                    CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+                }
             }
             AFL_VERIFY(LastCollectedGenStep <= CollectGenStepInFlight)("last", LastCollectedGenStep)("collect", CollectGenStepInFlight);
         } else {
@@ -361,22 +357,27 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         if (!DrainKeepTo(newCollectGenStep, gcContext)) {
             break;
         }
-        CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+        if (newCollectGenStep.Generation() == CurrentGen) {
+            CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
+        }
     }
 
-    if (!CollectGenStepInFlight) {
-        CollectGenStepInFlight = LastCollectedGenStep;
+    if (CollectGenStepInFlight) {
+        PopGCBarriers(*CollectGenStepInFlight);
+        if (FirstGC) {
+            gcContext.InitializeFirst(TabletInfo);
+            FirstGC = false;
+        }
     }
-    PopGCBarriers(*CollectGenStepInFlight);
     AFL_VERIFY(LastCollectedGenStep <= *CollectGenStepInFlight);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", *CollectGenStepInFlight)("current_gen", CurrentGen);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("notice", "collect_gen_step")("value", CollectGenStepInFlight)("current_gen", CurrentGen);
 
     const bool isFull = gcContext.IsFull();
 
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
 
-    auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), *CollectGenStepInFlight,
-        std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
+    auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()), 
+        CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID, CurrentGen);
     if (result->IsEmpty()) {
         CollectGenStepInFlight = {};
         return nullptr;
@@ -467,24 +468,34 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     }
 }
 
-void TBlobManager::OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db) {
-    db.SaveLastGcBarrier(genStep);
+void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
+    if (genStep) {
+        db.SaveLastGcBarrier(*genStep);
+    }
 }
 
-void TBlobManager::OnGCFinishedOnComplete(const TGenStep& genStep) {
-    LastCollectedGenStep = genStep;
-    AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
-    CollectGenStepInFlight.reset();
+void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    if (genStep) {
+        LastCollectedGenStep = *genStep;
+        AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
+        CollectGenStepInFlight.reset();
+    } else {
+        AFL_VERIFY(!CollectGenStepInFlight);
+    }
 }
 
-void TBlobManager::OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db) {
-    AFL_VERIFY(LastCollectedGenStep <= genStep)("last", LastCollectedGenStep)("prepared", genStep);
-    db.SaveGCBarrierPreparation(genStep);
+void TBlobManager::OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
+    if (genStep) {
+        AFL_VERIFY(LastCollectedGenStep <= *genStep)("last", LastCollectedGenStep)("prepared", genStep);
+        db.SaveGCBarrierPreparation(*genStep);
+    }
 }
 
-void TBlobManager::OnGCStartOnComplete(const TGenStep& genStep) {
-    AFL_VERIFY(GCBarrierPreparation <= genStep)("last", GCBarrierPreparation)("prepared", genStep);
-    GCBarrierPreparation = genStep;
+void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
+    if (genStep) {
+        AFL_VERIFY(GCBarrierPreparation <= *genStep)("last", GCBarrierPreparation)("prepared", genStep);
+        GCBarrierPreparation = *genStep;
+    }
 }
 
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {

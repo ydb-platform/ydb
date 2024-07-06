@@ -205,6 +205,7 @@ InArchiveRecovery
 InProgressBuf
 InRecovery
 InRedo
+InitialRunningXacts
 InitializingParallelWorker
 InterruptHoldoffCount
 InterruptPending
@@ -305,6 +306,7 @@ MyWorkerInfo
 MyXactDidWrite
 MyXactFlags
 NBuffers
+NInitialRunningXacts
 NLocBuffer
 NUMCache
 NUMCounter
@@ -329,6 +331,7 @@ OutputFileName
 PGLC_localeconv.CurrentLocaleConv
 PGLC_localeconv.CurrentLocaleConvAllocated
 PG_exception_stack
+PMChildInUse
 PMSignalState
 PageSetChecksumCopy.pageCopy
 ParallelCurrentXids
@@ -1056,6 +1059,7 @@ nextFreeLocalBuf
 nextLocalTransactionId
 nextSemKey
 nextTempTableSpace
+next_child_inuse
 next_rotation_time
 nfile
 nogc
@@ -1067,6 +1071,7 @@ numSems
 numSharedInvalidMessagesArray
 numTempTableSpaces
 num_active_timeouts
+num_child_inuse
 num_columns_read
 num_custom_options
 num_guc_variables

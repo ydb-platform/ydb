@@ -265,6 +265,7 @@ runs:
     
     - name: Set up environment variables
       if: inputs.testman_token
+      continue-on-error: true
       shell: bash
       run: |
         set -x
@@ -272,18 +273,21 @@ runs:
 
     - name: Test history upload results to YDB
       if: inputs.testman_token
+      continue-on-error: true
       shell: bash
       env:
         PR_NUMBER: ${{ github.event.number }}
+        JOB_NAME: ${{ job.name }}
       run: |
         set -x
+        python3 -m pip install ydb ydb[yc]
         .github/scripts/upload_tests_results.py \
           --result-file "$JUNIT_REPORT_XML" \
           --run-time ${{ env.CURRENT_TIME }} \
           --commit "$(git rev-parse HEAD)" \
           --build-type "${BUILD_PRESET}" \
           --pull "${PR_NUMBER}" \
-          --job-name "{{ job.name }}"
+          --job-name "${JOB_NAME}"
 
     - name: Unit test history upload results
       if: inputs.testman_token

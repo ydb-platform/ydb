@@ -1,14 +1,8 @@
 [
     {
-        "qq": 123,
-        "unique1": 4596
-    },
-    {
-        "qq": 123,
-        "unique1": 4596
-    },
-    {
-        "qq": 456,
-        "unique1": 7318
+        "stringu1": "WFAAAA",
+        "stringu2": "LKIAAA",
+        "unique1": 3,
+        "unique2": 11
     }
 ]

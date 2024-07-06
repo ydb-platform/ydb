@@ -5,58 +5,72 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 10,
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Limit",
+                        "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 8
+                                        "InternalOperatorId": 1
                                     }
                                 ],
-                                "Limit": "1001",
+                                "Name": "Aggregate"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 10
+                                    }
+                                ],
+                                "Limit": "1",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Aggregate-Filter-FullJoin (JoinDict)",
                                         "Operators": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Inputs": [],
+                                                "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "f1 = unique2",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 6
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Nth.unique2 == 42"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
                                                     },
                                                     {
                                                         "ExternalPlanNodeId": 4
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "FullJoin (JoinDict)"
                                             }
                                         ],
-                                        "PlanNodeId": 7,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
-                                                "Node Type": "Broadcast",
+                                                "KeyColumns": [
+                                                    "unique2"
+                                                ],
+                                                "Node Type": "HashShuffle",
                                                 "PlanNodeId": 4,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
@@ -76,8 +90,6 @@
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
-                                                                                    "even",
-                                                                                    "ten",
                                                                                     "unique2"
                                                                                 ],
                                                                                 "ReadRanges": [
@@ -100,34 +112,46 @@
                                                 ]
                                             },
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 6,
+                                                "KeyColumns": [
+                                                    "unique2"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TablePointLookup-ConstantExpr",
-                                                        "Operators": [
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
                                                             {
-                                                                "Inputs": [
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 6,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
                                                                     {
-                                                                        "InternalOperatorId": 1
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "unique2"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "unique1 (-\u221e, +\u221e)",
+                                                                                    "unique2 (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 5,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join0.test_plan/tenk1"
+                                                                        ]
                                                                     }
-                                                                ],
-                                                                "Name": "TablePointLookup",
-                                                                "ReadColumns": [
-                                                                    "f1"
-                                                                ],
-                                                                "Table": "postgres_jointest/join0.test_plan/int4_tbl"
-                                                            },
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{f1: 0}]",
-                                                                "Name": "Iterator"
+                                                                ]
                                                             }
-                                                        ],
-                                                        "PlanNodeId": 5,
-                                                        "Tables": [
-                                                            "postgres_jointest/join0.test_plan/int4_tbl"
                                                         ]
                                                     }
                                                 ]
@@ -148,23 +172,20 @@
     },
     "tables": [
         {
-            "name": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
-            "reads": [
-                {
-                    "columns": [
-                        "f1"
-                    ],
-                    "type": "Lookup"
-                }
-            ]
-        },
-        {
             "name": "/Root/postgres_jointest/join0.test_plan/tenk1",
             "reads": [
                 {
                     "columns": [
-                        "even",
-                        "ten",
+                        "unique2"
+                    ],
+                    "scan_by": [
+                        "unique1 (-\u221e, +\u221e)",
+                        "unique2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                },
+                {
+                    "columns": [
                         "unique2"
                     ],
                     "scan_by": [

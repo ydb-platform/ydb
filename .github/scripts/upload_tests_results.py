@@ -270,7 +270,7 @@ def main():
     job_name=args.job_name
 
     path_in_database = "test_results"
-    batch_size_default=200
+    batch_size_default=50
     dir = os.path.dirname(__file__)
     git_root = f"{dir}/../.."
     codeowners = f"{git_root}/.github/CODEOWNERS"

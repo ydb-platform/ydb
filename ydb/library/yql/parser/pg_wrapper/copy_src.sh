@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-VERSION="14.7"
+VERSION="14.8"
 
 errexit() {
     echo $1

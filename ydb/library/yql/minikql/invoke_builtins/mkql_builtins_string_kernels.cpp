@@ -26,7 +26,7 @@ Y_NO_INLINE arrow::Status ExecStringScalarScalarImpl(const arrow::compute::ExecB
         auto resDatum = scalarGetter();
         const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
         const auto val1 = GetStringScalarValue(*arg1.scalar());
-        const auto val2 = GetStringScalarValue(*arg1.scalar());
+        const auto val2 = GetStringScalarValue(*arg2.scalar());
         func(val1, val2, resPtr);
         *res = resDatum.scalar();
     }

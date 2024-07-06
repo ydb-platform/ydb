@@ -203,12 +203,27 @@ def prepare_and_upload_tests(pool, path, results, batch_size):
             batch = results[start:end]
 
             sql = f"""--!syntax_v1
-             UPSERT INTO `{path}` (build_type, job_name, commit, pull, run_time, test_id, suite_name, raw_test_name, file, test_name, fixture, time, status, owners, status_description) VALUES"""
+             UPSERT INTO `{path}` (build_type, job_name, commit, pull, run_time, test_id, suite_name, raw_test_name, file, test_name, fixture, time, status, status_description, owners) VALUES"""
             values = []
             for index, result in enumerate(batch):
+
                 values.append(
                     f"""
-                ("{result['build_type']}", "{result['job_name']}", "{result['commit']}", "{result['pull']}", DateTime::FromSeconds({result['run_time']}), "{result['pull']}_{result['run_time']}_{start+index}", "{result['suite_name']}", "{result['raw_test_name']}", "{result['file']}", "{result['test_name']}", "{result['fixture']}", {result['time']}, "{result['status']}", "{result['status_description']}", "{result['owners']}")
+                ("{result['build_type']}", 
+                "{result['job_name']}", 
+                "{result['commit']}",
+                "{result['pull']}", 
+                DateTime::FromSeconds({result['run_time']}),
+                "{result['pull']}_{result['run_time']}_{start+index}",
+                "{result['suite_name']}",
+                "{result['raw_test_name']}",
+                "{result['file']}",
+                "{result['test_name']}",
+                "{result['fixture']}",
+                {result['time']},
+                "{result['status']}",
+                "{result['status_description']}",
+                "{result['owners']}")
                 """
                 )
             sql += ", ".join(values) + ";"
@@ -267,7 +282,8 @@ def main():
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        return 0
+        #return 0
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork/ydb/.github/scripts/my-robot-key.json"
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally

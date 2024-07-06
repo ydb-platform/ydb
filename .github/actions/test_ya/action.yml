@@ -238,40 +238,6 @@ runs:
             fi
         )
     
-    - name: Set up environment variables
-      if: inputs.testman_token
-      continue-on-error: true
-      shell: bash
-      run: |
-        set -x
-        echo "CURRENT_TIME=$(date +%s)" >> $GITHUB_ENV
-
-    - name: Test history upload results to YDB
-      if: inputs.testman_token
-      continue-on-error: true
-      shell: bash
-      env:
-        PR_NUMBER: ${{ github.event.number }}
-        JOB_NAME: ${{ github.workflow }}
-      run: |
-        set -x
-        python3 -m pip install ydb ydb[yc]
-
-        # Debug variables
-        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
-        echo "CURRENT_TIME=${{ env.CURRENT_TIME }}"
-        echo "BUILD_PRESET=${BUILD_PRESET}"
-        echo "PR_NUMBER=${PR_NUMBER}"
-        echo "JOB_NAME=${JOB_NAME}"
-        
-        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time ${{ env.CURRENT_TIME }} --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME}"
-
-        printf "$script"
-        
-        # Attempt to run the script
-        result=$(python3 $script)
-        printf "$result"
-
     - name: archive unitest reports (orig)
       shell: bash
       run: |
@@ -292,6 +258,33 @@ runs:
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
     
+
+    - name: Test history upload results to YDB
+      if: inputs.testman_token
+      continue-on-error: true
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+        JOB_NAME: ${{ github.workflow }}
+      run: |
+        set -x
+        python3 -m pip install ydb ydb[yc]
+
+        # Debug variables
+        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
+        echo "BUILD_PRESET=${BUILD_PRESET}"
+        echo "PR_NUMBER=${PR_NUMBER}"
+        echo "JOB_NAME=${JOB_NAME}"
+        
+        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME}"
+
+        printf "$script"
+        
+        # Attempt to run the script
+        result=$(python3 $script)
+        printf "$result"
+
+
     - name: archive unitest reports (transformed)
       shell: bash
       run: |

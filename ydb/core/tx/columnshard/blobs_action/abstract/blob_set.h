@@ -50,7 +50,7 @@ private:
     struct Comparator {
         bool operator()(const TLogoBlobID& l, const TLogoBlobID& r) const {
             TGenStep gsl(l);
-            TGenStep gsr(l);
+            TGenStep gsr(r);
             if (gsl == gsr) {
                 return l < r;
             } else {
@@ -84,6 +84,7 @@ public:
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
             TGenStep gs(*it);
             if (includeBorder < gs) {
+                Blobs.erase(Blobs.begin(), it);
                 return true;
             }
             if (++idx > countLimit) {

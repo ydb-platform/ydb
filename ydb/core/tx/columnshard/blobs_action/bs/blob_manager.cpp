@@ -189,9 +189,6 @@ std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
         result.emplace_back(allocated->GenStep);
         newCollectGenStep = allocated->GenStep;
     }
-    if (result.empty() || LastCollectedGenStep < result.front()) {
-        result.emplace_front(LastCollectedGenStep);
-    }
     return result;
 }
 
@@ -321,8 +318,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     TGCContext gcContext(sharedBlobsInfo);
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("action_id", TGUID::CreateTimebased().AsGuidString());
     const std::deque<TGenStep> newCollectGenSteps = FindNewGCBarriers();
-    AFL_VERIFY(newCollectGenSteps.size());
-    AFL_VERIFY(newCollectGenSteps.front() == LastCollectedGenStep);
     if (GCBarrierPreparation != LastCollectedGenStep) {
         if (GCBarrierPreparation.Generation()) {
             AFL_VERIFY(GCBarrierPreparation.Generation() < CurrentGen);
@@ -350,7 +345,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             FirstGC = false;
         }
         if (!BlobsToKeep.IsEmpty()) {
-            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified());
+            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)("first", BlobsToKeep.GetMinGenStepVerified());
         }
         AFL_VERIFY(LastCollectedGenStep < *CollectGenStepInFlight);
     }

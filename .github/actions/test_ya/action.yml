@@ -281,13 +281,18 @@ runs:
       run: |
         set -x
         python3 -m pip install ydb ydb[yc]
-        .github/scripts/upload_tests_results.py \
+        script=.github/scripts/upload_tests_results.py \
           --result-file "${JUNIT_REPORT_XML}" \
           --run-time ${{ env.CURRENT_TIME }} \
           --commit "$(git rev-parse HEAD)" \
           --build-type "${BUILD_PRESET}" \
           --pull "${PR_NUMBER}" \
           --job-name "${JOB_NAME}"
+        printf "$script"
+        result=`$script`
+        printf "$result"
+
+        
 
     - name: Unit test history upload results
       if: inputs.testman_token

@@ -237,31 +237,6 @@ runs:
               fi
             fi
         )
-
-    - name: archive unitest reports (orig)
-      shell: bash
-      run: |
-        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
-    
-    - name: postprocess junit report
-      shell: bash
-      run: |
-        set -x
-        .github/scripts/tests/transform-ya-junit.py -i \
-          -m .github/config/muted_ya.txt \
-          --ya-out "$OUT_DIR" \
-          --log-url-prefix "$S3_URL_PREFIX/logs/" \
-          --log-out-dir "$ARTIFACTS_DIR/logs/" \
-          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
-          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
-          "$JUNIT_REPORT_XML"
-    
-        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-    
-    - name: archive unitest reports (transformed)
-      shell: bash
-      run: |
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
     
     - name: Set up environment variables
       if: inputs.testman_token
@@ -289,7 +264,7 @@ runs:
         echo "PR_NUMBER=${PR_NUMBER}"
         echo "JOB_NAME=${JOB_NAME}"
         
-        script=".github/scripts/upload_tests_results.py --result-file \"${JUNIT_REPORT_XML}\" --run-time \${{ env.CURRENT_TIME }}\ --commit \"$(git rev-parse HEAD)\" --build-type \"${BUILD_PRESET}\" --pull \"${PR_NUMBER}\" --job-name \"${JOB_NAME}\""
+        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time ${{ env.CURRENT_TIME }} --commit \"$(git rev-parse HEAD)\" --build-type \"${BUILD_PRESET}\" --pull \"${PR_NUMBER}\" --job-name \"${JOB_NAME}\""
 
         printf "$script"
         
@@ -297,8 +272,32 @@ runs:
         result=$(python3 $script)
         printf "$result"
 
-
-        
+    - name: archive unitest reports (orig)
+      shell: bash
+      run: |
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+    
+    - name: postprocess junit report
+      shell: bash
+      run: |
+        set -x
+        .github/scripts/tests/transform-ya-junit.py -i \
+          -m .github/config/muted_ya.txt \
+          --ya-out "$OUT_DIR" \
+          --log-url-prefix "$S3_URL_PREFIX/logs/" \
+          --log-out-dir "$ARTIFACTS_DIR/logs/" \
+          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
+          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
+          "$JUNIT_REPORT_XML"
+    
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+    
+    - name: archive unitest reports (transformed)
+      shell: bash
+      run: |
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+    
+ 
 
     - name: Unit test history upload results
       if: inputs.testman_token

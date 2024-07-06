@@ -265,7 +265,9 @@ runs:
     
     - name: Set up environment variables
       if: inputs.testman_token
+      shell: bash
       run: |
+        set -x
         echo "CURRENT_TIME=$(date +%s)" >> $GITHUB_ENV
 
     - name: Test history upload results to YDB

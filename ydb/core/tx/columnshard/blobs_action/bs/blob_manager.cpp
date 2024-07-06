@@ -178,7 +178,7 @@ void TBlobManager::PopGCBarriers(const TGenStep gs) {
 std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
     TGenStep newCollectGenStep = LastCollectedGenStep;
     std::deque<TGenStep> result;
-    if (AllocatedGenSteps.empty()) {
+    if (AllocatedGenSteps.empty() && LastCollectedGenStep < TGenStep(CurrentGen, CurrentStep)) {
         result.emplace_back(TGenStep(CurrentGen, CurrentStep));
     }
     for (auto& allocated : AllocatedGenSteps) {

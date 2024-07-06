@@ -145,7 +145,7 @@ private:
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
     // Lists of blobs that need Keep flag to be set
-    std::map<TGenStep, std::set<TLogoBlobID>> BlobsToKeep;
+    TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
     TTabletsByBlob BlobsToDelete;
 
@@ -239,7 +239,7 @@ private:
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
 
     TGenStep EdgeGenStep() const {
-        return CollectGenStepInFlight ? *CollectGenStepInFlight : LastCollectedGenStep;
+        return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
 };
 

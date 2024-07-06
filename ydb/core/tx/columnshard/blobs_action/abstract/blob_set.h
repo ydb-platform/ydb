@@ -44,6 +44,55 @@ public:
 
 };
 
+class TBlobsByGenStep {
+private:
+    struct Comparator {
+        bool operator<(const TLogoBlobID& l, const TLogoBlobID& r) const {
+            TGenStep gsl(l);
+            TGenStep gsr(l);
+            if (gsl == gsr) {
+                return l < r;
+            } else {
+                return gsl < gsr;
+            }
+        }
+    };
+    std::set<TLogoBlobID, Comparator> Blobs;
+public:
+    [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
+        return Blobs.emplace(blobId).second;
+    }
+    [[nodiscard]] bool Remove(const TLogoBlobID& blobId) {
+        return Blobs.erase(blobId);
+    }
+    ui32 GetSize() const {
+        return Blobs.size();
+    }
+
+    TGenStep GetMinGenStepVerified() const {
+        AFL_VERIFY(Blobs.size());
+        return TGenStep(*Blobs.begin());
+    }
+
+    template <class TActor>
+    bool ExtractFront(const TGenStep border, const ui32 countLimit, const TActor& actor) {
+        ui32 idx = 0;
+        for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
+            TGenStep gs(*it);
+            if (border < gs) {
+                return true;
+            }
+            if (++idx > countLimit) {
+                Blobs.erase(Blobs.begin(), it);
+                return false;
+            }
+            actor(gs, *it);
+        }
+        Blobs.clear();
+        return true;
+    }
+};
+
 class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;

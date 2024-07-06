@@ -277,12 +277,12 @@ runs:
       shell: bash
       env:
         PR_NUMBER: ${{ github.event.number }}
-        JOB_NAME: ${{ job.name }}
+        JOB_NAME: ${{ github.workflow }}
       run: |
         set -x
         python3 -m pip install ydb ydb[yc]
         .github/scripts/upload_tests_results.py \
-          --result-file "$JUNIT_REPORT_XML" \
+          --result-file "${JUNIT_REPORT_XML}" \
           --run-time ${{ env.CURRENT_TIME }} \
           --commit "$(git rev-parse HEAD)" \
           --build-type "${BUILD_PRESET}" \

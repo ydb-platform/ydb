@@ -1320,6 +1320,9 @@ scanbuflen
 scanstring
 scram_mock_salt.sha_digest
 segment_size
+selfpipe_owner_pid
+selfpipe_readfd
+selfpipe_writefd
 sendTimeLine
 sendTimeLineIsHistoric
 sendTimeLineNextTLI
@@ -1363,7 +1366,6 @@ show_tcp_user_timeout.nbuf
 show_unix_socket_permissions.buf
 shutdown_requested
 signal_due_at
-signal_fd
 signal_pending
 sin_30
 sizeComboCids

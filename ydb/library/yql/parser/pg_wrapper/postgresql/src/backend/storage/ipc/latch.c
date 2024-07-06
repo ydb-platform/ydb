@@ -164,16 +164,16 @@ static __thread volatile sig_atomic_t waiting = false;
 
 #ifdef WAIT_USE_SIGNALFD
 /* On Linux, we'll receive SIGURG via a signalfd file descriptor. */
-static __thread int	signal_fd = -1;
+static int	signal_fd = -1;
 #endif
 
 #ifdef WAIT_USE_SELF_PIPE
 /* Read and write ends of the self-pipe */
-static int	selfpipe_readfd = -1;
-static int	selfpipe_writefd = -1;
+static __thread int	selfpipe_readfd = -1;
+static __thread int	selfpipe_writefd = -1;
 
 /* Process owning the self-pipe --- needed for checking purposes */
-static int	selfpipe_owner_pid = 0;
+static __thread int	selfpipe_owner_pid = 0;
 
 /* Private function prototypes */
 static void latch_sigurg_handler(SIGNAL_ARGS);

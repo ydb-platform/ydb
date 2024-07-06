@@ -73,7 +73,10 @@ def parse_junit_xml(xml_file, build_type, job_name, commit, pull, run_time):
             
             status_description = ""
             status = "passed"
-            if testcase.find("failure") is not None:
+            if testcase.find("properties/property/[@name='mute']") is not None:
+                status = "mute"
+                status_description = testcase.find("properties/property/[@name='mute']").get('value')
+            elif testcase.find("failure") is not None:
                 status = "failure"
                 status_description = testcase.find("failure").text
             elif testcase.find("error") is not None:

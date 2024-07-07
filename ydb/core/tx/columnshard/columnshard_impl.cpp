@@ -17,7 +17,7 @@
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "bg_tasks/events/events.h"
-#include "counters/common/owner.h"
+#include "counters/common/durations.h"
 
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"

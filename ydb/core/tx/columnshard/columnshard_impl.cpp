@@ -17,6 +17,7 @@
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "bg_tasks/events/events.h"
+#include "counters/common/owner.h"
 
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
@@ -668,6 +669,8 @@ void TColumnShard::SetupIndexation() {
             ("indexing_debug", BackgroundController.DebugStringIndexation());
         return;
     }
+    static auto dCounter = TDurationController::CreateController("setup_indexation");
+    TDurationController::TGuard dGuard(dCounter);
 
     bool force = false;
     if (InsertTable->GetPathPriorities().size() && InsertTable->GetPathPriorities().rbegin()->first.GetCategory() == NOlap::TPathInfoIndexPriority::EIndexationPriority::PreventOverload) {
@@ -716,6 +719,9 @@ void TColumnShard::SetupCompaction() {
     }
     CSCounters.OnSetupCompaction();
 
+    static auto dCounter = TDurationController::CreateController("setup_compaction");
+    TDurationController::TGuard dGuard(dCounter);
+
     BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
@@ -744,6 +750,8 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
         return false;
     }
+    static auto dCounter = TDurationController::CreateController("setup_ttl");
+    TDurationController::TGuard dGuard(dCounter);
     CSCounters.OnSetupTtl();
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     for (auto&& i : eviction) {
@@ -787,6 +795,8 @@ void TColumnShard::SetupCleanupPortions() {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
         return;
     }
+    static auto dCounter = TDurationController::CreateController("setup_cleanup_portions");
+    TDurationController::TGuard dGuard(dCounter);
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
@@ -812,6 +822,8 @@ void TColumnShard::SetupCleanupTables() {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
         return;
     }
+    static auto dCounter = TDurationController::CreateController("setup_cleanup_tables");
+    TDurationController::TGuard dGuard(dCounter);
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.MutablePathsToDrop());
     if (!changes) {
@@ -834,6 +846,8 @@ void TColumnShard::SetupGC() {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_gc")("reason", "disabled");
         return;
     }
+    static auto dCounter = TDurationController::CreateController("setup_gc");
+    TDurationController::TGuard dGuard(dCounter);
     for (auto&& i : StoragesManager->GetStorages()) {
         auto gcTask = i.second->CreateGC();
         if (!gcTask) {
@@ -858,6 +872,9 @@ void TColumnShard::SetupCleanupInsertTable() {
     if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
+    static auto dCounter = TDurationController::CreateController("setup_cleanup_insert_table");
+    TDurationController::TGuard dGuard(dCounter);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
     BackgroundController.StartCleanupInsertTable();
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());

@@ -172,7 +172,7 @@ def create_tests_table(session, table_path):
     CREATE TABLE IF NOT EXISTS `{table_path}` (
         build_type Utf8,
         job_name Utf8,
-        job_id Int32,
+        job_id Uint64,
         commit Utf8,
         branch Utf8,
         pull Utf8,

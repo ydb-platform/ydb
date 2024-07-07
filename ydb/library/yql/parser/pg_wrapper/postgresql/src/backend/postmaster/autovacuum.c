@@ -1944,6 +1944,9 @@ get_database_list(void)
 
 	CommitTransactionCommand();
 
+	/* Be sure to restore caller's memory context */
+	MemoryContextSwitchTo(resultcxt);
+
 	return dblist;
 }
 
@@ -2960,7 +2963,7 @@ table_recheck_autovac(Oid relid, HTAB *table_toast_map,
 		 */
 		tab->at_dobalance =
 			!(avopts && (avopts->vacuum_cost_limit > 0 ||
-						 avopts->vacuum_cost_delay > 0));
+						 avopts->vacuum_cost_delay >= 0));
 
 		/*
 		 * When we decide to do vacuum or analyze, the existing stats cannot

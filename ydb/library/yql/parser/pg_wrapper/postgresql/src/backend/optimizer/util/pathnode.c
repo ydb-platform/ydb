@@ -3339,7 +3339,7 @@ create_minmaxagg_path(PlannerInfo *root,
 	/* For now, assume we are above any joins, so no parameterization */
 	pathnode->path.param_info = NULL;
 	pathnode->path.parallel_aware = false;
-	/* A MinMaxAggPath implies use of subplans, so cannot be parallel-safe */
+	/* A MinMaxAggPath implies use of initplans, so cannot be parallel-safe */
 	pathnode->path.parallel_safe = false;
 	pathnode->path.parallel_workers = 0;
 	/* Result is one unordered row */
@@ -3937,9 +3937,15 @@ reparameterize_path(PlannerInfo *root, Path *path,
 		case T_Memoize:
 			{
 				MemoizePath *mpath = (MemoizePath *) path;
+				Path	   *spath = mpath->subpath;
 
+				spath = reparameterize_path(root, spath,
+											required_outer,
+											loop_count);
+				if (spath == NULL)
+					return NULL;
 				return (Path *) create_memoize_path(root, rel,
-													mpath->subpath,
+													spath,
 													mpath->param_exprs,
 													mpath->hash_operators,
 													mpath->singlerow,
@@ -4170,6 +4176,7 @@ do { \
 
 				FLAT_COPY_PATH(mpath, path, MemoizePath);
 				REPARAMETERIZE_CHILD_PATH(mpath->subpath);
+				ADJUST_CHILD_ATTRS(mpath->param_exprs);
 				new_path = (Path *) mpath;
 			}
 			break;

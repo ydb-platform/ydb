@@ -2151,7 +2151,7 @@ AdvanceXLInsertBuffer(XLogRecPtr upto, bool opportunistic)
 	XLogRecPtr	NewPageEndPtr = InvalidXLogRecPtr;
 	XLogRecPtr	NewPageBeginPtr;
 	XLogPageHeader NewPage;
-	int			npages = 0;
+	int			npages pg_attribute_unused() = 0;
 
 	LWLockAcquire(WALBufMappingLock, LW_EXCLUSIVE);
 
@@ -4419,12 +4419,18 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 		if (record == NULL)
 		{
 			/*
-			 * When not in standby mode we find that WAL ends in an incomplete
-			 * record, keep track of that record.  After recovery is done,
-			 * we'll write a record to indicate downstream WAL readers that
-			 * that portion is to be ignored.
+			 * When we find that WAL ends in an incomplete record, keep track
+			 * of that record.  After recovery is done, we'll write a record to
+			 * indicate to downstream WAL readers that that portion is to be
+			 * ignored.
+			 *
+			 * However, when ArchiveRecoveryRequested = true, we're going to
+			 * switch to a new timeline at the end of recovery. We will only
+			 * copy WAL over to the new timeline up to the end of the last
+			 * complete record, so if we did this, we would later create an
+			 * overwrite contrecord in the wrong place, breaking everything.
 			 */
-			if (!StandbyMode &&
+			if (!ArchiveRecoveryRequested &&
 				!XLogRecPtrIsInvalid(xlogreader->abortedRecPtr))
 			{
 				abortedRecPtr = xlogreader->abortedRecPtr;
@@ -5872,8 +5878,13 @@ recoveryStopsBefore(XLogReaderState *record)
 		stopsHere = (recordXid == recoveryTargetXid);
 	}
 
-	if (recoveryTarget == RECOVERY_TARGET_TIME &&
-		getRecordTimestamp(record, &recordXtime))
+	/*
+	 * Note: we must fetch recordXtime regardless of recoveryTarget setting.
+	 * We don't expect getRecordTimestamp ever to fail, since we already know
+	 * this is a commit or abort record; but test its result anyway.
+	 */
+	if (getRecordTimestamp(record, &recordXtime) &&
+		recoveryTarget == RECOVERY_TARGET_TIME)
 	{
 		/*
 		 * There can be many transactions that share the same commit time, so
@@ -7866,6 +7877,14 @@ StartupXLOG(void)
 	 */
 	if (!XLogRecPtrIsInvalid(missingContrecPtr))
 	{
+		/*
+		 * We should only have a missingContrecPtr if we're not switching to
+		 * a new timeline. When a timeline switch occurs, WAL is copied from
+		 * the old timeline to the new only up to the end of the last complete
+		 * record, so there can't be an incomplete WAL record that we need to
+		 * disregard.
+		 */
+		Assert(ThisTimeLineID == PrevTimeLineID);
 		Assert(!XLogRecPtrIsInvalid(abortedRecPtr));
 		EndOfLog = missingContrecPtr;
 	}
@@ -10018,7 +10037,7 @@ KeepLogSeg(XLogRecPtr recptr, XLogSegNo *logSegNo)
 	 * max_slot_wal_keep_size.
 	 */
 	keep = XLogGetReplicationSlotMinimumLSN();
-	if (keep != InvalidXLogRecPtr)
+	if (keep != InvalidXLogRecPtr && keep < recptr)
 	{
 		XLByteToSeg(keep, segno, wal_segment_size);
 
@@ -12727,6 +12746,9 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						wait_time = wal_retrieve_retry_interval -
 							TimestampDifferenceMilliseconds(last_fail_time, now);
 
+						/* Do background tasks that might benefit us later. */
+						KnownAssignedTransactionIdsIdleMaintenance();
+
 						(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 										 WL_LATCH_SET | WL_TIMEOUT |
 										 WL_EXIT_ON_PM_DEATH,
@@ -12987,6 +13009,9 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						WalRcvForceReply();
 						streaming_reply_sent = true;
 					}
+
+					/* Do any background tasks that might benefit us later. */
+					KnownAssignedTransactionIdsIdleMaintenance();
 
 					/*
 					 * Wait for more WAL to arrive. Time out after 5 seconds

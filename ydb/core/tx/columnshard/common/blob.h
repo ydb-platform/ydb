@@ -21,8 +21,6 @@ public:
     virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
 };
 
-class TUnifiedBlobId;
-
 class TUnifiedBlobId {
     // Id of a blob in YDB distributed storage
     struct TDsBlobId {

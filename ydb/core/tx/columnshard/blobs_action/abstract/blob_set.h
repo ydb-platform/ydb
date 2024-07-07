@@ -47,7 +47,7 @@ public:
 
 class TBlobsByGenStep {
 private:
-    struct Comparator {
+    struct TGenStepFromLogoBlobIdComparator {
         bool operator()(const TLogoBlobID& l, const TLogoBlobID& r) const {
             TGenStep gsl(l);
             TGenStep gsr(r);
@@ -58,7 +58,7 @@ private:
             }
         }
     };
-    std::set<TLogoBlobID, Comparator> Blobs;
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator> Blobs;
 public:
     [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
         return Blobs.emplace(blobId).second;
@@ -69,7 +69,7 @@ public:
     bool IsEmpty() const {
         return Blobs.empty();
     }
-    ui32 GetSize() const {
+    size_t GetSize() const {
         return Blobs.size();
     }
 
@@ -79,11 +79,12 @@ public:
     }
 
     template <class TActor>
-    bool ExtractTo(const TGenStep includeBorder, const ui32 countLimit, const TActor& actor) {
+    requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID&>
+    bool ExtractTo(const TGenStep& lessOrEqualThan, const ui32 countLimit, const TActor& actor) {
         ui32 idx = 0;
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
             TGenStep gs(*it);
-            if (includeBorder < gs) {
+            if (lessOrEqualThan < gs) {
                 Blobs.erase(Blobs.begin(), it);
                 return true;
             }

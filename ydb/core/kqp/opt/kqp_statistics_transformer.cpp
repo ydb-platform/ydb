@@ -180,8 +180,7 @@ void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotation
 }
 
 void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    auto inputNode = TExprBase(input);
-    auto indexRanges = inputNode.Cast<TKqlReadTableIndexRanges>();
+    auto indexRanges = TKqlReadTableIndexRanges(input);
 
     auto inputStats = typeCtx->GetStats(indexRanges.Table().Raw());
     if (!inputStats) {

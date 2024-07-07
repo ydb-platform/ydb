@@ -13,6 +13,7 @@
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
+#include "counters/common/durations.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
@@ -351,6 +352,8 @@ protected:
     }
 
     STFUNC(StateWork) {
+        static auto dCounter = TDurationController::CreateController("event_processing");
+        TDurationController::TGuard dGuard(dCounter);
         const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {

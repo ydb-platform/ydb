@@ -28,55 +28,31 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% endlist %}
 
-## Response structure {#response-structure}
-
-For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
-Calling the `SelfCheck` method will return the following message:
-
-```protobuf
-message SelfCheckResult {
-    SelfCheck.Result self_check_result = 1;
-    repeated IssueLog issue_log = 2;
-}
-```
-
-If any issues are detected, the `issue_log` field will contain descriptions of the issues with the following structure:
-```protobuf
-message IssueLog {
-    string id = 1;
-    StatusFlag.Status status = 2;
-    string message = 3;
-    Location location = 4;
-    repeated string reason = 5;
-    string type = 6;
-    uint32 level = 7;
-}
-```
-These issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
-
-![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
-
-Each issue has a nesting `level` - the higher the `level`, the deeper the ish is in the hierarchy. Issues with the same `type` always have the same `level` and they can be represented as a hierarchy.
-
-![issues_hierarchy](./_assets/hc_types_hierarchy.png)
-
-Description of all fields in the response is provided below:
-
-| Field | Description |
-|:----|:----|
-| `self_check_result` | enum field which contains the DB check result:<ul><li>`GOOD`: No issues were detected.</li><li>`DEGRADED`: Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss).</li><li>`MAINTENANCE_REQUIRED`: Significant degradation was detected, there is a risk of availability loss, and human maintenance is required.</li><li>`EMERGENCY`: A serious issue was detected in the database, with complete or partial loss of availability.</li></ul> |
-| `issue_log` | This is a set of elements, each of which describes a issue in the system at a certain level. |
-| `issue_log.id` | A unique issue ID within this response. |
-| `issue_log.status` | Status (severity) of the current issue. <br/>It can take one of the following values:</li><li>`RED`: A component is faulty or unavailable.</li><li>`ORANGE`: A serious issue, we are one step away from losing availability. Maintenance may be required.</li><li>`YELLOW`: A minor issue, no risks to availability. We recommend you continue monitoring the issue.</li><li>`BLUE`: Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`.</li><li>`GREEN`: No issues were detected.</li><li>`GREY`: Failed to determine the status (a issue with the self-diagnostic mechanism).</li></ul> |
-| `issue_log.message` | Text that describes the issue. |
-| `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
-| `issue_log.reason` | This is a set of elements, each of which describes a issue in the system at a certain level. |
-| `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
-| `issue_log.level` | The depth of issue nesting. |
-| `database_status` | If settings contains `verbose` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious issues at a high level. [Example](#example-verbose). |
-| `location` | Contains information about host, where `HealthCheck` service was called |
-
 ## Call parameters {#call-parameters}
+
+`SelfCheck` method provides information in the form of a [set of issues](#emergency-example) which could look like this:
+
+```json
+{
+  "id": "RED-27c3-70fb",
+  "status": "RED",
+  "message": "Database has multiple issues",
+  "location": {
+    "database": {
+      "name": "/slice"
+    }
+  },
+  "reason": [
+    "RED-27c3-4e47",
+    "RED-27c3-53b5",
+    "YELLOW-27c3-5321"
+  ],
+  "type": "DATABASE",
+  "level": 1
+}
+```
+
+This is a short messages each about a single problem. All parameters will affect the amount of information the service returns for the specified database.
 
 The whole list of extra parameters presented below:
 
@@ -96,9 +72,86 @@ The whole list of extra parameters presented below:
 
 | Parameter | Type | Description |
 |:----|:----|:----|
-| `ReturnVerboseStatus` | `bool`         | As mentioned earlier, this parameter affects the filling of the `database_status` field. Default is false. |
-| `MinimumStatus`       | `EStatusFlag`  | The minimum severity status that will appear in the response. Less severe issues will be discarded. By default, all issues will be listed. |
-| `MaximumLevel`        | `int32`        | The maximum depth of issues in the response. Issues at deeper levels will be discarded. By default, all issues will be listed. |
+| `ReturnVerboseStatus` | `bool`         | If `ReturnVerboseStatus` is specified, the response will also include a summary of the overall health of the database in the `database_status` field ([Example](#example-verbose)). Default is false. |
+| `MinimumStatus`       | [EStatusFlag] (#issue-status) | Each issue has a `status` field. If `minimum_status` is specified, issues with a higher `status` will be discarded. By default, all issues will be listed. |
+| `MaximumLevel`        | `int32`        | Each issue has a `level` field. If `maximum_level` is specified, issues with deeper levels will be discarded. By default, all issues will be listed. |
+
+## Response structure {#response-structure}
+
+For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
+Calling the `SelfCheck` method will return the following message:
+
+```protobuf
+message SelfCheckResult {
+    SelfCheck.Result self_check_result = 1;
+    repeated IssueLog issue_log = 2;
+    repeated DatabaseStatus database_status = 3;
+    LocationNode location = 4;
+}
+```
+
+The shortest HealthCheck response looks like [this](#examples) . It is returned if there is nothing wrong with the database.
+
+If any issues are detected, the `issue_log` field will contain descriptions of the issues with the following structure:
+
+```protobuf
+message IssueLog {
+    string id = 1;
+    StatusFlag.Status status = 2;
+    string message = 3;
+    Location location = 4;
+    repeated string reason = 5;
+    string type = 6;
+    uint32 level = 7;
+}
+```
+
+These issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
+
+![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
+
+Each issue has a nesting `level` - the higher the `level`, the deeper the ish is in the hierarchy. Issues with the same `type` always have the same `level` and they can be represented as a hierarchy.
+
+![issues_hierarchy](./_assets/hc_types_hierarchy.png)
+
+Description of all fields in the response is provided below:
+
+| Field | Description |
+|:----|:----|
+| `self_check_result` | enum field which contains the [DB check result](#selfcheck-result) |
+| `issue_log.id` | A unique issue ID within this response. |
+| `issue_log.status` |  enum field which contains the [issue status](#issue-status) |
+| `issue_log.message` | Text that describes the issue. |
+| `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
+| `issue_log.reason` | This is a set of elements, each of which describes a issue in the system at a certain level. |
+| `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
+| `issue_log.level` | The depth of issue nesting. |
+| `database_status` | If settings contains `ReturnVerboseStatus` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious issues at a high level. [Example](#example-verbose). |
+| `location` | Contains information about host, where `HealthCheck` service was called |
+
+### DB check result {#selfcheck-result}
+
+The most general statuses of the database, which can have the following values:
+
+| Value | Description |
+|:----|:----|
+| `GOOD` | No issues were detected. |
+| `DEGRADED` | Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
+| `MAINTENANCE_REQUIRED` | Significant degradation was detected, there is a risk of availability loss, and human maintenance is required. |
+| `EMERGENCY` | A serious issue was detected in the database, with complete or partial loss of availability. |
+
+### Issue status {#issue-status}
+
+Status (severity) of the current issue:
+
+| Value | Description |
+|:----|:----|
+| `GREY` | Failed to determine the status (a issue with the self-diagnostic mechanism). |
+| `GREEN` | No issues were detected. |
+| `BLUE` | Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`. |
+| `YELLOW` | A minor issue, no risks to availability. We recommend you continue monitoring the issue. |
+| `ORANGE` | A serious issue, we are one step away from losing availability. Maintenance may be required. |
+| `RED` | A component is faulty or unavailable. |
 
 ## Possible issues {#issues}
 
@@ -154,8 +207,7 @@ The whole list of extra parameters presented below:
 | `The number of node restarts has increased` | The number of node restarts has exceeded the threshold. By default, 10 restarts per hour |
 | `Node is restarting too often` | The number of node restarts has exceeded the threshold. By default, 30 restarts per hour |
 | **NODES_TIME_DIFFERENCE** ||
-| `The nodes have a time difference of ... ms` | Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issus starts to appear from 5 ms |
-
+| `Node is ... ms behind peer [id]` <br>`Node is ... ms ahead of peer [id]` | Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issus starts to appear from 5 ms |
 
 ## Example {#examples}
 
@@ -167,6 +219,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 ```
 
 #### Verbose example {#example-verbose}
+
 `GOOD` response with `verbose` parameter:
 ```json
 {
@@ -415,6 +468,7 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 ```
 
 #### Emergency example {#example-emergency}
+
 Response with `EMERGENCY` status:
 ```json
 {

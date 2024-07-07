@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
@@ -214,6 +215,7 @@ private:
     const TKikimrConfiguration::TPtr Config;
 };
 
+// TODO: copy-paste from https://github.com/ydb-platform/ydb/blob/122f053354c5df4fc559bf06fe0302f92d813032/ydb/library/yql/dq/opt/dq_opt_build.cpp#L444
 bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     TVector<const TTypeAnnotationNode*> types;
     for (auto& item : type.GetItems()) {
@@ -225,6 +227,7 @@ bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TE
     return resolveStatus == IArrowResolver::OK;
 }
 
+// TODO: composite copy-paste from https://github.com/ydb-platform/ydb/blob/122f053354c5df4fc559bf06fe0302f92d813032/ydb/library/yql/dq/opt/dq_opt_build.cpp#L388
 bool CanPropagateWideBlockThroughChannel(
     const TDqOutput& output,
     const THashMap<ui64, TKqpProgram>& programs,
@@ -240,12 +243,11 @@ bool CanPropagateWideBlockThroughChannel(
 
     const auto& program = programs.at(output.Stage().Ref().UniqueId());
 
-    // TODO: enable this check.
-    // auto outputItemType = program.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    // if (IsWideBlockType(*outputItemType)) {
-    //     // output is already wide block
-    //     return false;
-    // }
+    auto outputItemType = program.Lambda().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+    if (IsWideBlockType(*outputItemType)) {
+        // output is already wide block
+        return false;
+    }
 
     if (!stageSettings.WideChannels) {
         return false;
@@ -335,10 +337,14 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
     for (const auto& stage : topSortedStages) {
         YQL_ENSURE(!optimizedStages.contains(stage.Ref().UniqueId()));
 
+        TCoLambda lambda = stage.Program();
+        TVector<TCoArgument> newArgs;
+        newArgs.reserve(stage.Inputs().Size());
+
         // Propagate "WideFromBlock" through connections.
-        {
-            TVector<TCoArgument> newArgs;
-            newArgs.reserve(stage.Inputs().Size());
+        // TODO(ilezhankin): this peephole optimization should be implemented instead as
+        //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
+        if (config->BlockChannelsMode != NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR) {
             TNodeOnNodeOwnedMap argsMap;
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
@@ -385,6 +391,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                             .Done();
 
                         // Run the peephole optimization on new program again to update type annotations.
+                        // TODO(ilezhankin): refactor to run only the update of type annotations - not the whole optimization.
                         bool allowNonDeterministicFunctions = !newInputProgram.Lambda().Body().Maybe<TKqpEffects>();
                         TExprNode::TPtr newInputProgramNode;
 
@@ -405,30 +412,35 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 }
             }
 
-            TCoLambda lambda = stage.Program();
             if (needRebuild) {
                 lambda = Build<TCoLambda>(ctx, lambda.Pos())
                     .Args(newArgs)
                     .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
                 .Done();
             }
-
-            TVector<const TTypeAnnotationNode*> argTypes;
-            for (const auto& arg : newArgs) {
-                YQL_ENSURE(arg.Ref().GetTypeAnn());
-                argTypes.push_back(arg.Ref().GetTypeAnn());
+        } else {
+            for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                auto oldArg = stage.Program().Args().Arg(i);
+                auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
+                newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArgs.emplace_back(newArg);
             }
-
-            // TODO: get rid of TKqpProgram-callable (YQL-10078)
-            auto program = Build<TKqpProgram>(ctx, stage.Pos())
-                .Lambda(lambda)
-                .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
-                .Done();
-
-            YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), program).second);
         }
 
-        const auto& program = programs.at(stage.Ref().UniqueId());
+        TVector<const TTypeAnnotationNode*> argTypes;
+        for (const auto& arg : newArgs) {
+            YQL_ENSURE(arg.Ref().GetTypeAnn());
+            argTypes.push_back(arg.Ref().GetTypeAnn());
+        }
+
+        // TODO: get rid of TKqpProgram-callable (YQL-10078)
+        auto program = Build<TKqpProgram>(ctx, stage.Pos())
+            .Lambda(lambda)
+            .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+            .Done();
+
+        YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), program).second);
+
         const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
 
         TExprNode::TPtr newProgram;

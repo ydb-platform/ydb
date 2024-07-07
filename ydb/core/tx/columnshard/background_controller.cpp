@@ -20,7 +20,7 @@ void TBackgroundController::CheckDeadlines() {
 void TBackgroundController::CheckDeadlinesIndexation() {
     for (auto&& i : ActiveIndexationTasks) {
         if (TMonotonic::Now() - i.second > NOlap::TCompactionLimits::CompactionTimeout) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("task_id", i.first);
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_indexation")("task_id", i.first);
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }

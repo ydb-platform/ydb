@@ -84,7 +84,7 @@ public:
         ui32 idx = 0;
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {
             TGenStep gs(*it);
-            if (lessOrEqualThen < gs) {
+            if (lessOrEqualThan < gs) {
                 Blobs.erase(Blobs.begin(), it);
                 return true;
             }

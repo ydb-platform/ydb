@@ -392,13 +392,14 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
 }
 
 void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    double nRows = input->ChildrenSize();
+    auto param = TCoParameter(input);
+    int nRows = 100;
     int nAttrs = 5;
-    if (input->ChildrenSize() && input->Child(0)->IsCallable("StructType")) {
-        nAttrs = input->Child(0)->ChildrenSize();
+    if (param.Type().Maybe<TCoStructType>()) {
+        nAttrs = param.Type().Ptr()->ChildrenSize();
+        typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+            EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
     }
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
-        EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
 }
 
 /***

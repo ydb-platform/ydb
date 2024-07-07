@@ -194,12 +194,13 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
     }
 
     auto indexColumnsPtr = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(indexColumns));
-    auto stats = std::make_shared<TOptimizerStatistics>(inputStats->Type, 
-                                                        inputStats->Nrows, 
-                                                        inputStats->Ncols, 
-                                                        inputStats->ByteSize, 
-                                                        inputStats->Cost, 
-                                                        indexColumnsPtr);
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        inputStats->Type, 
+        inputStats->Nrows, 
+        inputStats->Ncols, 
+        inputStats->ByteSize, 
+        inputStats->Cost, 
+        indexColumnsPtr);
 
     typeCtx->SetStats(input.Get(), stats);
 

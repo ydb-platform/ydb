@@ -266,6 +266,7 @@ runs:
       env:
         PR_NUMBER: ${{ github.event.number }}
         JOB_NAME: ${{ github.workflow }}
+        JOB_ID: ${{github.run_id }}
       run: |
         set -x
         python3 -m pip install ydb ydb[yc]
@@ -275,8 +276,10 @@ runs:
         echo "BUILD_PRESET=${BUILD_PRESET}"
         echo "PR_NUMBER=${PR_NUMBER}"
         echo "JOB_NAME=${JOB_NAME}"
+        echo "JOB_ID=${JOB_ID}"
+        echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
         
-        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME}"
+        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}"
 
         printf "$script"
         

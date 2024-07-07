@@ -371,7 +371,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 
 TBlobBatch TBlobManager::StartBlobBatch() {
     AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
-    ++CurrentStep;
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
     AFL_VERIFY(TabletInfo->Channels.size() > 2);
     const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];

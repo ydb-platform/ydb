@@ -4,11 +4,15 @@
 #include "engines/reader/transaction/tx_scan.h"
 #include "engines/reader/transaction/tx_internal_scan.h"
 
+#include <ydb/core/tx/columnshard/counters/common/durations.h>
+
 #include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
+    static auto dCounter = TDurationController::CreateController("start_scan");
+    TDurationController::TGuard dGuard(dCounter);
     auto& record = ev->Get()->Record;
     ui64 txId = record.GetTxId();
     const auto& scanId = record.GetScanId();
@@ -36,6 +40,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx) {
+    static auto dCounter = TDurationController::CreateController("start_internal_scan");
+    TDurationController::TGuard dGuard(dCounter);
     Execute(new NOlap::NReader::TTxInternalScan(this, ev), ctx);
 }
 

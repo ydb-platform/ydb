@@ -79,6 +79,7 @@ public:
     }
 
     template <class TActor>
+    requires std::invocable<TActor&, const TGenStep&, const TLogoBlobID& id>
     bool ExtractTo(const TGenStep& lessOrEqualThen, const ui32 countLimit, const TActor& actor) {
         ui32 idx = 0;
         for (auto it = Blobs.begin(); it != Blobs.end(); ++it) {

@@ -30,7 +30,7 @@ protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
     virtual bool DoIsEmpty() const override {
-        return false;
+        return !CollectGenStepInFlight && KeepsToErase.empty();
     }
 
 public:

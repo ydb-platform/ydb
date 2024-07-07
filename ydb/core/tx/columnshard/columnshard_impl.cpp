@@ -259,18 +259,38 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, con
 }
 
 bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
-    auto* lw = LongTxWrites.FindPtr(writeId);
-    AFL_VERIFY(lw)("write_id", (ui64)writeId)("tx_id", txId);
-    const ui64 prepared = lw->PreparedTxId;
-    AFL_VERIFY(!prepared || txId == prepared)("tx", txId)("prepared", prepared);
-    Schema::EraseLongTxWrite(db, writeId);
-    auto& ltxParts = LongTxWritesByUniqueId[lw->LongTxId.UniqueId];
-    ltxParts.erase(lw->WritePartId);
-    if (ltxParts.empty()) {
-        AFL_VERIFY(LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId));
+    if (auto* lw = LongTxWrites.FindPtr(writeId)) {
+        ui64 prepared = lw->PreparedTxId;
+        if (!prepared || txId == prepared) {
+            Schema::EraseLongTxWrite(db, writeId);
+            auto& ltxParts = LongTxWritesByUniqueId[lw->LongTxId.UniqueId];
+            ltxParts.erase(lw->WritePartId);
+            if (ltxParts.empty()) {
+                LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
+            }
+            LongTxWrites.erase(writeId);
+            return true;
+        }
     }
-    LongTxWrites.erase(writeId);
-    return true;
+    return false;
+}
+
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
+    std::vector<TWriteId> failedAborts;
+    for (auto& writeId : writesToAbort) {
+        if (!RemoveLongTxWrite(db, writeId)) {
+            failedAborts.push_back(writeId);
+        }
+    }
+    if (failedAborts.size()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
+    }
+    for (auto& writeId : failedAborts) {
+        writesToAbort.erase(writeId);
+    }
+    if (!writesToAbort.empty()) {
+        InsertTable->Abort(dbTable, writesToAbort);
+    }
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -455,7 +475,9 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     // TODO: Allow to read old snapshots after DROP
     TBlobGroupSelector dsGroupSelector(Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    InsertTable->DropPath(dbTable, pathId);
+    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
+
+    TryAbortWrites(db, dbTable, std::move(writesToAbort));
 }
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
@@ -827,17 +849,20 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 }
 
 void TColumnShard::SetupCleanupInsertTable() {
+    auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
+
     if (BackgroundController.IsCleanupInsertTableActive()) {
         ACFL_DEBUG("background", "cleanup_insert_table")("skip_reason", "in_progress");
         return;
     }
 
-    if (!InsertTable->GetAborted().size()) {
+    if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
     BackgroundController.StartCleanupInsertTable();
-    Execute(new TTxInsertTableCleanup(this), TActorContext::AsActorContext());
+    Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {

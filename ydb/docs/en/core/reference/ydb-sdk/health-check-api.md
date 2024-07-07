@@ -158,6 +158,7 @@ The whole list of extra parameters presented below:
 
 
 ## Example {#examples}
+
 The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database
 ```json
 {

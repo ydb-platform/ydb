@@ -382,6 +382,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 }
 
 TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
+    AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
     ++CountersUpdate.BatchesStarted;
     Y_ABORT_UNLESS(channel == BLOB_CHANNEL, "Support for mutiple blob channels is not implemented yet");
     ++CurrentStep;

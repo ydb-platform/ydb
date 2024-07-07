@@ -205,8 +205,6 @@ public:
         return CurrentGen;
     }
 
-    void RegisterControls(NKikimr::TControlBoard& icb);
-
     // Loads the state at startup
     bool LoadState(IBlobManagerDb& db, const TTabletId selfTabletId);
 

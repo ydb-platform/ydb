@@ -131,9 +131,6 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 {
 }
 
-void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
-}
-
 bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Load last collected Generation
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
@@ -167,7 +164,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
 
         AFL_VERIFY(blobsToKeepLocal[genStep].emplace(blobId).second)("blob_to_keep_double", unifiedBlobId.ToStringNew());
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
-        const ui64 groupId = dsGroupSelector.GetGroup(blobId);
+        const ui64 groupId = unifiedBlobId.GetDsGroup();
         // Keep + DontKeep (probably in different gen:steps)
         // GC could go through it to a greater LastCollectedGenStep
         if (BlobsToDelete.Contains(SelfTabletId, TUnifiedBlobId(groupId, blobId))) {

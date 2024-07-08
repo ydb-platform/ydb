@@ -213,7 +213,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
                 if (pathInfo.GetShardingInfo()) {
                     portion.GetPortionConstructor().SetShardingVersion(pathInfo.GetShardingInfo()->GetSnapshotVersion());
                 }
-                AppendedPortions.emplace_back(std::move(portion));
+                AppendedPortions.emplace_back(TWritePortionInfoWithBlobsResult(std::move(portion)));
             }
         }
     }

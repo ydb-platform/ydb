@@ -14,18 +14,6 @@ from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def parse_codeowners(codeowners_file):
-    entries = []
-    with open(codeowners_file, "r") as file:
-        for line in file:
-            if not line.strip() or line.startswith("#"):
-                continue
-            path, *owners = line.split()
-            entries.append((path, owners))
-
-    return entries
-
-
 def parse_test_name(name):
     rawname = name
     fixture = ""
@@ -103,8 +91,6 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
 
 
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
-
-
     with open(codeowners_file_path, 'r') as file:
         data = file.read()
         owners_odj = CodeOwners(data)
@@ -118,17 +104,6 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
         return tests_data_with_owners
 
 
-def upload_codeowners(session, entries):
-    # Вставка данных в таблицу
-    for entry in entries:
-        path, owners = entry
-        sql = f"""
-        UPSERT INTO codeowners (path, owners) VALUES 
-            ("{path}", {str(owners).replace("'", '"')});
-        """
-        session.transaction().execute(sql, commit_tx=True)
-
-
 def create_table(session, sql):
 
     try:
@@ -140,21 +115,8 @@ def create_table(session, sql):
         raise e
 
 
-# Создание таблицы
-def create_codeowners_table(session, table_path):
-    sql = f"""
-    --!syntax_v1
-    CREATE TABLE IF NOT EXISTS `{table_path}` (
-        path Utf8,
-        owners Utf8,
-        PRIMARY KEY (path)
-    );
-    """
-    create_table(session, sql)
-
-
 def create_tests_table(session, table_path):
-    # Создание таблицы, если ее еще нет
+    # Creating of new table if not exist yet
     sql = f"""
     --!syntax_v1
     CREATE TABLE IF NOT EXISTS `{table_path}` (

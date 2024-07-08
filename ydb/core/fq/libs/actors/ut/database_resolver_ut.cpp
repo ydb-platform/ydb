@@ -473,6 +473,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 issues
             );
     }
+
     Y_UNIT_TEST(Greenplum_MasterNode) {
         Test(
             NYql::EDatabaseType::Greenplum,
@@ -504,7 +505,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     TString(""),
                     true},
                 {});
-        }
+    }
 
     Y_UNIT_TEST(Greenplum_PermissionDenied) {
             NYql::TIssues issues{
@@ -535,7 +536,79 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             )",
                 NYql::TDatabaseResolverResponse::TDatabaseDescription{},
                 issues);
-        }
+    }
+
+    Y_UNIT_TEST(MySQL) {
+        Test(
+            NYql::EDatabaseType::MySQL,
+            NYql::NConnector::NApi::EProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "200",
+            R"({
+                "hosts": [
+                {
+                "services": [
+                    {
+                    "type": "POOLER",
+                    "health": "ALIVE"
+                    },
+                    {
+                    "type": "MYSQL",
+                    "health": "ALIVE"
+                    }
+                ],
+                "name": "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net",
+                "clusterId": "c9qb2bjghs8onbncpamk",
+                "zoneId": "ru-central1-b",
+                "role": "MASTER",
+                "health": "ALIVE"
+                }
+                ]
+                })",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{""},
+                TString{"rc1b-eyt6dtobu96rwydq.db.yandex.net"},
+                3306,
+                TString(""),
+                true
+                },
+                {});
+    }
+
+    Y_UNIT_TEST(MySQL_PermissionDenied) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                TStringBuilder{} << MakeErrorPrefix(
+                    "mdb.api.cloud.yandex.net:443",
+                    "/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+                    "etn021us5r9rhld1vgbh",
+                    NYql::EDatabaseType::MySQL
+                ) << NoPermissionStr
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::MySQL,
+            NYql::NConnector::NApi::EProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "403",
+            R"(
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
+                }
+            )",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{},
+                issues
+            );
+    }
+    
 
     Y_UNIT_TEST(DataStreams_PermissionDenied) {
         NYql::TIssues issues{

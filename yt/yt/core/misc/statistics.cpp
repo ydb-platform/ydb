@@ -91,10 +91,14 @@ bool TSummary::operator ==(const TSummary& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 bool IsAllowedComponentChar(char c) noexcept
 {
     return IsAsciiAlnum(c) || c == '_';
 }
+
+} // namespace
 
 std::optional<char> CheckStatisticPath(const NYPath::TYPath& path)
 {

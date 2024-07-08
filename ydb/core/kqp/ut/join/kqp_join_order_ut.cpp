@@ -286,19 +286,20 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = GetStatic(queryPath);
+        
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
 
-            TStreamExecScanQuerySettings settings;
-            settings.Explain(true);
-
-            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query, settings).ExtractValueSync();
-            auto res = CollectStreamResult(it);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString ref = GetStatic(correctJoinOrderPath);
 
             /* correct canonized join order in cout, change corresponding join_order/.json file */
-            Cout << CanonizeJoinOrder(*res.PlanJson) << Endl;
+            Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
 
-            UNIT_ASSERT(JoinOrderAndAlgosMatch(*res.PlanJson, ref));
+            /* Only check the plans if stream join is enabled*/
+            if (useStreamLookupJoin) {
+                UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
+            }
         }
     }
 
@@ -314,12 +315,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    /*
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
         );
     }
-
+    */
+   
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS78, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin

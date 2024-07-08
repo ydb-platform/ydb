@@ -153,6 +153,12 @@ def validate_sql(sql_query):
         pytest.skip('custom checks is not supported for KqpRun output format')
 
 
+def read_test_whitelist():
+    test_whitelist_path = yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt'))
+    with codecs.open(test_whitelist_path, 'r', encoding='utf-8') as test_whitelist_file:
+        return set(test_whitelist_file.read().split('\n'))
+
+
 def run_test(suite, case, cfg):
     if suite in EXCLUDED_SUITES:
         pytest.skip('skip sute ' + suite)
@@ -167,7 +173,7 @@ def run_test(suite, case, cfg):
     run_file_kqp(suite, case, cfg)
 
 
-run_test.test_whitelist = set(codecs.open(yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt')), 'r', encoding='utf-8').read().split('\n'))
+run_test.test_whitelist = read_test_whitelist()
 
 
 def run_file_kqp_no_cache(suite, case, cfg):

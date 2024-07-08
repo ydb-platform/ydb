@@ -2705,8 +2705,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
                         Columns { Name: "key1"       Type: "Uint32"}
@@ -3265,8 +3263,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
@@ -4709,8 +4705,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
                               Name: "pool-1"
@@ -5069,8 +5063,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
                               Name: "pool-1"
@@ -5232,8 +5224,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {

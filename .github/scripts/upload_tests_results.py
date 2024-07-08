@@ -10,6 +10,7 @@ import time
 import ydb
 import xml.etree.ElementTree as ET
 
+from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -27,17 +28,20 @@ def parse_codeowners(codeowners_file):
 
 def parse_test_name(name):
     rawname = name
+    fixture = ""
+    filename = ""
     if "[" in name and "]" in name:
         fixture = name[name.index("[") + 1 : name.index("]")]
         name = name[: name.index("[")]
-    else:
-        fixture = ""
-
+          
     parts = name.split(".")
-    filename = f"{parts[0]}.{parts[1]}" if len(parts) > 1 else ""
-
-    testname = ".".join(parts[2:]) if len(parts) > 1 else ""
-
+    
+    if ".py" in name:
+        filename = f"{parts[0]}.{parts[1]}" if len(parts) > 1 else ""
+        testname = ".".join(parts[2:]) if len(parts) > 1 else ""
+    else:
+        testname = ".".join(parts[0:]) if len(parts) > 1 else ""
+        
     return rawname, filename, testname, fixture
 
 
@@ -98,20 +102,20 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
     return results
 
 
-def get_codeowners_for_tests(entries, tests_data):
-    tests_data_with_owners = []
-    for test in tests_data:
-        owners = []
-        target_path = test["suite_name"]
-        for path, path_owners in entries:
-            path = path + "/" if path[-1] != "/" else path
-            path = path + "*" if path[-1] != "*" else path
-            if fnmatch.fnmatch(f"/{target_path}", path):
-                owners.extend(path_owners)
+def get_codeowners_for_tests(codeowners_file_path, tests_data):
 
-        test["owners"] = ",".join(owners)
-        tests_data_with_owners.append(test)
-    return tests_data_with_owners
+
+    with open(codeowners_file_path, 'r') as file:
+        data = file.read()
+        owners_odj = CodeOwners(data)
+
+        tests_data_with_owners = []
+        for test in tests_data:
+            target_path = f'{test["suite_name"]}/{test["file"]}' if test["file"] != "" else test["suite_name"]
+            owners = owners_odj.of(target_path) 
+            test["owners"] = joined_owners=";;".join([(":".join(x))  for x in owners])
+            tests_data_with_owners.append(test)
+        return tests_data_with_owners
 
 
 def upload_codeowners(session, entries):
@@ -278,7 +282,7 @@ def create_pool(endpoint, database):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--result-file', action='store', dest="result_file", required=True, help='XML with results of tests')
+    parser.add_argument('--test-results-file', action='store', dest="test_results_file", required=True, help='XML with results of tests')
     parser.add_argument('--build-type', action='store', dest="build_type", required=True, help='build type')
     parser.add_argument('--commit', default='store', dest="commit", required=True, help='commit sha')
     parser.add_argument('--branch', default='store', dest="branch", required=True, help='branch name ')
@@ -289,7 +293,7 @@ def main():
 
     args = parser.parse_args()
 
-    result_file = args.result_file
+    result_file = args.test_results_file
     build_type = args.build_type
     commit = args.commit
     branch = args.branch
@@ -332,7 +336,7 @@ def main():
     results = parse_junit_xml(
         result_file, build_type, job_name, job_id, commit, branch, pull, run_time
     )
-    result_with_owners = get_codeowners_for_tests(parse_codeowners(codeowners), results)
+    result_with_owners = get_codeowners_for_tests(codeowners, results)
     prepare_and_upload_tests(
         pool, test_table_name, results, batch_size=batch_size_default
     )

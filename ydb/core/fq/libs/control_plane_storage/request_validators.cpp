@@ -24,8 +24,8 @@ void ValidateGenericConnectionSetting(
         issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
 
-    if (!connection.database_name() || connection.database_name() == "") {
-        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.{database_id or host,port} field is not specified";
+    if (!connection.database_name()) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_name field is not specified";
         issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }    
 
@@ -75,17 +75,17 @@ NYql::TIssues ValidateConnectionSetting(
         break;
     }
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
-        const FederatedQuery::GreenplumCluster& greenplumStorage = setting.greenplum_cluster(); 
+        const FederatedQuery::GreenplumCluster& greenplumCluster = setting.greenplum_cluster(); 
 
-        if (!greenplumStorage.has_auth() || greenplumStorage.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+        if (!greenplumCluster.has_auth() || greenplumCluster.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.auth field is not specified"));
         }
 
-        if (greenplumStorage.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (greenplumCluster.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
-        if (!greenplumStorage.database_id() && !greenplumStorage.database_name()) {
+        if (!greenplumCluster.database_id() && !greenplumCluster.database_name()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.greenplum_database.{database_id or database_name} field is not specified"));
         }
         break;

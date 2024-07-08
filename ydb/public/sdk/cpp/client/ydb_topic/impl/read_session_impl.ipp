@@ -23,6 +23,7 @@
 
 #include <utility>
 #include <variant>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic {
 
@@ -216,11 +217,22 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     swap(ready, NotReady);
 }
 
+//
+// TDecompressionQueueItem
+//
+template <bool UseMigrationProtocol>
+TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueItem::~TDecompressionQueueItem()
+{
+    DBGTRACE("TDecompressionQueueItem::~TDecompressionQueueItem");
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSingleClusterReadSessionImpl
 
 template<bool UseMigrationProtocol>
-TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl()
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::~TSingleClusterReadSessionImpl");
     for (auto&& [_, partitionStream] : PartitionStreams) {
         partitionStream->ClearQueue();
     }
@@ -2352,6 +2364,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
     , DoDecompress(doDecompress)
     , ServerBytesSize(serverBytesSize)
 {
+    DBGTRACE("TDataDecompressionInfo::TDataDecompressionInfo");
     i64 compressedSize = 0;
     i64 messagesCount = 0;
 
@@ -2372,6 +2385,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
 template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 {
+    DBGTRACE("TDataDecompressionInfo::~TDataDecompressionInfo");
     if (auto session = CbContext->LockShared()) {
         session->OnDecompressionInfoDestroy(CompressedDataSize, DecompressedDataSize, MessagesInflight, ServerBytesSize);
     }
@@ -2651,7 +2665,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnUserRetrievedEvent(i64 deco
 template <bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::Add(size_t batch, size_t message,
                                                                            size_t sourceDataSize,
-                                                                           size_t estimatedDecompressedSize) {
+                                                                           size_t estimatedDecompressedSize)
+{
+    DBGTRACE("TDecompressionTask::Add");
     if (Messages.empty() || Messages.back().Batch != batch) {
         Messages.push_back({ batch, { message, message + 1 } });
     }
@@ -2668,13 +2684,24 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::TDecompression
     TReadyMessageThreshold* ready)
     : Parent(std::move(parent))
     , PartitionStream(std::move(partitionStream))
-    , Ready(ready) {
+    , Ready(ready)
+{
+    DBGTRACE("TDecompressionTask::TDecompressionTask");
+}
+
+template <bool UseMigrationProtocol>
+TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::~TDecompressionTask()
+{
+    DBGTRACE("TDecompressionTask::~TDecompressionTask");
 }
 
 template<bool UseMigrationProtocol>
-void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator()() {
+void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator()()
+{
+    DBGTRACE("TDecompressionTask::operator()");
     auto parent = Parent.lock();
     if (!parent) {
+        DBGTRACE_LOG("skip");
         return;
     }
     i64 minOffset = Max<i64>();
@@ -2836,6 +2863,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std:
 
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DoActions() {
+    DBGTRACE("TDeferredActions::DoActions");
     Read();
     StartExecutorTasks();
     AbortSession();

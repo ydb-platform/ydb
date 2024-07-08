@@ -28,7 +28,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::sh
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")
             ("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId)("message", result.GetErrorMessage());
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
         auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED,
             std::move(buffer), result.GetErrorMessage());
         TActorContext::AsActorContext().Send(ParentActorId, evResult.release());

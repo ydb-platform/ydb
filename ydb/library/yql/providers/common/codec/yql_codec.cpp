@@ -785,65 +785,99 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
     case TType::EKind::Variant: {
         auto varType = static_cast<TVariantType*>(type);
         auto underlyingType = varType->GetUnderlyingType();
-        if (cmd == StringMarker) {
-            YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
-            auto name = ReadNextString(cmd, buf);
-            auto index = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
-            YQL_ENSURE(index, "Unexpected member: " << name);
-            YQL_ENSURE(static_cast<TStructType*>(underlyingType)->GetMemberType(*index)->IsVoid(), "Expected Void as underlying type");
-            return holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod::Zero(), *index);
-        }
-
-        CHECK_EXPECTED(cmd, BeginListSymbol);
-        cmd = buf.Read();
-        i64 index = 0;
-        if (isTableFormat) {
-            YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
-            if (cmd == Uint64Marker) {
-                index = buf.ReadVarUI64();
+        if (nativeYtTypeFlags & NTCF_COMPLEX) {
+            CHECK_EXPECTED(cmd, BeginListSymbol);
+            cmd = buf.Read();
+            TType* type = nullptr;
+            i64 index = 0;
+            if (cmd == StringMarker) {
+                YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
+                auto structType = static_cast<TStructType*>(underlyingType);
+                auto nameBuffer = ReadNextString(cmd, buf);
+                index = *structType->FindMemberIndex(nameBuffer);
+                type = varType->GetAlternativeType(index);
             } else {
-                index = buf.ReadVarI64();
+                YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
+                YQL_ENSURE(underlyingType->IsTuple(), "Expected tuple as underlying type");
+                if (cmd == Uint64Marker) {
+                    index = buf.ReadVarUI64();
+                } else {
+                    index = buf.ReadVarI64();
+                }
+                type = varType->GetAlternativeType(index);
             }
-        } else {
-            if (cmd == BeginListSymbol) {
+            cmd = buf.Read();
+            CHECK_EXPECTED(cmd, ListItemSeparatorSymbol);
+            cmd = buf.Read();
+            auto value = ReadYsonValue(type, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
+            cmd = buf.Read();
+            if (cmd != EndListSymbol) {
+                CHECK_EXPECTED(cmd, ListItemSeparatorSymbol);
                 cmd = buf.Read();
+                CHECK_EXPECTED(cmd, EndListSymbol);
+            }
+            return holderFactory.CreateVariantHolder(value.Release(), index);
+        } else {
+            if (cmd == StringMarker) {
                 YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
                 auto name = ReadNextString(cmd, buf);
-                auto foundIndex = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
-                YQL_ENSURE(foundIndex, "Unexpected member: " << name);
-                index = *foundIndex;
-                cmd = buf.Read();
-                if (cmd == ListItemSeparatorSymbol) {
-                    cmd = buf.Read();
-                }
-
-                CHECK_EXPECTED(cmd, EndListSymbol);
-            } else {
-                index = ReadNextSerializedNumber<ui64>(cmd, buf);
+                auto index = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
+                YQL_ENSURE(index, "Unexpected member: " << name);
+                YQL_ENSURE(static_cast<TStructType*>(underlyingType)->GetMemberType(*index)->IsVoid(), "Expected Void as underlying type");
+                return holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod::Zero(), *index);
             }
-        }
 
-        YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
-            varType->GetAlternativesCount() << " are available");
-        YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
-        TType* itemType;
-        if (underlyingType->IsTuple()) {
-            itemType = static_cast<TTupleType*>(underlyingType)->GetElementType(index);
-        }
-        else {
-            itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
-        }
-
-        EXPECTED(buf, ListItemSeparatorSymbol);
-        cmd = buf.Read();
-        auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
-        cmd = buf.Read();
-        if (cmd == ListItemSeparatorSymbol) {
+            CHECK_EXPECTED(cmd, BeginListSymbol);
             cmd = buf.Read();
-        }
+            i64 index = 0;
+            if (isTableFormat) {
+                YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
+                if (cmd == Uint64Marker) {
+                    index = buf.ReadVarUI64();
+                } else {
+                    index = buf.ReadVarI64();
+                }
+            } else {
+                if (cmd == BeginListSymbol) {
+                    cmd = buf.Read();
+                    YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
+                    auto name = ReadNextString(cmd, buf);
+                    auto foundIndex = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
+                    YQL_ENSURE(foundIndex, "Unexpected member: " << name);
+                    index = *foundIndex;
+                    cmd = buf.Read();
+                    if (cmd == ListItemSeparatorSymbol) {
+                        cmd = buf.Read();
+                    }
 
-        CHECK_EXPECTED(cmd, EndListSymbol);
-        return holderFactory.CreateVariantHolder(value.Release(), index);
+                    CHECK_EXPECTED(cmd, EndListSymbol);
+                } else {
+                    index = ReadNextSerializedNumber<ui64>(cmd, buf);
+                }
+            }
+
+            YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
+                varType->GetAlternativesCount() << " are available");
+            YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
+            TType* itemType;
+            if (underlyingType->IsTuple()) {
+                itemType = static_cast<TTupleType*>(underlyingType)->GetElementType(index);
+            }
+            else {
+                itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
+            }
+
+            EXPECTED(buf, ListItemSeparatorSymbol);
+            cmd = buf.Read();
+            auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+
+            CHECK_EXPECTED(cmd, EndListSymbol);
+            return holderFactory.CreateVariantHolder(value.Release(), index);
+        }
     }
 
     case TType::EKind::Data: {
@@ -2016,14 +2050,10 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
     switch (type->GetKind()) {
     case TType::EKind::Variant: {
         buf.Write(BeginListSymbol);
-        buf.Write(Uint64Marker);
-        auto index = value.GetVariantIndex();
-        buf.WriteVarUI64(index);
-        buf.Write(ListItemSeparatorSymbol);
         auto varType = static_cast<TVariantType*>(type);
         auto underlyingType = varType->GetUnderlyingType();
-        YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
-            varType->GetAlternativesCount() << " are available");
+        auto index = value.GetVariantIndex();
+        YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " << varType->GetAlternativesCount() << " are available");
         YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
         TType* itemType;
         if (underlyingType->IsTuple()) {
@@ -2032,7 +2062,17 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
         else {
             itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
         }
-
+        if (!(nativeYtTypeFlags & NTCF_COMPLEX) || underlyingType->IsTuple()) {
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(index);
+        } else {
+            auto structType = static_cast<TStructType*>(underlyingType);
+            auto varName = structType->GetMemberName(index);
+            buf.Write(StringMarker);
+            buf.WriteVarI32(varName.size());
+            buf.WriteMany(varName);
+        }
+        buf.Write(ListItemSeparatorSymbol);
         WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetVariantItem(), false);
         buf.Write(ListItemSeparatorSymbol);
         buf.Write(EndListSymbol);

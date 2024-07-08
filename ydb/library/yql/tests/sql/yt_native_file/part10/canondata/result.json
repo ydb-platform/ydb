@@ -2509,9 +2509,9 @@
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Debug]": [
         {
-            "checksum": "ffce5f9dfc9d9a93eff4f89bac1ba579",
+            "checksum": "19b113c92fe797123b77c367c4c56381",
             "size": 3238,
-            "uri": "https://{canondata_backend}/212715/e4c5f67018021fc9462fbeedc6d7ee559b52f1be/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1880306/b36d93b064af553631079307bee5742ee438ad49/resource.tar.gz#test.test_type_v3-insert_struct_v3_with_native--Debug_/opt.yql"
         }
     ],
     "test.test[type_v3-insert_struct_v3_with_native--Plan]": [

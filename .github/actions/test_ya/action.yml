@@ -240,7 +240,6 @@ runs:
 
     - name: archive unitest reports (orig)
       shell: bash
-      if: always()
       run: |
         gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
 
@@ -271,7 +270,7 @@ runs:
         set -x
         python3 -m pip install ydb ydb[yc]
 
-        # Debug variables
+        #Variables
         echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
         echo "BUILD_PRESET=${BUILD_PRESET}"
         echo "PR_NUMBER=${PR_NUMBER}"
@@ -279,17 +278,11 @@ runs:
         echo "JOB_ID=${JOB_ID}"
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
         
-        script=".github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}"
-
-        printf "$script"
-        
-        # Attempt to run the script
-        result=$(python3 $script)
+        result=`github/scripts/upload_tests_results.py --result-file ${JUNIT_REPORT_XML} --run-time $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
         printf "$result"
 
     - name: archive unitest reports (transformed)
       shell: bash
-      if: always()
       run: |
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
 

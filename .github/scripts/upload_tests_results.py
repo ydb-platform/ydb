@@ -193,8 +193,11 @@ def upload_results(pool, sql):
 def prepare_and_upload_tests(pool, path, results, batch_size):
 
     total_records = len(results)
+    if total_records == 0:
+        print("Error:Object stored test results is empty, check test results artifacts")
+        return 1
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
 
         for start in range(0, total_records, batch_size):
             futures = []

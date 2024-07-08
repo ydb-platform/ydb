@@ -8,7 +8,7 @@ namespace NYT::NTableClient {
 
 struct TTableSchemaCompatibilityOptions
 {
-    bool IgnoreSortOrder;
+    bool IgnoreSortOrder = false;
     bool ForbidExtraComputedColumns = true;
     bool IgnoreStableNamesDifference = false;
 };

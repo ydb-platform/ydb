@@ -127,7 +127,7 @@ void SetCurrentTraceContext(TTraceContext* context)
 TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
 {
     if (NConcurrency::NDetail::PerThreadFls() && newContext) {
-        YT_LOG_DEBUG("Writing propagating storage in thread FLS (Location: %v)",
+        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
             loc);
     }
 

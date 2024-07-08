@@ -887,8 +887,8 @@ protected:
                 return NUdf::TUnboxedValue();
             }
             auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
-            auto val = ReadYsonValue(uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
-            return val.Release().MakeOptional();
+            auto val = ReadYsonValue((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
                 auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
@@ -1756,8 +1756,19 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
+            
+            bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
+            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 && field.Type->GetKind() == TTypeBase::EKind::Optional;
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(BeginListSymbol);
+            }
 
             WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
+
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(ListItemSeparatorSymbol);
+                Buf_.Write(EndListSymbol);
+            }
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }

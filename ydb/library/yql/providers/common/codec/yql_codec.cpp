@@ -2275,6 +2275,7 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
                 }
                 WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
                 if (itemType->GetKind() == TType::EKind::Optional) {
+                    buf.Write(ListItemSeparatorSymbol);
                     buf.Write(EndListSymbol);
                 }
             } else {

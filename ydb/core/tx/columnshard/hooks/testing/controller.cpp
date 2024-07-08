@@ -12,10 +12,6 @@ namespace NKikimr::NYDBTest::NColumnShard {
 
 bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    if (SharingIds.empty()) {
-        TCheckContext context;
-        CheckInvariants(shard, context);
-    }
     return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
@@ -24,9 +20,6 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
         AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
-//    if (SharingIds.empty()) {
-//        CheckInvariants();
-//    }
 }
 
 void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {

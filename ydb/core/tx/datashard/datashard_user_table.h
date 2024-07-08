@@ -267,6 +267,9 @@ struct TUserTable : public TThrRefBase {
             , Type(indexDesc.GetType())
             , State(indexDesc.GetState())
         {
+            if (Type != EType::EIndexTypeGlobalAsync) {
+                return;
+            }
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
                 Y_DEBUG_ABORT_UNLESS(!nameToId.contains(column.Name));

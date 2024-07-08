@@ -96,19 +96,17 @@ private:
 };
 
 
-
-
 class TOutputConsumer: public NYql::NPureCalc::IConsumer<NYT::TNode*> {
 public:
 
-    TOutputConsumer(std::function<void(const TVector<TString>&)> callback)
-        : Callback(callback)
-    {}
+    TOutputConsumer(std::function<void(const TString&)> callback)
+        : Callback(callback) {
+    }
 
     void OnObject(NYT::TNode* parsedRecord) override {
-        TVector<TString> result;
+        TString result;
         for (const auto& field : parsedRecord->AsMap()) {
-            result.push_back(field.second.AsString());
+            result += field.second.AsString();
         }
         Callback(result);
     }
@@ -117,7 +115,7 @@ public:
         Cout << "On Finish" << Endl;
     }
 private:
-    std::function<void(const TVector<TString>&)> Callback;
+    std::function<void(const TString&)> Callback;
 };
 
 
@@ -240,7 +238,7 @@ class TJsonParser {
 public:
     TJsonParser(
         const TVector<TString>& columns,
-        std::function<void(const TVector<TString>&)> callback)
+        std::function<void(const TString&)> callback)
         : LogPrefix("JsonParser: ") {
         auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
@@ -248,7 +246,7 @@ public:
             LOG_ROW_DISPATCHER_DEBUG("Creating program...");
             Program = factory->MakePushStreamProgram(
                 TInputSpec(),
-                TOutputSpec(MakeSchema(columns)),
+                TOutputSpec(MakeSchema({"data"})),
                 GenerateSql(columns),
                 NYql::NPureCalc::ETranslationMode::SQL
             );
@@ -271,12 +269,13 @@ private:
     TString GenerateSql(const TVector<TString>& columns) {
         TStringStream str;
         str << R"($json = SELECT CAST(data AS Json) as `Json` FROM Input;)"; 
-        str << "\nSELECT ";
+        str << "\n$fields = SELECT ";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
             str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
                 << *it << ((it != columns.end() - 1) ? "," : "");
         }
         str << " FROM $json;";
+        str << "\nSELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) as data FROM $fields";
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
     }

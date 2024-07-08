@@ -287,7 +287,7 @@ void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourc
         partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
-        partitionState->SetOffset(offset);
+        partitionState->SetOffset(offset + 1);
         SRC_LOG_D("TDqPqRdReadActor::SaveState offset " << offset);
     }
 
@@ -503,25 +503,15 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
     SRC_LOG_D("TEvSessionData, ev: " << ev->Sender);
-
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
 
     auto& sessionInfo = Sessions[partitionId];
-   // SRC_LOG_D("TEvSessionData, size " << ev->Get()->Record.BlobSize());
-    SRC_LOG_D("TEvSessionData, last offset " << ev->Get()->Record.GetLastOffset());
-    for (const auto& json : ev->Get()->Record.GetJson()) {
-
-        TStringStream str;
-        for (const auto& value : json.GetValue()) {
-            SRC_LOG_D("value: " << value);
-            str << value;
-        }
-
-        sessionInfo.Data.emplace_back(str.Str());
-        //sessionInfo.Data.push_back(blob);
+    for (const auto& message : ev->Get()->Record.GetMessages()) {
+        SRC_LOG_D("Json: " << message.GetJson());    
+        sessionInfo.Data.emplace_back(message.GetJson());
+        sessionInfo.LastOffset = message.GetOffset();
     }
-    sessionInfo.LastOffset = ev->Get()->Record.GetLastOffset();
 
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }

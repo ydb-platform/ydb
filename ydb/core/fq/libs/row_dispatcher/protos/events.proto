@@ -35,13 +35,13 @@ message TEvStopSession {
     uint32 PartitionId = 2;
 }
 
-message TEvJson {
-    repeated string Value = 1;
+message TEvMessage {
+    string Json = 1;
+    uint64 Offset = 2;
 }
 
 message TEvSessionData {
-    repeated TEvJson Json = 1;
+    repeated TEvMessage Messages = 1;
     uint32 PartitionId = 2;
-    uint64 LastOffset = 3;
 }
 

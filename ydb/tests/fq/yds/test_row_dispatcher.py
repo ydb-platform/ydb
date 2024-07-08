@@ -82,21 +82,21 @@ class TestPqRowDispatcher(TestYdsBase):
         sql1 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
         sql2 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
         query_id1 = start_yds_query(kikimr, client, sql1)
         query_id2 = start_yds_query(kikimr, client, sql2)
 
         data = [
-            '{"time": "101a"}',
-            '{"time": "102a"}'
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}'
         ]
 
         self.write_stream(data)
-        expected = ['101a', '102a']
+        expected = ['101', '102']
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
 
@@ -110,16 +110,16 @@ class TestPqRowDispatcher(TestYdsBase):
         sql3 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time String NOT NULL));'''
+            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
         data = [
-            '{"time": "103a"}',
-            '{"time": "104a"}'
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+            '{"time": 104, "data": "hello4", "event": "event4"}'
         ]
 
         self.write_stream(data)
-        expected = ['103a', '104a']
+        expected = ['103', '104']
 
         assert self.read_stream(len(expected), topic_path = output_topic1) == expected
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
@@ -151,17 +151,18 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql1 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic}`
-            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql1)
 
         data = [
-            '{"time" = 101;}',
-            '{"time" = 102;}'
+            '{"time": 101}',
+            '{"time": 102}'
         ]
 
         self.write_stream(data)
-        expected = data
+        expected = ['101', '102']
         assert self.read_stream(len(expected), topic_path = output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
@@ -177,12 +178,12 @@ class TestPqRowDispatcher(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
         data = [
-            '{"time" = 103;}',
-            '{"time" = 104;}'
+            '{"time": 103}',
+            '{"time": 104}'
         ]
 
         self.write_stream(data)
-        expected = data
+        expected = ['103', '104']
         assert self.read_stream(len(expected), topic_path = output_topic) == expected
 
         stop_yds_query(client, query_id)  # TODO?
@@ -204,16 +205,18 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql1 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
-            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+            SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
         sql2 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic2}`
-            SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
+            SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
         query_id1 = start_yds_query(kikimr, client, sql1)
         query_id2 = start_yds_query(kikimr, client, sql2)
 
         data = [
-            '{"time" = 101;}',
-            '{"time" = 102;}'
+            '{"time":101}',
+            '{"time":102}'
         ]
 
         self.write_stream(data)
@@ -224,50 +227,57 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id1)
 
         data = [
-            '{"time" = 103;}',
-            '{"time" = 104;}'
+            '{"time":103}',
+            '{"time":104}'
         ]
         self.write_stream(data)
         expected = data
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
         assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
 
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_with_schema(self, kikimr, client):
-        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
-        self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
+        # TODO
+        # client.modify_query(query_id1, "continue", sql1,
+        #     type=fq.QueryContent.QueryType.STREAMING,
+        #     state_load_mode=fq.StateLoadMode.EMPTY,
+        #     streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        # client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+
+    # @yq_v1
+    # @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    # def test_with_schema(self, kikimr, client):
+    #     client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
+    #     self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
         
-        output_topic1 = "pq_test_pq_read_write_output1"
-        create_stream(output_topic1, partitions_count=1)
-        create_read_rule(output_topic1, self.consumer_name)
+    #     output_topic1 = "pq_test_pq_read_write_output1"
+    #     create_stream(output_topic1, partitions_count=1)
+    #     create_read_rule(output_topic1, self.consumer_name)
 
-        sql1 = Rf'''
-             $input = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (
-                    format=json_each_row,
-                    SCHEMA (
-                        time Int32,
-                        data String
-                    )
-                );
+    #     sql1 = Rf'''
+    #          $input = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+    #             WITH (
+    #                 format=json_each_row,
+    #                 SCHEMA (
+    #                     time Int32,
+    #                     data String
+    #                 )
+    #             );
 
-            INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
-                SELECT Yson::SerializeText(Yson::From(TableRow())) FROM $input;
+    #         INSERT INTO {YDS_CONNECTION}.`{output_topic1}`
+    #             SELECT Yson::SerializeText(Yson::From(TableRow())) FROM $input;
                 
-           ;'''
+    #        ;'''
 
-        query_id1 = start_yds_query(kikimr, client, sql1)
+    #     query_id1 = start_yds_query(kikimr, client, sql1)
 
-        data = [
-            '{"time": 101, "data": "hello"}',
-            '{"time": 102, "data": "yoyo"}'
-        ]
+    #     data = [
+    #         '{"time": 101, "data": "hello"}',
+    #         '{"time": 102, "data": "yoyo"}'
+    #     ]
 
-        self.write_stream(data)
+    #     self.write_stream(data)
 
-        expected = [
-            '{"data" = "hello"; "time" = 101}',
-            '{"data" = "yoyo"; "time" = 102}'
-        ]
-        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+    #     expected = [
+    #         '{"data" = "hello"; "time" = 101}',
+    #         '{"data" = "yoyo"; "time" = 102}'
+    #     ]
+    #     assert self.read_stream(len(expected), topic_path = output_topic1) == expected

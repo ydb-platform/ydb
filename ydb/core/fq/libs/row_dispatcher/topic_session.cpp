@@ -69,7 +69,7 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
     public:
         TMaybe<TInstant> Watermark;
         //NKikimr::NMiniKQL::TUnboxedValueVector Data;
-        TVector<TString> Data;
+        TVector<std::pair<ui64, TString>> Data;     // first - offset
         i64 UsedSpace = 0;
         ui64 LastOffset = 0;
     };
@@ -100,6 +100,8 @@ private:
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     TJsonParser Parser;
 
+    ui64 CurrentOffset = 0;
+
 
 public:
     explicit TTopicSession(
@@ -117,7 +119,7 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession();
     void SubscribeOnNextEvent();
     void ParseData();
-    void SendData(const TVector<TString>& values);
+    void SendData(const TString& json);
     void CloseSession();
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
@@ -178,11 +180,8 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
    // , Alloc(__LOCATION__)
-    , Parser(GetColumns(), [&](const TVector<TString>& values){
-        for (auto v : values) {
-            LOG_ROW_DISPATCHER_DEBUG("parser " << v);
-        }
-        SendData(values);
+    , Parser(GetColumns(), [&](const TString& json){
+            SendData(json);
         })
 {
    // Alloc.DisableStrictAllocationCheck();
@@ -337,9 +336,9 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
      //   auto [item, size] = CreateItem(message);
 
         auto& curBatch = GetActiveBatch(/*partitionKey, message.GetWriteTime()*/);
-        curBatch.Data.emplace_back(std::move(item));
+        curBatch.Data.emplace_back(std::make_pair(message.GetOffset(), std::move(item)));
         curBatch.UsedSpace += size;
-        curBatch.LastOffset = message.GetOffset() + 1;
+      //  curBatch.LastOffset = message.GetOffset() + 1;
     }
     return std::nullopt;
 }
@@ -456,38 +455,27 @@ void TTopicSession::ParseData() {
         return;
     }
     auto& readyBatch = ReadyBuffer.front();
-    for (const auto& value : readyBatch.Data) {
+    for (const auto& [offset, value] : readyBatch.Data) {
+        CurrentOffset = offset;
         Parser.Push(value);
     }
     ReadyBuffer.pop();
 }
 
 
-void TTopicSession::SendData(const TVector<TString>& values) {
-    LOG_ROW_DISPATCHER_DEBUG("SendData: " );
+void TTopicSession::SendData(const TString& json) {
+    LOG_ROW_DISPATCHER_DEBUG("SendData: " << json);
     
-    NFq::NRowDispatcherProto::TEvJson json;
-    TStringStream str;
-    for (const auto& v : values) {
-        str << v << " ";
-        json.AddValue(v);
-    }
-
+    NFq::NRowDispatcherProto::TEvMessage message;
+    message.SetJson(json);
+    message.SetOffset(CurrentOffset);
+    
     for (auto& [actorId, info] : Consumers) {
-     //   LOG_ROW_DISPATCHER_DEBUG("Consumers.LastSendedMessage " << info.LastSendedMessage);
-
         auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
-        event->Record.SetPartitionId(PartitionId);
-       // ui64 offset = readyBatch.FirstOffset;
-    
-        event->Record.AddJson()->CopyFrom(json);
-        
-        //event->Record.SetLastOffset(readyBatch.LastOffset);
+        event->Record.SetPartitionId(PartitionId);    
+        event->Record.AddMessages()->CopyFrom(message);
 
         LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
-
-        
-        //info.LastSendedMessage = offset;
         Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 }

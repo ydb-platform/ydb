@@ -6627,6 +6627,10 @@ ATExecAddColumn(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							colDef->colname, RelationGetRelationName(rel))));
 
 			table_close(attrdesc, RowExclusiveLock);
+
+			/* Make the child column change visible */
+			CommandCounterIncrement();
+
 			return InvalidObjectAddress;
 		}
 	}
@@ -10949,15 +10953,19 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 /*
  * transformFkeyCheckAttrs -
  *
- *	Make sure that the attributes of a referenced table belong to a unique
- *	(or primary key) constraint.  Return the OID of the index supporting
- *	the constraint, as well as the opclasses associated with the index
- *	columns.
+ *	Validate that the 'attnums' columns in the 'pkrel' relation are valid to
+ *	reference as part of a foreign key constraint.
+ *
+ *	Returns the OID of the unique index supporting the constraint and
+ *	populates the caller-provided 'opclasses' array with the opclasses
+ *	associated with the index columns.
+ *
+ *	Raises an ERROR on validation failure.
  */
 static Oid
 transformFkeyCheckAttrs(Relation pkrel,
 						int numattrs, int16 *attnums,
-						Oid *opclasses) /* output parameter */
+						Oid *opclasses)
 {
 	Oid			indexoid = InvalidOid;
 	bool		found = false;
@@ -16861,30 +16869,6 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 				*partexprs = lappend(*partexprs, expr);
 
 				/*
-				 * Try to simplify the expression before checking for
-				 * mutability.  The main practical value of doing it in this
-				 * order is that an inline-able SQL-language function will be
-				 * accepted if its expansion is immutable, whether or not the
-				 * function itself is marked immutable.
-				 *
-				 * Note that expression_planner does not change the passed in
-				 * expression destructively and we have already saved the
-				 * expression to be stored into the catalog above.
-				 */
-				expr = (Node *) expression_planner((Expr *) expr);
-
-				/*
-				 * Partition expression cannot contain mutable functions,
-				 * because a given row must always map to the same partition
-				 * as long as there is no change in the partition boundary
-				 * structure.
-				 */
-				if (contain_mutable_functions(expr))
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-							 errmsg("functions in partition key expression must be marked IMMUTABLE")));
-
-				/*
 				 * transformPartitionSpec() should have already rejected
 				 * subqueries, aggregates, window functions, and SRFs, based
 				 * on the EXPR_KIND_ for partition expressions.
@@ -16924,6 +16908,32 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 										   get_attname(RelationGetRelid(rel), attno, false)),
 								 parser_errposition(pstate, pelem->location)));
 				}
+
+				/*
+				 * Preprocess the expression before checking for mutability.
+				 * This is essential for the reasons described in
+				 * contain_mutable_functions_after_planning.  However, we call
+				 * expression_planner for ourselves rather than using that
+				 * function, because if constant-folding reduces the
+				 * expression to a constant, we'd like to know that so we can
+				 * complain below.
+				 *
+				 * Like contain_mutable_functions_after_planning, assume that
+				 * expression_planner won't scribble on its input, so this
+				 * won't affect the partexprs entry we saved above.
+				 */
+				expr = (Node *) expression_planner((Expr *) expr);
+
+				/*
+				 * Partition expressions cannot contain mutable functions,
+				 * because a given row must always map to the same partition
+				 * as long as there is no change in the partition boundary
+				 * structure.
+				 */
+				if (contain_mutable_functions(expr))
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+							 errmsg("functions in partition key expression must be marked IMMUTABLE")));
 
 				/*
 				 * While it is not exactly *wrong* for a partition expression

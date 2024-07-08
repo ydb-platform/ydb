@@ -785,7 +785,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
     case TType::EKind::Variant: {
         auto varType = static_cast<TVariantType*>(type);
         auto underlyingType = varType->GetUnderlyingType();
-        if (nativeYtTypeFlags & NTCF_COMPLEX) {
+        if (isTableFormat && (nativeYtTypeFlags & NTCF_COMPLEX)) {
             CHECK_EXPECTED(cmd, BeginListSymbol);
             cmd = buf.Read();
             TType* type = nullptr;
@@ -794,7 +794,9 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
                 auto structType = static_cast<TStructType*>(underlyingType);
                 auto nameBuffer = ReadNextString(cmd, buf);
-                index = *structType->FindMemberIndex(nameBuffer);
+                auto foundIndex = structType->FindMemberIndex(nameBuffer);
+                YQL_ENSURE(foundIndex.Defined(), "Unexpected member: " << nameBuffer);
+                index = *foundIndex;
                 type = varType->GetAlternativeType(index);
             } else {
                 YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
@@ -804,6 +806,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 } else {
                     index = buf.ReadVarI64();
                 }
+                YQL_ENSURE(0 <= index && index < varType->GetAlternativesCount(), "Unexpected member index: " << index);
                 type = varType->GetAlternativeType(index);
             }
             cmd = buf.Read();
@@ -1211,7 +1214,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
             return NUdf::TUnboxedValuePod();
         }
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
-        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+        if (isTableFormat && (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX)) {
             if (itemType->GetKind() == TType::EKind::Optional) {
                 CHECK_EXPECTED(cmd, BeginListSymbol);
                 cmd = buf.Read();

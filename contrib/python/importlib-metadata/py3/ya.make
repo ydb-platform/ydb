@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(7.2.0)
+VERSION(7.2.1)
 
 LICENSE(Apache-2.0)
 
@@ -19,6 +19,7 @@ PY_SRCS(
     importlib_metadata/_meta.py
     importlib_metadata/_text.py
     importlib_metadata/compat/__init__.py
+    importlib_metadata/compat/py311.py
     importlib_metadata/compat/py39.py
     importlib_metadata/diagnose.py
 )

@@ -87,6 +87,7 @@ PEERDIR(
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
+    ydb/core/memory_controller
     ydb/core/mon
     ydb/core/mon_alloc
     ydb/core/node_whiteboard

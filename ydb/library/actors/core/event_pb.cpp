@@ -383,6 +383,7 @@ namespace NActors {
             size_t totalPayloadSize = 0;
             for (const TRope& rope : payload) {
                 size_t ropeSize = rope.GetSize();
+                totalPayloadSize += ropeSize;
                 result += SerializeNumber(ropeSize, buf);
             }
             result += totalPayloadSize;

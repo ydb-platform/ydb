@@ -10,7 +10,7 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class TInStoreShardsTransfer: public TInStoreTableUpdate {
 private:
     using TBase = TInStoreTableUpdate;
-    std::vector<NKikimrColumnShardDataSharingProto::TDestinationSession> DestinationSessions;
+    std::unordered_map<ui64, NKikimrColumnShardDataSharingProto::TDestinationSession> DestinationSessions;
     std::shared_ptr<TInStoreTable> TargetInStoreTable;
     std::set<ui64> ShardIdsUsage;
 
@@ -29,10 +29,8 @@ private:
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
 
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& /*seqNo*/) const override {
-        for (auto&& i : DestinationSessions) {
-            if (i.GetTransferContext().GetDestinationTabletId() == tabletId) {
-                return i.SerializeAsString();
-            }
+        if(const auto it = DestinationSessions.find(tabletId); it != DestinationSessions.end()) {
+            return it->second.SerializeAsString();
         }
         AFL_VERIFY(false);
         return "";
@@ -42,7 +40,6 @@ private:
         return ShardIdsUsage;
     }
 
-public:
 };
 
 }

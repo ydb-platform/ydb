@@ -1958,7 +1958,6 @@ public:
     }
 
     TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
-    const TBuildIndexManager& GetBuildIndexManager() const { return BuildIndexManager; }
 
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;

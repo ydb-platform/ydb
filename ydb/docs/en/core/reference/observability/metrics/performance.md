@@ -55,7 +55,7 @@ The distributed storage {{ ydb-short-name }} can ensure low response times only 
 
 ### Performance Metrics Configuration
 
-Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for Distributed Storage. Performance metric parameters can be managed via dynamic cluster configuration and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
+Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for Distributed Storage. Performance metric parameters can be managed via [dynamic cluster configuration](../../../maintenance/manual/dynamic-config.md) and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
 
 | Parameter Name | Description | Default Value |
 |----------------|-------------|---------------|

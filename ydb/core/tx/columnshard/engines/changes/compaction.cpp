@@ -40,6 +40,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 
     for (const auto& p : blobRanges) {
         auto action = BlobsAction.GetReading(p.first);
+        action->SetWithDeadline(true);
         for (auto&& b: p.second) {
             action->AddRange(b);
         }

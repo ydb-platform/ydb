@@ -24,6 +24,7 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     Y_ABORT_UNLESS(DataToIndex.size());
     auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
+    reading->SetWithDeadline(true);
     for (auto&& insertedData : DataToIndex) {
         reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData());
     }

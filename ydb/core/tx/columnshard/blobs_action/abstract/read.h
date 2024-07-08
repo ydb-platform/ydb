@@ -148,6 +148,8 @@ private:
     bool Started = false;
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
+    YDB_ACCESSOR(bool, WithDeadline, false);
+
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
     void StartReading(std::vector<TBlobRange>&& ranges);

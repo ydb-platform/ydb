@@ -141,14 +141,14 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     Y_UNIT_TEST(Single_History)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);   
-        CheckMixedIndex(*subset, 24000, 3547100, 31242);
+        CheckMixedIndex(*subset, 24000, 3547100, 49916);
     }
 
     Y_UNIT_TEST(Single_History_Slices)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 9582, 1425198, 31242);
+        CheckMixedIndex(*subset, 9582, 1425198, 49916);
     }
 
     Y_UNIT_TEST(Single_Groups)
@@ -167,14 +167,14 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     Y_UNIT_TEST(Single_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);   
-        CheckMixedIndex(*subset, 24000, 4054050, 18810);
+        CheckMixedIndex(*subset, 24000, 4054050, 29361);
     }
 
     Y_UNIT_TEST(Single_Groups_History_Slices)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 13570, 2277890, 18810);
+        CheckMixedIndex(*subset, 13570, 2277890, 29361);
     }
 
     Y_UNIT_TEST(Mixed)
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     Y_UNIT_TEST(Mixed_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, TMixerRnd(4), 0.3);
-        CheckMixedIndex(*subset, 24000, 4054270, 19152);
+        CheckMixedIndex(*subset, 24000, 4054270, 29970);
     }
 
     Y_UNIT_TEST(Serial)
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
     {
         TMixerSeq mixer(4, Mass1.Saved.Size());
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer, 0.3);
-        CheckMixedIndex(*subset, 24000, 4054290, 19168);
+        CheckMixedIndex(*subset, 24000, 4054290, 30013);
     }
 }
 
@@ -237,14 +237,14 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     Y_UNIT_TEST(Single_History)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);
-        CheckMixedIndex(*subset, 24000, 3547100, 61162);
+        CheckMixedIndex(*subset, 24000, 3547100, 81694);
     }
 
     Y_UNIT_TEST(Single_History_Slices)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 9582, 1425198, 61162);
+        CheckMixedIndex(*subset, 9582, 1425198, 81694);
     }
 
     Y_UNIT_TEST(Single_Groups)
@@ -263,14 +263,14 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     Y_UNIT_TEST(Single_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);   
-        CheckMixedIndex(*subset, 24000, 4054050, 34837);
+        CheckMixedIndex(*subset, 24000, 4054050, 46562);
     }
 
     Y_UNIT_TEST(Single_Groups_History_Slices)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 13570, 2277890, 34837);
+        CheckMixedIndex(*subset, 13570, 2277890, 46562);
     }
 
     Y_UNIT_TEST(Mixed)
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     Y_UNIT_TEST(Mixed_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, TMixerRnd(4), 0.3);
-        CheckMixedIndex(*subset, 24000, 4054270, 34579);
+        CheckMixedIndex(*subset, 24000, 4054270, 46543);
     }
 
     Y_UNIT_TEST(Serial)
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         TMixerSeq mixer(4, Mass1.Saved.Size());
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer, 0.3);
-        CheckMixedIndex(*subset, 24000, 4054290, 34652);
+        CheckMixedIndex(*subset, 24000, 4054290, 46640);
     }
 
     Y_UNIT_TEST(Single_LowResolution)
@@ -341,14 +341,14 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     Y_UNIT_TEST(Single_Groups_History_LowResolution)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);   
-        CheckMixedIndex(*subset, 24000, 4054050, 48540, 5310, 531050);
+        CheckMixedIndex(*subset, 24000, 4054050, 64742, 5310, 531050);
     }
 
     Y_UNIT_TEST(Single_Groups_History_Slices_LowResolution)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 13570, 2234982 /* ~2277890 */, 48540, 5310, 531050);
+        CheckMixedIndex(*subset, 13570, 2234982 /* ~2277890 */, 64742, 5310, 531050);
     }
 }
 
@@ -372,14 +372,14 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     Y_UNIT_TEST(Single_History)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);
-        CheckBTreeIndex(*subset, 24000, 3547100, 61162);
+        CheckBTreeIndex(*subset, 24000, 3547100, 81694);
     }
 
     Y_UNIT_TEST(Single_History_Slices)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckBTreeIndex(*subset, 9582, 1425282, 61162);
+        CheckBTreeIndex(*subset, 9582, 1425282, 81694);
     }
 
     Y_UNIT_TEST(Single_Groups)
@@ -398,14 +398,14 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     Y_UNIT_TEST(Single_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);   
-        CheckBTreeIndex(*subset, 24000, 4054050, 34837);
+        CheckBTreeIndex(*subset, 24000, 4054050, 46562);
     }
 
     Y_UNIT_TEST(Single_Groups_History_Slices)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckBTreeIndex(*subset, 13570, 2273213, 34837);
+        CheckBTreeIndex(*subset, 13570, 2273213, 46562);
     }
 
     Y_UNIT_TEST(Mixed)
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     Y_UNIT_TEST(Mixed_Groups_History)
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, TMixerRnd(4), 0.3);
-        CheckBTreeIndex(*subset, 24000, 4054270, 34579);
+        CheckBTreeIndex(*subset, 24000, 4054270, 46543);
     }
 }
 

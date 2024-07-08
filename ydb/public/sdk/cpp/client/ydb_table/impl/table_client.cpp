@@ -786,6 +786,13 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
         request.set_batch_limit_rows(*settings.BatchLimitRows_);
     }
 
+    if (settings.ReturnNotNullAsOptional_) {
+        request.set_return_not_null_data_as_optional(
+            settings.ReturnNotNullAsOptional_.GetRef()
+            ? Ydb::FeatureFlag::ENABLED
+            : Ydb::FeatureFlag::DISABLED);
+    }
+
     auto promise = NewPromise<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>>();
 
     Connections_->StartReadStream<Ydb::Table::V1::TableService, Ydb::Table::ReadTableRequest, Ydb::Table::ReadTableResponse>(

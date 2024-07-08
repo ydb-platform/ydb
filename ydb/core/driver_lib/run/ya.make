@@ -19,8 +19,6 @@ SRCS(
     run.h
     service_initializer.cpp
     service_initializer.h
-    cert_auth_props.h
-    cert_auth_props.cpp
 )
 
 PEERDIR(
@@ -71,7 +69,6 @@ PEERDIR(
     ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/grpc_services/auth_processor
     ydb/core/health_check
     ydb/core/http_proxy
     ydb/core/jaeger_tracing
@@ -113,6 +110,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
+    ydb/core/tx/limiter/service
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public

@@ -4347,6 +4347,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
+    MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
 
@@ -6444,7 +6445,7 @@ bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TCon
         if (boundary.HasSerializedKeyPrefix()) {
             prefix.Parse(boundary.GetSerializedKeyPrefix());
             rangeEnd = TVector<TCell>(prefix.GetCells().begin(), prefix.GetCells().end());
-        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, false, rangeEnd, errStr, memoryOwner)) {
+        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, {}, false, rangeEnd, errStr, memoryOwner)) {
             errStr = Sprintf("Error at split boundary %d: %s", i, errStr.data());
             return false;
         }
@@ -6836,6 +6837,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         const auto& schemeShardConfig = appConfig.GetSchemeShardConfig();
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
+        MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {

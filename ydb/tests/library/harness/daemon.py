@@ -74,7 +74,7 @@ class Daemon(object):
         self.__command = tuple(command)
         self.__stderr_on_error_lines = stderr_on_error_lines
         self.__daemon = None
-        self.__killed = False
+        self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
         self.__stdout_file = open(stdout_file, mode='w+b')
@@ -137,7 +137,7 @@ class Daemon(object):
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
-        self.__killed = False
+        self.killed = False
 
         return self
 
@@ -150,7 +150,7 @@ class Daemon(object):
         return 0, -signal.SIGTERM
 
     def __check_can_launch_stop(self, stop_type):
-        if self.__daemon is None or self.__killed:
+        if self.__daemon is None or self.killed:
             return False
 
         if self.__daemon is not None and self.__daemon.exit_code == 0:
@@ -215,7 +215,7 @@ class Daemon(object):
 
         self.__daemon.process.send_signal(signal.SIGKILL)
         wait_for(lambda: not self.is_alive(), self.__timeout)
-        self.__killed = True
+        self.killed = True
 
         self.__check_before_end_stop("kill")
 

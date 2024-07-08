@@ -31,7 +31,7 @@ namespace NTabletFlatExecutor {
 
             const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
 
-            if (!page) {
+            if (!page && ReadMissingReferences) {
                 MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
             }
 
@@ -47,6 +47,11 @@ namespace NTabletFlatExecutor {
 
         void EnableReadMissingReferences() noexcept {
             ReadMissingReferences = true;
+        }
+
+        void DisableReadMissingReferences() noexcept {
+            ReadMissingReferences = false;
+            MissingReferencesSize_ = 0;
         }
 
         ui64 MissingReferencesSize() const noexcept
@@ -210,6 +215,11 @@ namespace NTabletFlatExecutor {
         void EnableReadMissingReferences() noexcept override
         {
             TPageCollectionReadEnv::EnableReadMissingReferences();
+        }
+
+        void DisableReadMissingReferences() noexcept override
+        {
+            TPageCollectionReadEnv::DisableReadMissingReferences();
         }
 
         ui64 MissingReferencesSize() const noexcept override

@@ -415,6 +415,13 @@ namespace NKikimr {
         if (!CheckGC(ctx, record))
             return {NKikimrProto::ERROR, 0, false}; // record has duplicates
 
+        if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
+            LOG_ERROR_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                << "Db# Barriers ValidateGCCmd: empty garbage collection command"
+                << " TabletId# " << tabletID);
+            return {NKikimrProto::ERROR, "empty garbage collection command"};
+        }
+
         auto blockStatus = THullDbRecovery::IsBlocked(record);
         switch (blockStatus.Status) {
             case TBlocksCache::EStatus::OK:

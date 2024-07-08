@@ -78,9 +78,11 @@
 /*
  * We must skip "overhead" operations that involve database access when the
  * cached plan's subject statement is a transaction control command.
+ * For the convenience of postgres.c, treat empty statements as control
+ * commands too.
  */
 #define IsTransactionStmtPlan(plansource)  \
-	((plansource)->raw_parse_tree && \
+	((plansource)->raw_parse_tree == NULL || \
 	 IsA((plansource)->raw_parse_tree->stmt, TransactionStmt))
 
 /*
@@ -1438,7 +1440,9 @@ CachedPlanIsSimplyValid(CachedPlanSource *plansource, CachedPlan *plan,
 	 * that here we *do* check plansource->is_valid, so as to force plan
 	 * rebuild if that's become false.
 	 */
-	if (!plansource->is_valid || plan != plansource->gplan || !plan->is_valid)
+	if (!plansource->is_valid ||
+		plan == NULL || plan != plansource->gplan ||
+		!plan->is_valid)
 		return false;
 
 	Assert(plan->magic == CACHEDPLAN_MAGIC);

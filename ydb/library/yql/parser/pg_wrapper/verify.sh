@@ -2,7 +2,7 @@
 set -u
 
 echo -n "Building library: "
-ya make -DBUILD_POSTGRES_ONLY || exit $?
+yag make -DBUILD_POSTGRES_ONLY || exit $?
 
 echo -n "Checking static variables: "
 

@@ -394,7 +394,8 @@ InitProcess(void)
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
 	MyProc->isBackgroundWorker = IsBackgroundWorker;
-	MyProc->delayChkpt = 0;
+	MyProc->delayChkpt = false;
+	MyProc->delayChkptEnd = false;
 	MyProc->statusFlags = 0;
 	/* NB -- autovac launcher intentionally does not set IS_AUTOVACUUM */
 	if (IsAutoVacuumWorkerProcess())
@@ -579,7 +580,8 @@ InitAuxiliaryProcess(void)
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
 	MyProc->isBackgroundWorker = IsBackgroundWorker;
-	MyProc->delayChkpt = 0;
+	MyProc->delayChkpt = false;
+	MyProc->delayChkptEnd = false;
 	MyProc->statusFlags = 0;
 	MyProc->lwWaiting = false;
 	MyProc->lwWaitMode = 0;
@@ -1087,12 +1089,12 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 	/*
 	 * If group locking is in use, locks held by members of my locking group
 	 * need to be included in myHeldLocks.  This is not required for relation
-	 * extension or page locks which conflict among group members. However,
-	 * including them in myHeldLocks will give group members the priority to
-	 * get those locks as compared to other backends which are also trying to
-	 * acquire those locks.  OTOH, we can avoid giving priority to group
-	 * members for that kind of locks, but there doesn't appear to be a clear
-	 * advantage of the same.
+	 * extension lock which conflict among group members. However, including
+	 * them in myHeldLocks will give group members the priority to get those
+	 * locks as compared to other backends which are also trying to acquire
+	 * those locks.  OTOH, we can avoid giving priority to group members for
+	 * that kind of locks, but there doesn't appear to be a clear advantage of
+	 * the same.
 	 */
 	if (leader != NULL)
 	{

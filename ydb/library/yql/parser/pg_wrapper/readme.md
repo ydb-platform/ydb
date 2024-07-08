@@ -40,7 +40,7 @@ libossp-uuid-dev
 
 6. Assuming compilation and automatic patching were successful, apply local changes collected on step 2:
 
-   patch -p5 < local_changes.patch
+   patch -p6 < local_changes.patch
 
    Resolve possible conflicts. Usually, conflicts arise due to some already backported changes
 
@@ -54,7 +54,7 @@ libossp-uuid-dev
 
 9. Make sure that resulting pg_wrapper library compiles and passes minimal tests
 
-   ya make --build=relwithdebinfo -tA -C ut -C tests
+   ya make --build=relwithdebinfo -tA -C ut -C test
 
 10. Verify that all global variables in PostgreSQL-originated sources are accounted for
 

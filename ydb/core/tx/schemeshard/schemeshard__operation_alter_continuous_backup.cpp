@@ -83,7 +83,7 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription schema;
-    context.SS->DescribeTable(table, typeRegistry, true, false, &schema);
+    context.SS->DescribeTable(table, typeRegistry, true, false, true, &schema);
     schema.MutablePartitionConfig()->CopyFrom(table->TableDescription.GetPartitionConfig());
 
     TString errStr;

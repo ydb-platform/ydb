@@ -278,6 +278,7 @@ class TTableDescription::TImpl {
         , PartitioningSettings_(proto.partitioning_settings())
         , HasStorageSettings_(proto.has_storage_settings())
         , HasPartitioningSettings_(proto.has_partitioning_settings())
+        , IsIncrementalBackup_(proto.incremental_backup())
     {
         // primary key
         for (const auto& pk : proto.primary_key()) {
@@ -626,6 +627,10 @@ public:
         return ReadReplicasSettings_;
     }
 
+    bool IsIncrementalBackup() const {
+        return IsIncrementalBackup_;
+    }
+
 private:
     Ydb::Table::DescribeTableResult Proto_;
     TStorageSettings StorageSettings_;
@@ -652,6 +657,7 @@ private:
     bool HasStorageSettings_ = false;
     bool HasPartitioningSettings_ = false;
     EStoreType StoreType_ = EStoreType::Row;
+    bool IsIncrementalBackup_ = false;
 };
 
 TTableDescription::TTableDescription()
@@ -880,6 +886,10 @@ const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const {
     return Impl_->GetProto();
 }
 
+bool TTableDescription::IsIncrementalBackup() const {
+    return Impl_->IsIncrementalBackup();
+}
+
 void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) const {
     for (const auto& column : Impl_->GetColumns()) {
         auto& protoColumn = *request.add_columns();
@@ -961,6 +971,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
         default:
             break;
         }
+    }
+
+    if (Impl_->IsIncrementalBackup()) {
+        request.set_incremental_backup(true);
     }
 }
 

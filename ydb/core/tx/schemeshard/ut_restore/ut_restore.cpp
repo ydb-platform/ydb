@@ -56,6 +56,7 @@ namespace {
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
+        FillBackupDescription(scheme, tableDesc);
 
         TString result;
         UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(scheme, &result));
@@ -2624,7 +2625,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ExtractTenantSchemeshard(&schemeshardId)
         });
 
-        TestDescribeResult(DescribePath(runtime, schemeshardId, "/MyRoot/User/Table", true, true), checks);
+        TestDescribeResult(DescribePath(runtime, schemeshardId, "/MyRoot/User/Table", true, true, false, false, true), checks);
     }
 
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInDateTypeColumnMode) {
@@ -2700,6 +2701,22 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {
             NLs::UserAttrsEqual({{"key", "value"}}),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlag) {
+        ShouldRestoreSettings(R"(
+            incremental_backup: true
+        )", {
+            NLs::IncrementalBackup(true),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlagExplicitFalse) {
+        ShouldRestoreSettings(R"(
+            incremental_backup: false
+        )", {
+            NLs::IncrementalBackup(false),
         });
     }
 

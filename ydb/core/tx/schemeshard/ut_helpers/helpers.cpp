@@ -269,13 +269,14 @@ namespace NSchemeShardUT_Private {
         return DescribePath(runtime, schemeShard, path, returnPartitioning, returnBoundaries, true);
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning, bool returnBoundaries, bool showPrivate, bool returnBackups) {
+    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning, bool returnBoundaries, bool showPrivate, bool returnBackups, bool returnBackupMetaInfo) {
         NKikimrSchemeOp::TDescribeOptions opts;
         opts.SetReturnPartitioningInfo(returnPartitioning);
         opts.SetReturnPartitionConfig(returnPartitioning);
         opts.SetBackupInfo(returnBackups);
         opts.SetReturnBoundaries(returnBoundaries);
         opts.SetShowPrivateTable(showPrivate);
+        opts.SetReturnBackupMetaInfo(returnBackupMetaInfo);
 
         return DescribePath(runtime, schemeShard, path, opts);
     }
@@ -284,8 +285,8 @@ namespace NSchemeShardUT_Private {
         return DescribePath(runtime, TTestTxConfig::SchemeShard, path, returnPartitioning, returnBoundaries, true);
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning, bool returnBoundaries, bool showPrivate, bool returnBackups) {
-        return DescribePath(runtime, TTestTxConfig::SchemeShard, path, returnPartitioning, returnBoundaries, showPrivate, returnBackups);
+    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning, bool returnBoundaries, bool showPrivate, bool returnBackups, bool returnBackupMetaInfo) {
+        return DescribePath(runtime, TTestTxConfig::SchemeShard, path, returnPartitioning, returnBoundaries, showPrivate, returnBackups, returnBackupMetaInfo);
     }
 
     TPathVersion ExtractPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& describe) {

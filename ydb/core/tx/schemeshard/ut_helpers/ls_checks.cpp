@@ -1292,5 +1292,13 @@ void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, 
 #undef DESCRIBE_ASSERT_GE
 #undef DESCRIBE_ASSERT
 
+TCheckFunc IncrementalBackup(bool flag) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        NKikimrSchemeOp::TTableDescription table = record.GetPathDescription().GetTable();
+        bool isIncrBackup = table.GetIncrementalBackup();
+        UNIT_ASSERT_VALUES_EQUAL(isIncrBackup, flag);
+    };
+}
+
 } // NLs
 } // NSchemeShardUT_Private

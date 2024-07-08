@@ -67,6 +67,7 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
     FillSequenceDescription(scheme, tableDesc);
+    FillBackupDescription(scheme, tableDesc);
 
     return scheme;
 }

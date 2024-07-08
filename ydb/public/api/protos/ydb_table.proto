@@ -580,6 +580,8 @@ message CreateTableRequest {
     bool temporary = 19;
     // Is table column or row oriented
     StoreType store_type = 20;
+    // Is incremental backup table
+    bool incremental_backup = 21;
 }
 
 message CreateTableResponse {
@@ -781,6 +783,8 @@ message DescribeTableResult {
     bool temporary = 17;
     // Is table column or row oriented
     StoreType store_type = 18;
+    // Is incremental backup table
+    bool incremental_backup = 19;
 }
 
 message Query {

@@ -258,6 +258,29 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         )");
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardBackupTable) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                IncrementalBackup: true
+                KeyColumnNames: ["key"]
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
         TTestBasicRuntime runtime;
 
@@ -460,6 +483,132 @@ partitioning_settings {
   partitioning_by_load: DISABLED
   min_partitions_count: 1
 }
+)");
+    }
+
+    Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        const TVector<TString> tables = {R"(
+            Name: "Table"
+            Columns {
+                Name: "key"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "b"
+                        }
+                    }
+                }
+            }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "a"
+                        }
+                    }
+                }
+            }
+            IncrementalBackup: true
+            KeyColumnNames: ["key"]
+        )"};
+
+        Run(runtime, env, tables, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        auto schemeIt = s3Mock.GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != s3Mock.GetData().end());
+
+        TString scheme = schemeIt->second;
+
+        UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
+  name: "key"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "b"
+      }
+    }
+  }
+}
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "a"
+      }
+    }
+  }
+}
+primary_key: "key"
+partitioning_settings {
+  partitioning_by_size: DISABLED
+  partitioning_by_load: DISABLED
+  min_partitions_count: 1
+}
+incremental_backup: true
 )");
     }
 

@@ -409,8 +409,8 @@ namespace NKikimr {
                     // no more blobs to replicate; replication will not resume
                     State = Finished;
                     ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 0;
-                    ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 1;
-                    ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 1;
+                    ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 0;
+                    ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 0;
                     ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
                     ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
                     ReplCtx->MonGroup.ReplItemsRemaining() = 0;

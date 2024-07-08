@@ -321,6 +321,13 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
         Y_FAIL_S("unknown transaction type");
     }
 
+    for (ui64 tabletId : Senders) {
+        tx.AddSenders(tabletId);
+    }
+    for (ui64 tabletId : Receivers) {
+        tx.AddReceivers(tabletId);
+    }
+
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
@@ -336,12 +343,6 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
 
 void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
 {
-    for (ui64 tabletId : Senders) {
-        tx.AddSenders(tabletId);
-    }
-    for (ui64 tabletId : Receivers) {
-        tx.AddReceivers(tabletId);
-    }
     tx.MutableOperations()->Add(Operations.begin(), Operations.end());
     if (SelfDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetSelfPredicate(SelfDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);

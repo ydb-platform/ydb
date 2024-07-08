@@ -830,16 +830,23 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::GlobalVectorIndex_IndexType indexType, 
-                                  Ydb::Table::GlobalVectorIndex_Distance distance, 
-                                  Ydb::Table::GlobalVectorIndex_Similarity similarity, 
-                                  Ydb::Table::GlobalVectorIndex_VectorType vectorType) {
+TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
+                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+                                  Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                  ui32 vectorDimension
+                                  ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetIndexType(), indexType);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetDistance(), distance);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetSimilarity(), similarity);
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetVectorIndexDescription().GetVectorType(), vectorType);
+        if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
+            const auto& settings = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.distance(), dist);
+            UNIT_ASSERT_VALUES_EQUAL(settings.similarity(), similarity);
+            UNIT_ASSERT_VALUES_EQUAL(settings.vector_type(), vectorType);
+            UNIT_ASSERT_VALUES_EQUAL(settings.vector_dimension(), vectorDimension);
+        } else {
+            UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
+        }
     };
+
 }
 
 

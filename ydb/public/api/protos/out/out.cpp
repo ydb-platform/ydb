@@ -31,18 +31,14 @@ Y_DECLARE_OUT_SPEC(, Ydb::Import::ImportProgress::Progress, stream, value) {
     stream << Ydb::Import::ImportProgress_Progress_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::IndexType, stream, value) {
-    stream << Ydb::Table::GlobalVectorIndex::IndexType_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Distance, stream, value) {
+    stream << Ydb::Table::VectorIndexSettings::Distance_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::Distance, stream, value) {
-    stream << Ydb::Table::GlobalVectorIndex::Distance_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Similarity, stream, value) {
+    stream << Ydb::Table::VectorIndexSettings::Similarity_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::Similarity, stream, value) {
-    stream << Ydb::Table::GlobalVectorIndex::Similarity_Name(value);
-}
-
-Y_DECLARE_OUT_SPEC(, Ydb::Table::GlobalVectorIndex::VectorType, stream, value) {
-    stream << Ydb::Table::GlobalVectorIndex::VectorType_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::VectorType, stream, value) {
+    stream << Ydb::Table::VectorIndexSettings::VectorType_Name(value);
 }

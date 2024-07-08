@@ -226,7 +226,7 @@ private:
             case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
                 explain = "unsupported index type to build";
                 return false;
-            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorIndex:
+            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
                 explain = "unsupported vector index type to build";
                 return false;
             case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

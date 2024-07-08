@@ -167,7 +167,6 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
 
 bool IsCompatibleKeyTypes(
-    const NKikimrSchemeOp::EIndexType indexType, 
     const TColumnTypes& baseTableColumnsTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
@@ -193,11 +192,6 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             error = "It is not allowed to create index with data column";
             return false;
         }
-        if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
-            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-            error = "It is not allowed to create vector index with data column";
-            return false;
-        }
     }
 
     if (!IsCompatibleIndex(indexDesc.GetType(), baseTableColumns, indexKeys, error)) {
@@ -211,7 +205,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
+
+    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         if (indexKeys.KeyColumns.size() != 1) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
             error = "Only single column is supported for vector index";
@@ -227,12 +223,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
             return false;
         }
-    }
-
-    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
-    if (!IsCompatibleKeyTypes(indexDesc.GetType(), baseColumnTypes, implTableColumns, uniformTable, error)) {
-        status = NKikimrScheme::EStatus::StatusInvalidParameter;
-        return false;
+    } else {
+        if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            return false;
+        }
     }
 
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {

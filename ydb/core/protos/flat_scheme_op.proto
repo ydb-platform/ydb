@@ -974,7 +974,7 @@ enum EIndexType {
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
-    EIndexTypeGlobalVector = 4;
+    EIndexTypeGlobalVectorKmeansTree = 4;
 }
 
 enum EIndexState {
@@ -984,13 +984,8 @@ enum EIndexState {
     EIndexStateWriteOnly = 3;
 }
 
-message TVectorIndexDescription {
-    optional Ydb.Table.GlobalVectorIndex.IndexType IndexType = 1;
-    oneof DistanceSimilarity {
-        Ydb.Table.GlobalVectorIndex.Distance Distance = 2;
-        Ydb.Table.GlobalVectorIndex.Similarity Similarity = 3;
-    }
-    optional Ydb.Table.GlobalVectorIndex.VectorType VectorType = 4;
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1013,7 +1008,7 @@ message TIndexDescription {
     repeated TTableDescription IndexImplTableDescriptions = 10;
 
     oneof SpecializedIndexDescription {
-        TVectorIndexDescription VectorIndexDescription = 11;
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
     }
 }
 
@@ -1025,7 +1020,7 @@ message TIndexCreationConfig {
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
     oneof SpecializedIndexDescription {
-        TVectorIndexDescription VectorIndexDescription = 7;
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
     }
 }
 

@@ -24,7 +24,7 @@ TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexTy
 
     TTableColumns result;
 
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         result.Keys.push_back(NTableVectorIndex::LevelColumn);
         result.Keys.push_back(NTableVectorIndex::IdColumn);
         result.Columns.insert(NTableVectorIndex::LevelColumn);
@@ -81,13 +81,9 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
         }
     }
 
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         if (index.KeyColumns.size() != 1) {
             explain = "Only single key column is supported for vector index";
-            return false;
-        }
-        if (index.DataColumns.size() != 0) {
-            explain = "Data columns are not supported for vector index";
             return false;
         }
     }
@@ -114,7 +110,7 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
         }
     }
 
-    if (indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    if (indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         if (index.KeyColumns == table.Keys) {
             explain = TStringBuilder()
                       << "table and index keys are the same";

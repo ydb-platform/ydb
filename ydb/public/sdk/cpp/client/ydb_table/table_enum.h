@@ -28,7 +28,7 @@ enum class EIndexType {
     GlobalSync,
     GlobalAsync,
     GlobalUnique,
-    GlobalVector,
+    GlobalVectorKMeansTree,
 
     Unknown = std::numeric_limits<int>::max()
 };

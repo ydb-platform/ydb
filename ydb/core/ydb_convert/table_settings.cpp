@@ -442,8 +442,8 @@ bool FillIndexTablePartitioning(
         }
         break;
 
-    case Ydb::Table::TableIndex::kGlobalVectorIndex:
-        if (!fillIndexPartitioning(index.global_vector_index().settings())) {
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().settings())) {
             return false;
         }
         break;

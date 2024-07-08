@@ -9,6 +9,8 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <functional>
 
 namespace NSchemeShardUT_Private {
@@ -139,10 +141,11 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
     
-    TCheckFunc VectorIndexDescription(Ydb::Table::GlobalVectorIndex_IndexType indexType, 
-                                      Ydb::Table::GlobalVectorIndex_Distance distance,
-                                      Ydb::Table::GlobalVectorIndex_Similarity similarity, 
-                                      Ydb::Table::GlobalVectorIndex_VectorType vectorType);
+    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
+                                      Ydb::Table::VectorIndexSettings_Similarity similarity,
+                                      Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                      ui32 vectorDimension
+                                  );
 
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);

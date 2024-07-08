@@ -136,7 +136,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
-            case NKikimrSchemeOp::EIndexTypeGlobalVector:
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorIndexImplTable;
             default:
                 Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
@@ -1263,16 +1263,22 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
     }
 
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVector) {
-        auto& vectorIndexDescription = *entry.MutableVectorIndexDescription();
-        vectorIndexDescription.SetIndexType(indexInfo->VectorIndexDescription.GetIndexType());
-        if (indexInfo->VectorIndexDescription.HasDistance())
-            vectorIndexDescription.SetDistance(indexInfo->VectorIndexDescription.GetDistance());
-        else if (indexInfo->VectorIndexDescription.HasSimilarity())
-            vectorIndexDescription.SetSimilarity(indexInfo->VectorIndexDescription.GetSimilarity());
-        else
-            Y_FAIL_S("Either distance or similarity should be set in VectorIndexDescription: " << indexInfo->VectorIndexDescription);
-        vectorIndexDescription.SetVectorType(indexInfo->VectorIndexDescription.GetVectorType());
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        const auto& indexInfoDescription = indexInfo->VectorIndexKmeansTreeDescription;
+        if (indexInfoDescription) {
+            const auto& indexInfoSettings = indexInfoDescription->GetSettings(); 
+            auto entrySettings = entry.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+            if (indexInfoSettings.Hasdistance())
+                entrySettings->set_distance(indexInfoSettings.distance());
+            else if (indexInfoSettings.Hassimilarity())
+                entrySettings->set_similarity(indexInfoSettings.similarity());
+            else
+                Y_FAIL_S("Either distance or similarity should be set in VectorIndexKmeansTreeDescription: " << *indexInfoDescription);
+            entrySettings->set_vector_type(indexInfoSettings.vector_type());
+            entrySettings->set_vector_dimension(indexInfoSettings.vector_dimension());
+        } else {
+            Y_FAIL_S("VectorIndexKmeansTreeDescription should be set");
+        }
     }
     
 }

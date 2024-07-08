@@ -880,8 +880,8 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions()
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector:
-            *index->mutable_global_vector_index() = Ydb::Table::GlobalVectorIndex();
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+            *index->mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         default:
             break;
@@ -949,8 +949,8 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
             break;
 
-        case Ydb::Table::TableIndex::kGlobalVectorIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector);
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             break;
 
         default:

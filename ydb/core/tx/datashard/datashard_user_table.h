@@ -279,7 +279,7 @@ struct TUserTable : public TThrRefBase {
                 for (const auto& columnName : columnNames) {
                     auto it = nameToId.find(columnName);
 
-                    if (it == nameToId.end() && type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+                    if (it == nameToId.end() && type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                         Y_ABORT_UNLESS(columnName == NTableIndex::NTableVectorIndex::IdColumn || 
                                        columnName == NTableIndex::NTableVectorIndex::LevelColumn ||
                                        columnName == NTableIndex::NTableVectorIndex::CentroidColumn ||

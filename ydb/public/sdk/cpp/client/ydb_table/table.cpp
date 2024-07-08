@@ -2346,8 +2346,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     case EIndexType::GlobalUnique:
         GlobalIndexSettings_.SerializeTo(*proto.mutable_global_unique_index()->mutable_settings());
         break;
-    case EIndexType::GlobalVector:
-        *proto.mutable_global_vector_index() = Ydb::Table::GlobalVectorIndex();
+    case EIndexType::GlobalVectorKMeansTree:
+        *proto.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
         break;
     case EIndexType::Unknown:
         break;

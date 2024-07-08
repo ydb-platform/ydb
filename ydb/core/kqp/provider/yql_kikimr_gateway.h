@@ -64,7 +64,7 @@ struct TIndexDescription {
         GlobalSync = 0,
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
-        Vector = 3
+        GlobalSyncVectorKMeansTree = 3
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -126,9 +126,9 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalAsync;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
                 return TIndexDescription::EType::GlobalSyncUnique;
-            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector:
-                return TIndexDescription::EType::Vector;
-            case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+                return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            default:
                 YQL_ENSURE(false, "Unexpected NKikimrSchemeOp::EIndexType::EIndexTypeInvalid");
         }
     }
@@ -141,8 +141,8 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             case TIndexDescription::EType::GlobalSyncUnique:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
-            case NYql::TIndexDescription::EType::Vector:
-                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector;
+            case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
         }
     }
 
@@ -178,8 +178,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalAsync:
                 return false;
-            case EType::Vector:
-                return false;
+            case EType::GlobalSyncVectorKMeansTree:
+                return true;
         }
     }
 };

@@ -29,25 +29,27 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["embedding"]
-              Type: EIndexTypeGlobalVector
-              VectorIndexDescription {
-                IndexType: INDEX_TYPE_KMEANS_TREE,
-                Distance: DISTANCE_COSINE,
-                VectorType: VECTOR_TYPE_FLOAT
-              }             
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings : {
+                  distance: DISTANCE_COSINE,
+                  vector_type: VECTOR_TYPE_FLOAT,
+                  vector_dimension: 1024
+                }             
+              }
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector"),
             { NLs::PathExist,
-              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVector),
+              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
-              NLs::VectorIndexDescription(Ydb::Table::GlobalVectorIndex::INDEX_TYPE_KMEANS_TREE, 
-                                          Ydb::Table::GlobalVectorIndex::DISTANCE_COSINE,
-                                          Ydb::Table::GlobalVectorIndex::SIMILARITY_UNSPECIFIED,
-                                          Ydb::Table::GlobalVectorIndex::VECTOR_TYPE_FLOAT
+              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
+                                          Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                                          1024
                                           ),
             });
 

@@ -274,7 +274,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             //TODO build vector index
             break;
         default:

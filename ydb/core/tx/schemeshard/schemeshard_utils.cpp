@@ -308,7 +308,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 
     *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableInfo, indexTableDesc);
 
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         FillVectorIndexColumns(result);
         return result;
     }
@@ -379,7 +379,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 
     *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableDescr, indexTableDesc);
 
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector) {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         FillVectorIndexColumns(result);
         return result;
     }
@@ -557,15 +557,11 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
 }
 
 bool IsCompatibleKeyTypes(
-    const NKikimrSchemeOp::EIndexType indexType,
     const TColumnTypes& baseTableColumnTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
     TString& explain)
 {
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVector)
-        return true;
-
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
 

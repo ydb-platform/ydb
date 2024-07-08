@@ -735,7 +735,7 @@ public:
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId.SetValue(UlidGen.Next());
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
-            AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
+            AppData()->TimeProvider, AppData()->RandomProvider);
 
         auto& alloc = QueryState->TxCtx->TxAlloc;
         ui64 mkqlInitialLimit = Settings.MkqlInitialMemoryLimit;
@@ -815,7 +815,7 @@ public:
             }
         } else {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
-                AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
+                AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         }
@@ -1209,7 +1209,6 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-                YQL_ENSURE(txCtx.EnableImmediateEffects);
                 request.UseImmediateEffects = true;
             }
         }
@@ -1267,7 +1266,7 @@ public:
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
-            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY 
+            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
                 || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -1843,11 +1842,7 @@ public:
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ui64 proxyRequestId = ev->Cookie;
-        auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-            ? Ydb::StatusIds::SESSION_BUSY
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-
-        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
+        ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
     }
 
     static bool IsFatalError(const Ydb::StatusIds::StatusCode status) {

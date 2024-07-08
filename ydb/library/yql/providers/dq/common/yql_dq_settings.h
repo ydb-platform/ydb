@@ -66,6 +66,7 @@ struct TDqSettings {
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
         static constexpr ui64 EnableSpillingNodes = 0;
+        static constexpr bool EnableSpillingInChannels = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -138,6 +139,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
 
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<bool, false> EnableSpillingInChannels;
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
@@ -193,6 +195,7 @@ struct TDqSettings {
         SAVE_SETTING(ExportStats);
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
+        SAVE_SETTING(EnableSpillingInChannels);
         SAVE_SETTING(DisableCheckpoints);
 #undef SAVE_SETTING
     }
@@ -219,13 +222,18 @@ struct TDqSettings {
         }
     }
 
-    bool IsSpillingEnabled() const {
+    bool IsSpillingEngineEnabled() const {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
     }
 
+    bool IsSpillingInChannelsEnabled() const {
+        if (!IsSpillingEngineEnabled()) return false;
+        return EnableSpillingInChannels.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingInChannels) != false;
+    }
+
     ui64 GetEnabledSpillingNodes() const {
-        if (!IsSpillingEnabled()) return 0;
-        return EnableSpillingNodes.Get().GetOrElse(0);
+        if (!IsSpillingEngineEnabled()) return 0;
+        return EnableSpillingNodes.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingNodes);
     }
 
     bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {

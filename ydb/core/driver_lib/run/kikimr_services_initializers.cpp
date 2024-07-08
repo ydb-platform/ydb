@@ -2063,9 +2063,8 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
 
 // TMemProfMonitorInitializer
 
-TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver)
+TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
-    , MemObserver(std::move(memObserver))
 {}
 
 void TMemProfMonitorInitializer::InitializeServices(
@@ -2079,7 +2078,6 @@ void TMemProfMonitorInitializer::InitializeServices(
     }
 
     IActor* monitorActor = CreateMemProfMonitor(
-        MemObserver,
         1, // seconds
         appData->Counters,
         filePathPrefix);

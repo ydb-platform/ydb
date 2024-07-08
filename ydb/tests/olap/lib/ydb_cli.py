@@ -10,6 +10,7 @@ from enum import StrEnum
 class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
+    TPC_DS = 'tpcds'
 
 
 class YdbCliHelper:

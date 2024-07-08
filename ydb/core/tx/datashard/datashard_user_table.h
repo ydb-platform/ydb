@@ -287,7 +287,7 @@ struct TUserTable : public TThrRefBase {
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
         }
 
-        void Rename(NKikimrSchemeOp::TIndexDescription& indexDesc, const TString& newName) {
+        static void Rename(NKikimrSchemeOp::TIndexDescription& indexDesc, const TString& newName) {
             indexDesc.SetName(newName);
         }
     };

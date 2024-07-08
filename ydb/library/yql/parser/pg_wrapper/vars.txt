@@ -401,7 +401,6 @@ RecentXmin
 RecordCacheArray
 RecordCacheArrayLen
 RecordCacheHash
-RecordIdentifierArray
 RecoveryConflictPending
 RecoveryConflictReason
 RecoveryConflictRetryable
@@ -1036,6 +1035,7 @@ min_parallel_index_scan_size
 min_parallel_table_scan_size
 min_wal_size_mb
 missingContrecPtr
+missing_cache
 mxid_to_string.str
 myTempNamespace
 myTempNamespaceSubID

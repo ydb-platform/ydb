@@ -161,11 +161,13 @@ def run_test(suite, case, cfg):
     if full_test_name in EXCLUDED_TESTS:
         pytest.skip('skip case ' + full_test_name)
 
-    with codecs.open(yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt')), 'r', encoding='utf-8') as white_list_file:
-        if full_test_name not in white_list_file.read().split('\n'):
-            pytest.skip('skip case ' + full_test_name + ', out of test whitelist')
+    if full_test_name not in run_test.test_whitelist:
+        pytest.skip('skip case ' + full_test_name + ', out of test whitelist')
 
     run_file_kqp(suite, case, cfg)
+
+
+run_test.test_whitelist = set(codecs.open(yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt')), 'r', encoding='utf-8').read().split('\n'))
 
 
 def run_file_kqp_no_cache(suite, case, cfg):

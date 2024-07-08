@@ -902,7 +902,7 @@ TFuture<void> TTransaction::DoAbort(
 {
     VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
-    if (State_ == ETransactionState::Aborting || State_ == ETransactionState::Aborted) {
+    if (AbortPromise_) {
         return AbortPromise_.ToFuture();
     }
 
@@ -912,43 +912,59 @@ TFuture<void> TTransaction::DoAbort(
 
     auto alienTransactions = AlienTransactions_;
 
+    AbortPromise_ = NewPromise<void>();
+    auto abortFuture = AbortPromise_.ToFuture();
+
     guard->Release();
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
 
-    AbortPromise_.TrySetFrom(req->Invoke().Apply(
+    req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
             {
                 auto guard = Guard(SpinLock_);
 
-                if (State_ != ETransactionState::Aborting) {
+                if (!AbortPromise_) {
                     YT_LOG_DEBUG(rspOrError, "Transaction is no longer aborting, abort response ignored");
                     return;
                 }
 
+                TError abortError;
                 if (rspOrError.IsOK()) {
                     YT_LOG_DEBUG("Transaction aborted");
                 } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
-                    YT_LOG_DEBUG("Transaction has expired or was already aborted, ignored");
+                    YT_LOG_DEBUG("Transaction has expired or was already aborted");
                 } else {
                     YT_LOG_DEBUG(rspOrError, "Error aborting transaction");
-                    THROW_ERROR_EXCEPTION("Error aborting transaction %v",
+                    abortError = TError("Error aborting transaction %v",
                         GetId())
                         << rspOrError;
                 }
 
-                State_ = ETransactionState::Aborted;
-            }
+                if (abortError.IsOK()) {
+                    State_ = ETransactionState::Aborted;
+                } else {
+                    State_ = ETransactionState::AbortFailed;
+                }
 
-            Aborted_.Fire(TError("Transaction aborted by user request"));
-        })));
+                auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());
+
+                guard.Release();
+
+                if (abortError.IsOK()) {
+                    Aborted_.Fire(TError("Transaction aborted by user request"));
+                }
+
+                abortPromise.Set(std::move(abortError));
+            }
+        }));
 
     for (const auto& transaction : alienTransactions) {
         YT_UNUSED_FUTURE(transaction->Abort());
     }
 
-    return AbortPromise_.ToFuture();
+    return abortFuture;
 }
 
 TFuture<void> TTransaction::SendPing()
@@ -987,7 +1003,6 @@ TFuture<void> TTransaction::SendPing()
                     GetId());
 
                 if (fireAborted) {
-                    AbortPromise_.TrySet();
                     Aborted_.Fire(error);
                 }
 

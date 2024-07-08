@@ -17,7 +17,3 @@
 #ifndef KIKIMR_ALLOW_SSREPLICA_PROBES
 #define KIKIMR_ALLOW_SSREPLICA_PROBES 0
 #endif
-// This feature flag enables PDisk to use t1ha hash in sector footer checksums
-#ifndef KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING
-#define KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING true
-#endif

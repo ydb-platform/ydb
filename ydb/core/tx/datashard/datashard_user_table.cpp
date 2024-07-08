@@ -67,11 +67,12 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
-    if (Indexes.contains(addIndexPathId)) {
+    auto it = Indexes.lower_bound(addIndexPathId);
+    if (it != Indexes.end() && it->first == addIndexPathId) {
         return;
     }
 
-    Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
+    Indexes.emplace_hint(it, addIndexPathId, TTableIndex(indexDesc, Columns));
     AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -117,15 +118,13 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
-    for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) {
-        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
-            continue;
+    auto& indexes = *schema.MutableTableIndexes();
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            indexes.erase(it);
+            SetSchema(schema);
+            return;
         }
-
-        schema.MutableTableIndexes()->erase(it);
-        SetSchema(schema);
-
-        return;
     }
 
     Y_ABORT("unreachable");
@@ -392,6 +391,8 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeBeginIsInclusive(Range.FromInclusive);
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
+
+    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
 
     schema.SetName(Name);
     schema.SetPath(Path);

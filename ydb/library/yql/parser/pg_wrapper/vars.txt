@@ -205,6 +205,7 @@ InArchiveRecovery
 InProgressBuf
 InRecovery
 InRedo
+InitialRunningXacts
 InitializingParallelWorker
 InterruptHoldoffCount
 InterruptPending
@@ -215,6 +216,8 @@ IsForInput
 IsPostmasterEnvironment
 IsUnderPostmaster
 KnownAssignedXids
+KnownAssignedXidsCompress.lastCompressTs
+KnownAssignedXidsCompress.transactionEndsCounter
 KnownAssignedXidsValid
 LWLockTrancheNames
 LWLockTrancheNamesAllocated
@@ -305,6 +308,7 @@ MyWorkerInfo
 MyXactDidWrite
 MyXactFlags
 NBuffers
+NInitialRunningXacts
 NLocBuffer
 NUMCache
 NUMCounter
@@ -329,6 +333,7 @@ OutputFileName
 PGLC_localeconv.CurrentLocaleConv
 PGLC_localeconv.CurrentLocaleConvAllocated
 PG_exception_stack
+PMChildInUse
 PMSignalState
 PageSetChecksumCopy.pageCopy
 ParallelCurrentXids
@@ -587,6 +592,7 @@ all_timeouts
 all_timeouts_initialized
 allocatedDescs
 allowSystemTableMods
+allow_in_place_tablespaces
 amRegisteredListener
 am_autovacuum_launcher
 am_autovacuum_worker
@@ -676,6 +682,7 @@ bytesToHex.hex
 cachedCommitLSN
 cachedFetchXid
 cachedFetchXidStatus
+cachedXidIsNotInProgress
 cached_db_hash
 cached_expression_list
 cached_role
@@ -854,6 +861,7 @@ got_SIGUSR2
 got_STOPPING
 got_deadlock_timeout
 got_standby_deadlock_timeout
+got_standby_delay_timeout
 got_standby_lock_timeout
 guc_dirty
 guc_variables
@@ -881,7 +889,6 @@ in_remote_transaction
 in_restore_command
 in_streamed_transaction
 incoming_message
-int64_div_fast_to_numeric.pow10
 integer_datetimes
 internal_flush.last_reported_send_errno
 invalid_page_tab
@@ -1053,6 +1060,7 @@ nextFreeLocalBuf
 nextLocalTransactionId
 nextSemKey
 nextTempTableSpace
+next_child_inuse
 next_rotation_time
 nfile
 nogc
@@ -1064,6 +1072,7 @@ numSems
 numSharedInvalidMessagesArray
 numTempTableSpaces
 num_active_timeouts
+num_child_inuse
 num_columns_read
 num_custom_options
 num_guc_variables
@@ -1317,6 +1326,9 @@ scanbuflen
 scanstring
 scram_mock_salt.sha_digest
 segment_size
+selfpipe_owner_pid
+selfpipe_readfd
+selfpipe_writefd
 sendTimeLine
 sendTimeLineIsHistoric
 sendTimeLineNextTLI
@@ -1360,7 +1372,6 @@ show_tcp_user_timeout.nbuf
 show_unix_socket_permissions.buf
 shutdown_requested
 signal_due_at
-signal_fd
 signal_pending
 sin_30
 sizeComboCids

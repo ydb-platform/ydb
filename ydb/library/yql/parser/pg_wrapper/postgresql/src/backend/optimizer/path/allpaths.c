@@ -2461,7 +2461,8 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	if (ndx >= list_length(cteroot->cte_plan_ids))
 		elog(ERROR, "could not find plan for CTE \"%s\"", rte->ctename);
 	plan_id = list_nth_int(cteroot->cte_plan_ids, ndx);
-	Assert(plan_id > 0);
+	if (plan_id <= 0)
+		elog(ERROR, "no plan was made for CTE \"%s\"", rte->ctename);
 	cteplan = (Plan *) list_nth(root->glob->subplans, plan_id - 1);
 
 	/* Mark rel with estimated output rows, width, etc */
@@ -3867,12 +3868,24 @@ generate_partitionwise_join_paths(PlannerInfo *root, RelOptInfo *rel)
 		if (child_rel == NULL)
 			continue;
 
-		/* Add partitionwise join paths for partitioned child-joins. */
+		/* Make partitionwise join paths for this partitioned child-join. */
 		generate_partitionwise_join_paths(root, child_rel);
 
+		/* If we failed to make any path for this child, we must give up. */
+		if (child_rel->pathlist == NIL)
+		{
+			/*
+			 * Mark the parent joinrel as unpartitioned so that later
+			 * functions treat it correctly.
+			 */
+			rel->nparts = 0;
+			return;
+		}
+
+		/* Else, identify the cheapest path for it. */
 		set_cheapest(child_rel);
 
-		/* Dummy children will not be scanned, so ignore those. */
+		/* Dummy children need not be scanned, so ignore those. */
 		if (IS_DUMMY_REL(child_rel))
 			continue;
 

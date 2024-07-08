@@ -856,6 +856,8 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonValue.Cast(), ctx);
     } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }

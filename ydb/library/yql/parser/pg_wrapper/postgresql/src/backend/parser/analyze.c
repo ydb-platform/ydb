@@ -1381,7 +1381,7 @@ static Query *
 transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
-	List	   *exprsLists;
+	List	   *exprsLists = NIL;
 	List	   *coltypes = NIL;
 	List	   *coltypmods = NIL;
 	List	   *colcollations = NIL;
@@ -1465,6 +1465,9 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 
 		/* Release sub-list's cells to save memory */
 		list_free(sublist);
+
+		/* Prepare an exprsLists element for this row */
+		exprsLists = lappend(exprsLists, NIL);
 	}
 
 	/*
@@ -1508,17 +1511,7 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 	/*
 	 * Finally, rearrange the coerced expressions into row-organized lists.
 	 */
-	exprsLists = NIL;
-	foreach(lc, colexprs[0])
-	{
-		Node	   *col = (Node *) lfirst(lc);
-		List	   *sublist;
-
-		sublist = list_make1(col);
-		exprsLists = lappend(exprsLists, sublist);
-	}
-	list_free(colexprs[0]);
-	for (i = 1; i < sublist_length; i++)
+	for (i = 0; i < sublist_length; i++)
 	{
 		forboth(lc, colexprs[i], lc2, exprsLists)
 		{
@@ -1526,6 +1519,7 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 			List	   *sublist = lfirst(lc2);
 
 			sublist = lappend(sublist, col);
+			lfirst(lc2) = sublist;
 		}
 		list_free(colexprs[i]);
 	}
@@ -3251,11 +3245,28 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 			foreach(rt, qry->rtable)
 			{
 				RangeTblEntry *rte = (RangeTblEntry *) lfirst(rt);
+				char	   *rtename;
 
 				++i;
 				if (!rte->inFromCl)
 					continue;
-				if (strcmp(rte->eref->aliasname, thisrel->relname) == 0)
+
+				/*
+				 * A join RTE without an alias is not visible as a relation
+				 * name and needs to be skipped (otherwise it might hide a
+				 * base relation with the same name), except if it has a USING
+				 * alias, which *is* visible.
+				 */
+				if (rte->rtekind == RTE_JOIN && rte->alias == NULL)
+				{
+					if (rte->join_using_alias == NULL)
+						continue;
+					rtename = rte->join_using_alias->aliasname;
+				}
+				else
+					rtename = rte->eref->aliasname;
+
+				if (strcmp(rtename, thisrel->relname) == 0)
 				{
 					switch (rte->rtekind)
 					{

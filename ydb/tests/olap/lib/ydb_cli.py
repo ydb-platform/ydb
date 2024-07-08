@@ -47,6 +47,9 @@ class YdbCliHelper:
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
         try:
+            if not YdbCluster.wait_ydb_alive(60):
+                return YdbCliHelper.WorkloadRunResult(error_message='Ydb cluster is dead')
+
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
             plan_path = yatest.common.work_path(f'q{query_num}.plan')
@@ -60,7 +63,8 @@ class YdbCliHelper:
                 '--include', str(query_num),
                 '--iterations', str(iterations),
                 '--query-settings', "PRAGMA ydb.HashJoinMode='grace';" + get_external_param('query-prefix', ''),
-                '--plan', plan_path
+                '--plan', plan_path,
+                '--verbose'
             ]
             err = None
             try:
@@ -97,8 +101,8 @@ class YdbCliHelper:
                 stats=stats,
                 query_out=qout,
                 plan=plan,
-                stdout=exec.stdout,
-                stderr=exec.stderr,
+                stdout=exec.stdout.decode('utf-8'),
+                stderr=exec.stderr.decode('utf-8'),
                 error_message=err
             )
         except BaseException as e:

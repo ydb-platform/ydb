@@ -339,6 +339,11 @@ struct TUserTable : public TThrRefBase {
         bool HasStrongConsistency() const {
             return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
         }
+
+        void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
+            proto.SetMode(Mode);
+            proto.SetConsistency(Consistency);
+        }
     };
 
     struct TStats {
@@ -396,6 +401,30 @@ struct TUserTable : public TThrRefBase {
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
+
+    template <typename TCallback>
+    void ForAsyncIndex(const TPathId& pathId, TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        auto it = Indexes.find(pathId);
+        if (it != Indexes.end() && it->second.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+            callback(it->second);
+        }
+    }
+
+    template <typename TCallback>
+    void ForEachAsyncIndex(TCallback&& callback) const {
+        if (AsyncIndexCount == 0) {
+            return;
+        }
+        for (const auto& [pathId, index] : Indexes) {
+            if (index.Type == TTableIndex::EType::EIndexTypeGlobalAsync) {
+                callback(pathId, index);
+            }
+        }
+    }
+
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;

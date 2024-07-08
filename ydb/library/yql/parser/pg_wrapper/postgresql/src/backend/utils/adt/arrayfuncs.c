@@ -2453,8 +2453,7 @@ array_set_element(Datum arraydatum,
 	{
 		bits8	   *newnullbitmap = ARR_NULLBITMAP(newarray);
 
-		/* Zero the bitmap to take care of marking inserted positions null */
-		MemSet(newnullbitmap, 0, (newnitems + 7) / 8);
+		/* palloc0 above already marked any inserted positions as nulls */
 		/* Fix the inserted value */
 		if (addedafter)
 			array_set_isnull(newnullbitmap, newnitems - 1, isNull);
@@ -3070,8 +3069,7 @@ array_set_slice(Datum arraydatum,
 			bits8	   *newnullbitmap = ARR_NULLBITMAP(newarray);
 			bits8	   *oldnullbitmap = ARR_NULLBITMAP(array);
 
-			/* Zero the bitmap to handle marking inserted positions null */
-			MemSet(newnullbitmap, 0, (nitems + 7) / 8);
+			/* palloc0 above already marked any inserted positions as nulls */
 			array_bitmap_copy(newnullbitmap, addedbefore,
 							  oldnullbitmap, 0,
 							  itemsbefore);
@@ -6678,7 +6676,7 @@ trim_array(PG_FUNCTION_ARGS)
 {
 	ArrayType  *v = PG_GETARG_ARRAYTYPE_P(0);
 	int			n = PG_GETARG_INT32(1);
-	int			array_length = ARR_DIMS(v)[0];
+	int			array_length = (ARR_NDIM(v) > 0) ? ARR_DIMS(v)[0] : 0;
 	int16		elmlen;
 	bool		elmbyval;
 	char		elmalign;
@@ -6698,8 +6696,11 @@ trim_array(PG_FUNCTION_ARGS)
 	/* Set all the bounds as unprovided except the first upper bound */
 	memset(lowerProvided, false, sizeof(lowerProvided));
 	memset(upperProvided, false, sizeof(upperProvided));
-	upper[0] = ARR_LBOUND(v)[0] + array_length - n - 1;
-	upperProvided[0] = true;
+	if (ARR_NDIM(v) > 0)
+	{
+		upper[0] = ARR_LBOUND(v)[0] + array_length - n - 1;
+		upperProvided[0] = true;
+	}
 
 	/* Fetch the needed information about the element type */
 	get_typlenbyvalalign(ARR_ELEMTYPE(v), &elmlen, &elmbyval, &elmalign);

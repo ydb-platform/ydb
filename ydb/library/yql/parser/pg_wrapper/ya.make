@@ -22,6 +22,7 @@ ADDINCL(
     ydb/library/yql/parser/pg_wrapper/postgresql/src/port
 )
 
+IF (NOT BUILD_POSTGRES_ONLY)
 SRCS(
     arena_ctx.cpp
     arrow.cpp
@@ -41,6 +42,7 @@ SRCS(
     utils.cpp
     ctors.cpp
 )
+ENDIF()
 
 IF (ARCH_X86_64)
     CFLAGS(
@@ -55,11 +57,15 @@ ENDIF()
 
 INCLUDE(pg_sources.inc)
 
+IF (NOT BUILD_POSTGRES_ONLY)
 INCLUDE(pg_kernel_sources.inc)
+ENDIF()
 
 IF (NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
+IF (NOT BUILD_POSTGRES_ONLY)
 USE_LLVM_BC14()
 INCLUDE(pg_bc.all.inc)
+ENDIF()
 ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
 ENDIF()
@@ -141,7 +147,7 @@ FILES(
     copy_src.py
     copy_src.sh
     generate_kernels.py
-    generate_patch.sh
+    source.patch
     vars.txt
     verify.sh
 )

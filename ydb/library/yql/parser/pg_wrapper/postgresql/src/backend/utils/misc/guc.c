@@ -46,6 +46,7 @@
 #include "catalog/storage.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
+#include "commands/tablespace.h"
 #include "commands/trigger.h"
 #include "commands/user.h"
 #include "commands/vacuum.h"
@@ -409,6 +410,7 @@ static const const struct config_enum_entry backslash_quote_options[] = {
  */
 static const struct config_enum_entry compute_query_id_options[] = {
 	{"auto", COMPUTE_QUERY_ID_AUTO, false},
+	{"regress", COMPUTE_QUERY_ID_REGRESS, false},
 	{"on", COMPUTE_QUERY_ID_ON, false},
 	{"off", COMPUTE_QUERY_ID_OFF, false},
 	{"true", COMPUTE_QUERY_ID_ON, true},
@@ -1310,13 +1312,13 @@ valid_custom_variable_name(const char *name)
 			name_start = true;
 		}
 		else if (strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-						"abcdefghijklmnopqrstuvwxyz", *p) != NULL ||
+						"abcdefghijklmnopqrstuvwxyz_", *p) != NULL ||
 				 IS_HIGHBIT_SET(*p))
 		{
 			/* okay as first or non-first character */
 			name_start = false;
 		}
-		else if (!name_start && strchr("0123456789_$", *p) != NULL)
+		else if (!name_start && strchr("0123456789$", *p) != NULL)
 			 /* okay as non-first character */ ;
 		else
 			return false;
@@ -5335,7 +5337,16 @@ ShowAllGUCConfig(DestReceiver *dest)
 			isnull[1] = true;
 		}
 
-		values[2] = PointerGetDatum(cstring_to_text(conf->short_desc));
+		if (conf->short_desc)
+		{
+			values[2] = PointerGetDatum(cstring_to_text(conf->short_desc));
+			isnull[2] = false;
+		}
+		else
+		{
+			values[2] = PointerGetDatum(NULL);
+			isnull[2] = true;
+		}
 
 		/* send it to dest */
 		do_tup_output(tstate, values, isnull);
@@ -5347,7 +5358,8 @@ ShowAllGUCConfig(DestReceiver *dest)
 			pfree(setting);
 			pfree(DatumGetPointer(values[1]));
 		}
-		pfree(DatumGetPointer(values[2]));
+		if (conf->short_desc)
+			pfree(DatumGetPointer(values[2]));
 	}
 
 	end_tup_output(tstate);
@@ -5518,10 +5530,10 @@ GetConfigOptionByNum(int varnum, const char **values, bool *noshow)
 	values[3] = _(config_group_names[conf->group]);
 
 	/* short_desc */
-	values[4] = _(conf->short_desc);
+	values[4] = conf->short_desc != NULL ? _(conf->short_desc) : NULL;
 
 	/* extra_desc */
-	values[5] = _(conf->long_desc);
+	values[5] = conf->long_desc != NULL ? _(conf->long_desc) : NULL;
 
 	/* context */
 	values[6] = GucContext_Names[conf->context];

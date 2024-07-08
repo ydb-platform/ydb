@@ -289,11 +289,18 @@ prepare_probe_slot(MemoizeState *mstate, MemoizeKey *key)
 
 	if (key == NULL)
 	{
+		ExprContext *econtext = mstate->ss.ps.ps_ExprContext;
+		MemoryContext oldcontext;
+
+		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+
 		/* Set the probeslot's values based on the current parameter values */
 		for (int i = 0; i < numKeys; i++)
 			pslot->tts_values[i] = ExecEvalExpr(mstate->param_exprs[i],
-												mstate->ss.ps.ps_ExprContext,
+												econtext,
 												&pslot->tts_isnull[i]);
+
+		MemoryContextSwitchTo(oldcontext);
 	}
 	else
 	{
@@ -446,9 +453,13 @@ cache_reduce_memory(MemoizeState *mstate, MemoizeKey *specialkey)
 		 */
 		entry = memoize_lookup(mstate->hashtable, NULL);
 
-		/* A good spot to check for corruption of the table and LRU list. */
-		Assert(entry != NULL);
-		Assert(entry->key == key);
+		/*
+		 * Sanity check that we found the entry belonging to the LRU list
+		 * item.  A misbehaving hash or equality function could cause the
+		 * entry not to be found or the wrong entry to be found.
+		 */
+		if (unlikely(entry == NULL || entry->key != key))
+			elog(ERROR, "could not find memoization table entry");
 
 		/*
 		 * If we're being called to free memory while the cache is being

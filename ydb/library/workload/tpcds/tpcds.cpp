@@ -6,7 +6,7 @@
 namespace NYdbWorkload {
 
 TTpcdsWorkloadGenerator::TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& params)
-    : TWorkloadGeneratorBase(params)
+    : TTpcBaseWorkloadGenerator(params)
     , Params(params)
 {}
 
@@ -70,8 +70,8 @@ TQueryInfoList TTpcdsWorkloadGenerator::GetWorkload(int type) {
                 TStringBuilder() << "`" << Params.GetFullTableName(name) << "`"
             );
         };
-        SubstGlobal(query, "{% include 'header.sql.jinja' %}", "");
-        SubstGlobal(query, "{path}"      , Params.GetFullTableName(nullptr) + "/");
+        PatchQuery(query);
+        SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
         substTable("customer_address");
         substTable("customer_demographics");
         substTable("date_dim");
@@ -107,7 +107,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TTpcdsWorkloadGenerator::GetSupp
 }
 
 void TTpcdsWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")

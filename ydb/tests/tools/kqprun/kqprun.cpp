@@ -60,11 +60,8 @@ struct TExecutionOptions {
 };
 
 
-void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunnerOptions& runnerOptions) {
+void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-
-    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization of kqp runner..." << colors.Default() << Endl;
-    NKqpRun::TKqpRunner runner(runnerOptions);
 
     if (executionOptions.SchemeQuery) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing scheme query..." << colors.Default() << Endl;
@@ -136,18 +133,43 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             ythrow yexception() << "Failed to print script results, reason:\n" <<  CurrentExceptionMessage();
         }
     }
+}
+
+
+void RunAsDaemon() {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
+    while (true) {
+        TString command;
+        Cin >> command;
+
+        if (command == "exit") {
+            break;
+        }
+        Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
+    }
+}
+
+
+void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunnerOptions& runnerOptions) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization of kqp runner..." << colors.Default() << Endl;
+    NKqpRun::TKqpRunner runner(runnerOptions);
+
+    try {
+        RunArgumentQueries(executionOptions, runner);
+    } catch (const yexception& exception) {
+        if (runnerOptions.YdbSettings.MonitoringEnabled) {
+            Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
+        } else {
+            throw exception;
+        }
+    }
 
     if (runnerOptions.YdbSettings.MonitoringEnabled) {
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
-        while (true) {
-            TString command;
-            Cin >> command;
-
-            if (command == "exit") {
-                break;
-            }
-            Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
-        }
+        RunAsDaemon();
     }
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;

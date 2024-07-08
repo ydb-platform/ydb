@@ -926,8 +926,11 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     }
     auto join = node.Cast<TDqJoin>();
 
-    if (useCBO && FromString<EJoinAlgoType>(join.JoinAlgo().StringValue()) != EJoinAlgoType::LookupJoin) {
-        return node;
+    if (useCBO){
+         auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse && algo != EJoinAlgoType::Undefined) {
+            return node;
+         }
     }
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));

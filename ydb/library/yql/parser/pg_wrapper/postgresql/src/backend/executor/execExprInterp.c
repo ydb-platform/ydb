@@ -2706,7 +2706,7 @@ ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op)
 	{
 		/* Must be nested array expressions */
 		int			nbytes = 0;
-		int			nitems = 0;
+		int			nitems;
 		int			outer_nelems = 0;
 		int			elem_ndims = 0;
 		int		   *elem_dims = NULL;
@@ -2801,9 +2801,14 @@ ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op)
 			subbitmaps[outer_nelems] = ARR_NULLBITMAP(array);
 			subbytes[outer_nelems] = ARR_SIZE(array) - ARR_DATA_OFFSET(array);
 			nbytes += subbytes[outer_nelems];
+			/* check for overflow of total request */
+			if (!AllocSizeIsValid(nbytes))
+				ereport(ERROR,
+						(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+						 errmsg("array size exceeds the maximum allowed (%d)",
+								(int) MaxAllocSize)));
 			subnitems[outer_nelems] = ArrayGetNItems(this_ndims,
 													 ARR_DIMS(array));
-			nitems += subnitems[outer_nelems];
 			havenulls |= ARR_HASNULL(array);
 			outer_nelems++;
 		}
@@ -2837,7 +2842,7 @@ ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op)
 		}
 
 		/* check for subscript overflow */
-		(void) ArrayGetNItems(ndims, dims);
+		nitems = ArrayGetNItems(ndims, dims);
 		ArrayCheckBounds(ndims, dims, lbs);
 
 		if (havenulls)
@@ -2851,7 +2856,7 @@ ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op)
 			nbytes += ARR_OVERHEAD_NONULLS(ndims);
 		}
 
-		result = (ArrayType *) palloc(nbytes);
+		result = (ArrayType *) palloc0(nbytes);
 		SET_VARSIZE(result, nbytes);
 		result->ndim = ndims;
 		result->dataoffset = dataoffset;
@@ -4050,9 +4055,8 @@ ExecEvalWholeRowVar(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
 
 			/*
 			 * Use the variable's declared rowtype as the descriptor for the
-			 * output values, modulo possibly assigning new column names
-			 * below. In particular, we *must* absorb any attisdropped
-			 * markings.
+			 * output values.  In particular, we *must* absorb any
+			 * attisdropped markings.
 			 */
 			oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 			output_tupdesc = CreateTupleDescCopy(var_tupdesc);
@@ -4070,39 +4074,38 @@ ExecEvalWholeRowVar(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
 			oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 			output_tupdesc = CreateTupleDescCopy(slot->tts_tupleDescriptor);
 			MemoryContextSwitchTo(oldcontext);
-		}
 
-		/*
-		 * Construct a tuple descriptor for the composite values we'll
-		 * produce, and make sure its record type is "blessed".  The main
-		 * reason to do this is to be sure that operations such as
-		 * row_to_json() will see the desired column names when they look up
-		 * the descriptor from the type information embedded in the composite
-		 * values.
-		 *
-		 * We already got the correct physical datatype info above, but now we
-		 * should try to find the source RTE and adopt its column aliases, in
-		 * case they are different from the original rowtype's names.  For
-		 * example, in "SELECT foo(t) FROM tab t(x,y)", the first two columns
-		 * in the composite output should be named "x" and "y" regardless of
-		 * tab's column names.
-		 *
-		 * If we can't locate the RTE, assume the column names we've got are
-		 * OK.  (As of this writing, the only cases where we can't locate the
-		 * RTE are in execution of trigger WHEN clauses, and then the Var will
-		 * have the trigger's relation's rowtype, so its names are fine.)
-		 * Also, if the creator of the RTE didn't bother to fill in an eref
-		 * field, assume our column names are OK.  (This happens in COPY, and
-		 * perhaps other places.)
-		 */
-		if (econtext->ecxt_estate &&
-			variable->varno <= econtext->ecxt_estate->es_range_table_size)
-		{
-			RangeTblEntry *rte = exec_rt_fetch(variable->varno,
-											   econtext->ecxt_estate);
+			/*
+			 * It's possible that the input slot is a relation scan slot and
+			 * so is marked with that relation's rowtype.  But we're supposed
+			 * to be returning RECORD, so reset to that.
+			 */
+			output_tupdesc->tdtypeid = RECORDOID;
+			output_tupdesc->tdtypmod = -1;
 
-			if (rte->eref)
-				ExecTypeSetColNames(output_tupdesc, rte->eref->colnames);
+			/*
+			 * We already got the correct physical datatype info above, but
+			 * now we should try to find the source RTE and adopt its column
+			 * aliases, since it's unlikely that the input slot has the
+			 * desired names.
+			 *
+			 * If we can't locate the RTE, assume the column names we've got
+			 * are OK.  (As of this writing, the only cases where we can't
+			 * locate the RTE are in execution of trigger WHEN clauses, and
+			 * then the Var will have the trigger's relation's rowtype, so its
+			 * names are fine.)  Also, if the creator of the RTE didn't bother
+			 * to fill in an eref field, assume our column names are OK. (This
+			 * happens in COPY, and perhaps other places.)
+			 */
+			if (econtext->ecxt_estate &&
+				variable->varno <= econtext->ecxt_estate->es_range_table_size)
+			{
+				RangeTblEntry *rte = exec_rt_fetch(variable->varno,
+												   econtext->ecxt_estate);
+
+				if (rte->eref)
+					ExecTypeSetColNames(output_tupdesc, rte->eref->colnames);
+			}
 		}
 
 		/* Bless the tupdesc if needed, and save it in the execution state */

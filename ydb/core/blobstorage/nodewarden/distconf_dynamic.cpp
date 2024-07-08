@@ -39,16 +39,19 @@ namespace NKikimr::NStorage {
         StaticNodeSessionId = sessionId;
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId /*sessionId*/) {
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
+    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && StaticNodeSessionId != sessionId)) {
+            return; // possible race with unsubscription
+        }
         ConnectedToStaticNode = 0;
         StaticNodeSessionId = {};
         ConnectToStaticNode();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenDynamicConfigPush::TPtr ev) {
-        Y_ABORT_UNLESS(StaticNodeSessionId);
-        Y_ABORT_UNLESS(ev->InterconnectSession == StaticNodeSessionId);
+        if (ev->Sender.NodeId() != ConnectedToStaticNode || !StaticNodeSessionId || ev->InterconnectSession != StaticNodeSessionId) {
+            return; // this may be a race with unsubscription
+        }
         auto& record = ev->Get()->Record;
         if (record.HasConfig()) {
             ApplyStorageConfig(record.GetConfig());

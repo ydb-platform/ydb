@@ -1685,9 +1685,9 @@
     ],
     "test.test[lineage-window_asstruct-default.txt-Debug]": [
         {
-            "checksum": "0ab3aeea87400900f38d2ea7ecfcda83",
-            "size": 2743,
-            "uri": "https://{canondata_backend}/212715/fe53cda4a61f809660228c37e85a30bda1ca302b/resource.tar.gz#test.test_lineage-window_asstruct-default.txt-Debug_/opt.yql"
+            "checksum": "93bb636aa30bb40788178e4376c1dc22",
+            "size": 2775,
+            "uri": "https://{canondata_backend}/1937424/81876ebbebad4ade407d5bdb6ac2d658b3e22a9a/resource.tar.gz#test.test_lineage-window_asstruct-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[lineage-window_asstruct-default.txt-Lineage]": [
@@ -2101,9 +2101,9 @@
     ],
     "test.test[produce-process_streaming_inline_bash-default.txt-Debug]": [
         {
-            "checksum": "a7c764d9a33f7cc95bfb6d92beb81609",
-            "size": 2206,
-            "uri": "https://{canondata_backend}/1936273/0019cb80f7de222686c61749aff367a7828d8ae4/resource.tar.gz#test.test_produce-process_streaming_inline_bash-default.txt-Debug_/opt.yql"
+            "checksum": "fb7fa4a5e89e443740291fd54bb30381",
+            "size": 2238,
+            "uri": "https://{canondata_backend}/1937424/e4442950ac6f3adaae5ae84f1f82967709b6f24b/resource.tar.gz#test.test_produce-process_streaming_inline_bash-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[produce-process_streaming_inline_bash-default.txt-Plan]": [
@@ -2627,9 +2627,9 @@
     ],
     "test.test[window-win_expr_bounds--Debug]": [
         {
-            "checksum": "bfe98f55960fc5a68bb5468dc9e360e7",
-            "size": 3345,
-            "uri": "https://{canondata_backend}/1781765/41bc99b44bf53b43f330b886fe16125672edcd41/resource.tar.gz#test.test_window-win_expr_bounds--Debug_/opt.yql"
+            "checksum": "3e945e1a99e6ec5e7d91690fdec742b0",
+            "size": 3377,
+            "uri": "https://{canondata_backend}/1775319/a876c38f6fb0b30245fda755c3e09b9290083300/resource.tar.gz#test.test_window-win_expr_bounds--Debug_/opt.yql"
         }
     ],
     "test.test[window-win_expr_bounds--Plan]": [

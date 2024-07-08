@@ -59,7 +59,7 @@ class Database:
             case EDataSourceKind.POSTGRESQL:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
-                raise Exception("Fix me first in YQ-3315")
+                return 'issues = [{\'Path not found\'}])'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

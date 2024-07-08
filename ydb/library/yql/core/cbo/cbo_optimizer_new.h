@@ -88,7 +88,8 @@ struct IProviderContext {
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) = 0;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind) = 0;
 };
 
 /**
@@ -105,7 +106,8 @@ struct TBaseProviderContext : public IProviderContext {
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         const TVector<TString>& leftJoinKeys,
         const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) override;
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind) override;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,

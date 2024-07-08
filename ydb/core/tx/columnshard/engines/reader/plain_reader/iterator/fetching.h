@@ -131,7 +131,8 @@ private:
     bool FinishedFlag = false;
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
-    virtual bool DoExecute() override;
+    virtual TConclusionStatus DoExecuteImpl() override;
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "STEP_ACTION";

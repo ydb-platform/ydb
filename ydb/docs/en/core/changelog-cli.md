@@ -1,21 +1,42 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.10.0 {#2-10-0}
+
+Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Added `ydb sql` command that runs over QueryService and is able to execute any DML/DDL command.
+* Added `notx` support for `--tx-mode` option in `ydb table query execute`.
+* Added start and end times for long-running operation description (export, import).
+* Added replication description support in `ydb scheme describe` and `ydb scheme ls` commands.
+* Added big datetime types support.
+* `ydb workload` commands rework:
+   * `--path` option moved to specific workload level. I.e.: `ydb workload tpch --path some/tables/path init ...`.
+   * `--store=s3` changed to `--store=external-s3` in `init` subcommand.
+   * Added `--clear-state` option to `init` subcommand that allows to remove tables before workload initialization.
+   * Added `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks. 
+
+**Bug fixes:**
+
+* Fixed colors in PrettyTable format
+
 ## Version 2.9.0 {#2-9-0}
 
 Released on April 25, 2024. To update to version **2.9.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **Features:**
 
-* Improved tables with query logical plans: added colors, more information, fixed some bugs.
+* Improved query logical plan tables: added colors, more information, fixed some bugs.
 * Verbose option '-v' is supported for `ydb workload` commands to provide debug information.
 * Added an option to run `ydb workload tpch` with s3 source to measure federated query performance.
-* Added `--rate` parameter for ydb workload command to control transactions (or requests) per second limit.
-* Added `--use-virtual-addressing` option for s3 import/export allowing to switch s3 path layout. @nilnaz
+* Added `--rate` option for `ydb workload command` to control transactions (or requests) per second limit.
+* Added `--use-virtual-addressing` option for s3 import/export allowing to switch s3 path layout.
 * Improved `ydb scheme ls` performance due to listing directories in parallel.
 
 **Bug fixes:**
 
-* Fixed a bug with cutting off extra chars when transferring a line in a table.
+* Resolved an issue where extra characters were truncated during line transfers in CLI tables.
 * Fixed invalid memory access in `tools restore`.
 * Fixed ignoring `--timeout` option in generic and scan queries and import command.
 * Added 60s timeout to version check and cli binary download to prevent infinite waiting.

@@ -761,6 +761,10 @@ errcode_for_file_access(void)
 			edata->sqlerrcode = ERRCODE_DISK_FULL;
 			break;
 
+		case ENOMEM:			/* Out of memory */
+			edata->sqlerrcode = ERRCODE_OUT_OF_MEMORY;
+			break;
+
 		case ENFILE:			/* File table overflow */
 		case EMFILE:			/* Too many open files */
 			edata->sqlerrcode = ERRCODE_INSUFFICIENT_RESOURCES;
@@ -3598,6 +3602,34 @@ write_stderr(const char *fmt,...)
 	}
 #endif
 	va_end(ap);
+}
+
+
+/*
+ * Write a message to STDERR using only async-signal-safe functions.  This can
+ * be used to safely emit a message from a signal handler.
+ *
+ * TODO: It is likely possible to safely do a limited amount of string
+ * interpolation (e.g., %s and %d), but that is not presently supported.
+ */
+void
+write_stderr_signal_safe(const char *str)
+{
+	int			nwritten = 0;
+	int			ntotal = strlen(str);
+
+	while (nwritten < ntotal)
+	{
+		int			rc;
+
+		rc = write(STDERR_FILENO, str + nwritten, ntotal - nwritten);
+
+		/* Just give up on error.  There isn't much else we can do. */
+		if (rc == -1)
+			return;
+
+		nwritten += rc;
+	}
 }
 
 

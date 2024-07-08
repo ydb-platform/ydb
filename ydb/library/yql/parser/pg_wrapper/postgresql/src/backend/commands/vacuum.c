@@ -1480,6 +1480,8 @@ vac_update_datfrozenxid(void)
 	/*
 	 * We must seqscan pg_class to find the minimum Xid, because there is no
 	 * index that can help us here.
+	 *
+	 * See vac_truncate_clog() for the race condition to prevent.
 	 */
 	relation = table_open(RelationRelationId, AccessShareLock);
 
@@ -1488,7 +1490,9 @@ vac_update_datfrozenxid(void)
 
 	while ((classTup = systable_getnext(scan)) != NULL)
 	{
-		Form_pg_class classForm = (Form_pg_class) GETSTRUCT(classTup);
+		volatile FormData_pg_class *classForm = (Form_pg_class) GETSTRUCT(classTup);
+		TransactionId relfrozenxid = classForm->relfrozenxid;
+		TransactionId relminmxid = classForm->relminmxid;
 
 		/*
 		 * Only consider relations able to hold unfrozen XIDs (anything else
@@ -1498,8 +1502,8 @@ vac_update_datfrozenxid(void)
 			classForm->relkind != RELKIND_MATVIEW &&
 			classForm->relkind != RELKIND_TOASTVALUE)
 		{
-			Assert(!TransactionIdIsValid(classForm->relfrozenxid));
-			Assert(!MultiXactIdIsValid(classForm->relminmxid));
+			Assert(!TransactionIdIsValid(relfrozenxid));
+			Assert(!MultiXactIdIsValid(relminmxid));
 			continue;
 		}
 
@@ -1518,34 +1522,34 @@ vac_update_datfrozenxid(void)
 		 * before those relations have been scanned and cleaned up.
 		 */
 
-		if (TransactionIdIsValid(classForm->relfrozenxid))
+		if (TransactionIdIsValid(relfrozenxid))
 		{
-			Assert(TransactionIdIsNormal(classForm->relfrozenxid));
+			Assert(TransactionIdIsNormal(relfrozenxid));
 
 			/* check for values in the future */
-			if (TransactionIdPrecedes(lastSaneFrozenXid, classForm->relfrozenxid))
+			if (TransactionIdPrecedes(lastSaneFrozenXid, relfrozenxid))
 			{
 				bogus = true;
 				break;
 			}
 
 			/* determine new horizon */
-			if (TransactionIdPrecedes(classForm->relfrozenxid, newFrozenXid))
-				newFrozenXid = classForm->relfrozenxid;
+			if (TransactionIdPrecedes(relfrozenxid, newFrozenXid))
+				newFrozenXid = relfrozenxid;
 		}
 
-		if (MultiXactIdIsValid(classForm->relminmxid))
+		if (MultiXactIdIsValid(relminmxid))
 		{
 			/* check for values in the future */
-			if (MultiXactIdPrecedes(lastSaneMinMulti, classForm->relminmxid))
+			if (MultiXactIdPrecedes(lastSaneMinMulti, relminmxid))
 			{
 				bogus = true;
 				break;
 			}
 
 			/* determine new horizon */
-			if (MultiXactIdPrecedes(classForm->relminmxid, newMinMulti))
-				newMinMulti = classForm->relminmxid;
+			if (MultiXactIdPrecedes(relminmxid, newMinMulti))
+				newMinMulti = relminmxid;
 		}
 	}
 
@@ -1698,6 +1702,20 @@ vac_truncate_clog(TransactionId frozenXID,
 		Assert(MultiXactIdIsValid(datminmxid));
 
 		/*
+		 * If database is in the process of getting dropped, or has been
+		 * interrupted while doing so, no connections to it are possible
+		 * anymore. Therefore we don't need to take it into account here.
+		 * Which is good, because it can't be processed by autovacuum either.
+		 */
+		if (database_is_invalid_form((Form_pg_database) dbform))
+		{
+			elog(DEBUG2,
+				 "skipping invalid database \"%s\" while computing relfrozenxid",
+				 NameStr(dbform->datname));
+			continue;
+		}
+
+		/*
 		 * If things are working properly, no database should have a
 		 * datfrozenxid or datminmxid that is "in the future".  However, such
 		 * cases have been known to arise due to bugs in pg_upgrade.  If we
@@ -1740,12 +1758,16 @@ vac_truncate_clog(TransactionId frozenXID,
 		ereport(WARNING,
 				(errmsg("some databases have not been vacuumed in over 2 billion transactions"),
 				 errdetail("You might have already suffered transaction-wraparound data loss.")));
+		LWLockRelease(WrapLimitsVacuumLock);
 		return;
 	}
 
 	/* chicken out if data is bogus in any other way */
 	if (bogus)
+	{
+		LWLockRelease(WrapLimitsVacuumLock);
 		return;
+	}
 
 	/*
 	 * Advance the oldest value for commit timestamps before truncating, so

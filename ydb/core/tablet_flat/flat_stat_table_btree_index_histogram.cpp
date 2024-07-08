@@ -150,7 +150,7 @@ class TTableHistogramBuilderBtreeIndex {
 
             // category = -1 for Key = { }, IsBegin = true
             // category =  0 for Key = {*}, IsBegin = *
-            // category = -1 for Key = { }, IsBegin = false
+            // category = +1 for Key = { }, IsBegin = false
             return Compare(GetCategory(a), GetCategory(b));
         }
 
@@ -159,12 +159,12 @@ class TTableHistogramBuilderBtreeIndex {
             if (a.Key) {
                 return 0;
             }
-            return a.IsBegin ? -1 : 1;
+            return a.IsBegin ? -1 : +1;
         }
 
         static i8 Compare(i8 a, i8 b) noexcept {
             if (a < b) return -1;
-            if (a > b) return 1;
+            if (a > b) return +1;
             return 0;
         }
     };

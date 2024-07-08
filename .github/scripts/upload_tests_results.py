@@ -9,29 +9,12 @@ import sys
 import time
 import ydb
 import xml.etree.ElementTree as ET
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-
-def get_git_root():
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing git command: {e}", file=sys.stderr)
-        return None
-
-
-
 def parse_codeowners(codeowners_file):
-    # Чтение файла CODEOWNERS
     entries = []
-
     with open(codeowners_file, "r") as file:
         for line in file:
             if not line.strip() or line.startswith("#"):
@@ -70,12 +53,14 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
             name = testcase.get("name")
             rawname, filename, testname, fixture = parse_test_name(name)
             time = testcase.get("time")
-            
+
             status_description = ""
             status = "passed"
             if testcase.find("properties/property/[@name='mute']") is not None:
                 status = "mute"
-                status_description = testcase.find("properties/property/[@name='mute']").get('value')
+                status_description = testcase.find(
+                    "properties/property/[@name='mute']"
+                ).get("value")
             elif testcase.find("failure") is not None:
                 status = "failure"
                 status_description = testcase.find("failure").text
@@ -85,10 +70,10 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
             elif testcase.find("skipped") is not None:
                 status = "skipped"
                 status_description = testcase.find("skipped").text
-                
+
             results.append(
                 {
-                    "build_type": build_type, 
+                    "build_type": build_type,
                     "commit": commit,
                     "branch": branch,
                     "pull": pull,
@@ -116,7 +101,6 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
 def get_codeowners_for_tests(entries, tests_data):
     tests_data_with_owners = []
     for test in tests_data:
-        # Функция для поиска владельцев для заданного пути на основе записей из CODEOWNERS.
         owners = []
         target_path = test["suite_name"]
         for path, path_owners in entries:
@@ -276,12 +260,11 @@ def prepare_and_upload_tests(pool, path, results, batch_size):
             future.result()  # Raise exception if occurred
 
 
-def create_pool(endpoint, database): #, token):
+def create_pool(endpoint, database):
     driver_config = ydb.DriverConfig(
         endpoint,
         database,
         credentials=ydb.credentials_from_env_variables()
-        #credentials=ydb.iam.ServiceAccountCredentials.from_file(token),
     )
 
     driver = ydb.Driver(driver_config)
@@ -303,17 +286,17 @@ def main():
 
     args = parser.parse_args()
 
-    result_file=args.result_file
-    build_type=args.build_type
-    commit=args.commit
-    branch=args.branch
-    pull=args.pull
-    run_time=args.run_time
-    job_name=args.job_name
-    job_id=args.job_id
+    result_file = args.result_file
+    build_type = args.build_type
+    commit = args.commit
+    branch = args.branch
+    pull = args.pull
+    run_time = args.run_time
+    job_name = args.job_name
+    job_id = args.job_id
 
     path_in_database = "test_results"
-    batch_size_default=30
+    batch_size_default = 30
     dir = os.path.dirname(__file__)
     git_root = f"{dir}/../.."
     codeowners = f"{git_root}/.github/CODEOWNERS"
@@ -335,18 +318,21 @@ def main():
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
-  
-    test_table_name= f"{path_in_database}/{job_name.lower().replace('-','_')}"
-    #Prepare connection and table
-    pool = create_pool(DATABASE_ENDPOINT, DATABASE_PATH)#, token)
+
+    test_table_name = f"{path_in_database}/{job_name.lower().replace('-','_')}"
+    # Prepare connection and table
+    pool = create_pool(DATABASE_ENDPOINT, DATABASE_PATH)
     with pool.checkout() as session:
         create_tests_table(session, test_table_name)
 
     # Parse and upload
-    results = parse_junit_xml(result_file, build_type, job_name, job_id, commit, branch, pull, run_time)
+    results = parse_junit_xml(
+        result_file, build_type, job_name, job_id, commit, branch, pull, run_time
+    )
     result_with_owners = get_codeowners_for_tests(parse_codeowners(codeowners), results)
-    prepare_and_upload_tests(pool, test_table_name, results, batch_size=batch_size_default)
-
+    prepare_and_upload_tests(
+        pool, test_table_name, results, batch_size=batch_size_default
+    )
 
 
 if __name__ == "__main__":

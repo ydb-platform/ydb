@@ -237,12 +237,13 @@ runs:
               fi
             fi
         )
-    
+
     - name: archive unitest reports (orig)
       shell: bash
+      if: always()
       run: |
         gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
-    
+
     - name: postprocess junit report
       shell: bash
       run: |
@@ -258,9 +259,8 @@ runs:
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
     
-
     - name: Test history upload results to YDB
-      if: inputs.testman_token
+      if: always()
       continue-on-error: true
       shell: bash
       env:
@@ -287,13 +287,11 @@ runs:
         result=$(python3 $script)
         printf "$result"
 
-
     - name: archive unitest reports (transformed)
       shell: bash
+      if: always()
       run: |
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
-    
- 
 
     - name: Unit test history upload results
       if: inputs.testman_token

@@ -58,7 +58,7 @@ NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(const NKikimrCol
 TString TTabletsByBlob::DebugString() const {
     TStringBuilder sb;
     for (auto&& i : Data) {
-        sb << "[ ";
+        sb << "[";
         sb << i.first.ToStringNew() << ":" << JoinSeq(",", i.second);
         sb << "];";
     }

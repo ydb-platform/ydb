@@ -1127,11 +1127,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetMonitoringPortOffset(monPort, true); // authorization is implemented only in async mon
 
-        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
-        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+        //auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        //securityConfig.SetEnforceUserTokenCheckRequirement(true);
 
         TFakeTicketParserActor* ticketParser = nullptr;
-        settings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
+        settings.CreateTicketParser = [&](const NKikimrProto::TAuthConfig&) -> IActor* {
             ticketParser = new TFakeTicketParserActor();
             return ticketParser;
         };

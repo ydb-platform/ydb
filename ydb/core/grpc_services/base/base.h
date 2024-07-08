@@ -1676,16 +1676,27 @@ public:
         }
     }
 
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override {
+        Y_UNUSED(code);
+        if (reason) {
+            IssueManager.RaiseIssue(NYql::TIssue{reason});
+        }
+        if (details) {
+            IssueManager.RaiseIssue(NYql::TIssue{details});
+        }
+        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    }
+
+    void ReplyUnavaliable() override {
+        ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) override {
         IssueManager.RaiseIssue(issue);
     }
 
     void RaiseIssues(const NYql::TIssues& issues) override {
         IssueManager.RaiseIssues(issues);
-    }
-
-    TVector<TStringBuf> FindClientCertPropertyValues() const override {
-        return {};
     }
 
     void StartTracing(NWilson::TSpan&& span) override {
@@ -1709,6 +1720,10 @@ public:
 
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
+    }
+
+    bool HasClientCapability(const TString&) const override {
+        return false;
     }
 
     void UseDatabase(const TString& database) override {
@@ -1797,6 +1812,13 @@ public:
         return deadline;
     }
 
+    bool GetDiskQuotaExceeded() const override {
+        return false;
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return {};
+    }
 
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};

@@ -1,9 +1,12 @@
+import codecs
+import os
+
 import pytest
 
 from file_common import check_provider, get_sql_query
 from kqprun import KqpRun
 from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
-from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path
+from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
 EXCLUDED_SUITES = [
     'match_recognize',  # MATCH_RECOGNIZE is disabled in KQP
@@ -157,6 +160,10 @@ def run_test(suite, case, cfg):
     full_test_name = suite + '/' + case
     if full_test_name in EXCLUDED_TESTS:
         pytest.skip('skip case ' + full_test_name)
+
+    with codecs.open(yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt')), 'r', encoding='utf-8') as white_list_file:
+        if full_test_name not in white_list_file.read().split('\n'):
+            pytest.skip('skip case ' + full_test_name + ', out of test whitelist')
 
     run_file_kqp(suite, case, cfg)
 

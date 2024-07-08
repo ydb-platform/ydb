@@ -123,9 +123,14 @@ private:
 
     TAdaptiveLock Lock;
 
-    size_t SubsessionGeneration = 0;
+    using TSubsessionGeneration = size_t;
+    TSubsessionGeneration SubsessionGeneration = 0;
     std::shared_ptr<NTopic::IWriteSession> Subsession;
     std::shared_ptr<NTopic::IWriteSession> OldSubsession;
+
+    // Map from a subsession generation to a pair of <pointer to the subsession, bool(got TSessionClosedEvent from the subsession)>.
+    // See comment in ReadyToAcceptHandler in .cpp for more information.
+    TMap<TSubsessionGeneration, std::pair<std::shared_ptr<NTopic::IWriteSession>, bool>> ReadyToAcceptSubsessions;
 
     std::shared_ptr<NTopic::TWriteSessionEventsQueue> ClientEventsQueue;
 

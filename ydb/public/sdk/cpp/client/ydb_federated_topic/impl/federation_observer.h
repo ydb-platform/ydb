@@ -59,9 +59,6 @@ public:
 class TFederatedDbObserverImpl : public TClientImplCommon<TFederatedDbObserverImpl>,
                                  public NTopic::TEnableSelfContext<TFederatedDbObserverImpl> {
 public:
-    static constexpr TDuration REDISCOVER_DELAY = TDuration::Seconds(60);
-
-public:
     TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings);
 
     ~TFederatedDbObserverImpl();

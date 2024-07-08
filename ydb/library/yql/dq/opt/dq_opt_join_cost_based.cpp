@@ -240,6 +240,7 @@ private:
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }

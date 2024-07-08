@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 10,
+                "PlanNodeId": 8,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,22 +14,22 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 8
+                                        "ExternalPlanNodeId": 6
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 7,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 8,
+                                "Node Type": "Merge",
+                                "PlanNodeId": 6,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -38,68 +38,62 @@
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.xx.pkxx"
                                             },
                                             {
                                                 "Condition": "pkxx = _equijoin_column_0",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 6
+                                                        "ExternalPlanNodeId": 4
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "ExternalPlanNodeId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 7,
+                                        "PlanNodeId": 5,
                                         "Plans": [
                                             {
-                                                "Node Type": "Broadcast",
-                                                "PlanNodeId": 4,
+                                                "KeyColumns": [
+                                                    "_yql_dq_key_right_0"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 2,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
-                                                        "PlanNodeId": 3,
-                                                        "Plans": [
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
                                                             {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 2,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "TableFullScan",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Inputs": [],
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "pkxx"
-                                                                                ],
-                                                                                "ReadRanges": [
-                                                                                    "pkxx (-\u221e, +\u221e)",
-                                                                                    "pkyy (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Scan": "Parallel",
-                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/yy"
-                                                                            }
-                                                                        ],
-                                                                        "PlanNodeId": 1,
-                                                                        "Tables": [
-                                                                            "postgres_jointest/coalesce-and-join.test_plan/yy"
-                                                                        ]
-                                                                    }
-                                                                ]
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "pkxx"
+                                                                ],
+                                                                "ReadRanges": [
+                                                                    "pkxx (-\u221e, +\u221e)",
+                                                                    "pkyy (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Scan": "Parallel",
+                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/yy"
                                                             }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "postgres_jointest/coalesce-and-join.test_plan/yy"
                                                         ]
                                                     }
                                                 ]
                                             },
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 6,
+                                                "KeyColumns": [
+                                                    "pkxx"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 4,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -118,7 +112,7 @@
                                                                 "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 5,
+                                                        "PlanNodeId": 3,
                                                         "Tables": [
                                                             "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                         ]
@@ -127,6 +121,9 @@
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "xx.pkxx (Asc)"
                                 ]
                             }
                         ]

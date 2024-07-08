@@ -41,7 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "i,i,i = x,y,x",
+                                                "Condition": "i,i = x,y",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14

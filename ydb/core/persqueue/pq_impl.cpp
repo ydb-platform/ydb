@@ -4550,13 +4550,16 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext&)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
+
     auto& record = ev->Get()->Record;
     const TWriteId writeId(record.GetLockNode(), record.GetLockId());
 
     if (!TxWrites.contains(writeId)) {
         // the transaction has already been completed
+        PQ_LOG_D("unknown WriteId " << writeId);
         return;
     }
 
@@ -4564,11 +4567,24 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     writeInfo.LongTxSubscriptionStatus = record.GetStatus();
 
     if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
+        PQ_LOG_D("subscribed WriteId " << writeId);
         return;
     }
 
+    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << writeInfo.TxId);
+
     if (!writeInfo.TxId.Defined()) {
+        PQ_LOG_D("delete write info for WriteId " << writeId);
         // the message TEvProposeTransaction will not come anymore
+        BeginDeletePartitions(writeInfo);
+        return;
+    }
+
+    ui64 txId = *writeInfo.TxId;
+    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << txId);
+
+    auto* tx = GetTransaction(ctx, txId);
+    if (!tx || (tx->State == NKikimrPQ::TTransaction::EXECUTED)) {
         BeginDeletePartitions(writeInfo);
     }
 }
@@ -4589,6 +4605,8 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
 
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvDeletePartitionDone " << ev->Get()->PartitionId);
+
     auto* event = ev->Get();
     Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
     const TWriteId& writeId = *event->PartitionId.WriteId;
@@ -4637,13 +4655,16 @@ void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
 {
     Y_ABORT_UNLESS(tx.WriteId.Defined());
     const TWriteId& writeId = *tx.WriteId;
+    PQ_LOG_D("begin delete write info for WriteId " << writeId);
     if (!TxWrites.contains(writeId)) {
         // the transaction has already been completed
+        PQ_LOG_D("unknown WriteId " << writeId);
         return;
     }
 
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
+        PQ_LOG_D("wait for WriteId subscription status");
         return;
     }
 
@@ -4653,11 +4674,13 @@ void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
 void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
 {
     if (writeInfo.Deleting) {
+        PQ_LOG_D("Already deleting WriteInfo");
         return;
     }
     for (auto& [_, partitionId] : writeInfo.Partitions) {
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
+        PQ_LOG_D("send TEvPQ::TEvDeletePartitio to partition " << partitionId);
         Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
     writeInfo.Deleting = true;

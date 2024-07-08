@@ -780,7 +780,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TFixedSizeArrayBuilder<typename TDataType<TUserDataType>::TLayout, Nullable>>;
 
     template<typename TUserDataType>
-    struct TMakeDateKernelExec : TUnaryKernelExec<TMakeDateKernelExec<TUserDataType>, TReaderTraits::TResource<true>, TMakeResBuilder<TUserDataType, true>> {
+    struct TMakeDateKernelExec : TUnaryKernelExec<TMakeDateKernelExec<TUserDataType>, TReaderTraits::TResource<false>, TMakeResBuilder<TUserDataType, false>> {
         static TBlockItem Make(TTMStorage& storage, const IValueBuilder& valueBuilder);
 
         template<typename TSink>
@@ -1233,113 +1233,160 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     // StartOf*
 
-    SIMPLE_STRICT_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
+    template<auto Core>
+    struct TStartOfKernelExec : TUnaryKernelExec<TStartOfKernelExec<Core>, TResourceBlockReader<false>, TResourceArrayBuilder<true>> {
+        template<typename TSink>
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+            if (auto res = Core(Reference(item), valueBuilder)) {
+                Reference(item) = res.GetRef();
+                sink(item);
+            } else {
+                sink(TBlockItem{});
+            }
+
+        }
+    };
+
+    TMaybe<TTMStorage> StartOfYear(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Month = 1;
         storage.Day = 1;
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
         storage.Microsecond = 0;
-
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
         }
-        return result;
+        return storage;
     }
-
-    SIMPLE_STRICT_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
+        if (auto res = StartOfYear(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOfYear, TStartOfKernelExec<StartOfYear>::Do);
+
+    TMaybe<TTMStorage> StartOfQuarter(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Month = (storage.Month - 1) / 3 * 3 + 1;
         storage.Day = 1;
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
         storage.Microsecond = 0;
-
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
         }
-        return result;
+        return storage;
     }
-
-    SIMPLE_STRICT_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
+        if (auto res = StartOfQuarter(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOfQuarter, TStartOfKernelExec<StartOfQuarter>::Do);
+    
+    TMaybe<TTMStorage> StartOfMonth(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Day = 1;
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
         storage.Microsecond = 0;
-
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
         }
-        return result;
+        return storage;
     }
-
-    SIMPLE_STRICT_UDF(TEndOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
+        if (auto res = StartOfMonth(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOfMonth, TStartOfKernelExec<StartOfMonth>::Do);
+    
+    TMaybe<TTMStorage> EndOfMonth(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
         storage.Microsecond = 0;
 
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
         }
-        return result;
+        return storage;
     }
 
-    SIMPLE_STRICT_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
         auto& storage = Reference(result);
-        auto& builder = valueBuilder->GetDateBuilder();
-
-        const auto date = storage.ToDatetime(builder);
-        const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
-        if (shift > date) {
-            return TUnboxedValuePod();
-        }
-        storage.FromDatetime(builder, date - shift, storage.TimezoneId);
-
-        storage.Hour = 0;
-        storage.Minute = 0;
-        storage.Second = 0;
-        storage.Microsecond = 0;
-        return result;
-    }
-
-    SIMPLE_STRICT_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        storage.Hour = 0;
-        storage.Minute = 0;
-        storage.Second = 0;
-        storage.Microsecond = 0;
-
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
-        }
-        return result;
-    }
-
-    SIMPLE_STRICT_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
-        auto result = args[0];
-        ui64 interval = std::abs(args[1].Get<i64>());
-        if (interval == 0) {
+        if (auto res = EndOfMonth(storage, *valueBuilder)) {
+            storage = res.GetRef();
             return result;
         }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TEndOfMonth, TStartOfKernelExec<EndOfMonth>::Do);
+    
+    TMaybe<TTMStorage> StartOfWeek(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
+        if (shift > storage.ToDatetime(valueBuilder.GetDateBuilder())) {
+            return {};
+        }
+        storage.FromDatetime(valueBuilder.GetDateBuilder(), storage.ToDatetime(valueBuilder.GetDateBuilder()) - shift, storage.TimezoneId);
+        storage.Hour = 0;
+        storage.Minute = 0;
+        storage.Second = 0;
+        storage.Microsecond = 0;
+        return storage;
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        auto result = args[0];
         auto& storage = Reference(result);
+        if (auto res = StartOfWeek(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOfWeek, TStartOfKernelExec<StartOfWeek>::Do);
+    
+    TMaybe<TTMStorage> StartOfDay(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        storage.Hour = 0;
+        storage.Minute = 0;
+        storage.Second = 0;
+        storage.Microsecond = 0;
+        auto& builder = valueBuilder.GetDateBuilder();
+        if (!storage.Validate(builder)) {
+            return {};
+        }
+        return storage;
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        auto result = args[0];
+        auto& storage = Reference(result);
+        if (auto res = StartOfDay(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOfDay, TStartOfKernelExec<StartOfDay>::Do);
+    
+    TMaybe<TTMStorage> StartOf(TTMStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
         if (interval >= 86400000000ull) {
             // treat as StartOfDay
             storage.Hour = 0;
@@ -1352,18 +1399,63 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             storage.FromTimeOfDay(rounded);
         }
 
-        auto& builder = valueBuilder->GetDateBuilder();
+        auto& builder = valueBuilder.GetDateBuilder();
         if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
+            return {};
         }
-        return result;
+        return storage;
     }
 
-    SIMPLE_STRICT_UDF(TTimeOfDay, TInterval(TAutoMap<TResource<TMResourceName>>)) {
+    struct TStartOfBinaryKernelExec : TBinaryKernelExec<TStartOfBinaryKernelExec> {
+        template<typename TSink>
+        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder& valueBuilder, TSink& sink) {
+            auto& storage = Reference(arg1);
+            ui64 interval = std::abs(arg2.Get<i64>());
+            if (interval == 0) {
+                sink(arg1);
+                return;
+            }
+
+            if (auto res = StartOf(storage, interval, valueBuilder)) {
+                storage = res.GetRef();
+                sink(arg1);
+            } else {
+                sink(TBlockItem{});
+            }
+        }
+    };
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
+        auto result = args[0];
+        ui64 interval = std::abs(args[1].Get<i64>());
+        if (interval == 0) {
+            return result;
+        }
+        if (auto res = StartOf(Reference(result), interval, *valueBuilder)) {
+            Reference(result) = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TStartOf, TStartOfBinaryKernelExec::Do);
+    
+    struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
+        template<typename TSink>
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+            Y_UNUSED(valueBuilder);
+            auto& storage = Reference(item);
+            sink(TBlockItem{(TDataType<TInterval>::TLayout)storage.ToTimeOfDay()});
+        }
+    };
+
+    const auto timeOfDayKernelExecDo = TTimeOfDayKernelExec::Do;
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TTimeOfDay, TInterval(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         auto& storage = Reference(args[0]);
         return TUnboxedValuePod((i64)storage.ToTimeOfDay());
     }
+    END_SIMPLE_ARROW_UDF(TTimeOfDay, timeOfDayKernelExecDo);
+
 
     // Add ...
 

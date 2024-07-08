@@ -278,7 +278,7 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId
 void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
     std::vector<TWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
-        if (!RemoveLongTxWrite(db, writeId)) {
+        if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);
         }
     }
@@ -865,7 +865,6 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    // TODO
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();

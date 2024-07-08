@@ -14,37 +14,17 @@ from codeowners import CodeOwners
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def parse_test_name(name):
-    rawname = name
-    fixture = ""
-    filename = ""
-    if "[" in name and "]" in name:
-        fixture = name[name.index("[") + 1 : name.index("]")]
-        name = name[: name.index("[")]
-          
-    parts = name.split(".")
-    
-    if ".py" in name:
-        filename = f"{parts[0]}.{parts[1]}" if len(parts) > 1 else ""
-        testname = ".".join(parts[2:]) if len(parts) > 1 else ""
-    else:
-        testname = ".".join(parts[0:]) if len(parts) > 1 else ""
-        
-    return rawname, filename, testname, fixture
-
-
-def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull, run_time):
-    tree = ET.parse(xml_file)
+def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp):
+    tree = ET.parse(test_results_file)
     root = tree.getroot()
 
     results = []
     for testsuite in root.findall(".//testsuite"):
-        suite_name = testsuite.get("name")
+        suite_folder = testsuite.get("name")
 
         for testcase in testsuite.findall("testcase"):
-            name = testcase.get("name")
-            rawname, filename, testname, fixture = parse_test_name(name)
-            time = testcase.get("time")
+            name = testcase.get("name")            
+            duration = testcase.get("time")
 
             status_description = ""
             status = "passed"
@@ -69,15 +49,12 @@ def parse_junit_xml(xml_file, build_type, job_name, job_id, commit, branch, pull
                     "commit": commit,
                     "branch": branch,
                     "pull": pull,
-                    "run_time": run_time,
+                    "run_timestamp": run_timestamp,
                     "job_name": job_name,
                     "job_id": job_id,
-                    "suite_name": suite_name,
-                    "raw_test_name": rawname,
-                    "file": filename,
-                    "test_name": testname,
-                    "fixture": fixture,
-                    "time": float(time),
+                    "suite_folder": suite_folder,
+                    "test_name": name,
+                    "duration": float(duration),
                     "status": status,
                     "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'"),
                     "log": "" if testcase.find("properties/property/[@name='url:log']") is None else testcase.find("properties/property/[@name='url:log']").get('value'),
@@ -97,9 +74,9 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
 
         tests_data_with_owners = []
         for test in tests_data:
-            target_path = f'{test["suite_name"]}/{test["file"]}' if test["file"] != "" else test["suite_name"]
+            target_path = f'{test["suite_folder"]}'
             owners = owners_odj.of(target_path) 
-            test["owners"] = joined_owners=";;".join([(":".join(x))  for x in owners])
+            test["owners"] = joined_owners=";;".join([(":".join(x)) for x in owners])
             tests_data_with_owners.append(test)
         return tests_data_with_owners
 
@@ -126,14 +103,11 @@ def create_tests_table(session, table_path):
         commit Utf8,
         branch Utf8,
         pull Utf8,
-        run_time Timestamp,
+        run_timestamp Timestamp,
         test_id Utf8,
-        suite_name Utf8,
-        raw_test_name Utf8,
-        file Utf8,
+        suite_folder Utf8,
         test_name Utf8,
-        fixture Utf8,
-        time Double,
+        duration Double,
         status Utf8,
         status_description Utf8,
         owners Utf8,
@@ -178,14 +152,11 @@ def prepare_and_upload_tests(pool, path, results, batch_size):
             commit,
             branch,
             pull, 
-            run_time, 
+            run_timestamp, 
             test_id, 
-            suite_name, 
-            raw_test_name, 
-            file, 
+            suite_folder,
             test_name, 
-            fixture, 
-            time, 
+            duration, 
             status,
             status_description,
             log,
@@ -204,14 +175,11 @@ def prepare_and_upload_tests(pool, path, results, batch_size):
                 "{result['commit']}",
                 "{result['branch']}",
                 "{result['pull']}", 
-                DateTime::FromSeconds({result['run_time']}),
-                "{result['pull']}_{result['run_time']}_{start+index}",
-                "{result['suite_name']}",
-                "{result['raw_test_name']}",
-                "{result['file']}",
+                DateTime::FromSeconds({result['run_timestamp']}),
+                "{result['pull']}_{result['run_timestamp']}_{start+index}",
+                "{result['suite_folder']}",
                 "{result['test_name']}",
-                "{result['fixture']}",
-                {result['time']},
+                {result['duration']},
                 "{result['status']}",
                 "{result['status_description']}",
                 "{result['log']}",
@@ -249,18 +217,18 @@ def main():
     parser.add_argument('--commit', default='store', dest="commit", required=True, help='commit sha')
     parser.add_argument('--branch', default='store', dest="branch", required=True, help='branch name ')
     parser.add_argument('--pull', action='store', dest="pull",required=True, help='pull number')
-    parser.add_argument('--run-time', action='store', dest="run_time",required=True, help='time of test run start')
+    parser.add_argument('--run-timestamp', action='store', dest="run_timestamp",required=True, help='time of test run start')
     parser.add_argument('--job-name', action='store', dest="job_name",required=True, help='job name where launched')
     parser.add_argument('--job-id', action='store', dest="job_id",required=True, help='job id of workflow')
 
     args = parser.parse_args()
 
-    result_file = args.test_results_file
+    test_results_file = args.test_results_file
     build_type = args.build_type
     commit = args.commit
     branch = args.branch
     pull = args.pull
-    run_time = args.run_time
+    run_timestamp = args.run_timestamp
     job_name = args.job_name
     job_id = args.job_id
 
@@ -280,7 +248,8 @@ def main():
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        return 0
+        #return 0
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork/ydb/.github/scripts/my-robot-key.json"
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
@@ -288,7 +257,7 @@ def main():
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
 
-    test_table_name = f"{path_in_database}/{job_name.lower().replace('-','_')}"
+    test_table_name = f"{path_in_database}/test_runs_results"
     # Prepare connection and table
     pool = create_pool(DATABASE_ENDPOINT, DATABASE_PATH)
     with pool.checkout() as session:
@@ -296,7 +265,7 @@ def main():
 
     # Parse and upload
     results = parse_junit_xml(
-        result_file, build_type, job_name, job_id, commit, branch, pull, run_time
+        test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
     )
     result_with_owners = get_codeowners_for_tests(codeowners, results)
     prepare_and_upload_tests(

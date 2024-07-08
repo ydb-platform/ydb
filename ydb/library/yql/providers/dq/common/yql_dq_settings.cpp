@@ -80,10 +80,12 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, SpillingEngine)
         .Parser([](const TString& v) {
             return FromString<TDqSettings::ESpillingEngine>(v);
-        })
-        .ValueSetter([this](const TString&, TDqSettings::ESpillingEngine value) {
-            SpillingEngine = value;
-            if (value != TDqSettings::ESpillingEngine::Disable) {
+        });
+
+    REGISTER_SETTING(*this, EnableSpillingInChannels)
+        .ValueSetter([this](const TString&, bool value) {
+            EnableSpillingInChannels = value;
+            if (value) {
                 SplitStageOnDqReplicate = false;
                 EnableDqReplicate = true;
             }

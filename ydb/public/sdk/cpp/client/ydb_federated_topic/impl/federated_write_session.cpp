@@ -71,15 +71,16 @@ void TFederatedWriteSessionImpl::IssueTokenIfAllowed() {
     }
 }
 
-void TFederatedWriteSessionImpl::UpdateFederationStateImpl() {
+std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::UpdateFederationStateImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
     // Even after the user has called the Close method, transitioning the session to the CLOSING state,
     // we keep updating the federation state, as the session may still have some messages to send in its queues,
     // and for that we need to know the current state of the federation.
     if (SessionState < State::CLOSED) {
         FederationState = Observer->GetState();
-        OnFederationStateUpdateImpl();
+        return OnFederationStateUpdateImpl();
     }
+    return {};
 }
 
 void TFederatedWriteSessionImpl::Start() {
@@ -104,15 +105,16 @@ void TFederatedWriteSessionImpl::Start() {
     });
 }
 
-void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db) {
+std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     ++SubsessionGeneration;
 
+    std::shared_ptr<NTopic::IWriteSession> oldSubsession;
+
     if (Subsession) {
         PendingToken.Clear();
-        OldSubsession = std::move(Subsession);
-        OldSubsession->Close(TDuration::Zero());
+        std::swap(oldSubsession, Subsession);
     }
 
     auto clientSettings = SubclientSettings;
@@ -122,12 +124,11 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
-        .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
+        .HandlersExecutor(NTopic::CreateThreadPoolExecutor(1))
         .ReadyToAcceptHandler([selfCtx = SelfContext, generation = SubsessionGeneration](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             if (auto self = selfCtx->LockShared()) {
-                TDeferredWrite deferred;
-
                 with_lock(self->Lock) {
+                    TDeferredWrite deferred;
                     if (generation != self->SubsessionGeneration) {
                         return;
                     }
@@ -135,9 +136,8 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                     Y_ABORT_UNLESS(self->PendingToken.Empty());
                     self->PendingToken = std::move(ev.ContinuationToken);
                     self->PrepareDeferredWriteImpl(deferred);
+                    deferred.DoWrite();
                 }
-
-                deferred.DoWrite();
             }
         })
         .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
@@ -182,6 +182,8 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
 
     Subsession = subclient->CreateWriteSession(wsSettings);
     CurrentDatabase = db;
+
+    return oldSubsession;
 }
 
 std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
@@ -267,13 +269,13 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
     return SelectDatabaseByHashImpl(settings, dbInfos);
 }
 
-void TFederatedWriteSessionImpl::OnFederationStateUpdateImpl() {
+std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OnFederationStateUpdateImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (!FederationState->Status.IsSuccess()) {
         // The observer became stale, it won't try to get federation state anymore due to retry policy,
         // so there's no reason to keep the write session alive.
         CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
-        return;
+        return {};
     }
 
     Y_ABORT_UNLESS(!FederationState->DbInfos.empty());
@@ -292,19 +294,22 @@ void TFederatedWriteSessionImpl::OnFederationStateUpdateImpl() {
             LOG_LAZY(Log, TLOG_ERR, GetLogPrefixImpl() << message << ". Status: " << status);
             CloseImpl(status, NYql::TIssues{NYql::TIssue(message)});
         }
-        return;
+        return {};
     }
     RetryState.reset();
 
+    std::shared_ptr<NTopic::IWriteSession> oldSubsession;
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
         LOG_LAZY(Log, TLOG_INFO, GetLogPrefixImpl()
             << "Start federated write session to database '" << preferrableDb->name()
             << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
             << " FederationState: " << *FederationState);
-        OpenSubsessionImpl(preferrableDb);
+        oldSubsession = OpenSubsessionImpl(preferrableDb);
     }
 
     ScheduleFederationStateUpdateImpl(UPDATE_FEDERATION_STATE_DELAY);
+
+    return oldSubsession;
 }
 
 void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration delay) {
@@ -314,8 +319,10 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
             if (auto self = selfCtx->LockShared()) {
                 std::shared_ptr<NTopic::IWriteSession> old;
                 with_lock(self->Lock) {
-                    self->UpdateFederationStateImpl();
-                    old = std::move(self->OldSubsession);
+                    old = self->UpdateFederationStateImpl();
+                }
+                if (old) {
+                    old->Close(TDuration::Zero());
                 }
             }
         }

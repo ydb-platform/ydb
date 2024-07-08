@@ -83,9 +83,11 @@ private:
 
 private:
     void Start();
-    void OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
 
-    void OnFederationStateUpdateImpl();
+    std::shared_ptr<NTopic::IWriteSession> OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
+    std::shared_ptr<NTopic::IWriteSession> UpdateFederationStateImpl();
+    std::shared_ptr<NTopic::IWriteSession> OnFederationStateUpdateImpl();
+
     void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
@@ -95,7 +97,6 @@ private:
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
     bool MessageQueuesAreEmptyImpl() const;
-    void UpdateFederationStateImpl();
 
     void IssueTokenIfAllowed();
 
@@ -125,7 +126,6 @@ private:
 
     size_t SubsessionGeneration = 0;
     std::shared_ptr<NTopic::IWriteSession> Subsession;
-    std::shared_ptr<NTopic::IWriteSession> OldSubsession;
 
     std::shared_ptr<NTopic::TWriteSessionEventsQueue> ClientEventsQueue;
 

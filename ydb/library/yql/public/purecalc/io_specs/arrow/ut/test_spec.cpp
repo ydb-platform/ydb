@@ -53,7 +53,7 @@ using ExecBatchConsumerImpl = TVectorConsumer<arrow::compute::ExecBatch>;
 
 
 arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value) {
-    TVector<ui64> data(bsize);
+    TVector<uint64_t> data(bsize);
     TVector<bool> valid(bsize);
     std::iota(data.begin(), data.end(), 1);
     std::fill(valid.begin(), valid.end(), true);

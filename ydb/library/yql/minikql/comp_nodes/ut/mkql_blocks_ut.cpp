@@ -17,6 +17,7 @@ BEGIN_SIMPLE_ARROW_UDF(TInc, i32(i32)) {
 struct TIncKernelExec : public NYql::NUdf::TUnaryKernelExec<TIncKernelExec> {
     template <typename TSink>
     static void Process(NYql::NUdf::TBlockItem arg, const NYql::NUdf::IValueBuilder& valueBuilder, const TSink& sink) {
+        Y_UNUSED(valueBuilder);
         sink(NYql::NUdf::TBlockItem(arg.As<i32>() + 1));
     }
 };

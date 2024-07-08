@@ -46,7 +46,7 @@ libossp-uuid-dev
 
 7. Update pg_catalog data
 
-   (cd ../../tools/pg_catalog_dump/ && ya make --build=relwithdebinfo && ./pg_catalog_dump > dump.json)
+   (cd ../../tools/pg_catalog_dump/ && yag make --build=relwithdebinfo && ./pg_catalog_dump > dump.json)
 
 8. Regenerate Arrow postgresql kernels
 
@@ -54,7 +54,7 @@ libossp-uuid-dev
 
 9. Make sure that resulting pg_wrapper library compiles and passes minimal tests
 
-   ya make --build=relwithdebinfo -tA -C ut -C test
+   yag make --build=relwithdebinfo -tA -C ut -C test
 
 10. Verify that all global variables in PostgreSQL-originated sources are accounted for
 

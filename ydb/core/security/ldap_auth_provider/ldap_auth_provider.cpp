@@ -306,9 +306,11 @@ private:
         LDAPMessage* searchMessage = nullptr;
         int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
         if (!NKikimrLdap::IsSuccess(result)) {
+            Cerr << "+++No Success: " << NKikimrLdap::ErrorToString(result) << Endl;
             return {};
         }
         const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
+        Cerr << "+++countEntries: " << countEntries << Endl;
         if (countEntries == 0) {
             NKikimrLdap::MsgFree(searchMessage);
             return {};

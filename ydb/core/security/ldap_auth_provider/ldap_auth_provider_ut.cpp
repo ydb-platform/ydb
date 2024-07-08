@@ -721,6 +721,7 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
         THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+        Cerr << "+++size: " << fetchedGroups.size() << Endl;
 
         THashSet<TString> expectedGroups = TCorrectLdapResponse::GetAllGroups(ldapDomain);
         expectedGroups.insert("all-users@well-known");

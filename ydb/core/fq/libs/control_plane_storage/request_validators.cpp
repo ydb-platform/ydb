@@ -24,7 +24,7 @@ void ValidateGenericConnectionSetting(
         issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
 
-    if (!connection.database_name()) {
+    if (!connection.database_name()){
         auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_name field is not specified";
         issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }    

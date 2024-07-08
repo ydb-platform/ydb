@@ -14,7 +14,7 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 * `ydb workload` commands rework:
    * `--path` option moved to specific workload level. I.e.: `ydb workload tpch --path some/tables/path init ...`.
    * `--store=s3` changed to `--store=external-s3` in `init` subcommand.
-   * Added `--clear-state` option to `init` subcommand that allows to remove tables before workload initialization.
+   * Added `--clear` option to `init` subcommand that allows to remove tables before workload initialization.
    * Added `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks. 
 
 **Bug fixes:**

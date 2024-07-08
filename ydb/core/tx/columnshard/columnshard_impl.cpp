@@ -1106,7 +1106,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev, const TActorContext& /*ctx*/) {
     Y_ABORT_UNLESS(Tiers);
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TEvRefreshSubscriberData")("snapshot", ev->Get()->GetSnapshot()->SerializeToString());
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);

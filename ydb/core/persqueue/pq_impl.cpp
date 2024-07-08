@@ -3040,6 +3040,8 @@ void TPersQueue::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
 
 void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvInterconnect::TEvNodeInfo");
+
     Y_ABORT_UNLESS(ev->Get()->Node);
     DCId = ev->Get()->Node->Location.GetDataCenterId();
     ResourceMetrics = Executor()->GetResourceMetrics();
@@ -3283,7 +3285,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSet");
+    PQ_LOG_D("Handle TEvTxProcessing::TEvReadSet " << ev->Get()->Record.ShortDebugString());
 
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
@@ -3302,6 +3304,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
             TryWriteTxs(ctx);
         }
     } else if (ack) {
+        PQ_LOG_D("send TEvReadSetAck to " << event.GetTabletProducer());
         //
         // для неизвестных транзакций подтверждение отправляется сразу
         //
@@ -3311,7 +3314,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSetAck");
+    PQ_LOG_D("Handle TEvTxProcessing::TEvReadSetAck " << ev->Get()->Record.ShortDebugString());
 
     NKikimrTx::TEvReadSetAck& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
@@ -3335,13 +3338,11 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 {
     const TEvPQ::TEvTxCalcPredicateResult& event = *ev->Get();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                "Tablet " << TabletID() <<
-                " Handle TEvPQ::TEvTxCalcPredicateResult" <<
-                " Step " << event.Step <<
-                " TxId " << event.TxId <<
-                " Partition " << event.Partition <<
-                " Predicate " << (event.Predicate ? "true" : "false"));
+    PQ_LOG_D("Handle TEvPQ::TEvTxCalcPredicateResult" <<
+             " Step " << event.Step <<
+             ", TxId " << event.TxId <<
+             ", Partition " << event.Partition <<
+             ", Predicate " << (event.Predicate ? "true" : "false"));
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
@@ -3359,6 +3360,11 @@ void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const 
 {
     const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
 
+    PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfigResult" <<
+             " Step " << event.Step <<
+             ", TxId " << event.TxId <<
+             ", Partition " << event.Partition);
+
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
         return;
@@ -3375,9 +3381,12 @@ void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const 
 
 void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvPQ::TEvTxCommitDone");
-
     const TEvPQ::TEvTxCommitDone& event = *ev->Get();
+
+    PQ_LOG_D("Handle TEvPQ::TEvTxCommitDone" <<
+             " Step " << event.Step <<
+             ", TxId " << event.TxId <<
+             ", Partition " << event.Partition);
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
@@ -3969,11 +3978,10 @@ const THashSet<ui64>& TPersQueue::GetBindedTxs(ui64 tabletId)
 TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
                                                     ui64 txId)
 {
+    Y_UNUSED(ctx);
     auto p = Txs.find(txId);
     if (p == Txs.end()) {
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
-                   "Tablet " << TabletID() <<
-                   " Unknown transaction " << txId);
+        PQ_LOG_W("Unknown transaction " << txId);
         return nullptr;
     }
     return &p->second;
@@ -4404,8 +4412,7 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
     }
 
     if (!TxQueue.empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " " <<
-                    "top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
+        PQ_LOG_D("top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
     }
 
     Y_UNUSED(partitionTxs);
@@ -4463,6 +4470,8 @@ void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx)
 {
+    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransactionAttach " << ev->Get()->Record.ShortDebugString());
+
     const ui64 txId = ev->Get()->Record.GetTxId();
     NKikimrProto::EReplyStatus status = NKikimrProto::NODATA;
 

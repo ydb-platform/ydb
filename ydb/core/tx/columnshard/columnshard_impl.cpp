@@ -874,7 +874,7 @@ void TColumnShard::SetupCleanupInsertTable() {
     }
     static auto dCounter = TDurationController::CreateController("setup_cleanup_insert_table");
     TDurationController::TGuard dGuard(dCounter);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size());
+
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
     BackgroundController.StartCleanupInsertTable();
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());

@@ -3,3 +3,5 @@ items:
   href: index.md
 - name: Grafana дашборды 
   href: grafana-dashboards.md
+- name: Метрики производительности распределённого хранилища
+  href: performance.md

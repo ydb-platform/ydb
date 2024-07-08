@@ -1,6 +1,6 @@
-# BlobStorage Performance Metrics
+# Distributed Storage Performance Metrics
 
-BlobStorage has a specific throughput limited by the resources of physical devices in the cluster and can provide low response times if the load does not exceed this capacity. Performance metrics display the amount of available resources of physical devices and allow for the assessment of their consumption level. By tracking the values of performance metrics we can monitor whether the necessary conditions for low response time guatantees are met, specifically, that the average load does not exceed the available limit and that there are no short-term load bursts.
+Distributed Storage has a specific throughput limited by the resources of physical devices in the cluster and can provide low response times if the load does not exceed this capacity. Performance metrics display the amount of available resources of physical devices and allow for the assessment of their consumption level. By tracking the values of performance metrics we can monitor whether the necessary conditions for low response time guatantees are met, specifically, that the average load does not exceed the available limit and that there are no short-term load bursts.
 
 ### Request Cost Model
 
@@ -20,7 +20,7 @@ In the {{ ydb-short-name }} system, all physical devices are divided into three 
 
 Operations are divided into three types: reads, writes, and huge-writes. The division of writes into regular and huge-writes is due to the specifics of handling write requests on VDisks.
 
-Besides user requests, the load on BlobStorage is created by background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writings.
+Besides user requests, the load on Distributed Storage is created by background processes of compaction, scrubbing, and defragmentation, as well as internal communication between VDisks. The compaction process can create particularly high loads when there is a substantial flow of small blob writings.
 
 ### Available Disk Time {#diskTimeAvailable}
 
@@ -39,7 +39,7 @@ Performance metrics are calculated based on the following VDisk sensors:
 | Sensor Name | Units | Description |
 |-------------|-------|-------------|
 | `DiskTimeAvailable` | arb. units | Available disk time. |
-| `UserDiskCost` | arb. units | Total cost of requests received by the VDisk from the BlobStorage Proxy. |
+| `UserDiskCost` | arb. units | Total cost of requests received by the VDisk from the DS Proxy. |
 | `InternalDiskCost` | arb. units | Total cost of requests received by the VDisk from another VDisk in the group. These requests can be created by, for example, replication process. |
 | `CompactionDiskCost` | arb. units | Total cost of requests sent by the VDisk as part of the compaction process. |
 | `DefragDiskCost` | arb. units | Total cost of requests sent by the VDisk as part of the defragmentation process. |
@@ -55,7 +55,7 @@ The distributed storage {{ ydb-short-name }} can ensure low response times only 
 
 ### Performance Metrics Configuration
 
-Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for BlobStorage. Performance metric parameters can be managed via dynamic cluster configuration and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
+Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for Distributed Storage. Performance metric parameters can be managed via dynamic cluster configuration and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
 
 | Parameter Name | Description | Default Value |
 |----------------|-------------|---------------|
@@ -84,7 +84,7 @@ vdisk_controls:
 
 ### How to Compare the Performance of Your Installation with the Baseline
 
-To compare the performance of BlobStorage in your system with the baseline, you need to load the distributed storage with requests to the point where the VDisks cannot process the incoming request flow. At this moment, requests start to queue up, and the response time of the VDisks increases sharply. Compute the value $D$ just before the overload:
+To compare the performance of Distributed Storage in your system with the baseline, you need to load the distributed storage with requests to the point where the VDisks cannot process the incoming request flow. At this moment, requests start to queue up, and the response time of the VDisks increases sharply. Compute the value $D$ just before the overload:
 $$
 D = \frac{UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost + ScrubDiskCost}{DiskTimeAvailable}
 $$

@@ -31,7 +31,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 * Verbose option '-v' is supported for `ydb workload` commands to provide debug information.
 * Added an option to run `ydb workload tpch` with s3 source to measure federated query performance.
 * Added `--rate` option for `ydb workload command` to control transactions (or requests) per second limit.
-* Added `--use-virtual-addressing` option for s3 import/export allowing to switch s3 path layout.
+* Added `--use-virtual-addressing` option for s3 import/export allowing to switch [virtual hosing of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for s3 path layout.
 * Improved `ydb scheme ls` performance due to listing directories in parallel.
 
 **Bug fixes:**

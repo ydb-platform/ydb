@@ -91,8 +91,30 @@ bool TSummary::operator ==(const TSummary& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsAllowedComponentChar(char c) noexcept
+{
+    return IsAsciiAlnum(c) || c == '_';
+}
+
+std::optional<char> CheckStatisticPath(const NYPath::TYPath& path)
+{
+    for (auto c : path) {
+        if (!IsAllowedComponentChar(c) && c != '/') {
+            return c;
+        }
+    }
+    return {};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSummary& TStatistics::GetSummary(const NYPath::TYPath& path)
 {
+    if (auto c = CheckStatisticPath(path)) {
+        THROW_ERROR_EXCEPTION("Invalid character %c in statistic path", *c)
+            << TErrorAttribute("path", path)
+            << TErrorAttribute("invalid_character", *c);
+    }
     auto result = Data_.emplace(path, TSummary());
     auto it = result.first;
     if (result.second) {

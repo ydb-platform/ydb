@@ -21,12 +21,12 @@ void ValidateGenericConnectionSetting(
 
     if (!connection.database_id() && !(connection.host() && connection.port())) {
         auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.{database_id or host,port} field is not specified";
-        issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }
 
-    if (!connection.database_name()){
+    if (!connection.database_name()) {
         auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.database_name field is not specified";
-        issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
     }    
 
     if (!connection.login()) {

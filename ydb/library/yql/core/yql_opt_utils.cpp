@@ -1896,7 +1896,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 }
 
 TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
-    if (node.IsCallable({"Unwrap", "Ensure", "ScripUdf", "Error", "ErrorType"})) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
         return false;
     }
     if (node.IsCallable("Udf")) {

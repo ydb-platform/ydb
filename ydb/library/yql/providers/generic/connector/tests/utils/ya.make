@@ -13,10 +13,8 @@ PY_SRCS(
     sql.py
 )
 
-IF (AUTOCHECK)
-    # YQ-3351: enabling python style checks only for opensource
-    NO_LINT()
-ENDIF()
+# YQ-3351: enabling python style checks only for opensource
+NO_LINT()
 
 IF (OPENSOURCE) 
     # YQ-3351: enabling python style checks only for opensource

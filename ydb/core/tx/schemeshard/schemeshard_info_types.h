@@ -2370,7 +2370,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
         if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            alterData->VectorIndexKmeansTreeDescription = config.GetVectorIndexKmeansTreeDescription();
+            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
         }
 
         return result;
@@ -2385,7 +2385,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     TTableIndexInfo::TPtr AlterData = nullptr;
 
-    std::optional<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> VectorIndexKmeansTreeDescription;
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {

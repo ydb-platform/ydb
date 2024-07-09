@@ -205,14 +205,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
-
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        if (indexKeys.KeyColumns.size() != 1) {
-            status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = "Only single column is supported for vector index";
-            return false;
-        }
+        //We have already checked this in IsCompatibleIndex
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
 
         const TString& indexColumnName = indexKeys.KeyColumns[0];
         Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
@@ -224,6 +219,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             return false;
         }
     } else {
+        implTableColumns = CalcTableImplDescription(baseTableColumns, indexKeys);
+
         if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
             return false;

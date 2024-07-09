@@ -16,23 +16,8 @@ TVector<TString>::const_iterator IsUniq(const TVector<TString>& names) {
 namespace NKikimr {
 namespace NTableIndex {
 
-TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
-    {
-        TString explain;
-        Y_ABORT_UNLESS(IsCompatibleIndex(indexType, table, index, explain), "explain is %s", explain.c_str());
-    }
-
+TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index) {
     TTableColumns result;
-
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        result.Keys.push_back(NTableVectorIndex::LevelColumn);
-        result.Keys.push_back(NTableVectorIndex::IdColumn);
-        result.Columns.insert(NTableVectorIndex::LevelColumn);
-        result.Columns.insert(NTableVectorIndex::IdColumn);
-        result.Columns.insert(NTableVectorIndex::CentroidColumn);
-        result.Columns.insert(NTableVectorIndex::IdsColumn);
-        return result;
-    }
 
     for (const auto& ik: index.KeyColumns) {
         result.Keys.push_back(ik);

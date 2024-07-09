@@ -274,20 +274,10 @@ struct TUserTable : public TThrRefBase {
                 nameToId.emplace(column.Name, id);
             }
 
-            auto fillColumnIds = [&nameToId, type = Type](const auto& columnNames, TVector<ui32>& columnIds) {
+            auto fillColumnIds = [&nameToId](const auto& columnNames, TVector<ui32>& columnIds) {
                 columnIds.reserve(columnNames.size());
                 for (const auto& columnName : columnNames) {
                     auto it = nameToId.find(columnName);
-
-                    if (it == nameToId.end() && type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                        Y_ABORT_UNLESS(columnName == NTableIndex::NTableVectorIndex::IdColumn || 
-                                       columnName == NTableIndex::NTableVectorIndex::LevelColumn ||
-                                       columnName == NTableIndex::NTableVectorIndex::CentroidColumn ||
-                                       columnName == NTableIndex::NTableVectorIndex::IdsColumn
-                                       );
-                        continue;
-                    }
-
                     Y_ABORT_UNLESS(it != nameToId.end());
                     columnIds.push_back(it->second);
                 }

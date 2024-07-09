@@ -275,7 +275,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
-            //TODO build vector index
+            *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         default:
             Y_ABORT("Unreachable");

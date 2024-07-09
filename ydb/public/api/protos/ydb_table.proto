@@ -81,7 +81,7 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    oneof distance_similarity {
+    oneof metric {
         Distance distance = 1;
         Similarity similarity = 2;
     }

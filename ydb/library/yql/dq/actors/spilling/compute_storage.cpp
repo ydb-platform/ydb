@@ -14,16 +14,14 @@ TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCal
 }
 
 TDqComputeStorage::~TDqComputeStorage() {
-    bool isSent = ActorSystem_->Send(ComputeStorageActorId_, new TEvents::TEvPoison, IEventHandle::FlagTrackDelivery);
-    Y_ABORT_UNLESS(isSent, "MISHAMISHA");
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvents::TEvPoison);
 }
 
 NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> TDqComputeStorage::Put(TRope&& blob) {
     auto promise = NThreading::NewPromise<NKikimr::NMiniKQL::ISpiller::TKey>();
     auto future = promise.GetFuture();
 
-    bool isSent = ActorSystem_->Send(ComputeStorageActorId_, new TEvPut(std::move(blob), std::move(promise)), IEventHandle::FlagTrackDelivery);
-    Y_ABORT_UNLESS(isSent, "MISHAMISHA");
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvPut(std::move(blob), std::move(promise)));
     return future;
 }
 
@@ -35,8 +33,7 @@ NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
     auto promise = NThreading::NewPromise<void>();
     auto future = promise.GetFuture();
 
-    bool isSent = ActorSystem_->Send(ComputeStorageActorId_, new TEvDelete(key, std::move(promise)), IEventHandle::FlagForwardOnNondelivery);
-    Y_ABORT_UNLESS(isSent, "MISHAMISHA");
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvDelete(key, std::move(promise)));
 
     return future;
 }
@@ -50,8 +47,7 @@ NThreading::TFuture<std::optional<TRope>> TDqComputeStorage::GetInternal(TKey ke
     auto promise = NThreading::NewPromise<std::optional<TRope>>();
     auto future = promise.GetFuture();
 
-    bool isSent = ActorSystem_->Send(ComputeStorageActorId_, new TEvGet(key, std::move(promise), removeBlobAfterRead), IEventHandle::FlagTrackDelivery);
-    Y_ABORT_UNLESS(isSent, "MISHAMISHA");
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvGet(key, std::move(promise), removeBlobAfterRead));
     return future;
 }
 

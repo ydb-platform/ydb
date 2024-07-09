@@ -8,8 +8,11 @@ namespace NKikimr::NMiniKQL {
 struct ISpiller
 {
     using TPtr = std::shared_ptr<ISpiller>;
-    virtual ~ISpiller(){}
+    using TErrorCallback = std::function<void(const TString& error)>;
     using TKey = ui64;
+
+    virtual ~ISpiller(){}
+
     virtual NThreading::TFuture<TKey> Put(TRope&& blob) = 0;
 
     ///\return

@@ -659,7 +659,11 @@ public:
         , Ctx(ctx)
     {
         if (Ctx.SpillerFactory) {
-            Spiller = Ctx.SpillerFactory->CreateSpiller();
+            const auto errorCallback = [&](const TString& error) {
+                YQL_LOG(ERROR) << error;
+                MKQL_ENSURE(false, "Internal logic error");
+            };
+            Spiller = Ctx.SpillerFactory->CreateSpiller(errorCallback);
         }
         ResetFields();
     }

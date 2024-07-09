@@ -81,7 +81,7 @@
  * bootparse.y
  *	  yacc grammar for the "bootstrap" mode (BKI file format)
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -693,12 +693,12 @@ static const yytype_int8 yytranslate[] =
 static const yytype_int16 yyrline[] =
 {
        0,   115,   115,   116,   120,   121,   125,   126,   127,   128,
-     129,   130,   131,   132,   136,   145,   155,   165,   154,   251,
-     250,   269,   321,   373,   385,   395,   396,   400,   415,   416,
-     420,   421,   425,   426,   430,   431,   435,   444,   445,   446,
-     450,   454,   455,   456,   460,   462,   467,   468,   469,   470,
-     471,   472,   473,   474,   475,   476,   477,   478,   479,   480,
-     481,   482,   483,   484,   485,   486
+     129,   130,   131,   132,   136,   145,   155,   165,   154,   252,
+     251,   270,   322,   374,   386,   396,   397,   401,   417,   418,
+     422,   423,   427,   428,   432,   433,   437,   446,   447,   448,
+     452,   456,   457,   458,   462,   464,   469,   470,   471,   472,
+     473,   474,   475,   476,   477,   478,   479,   480,   481,   482,
+     483,   484,   485,   486,   487,   488
 };
 #endif
 
@@ -1402,9 +1402,9 @@ yyreduce:
   case 18: /* Boot_CreateStmt: XCREATE boot_ident oidspec optbootstrap optsharedrelation optrowtypeoid LPAREN $@1 boot_column_list $@2 RPAREN  */
 #line 169 "bootparse.y"
                                 {
-					TupleDesc tupdesc;
-					bool	shared_relation;
-					bool	mapped_relation;
+					TupleDesc	tupdesc;
+					bool		shared_relation;
+					bool		mapped_relation;
 
 					do_start();
 
@@ -1447,12 +1447,13 @@ yyreduce:
 												   mapped_relation,
 												   true,
 												   &relfrozenxid,
-												   &relminmxid);
+												   &relminmxid,
+												   true);
 						elog(DEBUG4, "bootstrap relation created");
 					}
 					else
 					{
-						Oid id;
+						Oid			id;
 
 						id = heap_create_with_catalog((yyvsp[-9].str),
 													  PG_CATALOG_NAMESPACE,
@@ -1479,21 +1480,21 @@ yyreduce:
 					}
 					do_end();
 				}
-#line 1483 "bootparse.c"
+#line 1484 "bootparse.c"
     break;
 
   case 19: /* $@3: %empty  */
-#line 251 "bootparse.y"
+#line 252 "bootparse.y"
                                 {
 					do_start();
 					elog(DEBUG4, "inserting row");
 					num_columns_read = 0;
 				}
-#line 1493 "bootparse.c"
+#line 1494 "bootparse.c"
     break;
 
   case 20: /* Boot_InsertStmt: INSERT_TUPLE $@3 LPAREN boot_column_val_list RPAREN  */
-#line 257 "bootparse.y"
+#line 258 "bootparse.y"
                                 {
 					if (num_columns_read != numattr)
 						elog(ERROR, "incorrect number of columns in row (expected %d, got %d)",
@@ -1503,14 +1504,14 @@ yyreduce:
 					InsertOneTuple();
 					do_end();
 				}
-#line 1507 "bootparse.c"
+#line 1508 "bootparse.c"
     break;
 
   case 21: /* Boot_DeclareIndexStmt: XDECLARE INDEX boot_ident oidspec ON boot_ident USING boot_ident LPAREN boot_index_params RPAREN  */
-#line 270 "bootparse.y"
+#line 271 "bootparse.y"
                                 {
-					IndexStmt *stmt = makeNode(IndexStmt);
-					Oid		relationId;
+					IndexStmt  *stmt = makeNode(IndexStmt);
+					Oid			relationId;
 
 					elog(DEBUG4, "creating index \"%s\"", (yyvsp[-8].str));
 
@@ -1556,14 +1557,14 @@ yyreduce:
 								false);
 					do_end();
 				}
-#line 1560 "bootparse.c"
+#line 1561 "bootparse.c"
     break;
 
   case 22: /* Boot_DeclareUniqueIndexStmt: XDECLARE UNIQUE INDEX boot_ident oidspec ON boot_ident USING boot_ident LPAREN boot_index_params RPAREN  */
-#line 322 "bootparse.y"
+#line 323 "bootparse.y"
                                 {
-					IndexStmt *stmt = makeNode(IndexStmt);
-					Oid		relationId;
+					IndexStmt  *stmt = makeNode(IndexStmt);
+					Oid			relationId;
 
 					elog(DEBUG4, "creating unique index \"%s\"", (yyvsp[-8].str));
 
@@ -1609,11 +1610,11 @@ yyreduce:
 								false);
 					do_end();
 				}
-#line 1613 "bootparse.c"
+#line 1614 "bootparse.c"
     break;
 
   case 23: /* Boot_DeclareToastStmt: XDECLARE XTOAST oidspec oidspec ON boot_ident  */
-#line 374 "bootparse.y"
+#line 375 "bootparse.y"
                                 {
 					elog(DEBUG4, "creating toast table for table \"%s\"", (yyvsp[0].str));
 
@@ -1622,35 +1623,36 @@ yyreduce:
 					BootstrapToastTable((yyvsp[0].str), (yyvsp[-3].oidval), (yyvsp[-2].oidval));
 					do_end();
 				}
-#line 1626 "bootparse.c"
+#line 1627 "bootparse.c"
     break;
 
   case 24: /* Boot_BuildIndsStmt: XBUILD INDICES  */
-#line 386 "bootparse.y"
+#line 387 "bootparse.y"
                                 {
 					do_start();
 					build_indices();
 					do_end();
 				}
-#line 1636 "bootparse.c"
+#line 1637 "bootparse.c"
     break;
 
   case 25: /* boot_index_params: boot_index_params COMMA boot_index_param  */
-#line 395 "bootparse.y"
+#line 396 "bootparse.y"
                                                                 { (yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].ielem)); }
-#line 1642 "bootparse.c"
+#line 1643 "bootparse.c"
     break;
 
   case 26: /* boot_index_params: boot_index_param  */
-#line 396 "bootparse.y"
+#line 397 "bootparse.y"
                                                                                         { (yyval.list) = list_make1((yyvsp[0].ielem)); }
-#line 1648 "bootparse.c"
+#line 1649 "bootparse.c"
     break;
 
   case 27: /* boot_index_param: boot_ident boot_ident  */
-#line 401 "bootparse.y"
+#line 402 "bootparse.y"
                                 {
-					IndexElem *n = makeNode(IndexElem);
+					IndexElem  *n = makeNode(IndexElem);
+
 					n->name = (yyvsp[-1].str);
 					n->expr = NULL;
 					n->indexcolname = NULL;
@@ -1660,213 +1662,213 @@ yyreduce:
 					n->nulls_ordering = SORTBY_NULLS_DEFAULT;
 					(yyval.ielem) = n;
 				}
-#line 1664 "bootparse.c"
+#line 1666 "bootparse.c"
     break;
 
   case 28: /* optbootstrap: XBOOTSTRAP  */
-#line 415 "bootparse.y"
+#line 417 "bootparse.y"
                                         { (yyval.ival) = 1; }
-#line 1670 "bootparse.c"
+#line 1672 "bootparse.c"
     break;
 
   case 29: /* optbootstrap: %empty  */
-#line 416 "bootparse.y"
+#line 418 "bootparse.y"
                                                 { (yyval.ival) = 0; }
-#line 1676 "bootparse.c"
+#line 1678 "bootparse.c"
     break;
 
   case 30: /* optsharedrelation: XSHARED_RELATION  */
-#line 420 "bootparse.y"
+#line 422 "bootparse.y"
                                                 { (yyval.ival) = 1; }
-#line 1682 "bootparse.c"
+#line 1684 "bootparse.c"
     break;
 
   case 31: /* optsharedrelation: %empty  */
-#line 421 "bootparse.y"
+#line 423 "bootparse.y"
                                                                 { (yyval.ival) = 0; }
-#line 1688 "bootparse.c"
+#line 1690 "bootparse.c"
     break;
 
   case 32: /* optrowtypeoid: XROWTYPE_OID oidspec  */
-#line 425 "bootparse.y"
+#line 427 "bootparse.y"
                                                 { (yyval.oidval) = (yyvsp[0].oidval); }
-#line 1694 "bootparse.c"
+#line 1696 "bootparse.c"
     break;
 
   case 33: /* optrowtypeoid: %empty  */
-#line 426 "bootparse.y"
+#line 428 "bootparse.y"
                                                                         { (yyval.oidval) = InvalidOid; }
-#line 1700 "bootparse.c"
+#line 1702 "bootparse.c"
     break;
 
   case 36: /* boot_column_def: boot_ident EQUALS boot_ident boot_column_nullness  */
-#line 436 "bootparse.y"
+#line 438 "bootparse.y"
                                 {
 				   if (++numattr > MAXATTR)
 						elog(FATAL, "too many columns");
 				   DefineAttr((yyvsp[-3].str), (yyvsp[-1].str), numattr-1, (yyvsp[0].ival));
 				}
-#line 1710 "bootparse.c"
+#line 1712 "bootparse.c"
     break;
 
   case 37: /* boot_column_nullness: XFORCE XNOT XNULL  */
-#line 444 "bootparse.y"
+#line 446 "bootparse.y"
                                                 { (yyval.ival) = BOOTCOL_NULL_FORCE_NOT_NULL; }
-#line 1716 "bootparse.c"
+#line 1718 "bootparse.c"
     break;
 
   case 38: /* boot_column_nullness: XFORCE XNULL  */
-#line 445 "bootparse.y"
+#line 447 "bootparse.y"
                                                 {  (yyval.ival) = BOOTCOL_NULL_FORCE_NULL; }
-#line 1722 "bootparse.c"
+#line 1724 "bootparse.c"
     break;
 
   case 39: /* boot_column_nullness: %empty  */
-#line 446 "bootparse.y"
+#line 448 "bootparse.y"
                   { (yyval.ival) = BOOTCOL_NULL_AUTO; }
-#line 1728 "bootparse.c"
+#line 1730 "bootparse.c"
     break;
 
   case 40: /* oidspec: boot_ident  */
-#line 450 "bootparse.y"
+#line 452 "bootparse.y"
                                                                                         { (yyval.oidval) = atooid((yyvsp[0].str)); }
-#line 1734 "bootparse.c"
+#line 1736 "bootparse.c"
     break;
 
   case 44: /* boot_column_val: boot_ident  */
-#line 461 "bootparse.y"
+#line 463 "bootparse.y"
                         { InsertOneValue((yyvsp[0].str), num_columns_read++); }
-#line 1740 "bootparse.c"
+#line 1742 "bootparse.c"
     break;
 
   case 45: /* boot_column_val: NULLVAL  */
-#line 463 "bootparse.y"
+#line 465 "bootparse.y"
                         { InsertOneNull(num_columns_read++); }
-#line 1746 "bootparse.c"
+#line 1748 "bootparse.c"
     break;
 
   case 46: /* boot_ident: ID  */
-#line 467 "bootparse.y"
+#line 469 "bootparse.y"
                                         { (yyval.str) = (yyvsp[0].str); }
-#line 1752 "bootparse.c"
+#line 1754 "bootparse.c"
     break;
 
   case 47: /* boot_ident: OPEN  */
-#line 468 "bootparse.y"
+#line 470 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1758 "bootparse.c"
+#line 1760 "bootparse.c"
     break;
 
   case 48: /* boot_ident: XCLOSE  */
-#line 469 "bootparse.y"
+#line 471 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1764 "bootparse.c"
+#line 1766 "bootparse.c"
     break;
 
   case 49: /* boot_ident: XCREATE  */
-#line 470 "bootparse.y"
+#line 472 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1770 "bootparse.c"
+#line 1772 "bootparse.c"
     break;
 
   case 50: /* boot_ident: INSERT_TUPLE  */
-#line 471 "bootparse.y"
+#line 473 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1776 "bootparse.c"
+#line 1778 "bootparse.c"
     break;
 
   case 51: /* boot_ident: XDECLARE  */
-#line 472 "bootparse.y"
+#line 474 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1782 "bootparse.c"
+#line 1784 "bootparse.c"
     break;
 
   case 52: /* boot_ident: INDEX  */
-#line 473 "bootparse.y"
+#line 475 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1788 "bootparse.c"
+#line 1790 "bootparse.c"
     break;
 
   case 53: /* boot_ident: ON  */
-#line 474 "bootparse.y"
+#line 476 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1794 "bootparse.c"
+#line 1796 "bootparse.c"
     break;
 
   case 54: /* boot_ident: USING  */
-#line 475 "bootparse.y"
+#line 477 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1800 "bootparse.c"
+#line 1802 "bootparse.c"
     break;
 
   case 55: /* boot_ident: XBUILD  */
-#line 476 "bootparse.y"
+#line 478 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1806 "bootparse.c"
+#line 1808 "bootparse.c"
     break;
 
   case 56: /* boot_ident: INDICES  */
-#line 477 "bootparse.y"
+#line 479 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1812 "bootparse.c"
+#line 1814 "bootparse.c"
     break;
 
   case 57: /* boot_ident: UNIQUE  */
-#line 478 "bootparse.y"
+#line 480 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1818 "bootparse.c"
+#line 1820 "bootparse.c"
     break;
 
   case 58: /* boot_ident: XTOAST  */
-#line 479 "bootparse.y"
+#line 481 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1824 "bootparse.c"
+#line 1826 "bootparse.c"
     break;
 
   case 59: /* boot_ident: OBJ_ID  */
-#line 480 "bootparse.y"
+#line 482 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1830 "bootparse.c"
+#line 1832 "bootparse.c"
     break;
 
   case 60: /* boot_ident: XBOOTSTRAP  */
-#line 481 "bootparse.y"
+#line 483 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1836 "bootparse.c"
+#line 1838 "bootparse.c"
     break;
 
   case 61: /* boot_ident: XSHARED_RELATION  */
-#line 482 "bootparse.y"
+#line 484 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1842 "bootparse.c"
+#line 1844 "bootparse.c"
     break;
 
   case 62: /* boot_ident: XROWTYPE_OID  */
-#line 483 "bootparse.y"
+#line 485 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1848 "bootparse.c"
+#line 1850 "bootparse.c"
     break;
 
   case 63: /* boot_ident: XFORCE  */
-#line 484 "bootparse.y"
+#line 486 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1854 "bootparse.c"
+#line 1856 "bootparse.c"
     break;
 
   case 64: /* boot_ident: XNOT  */
-#line 485 "bootparse.y"
+#line 487 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1860 "bootparse.c"
+#line 1862 "bootparse.c"
     break;
 
   case 65: /* boot_ident: XNULL  */
-#line 486 "bootparse.y"
+#line 488 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1866 "bootparse.c"
+#line 1868 "bootparse.c"
     break;
 
 
-#line 1870 "bootparse.c"
+#line 1872 "bootparse.c"
 
       default: break;
     }
@@ -2060,7 +2062,7 @@ yyreturn:
   return yyresult;
 }
 
-#line 488 "bootparse.y"
+#line 490 "bootparse.y"
 
 
 #include "bootscanner.c"

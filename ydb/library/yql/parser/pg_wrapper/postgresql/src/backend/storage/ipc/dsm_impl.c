@@ -36,7 +36,7 @@
  *
  * As ever, Windows requires its own implementation.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -974,6 +974,7 @@ dsm_impl_pin_segment(dsm_handle handle, void *impl_private,
 	{
 #ifdef USE_DSM_WINDOWS
 		case DSM_IMPL_WINDOWS:
+			if (IsUnderPostmaster)
 			{
 				HANDLE		hmap;
 
@@ -999,8 +1000,8 @@ dsm_impl_pin_segment(dsm_handle handle, void *impl_private,
 				 * is unpinned, dsm_impl_unpin_segment can close it.
 				 */
 				*impl_private_pm_handle = hmap;
-				break;
 			}
+			break;
 #endif
 		default:
 			break;
@@ -1023,6 +1024,7 @@ dsm_impl_unpin_segment(dsm_handle handle, void **impl_private)
 	{
 #ifdef USE_DSM_WINDOWS
 		case DSM_IMPL_WINDOWS:
+			if (IsUnderPostmaster)
 			{
 				if (*impl_private &&
 					!DuplicateHandle(PostmasterHandle, *impl_private,
@@ -1040,8 +1042,8 @@ dsm_impl_unpin_segment(dsm_handle handle, void **impl_private)
 				}
 
 				*impl_private = NULL;
-				break;
 			}
+			break;
 #endif
 		default:
 			break;

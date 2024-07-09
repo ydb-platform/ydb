@@ -49,7 +49,7 @@
  * we calculate operands first.  Then we check that results are numeric
  * singleton lists, calculate the result and pass it to the next path item.
  *
- * Copyright (c) 2019-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/backend/utils/adt/jsonpath_exec.c
@@ -2659,7 +2659,7 @@ static int
 compareDatetime(Datum val1, Oid typid1, Datum val2, Oid typid2,
 				bool useTz, bool *cast_error)
 {
-	PGFunction cmpfunc;
+	PGFunction	cmpfunc;
 
 	*cast_error = false;
 

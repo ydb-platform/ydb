@@ -37,7 +37,7 @@
  * the data is valid in the current encoding.
  *
  * In binary mode, the pipeline is much simpler.  Input is loaded into
- * into 'raw_buf', and encoding conversion is done in the datatype-specific
+ * 'raw_buf', and encoding conversion is done in the datatype-specific
  * receive functions, if required.  'input_buf' and 'line_buf' are not used,
  * but 'attribute_buf' is used as a temporary buffer to hold one attribute's
  * data when it's passed the receive function.
@@ -47,7 +47,7 @@
  * and 'attribute_buf' are expanded on demand, to hold the longest line
  * encountered so far.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -72,6 +72,7 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "port/pg_bswap.h"
+#include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
@@ -758,12 +759,60 @@ NextCopyFromRawFields(CopyFromState cstate, char ***fields, int *nfields)
 	/* only available for text or csv input */
 	Assert(!cstate->opts.binary);
 
-	/* on input just throw the header line away */
+	/* on input check that the header line is correct if needed */
 	if (cstate->cur_lineno == 0 && cstate->opts.header_line)
 	{
+		ListCell   *cur;
+		TupleDesc	tupDesc;
+
+		tupDesc = RelationGetDescr(cstate->rel);
+
 		cstate->cur_lineno++;
-		if (CopyReadLine(cstate))
-			return false;		/* done */
+		done = CopyReadLine(cstate);
+
+		if (cstate->opts.header_line == COPY_HEADER_MATCH)
+		{
+			int			fldnum;
+
+			if (cstate->opts.csv_mode)
+				fldct = CopyReadAttributesCSV(cstate);
+			else
+				fldct = CopyReadAttributesText(cstate);
+
+			if (fldct != list_length(cstate->attnumlist))
+				ereport(ERROR,
+						(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
+						 errmsg("wrong number of fields in header line: got %d, expected %d",
+								fldct, list_length(cstate->attnumlist))));
+
+			fldnum = 0;
+			foreach(cur, cstate->attnumlist)
+			{
+				int			attnum = lfirst_int(cur);
+				char	   *colName;
+				Form_pg_attribute attr = TupleDescAttr(tupDesc, attnum - 1);
+
+				Assert(fldnum < cstate->max_fields);
+
+				colName = cstate->raw_fields[fldnum++];
+				if (colName == NULL)
+					ereport(ERROR,
+							(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
+							 errmsg("column name mismatch in header line field %d: got null value (\"%s\"), expected \"%s\"",
+									fldnum, cstate->opts.null_print, NameStr(attr->attname))));
+
+				if (namestrcmp(&attr->attname, colName) != 0)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
+							 errmsg("column name mismatch in header line field %d: got \"%s\", expected \"%s\"",
+									fldnum, colName, NameStr(attr->attname))));
+				}
+			}
+		}
+
+		if (done)
+			return false;
 	}
 
 	cstate->cur_lineno++;

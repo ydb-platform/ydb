@@ -4,7 +4,7 @@
  *	  prototypes for postgres.c.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/tcop/tcopprot.h
@@ -25,11 +25,11 @@
 /* Required daylight between max_stack_depth and the kernel limit, in bytes */
 #define STACK_DEPTH_SLOP (512 * 1024L)
 
-extern __thread CommandDest whereToSendOutput;
+extern __thread PGDLLIMPORT CommandDest whereToSendOutput;
 extern __thread PGDLLIMPORT const char *debug_query_string;
-extern __thread int	max_stack_depth;
-extern __thread int	PostAuthDelay;
-extern __thread int	client_connection_check_interval;
+extern __thread PGDLLIMPORT int max_stack_depth;
+extern __thread PGDLLIMPORT int PostAuthDelay;
+extern __thread PGDLLIMPORT int client_connection_check_interval;
 
 /* GUC-configurable parameters */
 
@@ -45,11 +45,16 @@ extern __thread PGDLLIMPORT int log_statement;
 
 extern List *pg_parse_query(const char *query_string);
 extern List *pg_rewrite_query(Query *query);
-extern List *pg_analyze_and_rewrite(RawStmt *parsetree,
-									const char *query_string,
-									Oid *paramTypes, int numParams,
-									QueryEnvironment *queryEnv);
-extern List *pg_analyze_and_rewrite_params(RawStmt *parsetree,
+extern List *pg_analyze_and_rewrite_fixedparams(RawStmt *parsetree,
+												const char *query_string,
+												const Oid *paramTypes, int numParams,
+												QueryEnvironment *queryEnv);
+extern List *pg_analyze_and_rewrite_varparams(RawStmt *parsetree,
+											  const char *query_string,
+											  Oid **paramTypes,
+											  int *numParams,
+											  QueryEnvironment *queryEnv);
+extern List *pg_analyze_and_rewrite_withcb(RawStmt *parsetree,
 										   const char *query_string,
 										   ParserSetupHook parserSetup,
 										   void *parserSetupArg,
@@ -75,8 +80,9 @@ extern void ProcessClientWriteInterrupt(bool blocked);
 
 extern void process_postgres_switches(int argc, char *argv[],
 									  GucContext ctx, const char **dbname);
-extern void PostgresMain(int argc, char *argv[],
-						 const char *dbname,
+extern void PostgresSingleUserMain(int argc, char *argv[],
+								   const char *username) pg_attribute_noreturn();
+extern void PostgresMain(const char *dbname,
 						 const char *username) pg_attribute_noreturn();
 extern long get_stack_depth_rlimit(void);
 extern void ResetUsage(void);

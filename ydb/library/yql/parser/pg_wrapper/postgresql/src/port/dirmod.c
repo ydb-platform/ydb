@@ -35,7 +35,7 @@
 #include <winioctl.h>
 #else
 #include <windows.h>
-#error #include <w32api/winioctl.h>
+#include <w32api/winioctl.h>
 #endif
 #endif
 

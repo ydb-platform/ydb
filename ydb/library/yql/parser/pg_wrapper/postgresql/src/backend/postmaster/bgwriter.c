@@ -12,9 +12,6 @@
  *
  * As of Postgres 9.2 the bgwriter no longer handles checkpoints.
  *
- * The bgwriter is started by the postmaster as soon as the startup subprocess
- * finishes, or as soon as recovery begins if we are doing archive recovery.
- * It remains alive until the postmaster commands it to terminate.
  * Normal termination is by SIGTERM, which instructs the bgwriter to exit(0).
  * Emergency termination is by SIGQUIT; like any backend, the bgwriter will
  * simply abort and exit on SIGQUIT.
@@ -24,7 +21,7 @@
  * should be killed by SIGQUIT and then a recovery cycle started.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -243,11 +240,9 @@ BackgroundWriterMain(void)
 		 */
 		can_hibernate = BgBufferSync(&wb_context);
 
-		/*
-		 * Send off activity statistics to the stats collector
-		 */
-		pgstat_send_bgwriter();
-		pgstat_send_wal(true);
+		/* Report pending statistics to the cumulative stats system */
+		pgstat_report_bgwriter();
+		pgstat_report_wal(true);
 
 		if (FirstCallSinceLastCheckpoint())
 		{

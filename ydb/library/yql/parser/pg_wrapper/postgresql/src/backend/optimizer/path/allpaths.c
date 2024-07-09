@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -27,6 +27,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/supportnodes.h"
 #ifdef OPTIMIZER_DEBUG
 #include "nodes/print.h"
 #endif
@@ -50,13 +51,31 @@
 #include "utils/lsyscache.h"
 
 
+/* Bitmask flags for pushdown_safety_info.unsafeFlags */
+#define UNSAFE_HAS_VOLATILE_FUNC		(1 << 0)
+#define UNSAFE_HAS_SET_FUNC				(1 << 1)
+#define UNSAFE_NOTIN_DISTINCTON_CLAUSE	(1 << 2)
+#define UNSAFE_NOTIN_PARTITIONBY_CLAUSE	(1 << 3)
+#define UNSAFE_TYPE_MISMATCH			(1 << 4)
+
 /* results of subquery_is_pushdown_safe */
 typedef struct pushdown_safety_info
 {
-	bool	   *unsafeColumns;	/* which output columns are unsafe to use */
+	unsigned char *unsafeFlags; /* bitmask of reasons why this target list
+								 * column is unsafe for qual pushdown, or 0 if
+								 * no reason. */
 	bool		unsafeVolatile; /* don't push down volatile quals */
 	bool		unsafeLeaky;	/* don't push down leaky quals */
 } pushdown_safety_info;
+
+/* Return type for qual_is_pushdown_safe */
+typedef enum pushdown_safe_type
+{
+	PUSHDOWN_UNSAFE,			/* unsafe to push qual into subquery */
+	PUSHDOWN_SAFE,				/* safe to push qual into subquery */
+	PUSHDOWN_WINDOWCLAUSE_RUNCOND	/* unsafe, but may work as WindowClause
+									 * run condition */
+} pushdown_safe_type;
 
 /* These parameters are set by GUC */
 __thread bool		enable_geqo = false;	/* just in case GUC doesn't set it */
@@ -134,14 +153,15 @@ static void check_output_expressions(Query *subquery,
 static void compare_tlist_datatypes(List *tlist, List *colTypes,
 									pushdown_safety_info *safetyInfo);
 static bool targetIsInAllPartitionLists(TargetEntry *tle, Query *query);
-static bool qual_is_pushdown_safe(Query *subquery, Index rti,
-								  RestrictInfo *rinfo,
-								  pushdown_safety_info *safetyInfo);
+static pushdown_safe_type qual_is_pushdown_safe(Query *subquery, Index rti,
+												RestrictInfo *rinfo,
+												pushdown_safety_info *safetyInfo);
 static void subquery_push_qual(Query *subquery,
 							   RangeTblEntry *rte, Index rti, Node *qual);
 static void recurse_push_qual(Node *setOp, Query *topquery,
 							  RangeTblEntry *rte, Index rti, Node *qual);
-static void remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel);
+static void remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel,
+										   Bitmapset *extra_used_attrs);
 
 
 /*
@@ -551,12 +571,11 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	 * its own pool of workers.  Instead, we'll consider gathering partial
 	 * paths for the parent appendrel.
 	 *
-	 * Also, if this is the topmost scan/join rel (that is, the only baserel),
-	 * we postpone gathering until the final scan/join targetlist is available
-	 * (see grouping_planner).
+	 * Also, if this is the topmost scan/join rel, we postpone gathering until
+	 * the final scan/join targetlist is available (see grouping_planner).
 	 */
 	if (rel->reloptkind == RELOPT_BASEREL &&
-		bms_membership(root->all_baserels) != BMS_SINGLETON)
+		!bms_equal(rel->relids, root->all_baserels))
 		generate_useful_gather_paths(root, rel, false);
 
 	/* Now find the cheapest of the paths for this rel */
@@ -1689,7 +1708,7 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 	 * for both forward and reverse scans.
 	 */
 	if (rel->part_scheme != NULL && IS_SIMPLE_REL(rel) &&
-		partitions_are_ordered(rel->boundinfo, rel->nparts))
+		partitions_are_ordered(rel->boundinfo, rel->live_parts))
 	{
 		partition_pathkeys = build_partition_pathkeys(root, rel,
 													  ForwardScanDirection,
@@ -1716,6 +1735,7 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 		List	   *pathkeys = (List *) lfirst(lcp);
 		List	   *startup_subpaths = NIL;
 		List	   *total_subpaths = NIL;
+		List	   *fractional_subpaths = NIL;
 		bool		startup_neq_total = false;
 		ListCell   *lcr;
 		bool		match_partition_order;
@@ -1745,7 +1765,8 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 		{
 			RelOptInfo *childrel = (RelOptInfo *) lfirst(lcr);
 			Path	   *cheapest_startup,
-					   *cheapest_total;
+					   *cheapest_total,
+					   *cheapest_fractional = NULL;
 
 			/* Locate the right paths, if they are available. */
 			cheapest_startup =
@@ -1774,6 +1795,38 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 			}
 
 			/*
+			 * When building a fractional path, determine a cheapest
+			 * fractional path for each child relation too. Looking at startup
+			 * and total costs is not enough, because the cheapest fractional
+			 * path may be dominated by two separate paths (one for startup,
+			 * one for total).
+			 *
+			 * When needed (building fractional path), determine the cheapest
+			 * fractional path too.
+			 */
+			if (root->tuple_fraction > 0)
+			{
+				double		path_fraction = (1.0 / root->tuple_fraction);
+
+				cheapest_fractional =
+					get_cheapest_fractional_path_for_pathkeys(childrel->pathlist,
+															  pathkeys,
+															  NULL,
+															  path_fraction);
+
+				/*
+				 * If we found no path with matching pathkeys, use the
+				 * cheapest total path instead.
+				 *
+				 * XXX We might consider partially sorted paths too (with an
+				 * incremental sort on top). But we'd have to build all the
+				 * incremental paths, do the costing etc.
+				 */
+				if (!cheapest_fractional)
+					cheapest_fractional = cheapest_total;
+			}
+
+			/*
 			 * Notice whether we actually have different paths for the
 			 * "cheapest" and "total" cases; frequently there will be no point
 			 * in two create_merge_append_path() calls.
@@ -1799,6 +1852,12 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 
 				startup_subpaths = lappend(startup_subpaths, cheapest_startup);
 				total_subpaths = lappend(total_subpaths, cheapest_total);
+
+				if (cheapest_fractional)
+				{
+					cheapest_fractional = get_singleton_append_subpath(cheapest_fractional);
+					fractional_subpaths = lappend(fractional_subpaths, cheapest_fractional);
+				}
 			}
 			else if (match_partition_order_desc)
 			{
@@ -1812,6 +1871,12 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 
 				startup_subpaths = lcons(cheapest_startup, startup_subpaths);
 				total_subpaths = lcons(cheapest_total, total_subpaths);
+
+				if (cheapest_fractional)
+				{
+					cheapest_fractional = get_singleton_append_subpath(cheapest_fractional);
+					fractional_subpaths = lcons(cheapest_fractional, fractional_subpaths);
+				}
 			}
 			else
 			{
@@ -1823,6 +1888,10 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 										  &startup_subpaths, NULL);
 				accumulate_append_subpath(cheapest_total,
 										  &total_subpaths, NULL);
+
+				if (cheapest_fractional)
+					accumulate_append_subpath(cheapest_fractional,
+											  &fractional_subpaths, NULL);
 			}
 		}
 
@@ -1849,6 +1918,17 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 														  0,
 														  false,
 														  -1));
+
+			if (fractional_subpaths)
+				add_path(rel, (Path *) create_append_path(root,
+														  rel,
+														  fractional_subpaths,
+														  NIL,
+														  pathkeys,
+														  NULL,
+														  0,
+														  false,
+														  -1));
 		}
 		else
 		{
@@ -1862,6 +1942,13 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 				add_path(rel, (Path *) create_merge_append_path(root,
 																rel,
 																total_subpaths,
+																pathkeys,
+																NULL));
+
+			if (fractional_subpaths)
+				add_path(rel, (Path *) create_merge_append_path(root,
+																rel,
+																fractional_subpaths,
 																pathkeys,
 																NULL));
 		}
@@ -2091,6 +2178,297 @@ has_multiple_baserels(PlannerInfo *root)
 }
 
 /*
+ * find_window_run_conditions
+ *		Determine if 'wfunc' is really a WindowFunc and call its prosupport
+ *		function to determine the function's monotonic properties.  We then
+ *		see if 'opexpr' can be used to short-circuit execution.
+ *
+ * For example row_number() over (order by ...) always produces a value one
+ * higher than the previous.  If someone has a window function in a subquery
+ * and has a WHERE clause in the outer query to filter rows <= 10, then we may
+ * as well stop processing the windowagg once the row number reaches 11.  Here
+ * we check if 'opexpr' might help us to stop doing needless extra processing
+ * in WindowAgg nodes.
+ *
+ * '*keep_original' is set to true if the caller should also use 'opexpr' for
+ * its original purpose.  This is set to false if the caller can assume that
+ * the run condition will handle all of the required filtering.
+ *
+ * Returns true if 'opexpr' was found to be useful and was added to the
+ * WindowClauses runCondition.  We also set *keep_original accordingly and add
+ * 'attno' to *run_cond_attrs offset by FirstLowInvalidHeapAttributeNumber.
+ * If the 'opexpr' cannot be used then we set *keep_original to true and
+ * return false.
+ */
+static bool
+find_window_run_conditions(Query *subquery, RangeTblEntry *rte, Index rti,
+						   AttrNumber attno, WindowFunc *wfunc, OpExpr *opexpr,
+						   bool wfunc_left, bool *keep_original,
+						   Bitmapset **run_cond_attrs)
+{
+	Oid			prosupport;
+	Expr	   *otherexpr;
+	SupportRequestWFuncMonotonic req;
+	SupportRequestWFuncMonotonic *res;
+	WindowClause *wclause;
+	List	   *opinfos;
+	OpExpr	   *runopexpr;
+	Oid			runoperator;
+	ListCell   *lc;
+
+	*keep_original = true;
+
+	while (IsA(wfunc, RelabelType))
+		wfunc = (WindowFunc *) ((RelabelType *) wfunc)->arg;
+
+	/* we can only work with window functions */
+	if (!IsA(wfunc, WindowFunc))
+		return false;
+
+	/* can't use it if there are subplans in the WindowFunc */
+	if (contain_subplans((Node *) wfunc))
+		return false;
+
+	prosupport = get_func_support(wfunc->winfnoid);
+
+	/* Check if there's a support function for 'wfunc' */
+	if (!OidIsValid(prosupport))
+		return false;
+
+	/* get the Expr from the other side of the OpExpr */
+	if (wfunc_left)
+		otherexpr = lsecond(opexpr->args);
+	else
+		otherexpr = linitial(opexpr->args);
+
+	/*
+	 * The value being compared must not change during the evaluation of the
+	 * window partition.
+	 */
+	if (!is_pseudo_constant_clause((Node *) otherexpr))
+		return false;
+
+	/* find the window clause belonging to the window function */
+	wclause = (WindowClause *) list_nth(subquery->windowClause,
+										wfunc->winref - 1);
+
+	req.type = T_SupportRequestWFuncMonotonic;
+	req.window_func = wfunc;
+	req.window_clause = wclause;
+
+	/* call the support function */
+	res = (SupportRequestWFuncMonotonic *)
+		DatumGetPointer(OidFunctionCall1(prosupport,
+										 PointerGetDatum(&req)));
+
+	/*
+	 * Nothing to do if the function is neither monotonically increasing nor
+	 * monotonically decreasing.
+	 */
+	if (res == NULL || res->monotonic == MONOTONICFUNC_NONE)
+		return false;
+
+	runopexpr = NULL;
+	runoperator = InvalidOid;
+	opinfos = get_op_btree_interpretation(opexpr->opno);
+
+	foreach(lc, opinfos)
+	{
+		OpBtreeInterpretation *opinfo = (OpBtreeInterpretation *) lfirst(lc);
+		int			strategy = opinfo->strategy;
+
+		/* handle < / <= */
+		if (strategy == BTLessStrategyNumber ||
+			strategy == BTLessEqualStrategyNumber)
+		{
+			/*
+			 * < / <= is supported for monotonically increasing functions in
+			 * the form <wfunc> op <pseudoconst> and <pseudoconst> op <wfunc>
+			 * for monotonically decreasing functions.
+			 */
+			if ((wfunc_left && (res->monotonic & MONOTONICFUNC_INCREASING)) ||
+				(!wfunc_left && (res->monotonic & MONOTONICFUNC_DECREASING)))
+			{
+				*keep_original = false;
+				runopexpr = opexpr;
+				runoperator = opexpr->opno;
+			}
+			break;
+		}
+		/* handle > / >= */
+		else if (strategy == BTGreaterStrategyNumber ||
+				 strategy == BTGreaterEqualStrategyNumber)
+		{
+			/*
+			 * > / >= is supported for monotonically decreasing functions in
+			 * the form <wfunc> op <pseudoconst> and <pseudoconst> op <wfunc>
+			 * for monotonically increasing functions.
+			 */
+			if ((wfunc_left && (res->monotonic & MONOTONICFUNC_DECREASING)) ||
+				(!wfunc_left && (res->monotonic & MONOTONICFUNC_INCREASING)))
+			{
+				*keep_original = false;
+				runopexpr = opexpr;
+				runoperator = opexpr->opno;
+			}
+			break;
+		}
+		/* handle = */
+		else if (strategy == BTEqualStrategyNumber)
+		{
+			int16		newstrategy;
+
+			/*
+			 * When both monotonically increasing and decreasing then the
+			 * return value of the window function will be the same each time.
+			 * We can simply use 'opexpr' as the run condition without
+			 * modifying it.
+			 */
+			if ((res->monotonic & MONOTONICFUNC_BOTH) == MONOTONICFUNC_BOTH)
+			{
+				*keep_original = false;
+				runopexpr = opexpr;
+				runoperator = opexpr->opno;
+				break;
+			}
+
+			/*
+			 * When monotonically increasing we make a qual with <wfunc> <=
+			 * <value> or <value> >= <wfunc> in order to filter out values
+			 * which are above the value in the equality condition.  For
+			 * monotonically decreasing functions we want to filter values
+			 * below the value in the equality condition.
+			 */
+			if (res->monotonic & MONOTONICFUNC_INCREASING)
+				newstrategy = wfunc_left ? BTLessEqualStrategyNumber : BTGreaterEqualStrategyNumber;
+			else
+				newstrategy = wfunc_left ? BTGreaterEqualStrategyNumber : BTLessEqualStrategyNumber;
+
+			/* We must keep the original equality qual */
+			*keep_original = true;
+			runopexpr = opexpr;
+
+			/* determine the operator to use for the runCondition qual */
+			runoperator = get_opfamily_member(opinfo->opfamily_id,
+											  opinfo->oplefttype,
+											  opinfo->oprighttype,
+											  newstrategy);
+			break;
+		}
+	}
+
+	if (runopexpr != NULL)
+	{
+		Expr	   *newexpr;
+
+		/*
+		 * Build the qual required for the run condition keeping the
+		 * WindowFunc on the same side as it was originally.
+		 */
+		if (wfunc_left)
+			newexpr = make_opclause(runoperator,
+									runopexpr->opresulttype,
+									runopexpr->opretset, (Expr *) wfunc,
+									otherexpr, runopexpr->opcollid,
+									runopexpr->inputcollid);
+		else
+			newexpr = make_opclause(runoperator,
+									runopexpr->opresulttype,
+									runopexpr->opretset,
+									otherexpr, (Expr *) wfunc,
+									runopexpr->opcollid,
+									runopexpr->inputcollid);
+
+		wclause->runCondition = lappend(wclause->runCondition, newexpr);
+
+		/* record that this attno was used in a run condition */
+		*run_cond_attrs = bms_add_member(*run_cond_attrs,
+										 attno - FirstLowInvalidHeapAttributeNumber);
+		return true;
+	}
+
+	/* unsupported OpExpr */
+	return false;
+}
+
+/*
+ * check_and_push_window_quals
+ *		Check if 'clause' is a qual that can be pushed into a WindowFunc's
+ *		WindowClause as a 'runCondition' qual.  These, when present, allow
+ *		some unnecessary work to be skipped during execution.
+ *
+ * 'run_cond_attrs' will be populated with all targetlist resnos of subquery
+ * targets (offset by FirstLowInvalidHeapAttributeNumber) that we pushed
+ * window quals for.
+ *
+ * Returns true if the caller still must keep the original qual or false if
+ * the caller can safely ignore the original qual because the WindowAgg node
+ * will use the runCondition to stop returning tuples.
+ */
+static bool
+check_and_push_window_quals(Query *subquery, RangeTblEntry *rte, Index rti,
+							Node *clause, Bitmapset **run_cond_attrs)
+{
+	OpExpr	   *opexpr = (OpExpr *) clause;
+	bool		keep_original = true;
+	Var		   *var1;
+	Var		   *var2;
+
+	/* We're only able to use OpExprs with 2 operands */
+	if (!IsA(opexpr, OpExpr))
+		return true;
+
+	if (list_length(opexpr->args) != 2)
+		return true;
+
+	/*
+	 * Currently, we restrict this optimization to strict OpExprs.  The reason
+	 * for this is that during execution, once the runcondition becomes false,
+	 * we stop evaluating WindowFuncs.  To avoid leaving around stale window
+	 * function result values, we set them to NULL.  Having only strict
+	 * OpExprs here ensures that we properly filter out the tuples with NULLs
+	 * in the top-level WindowAgg.
+	 */
+	set_opfuncid(opexpr);
+	if (!func_strict(opexpr->opfuncid))
+		return true;
+
+	/*
+	 * Check for plain Vars that reference window functions in the subquery.
+	 * If we find any, we'll ask find_window_run_conditions() if 'opexpr' can
+	 * be used as part of the run condition.
+	 */
+
+	/* Check the left side of the OpExpr */
+	var1 = linitial(opexpr->args);
+	if (IsA(var1, Var) && var1->varattno > 0)
+	{
+		TargetEntry *tle = list_nth(subquery->targetList, var1->varattno - 1);
+		WindowFunc *wfunc = (WindowFunc *) tle->expr;
+
+		if (find_window_run_conditions(subquery, rte, rti, tle->resno, wfunc,
+									   opexpr, true, &keep_original,
+									   run_cond_attrs))
+			return keep_original;
+	}
+
+	/* and check the right side */
+	var2 = lsecond(opexpr->args);
+	if (IsA(var2, Var) && var2->varattno > 0)
+	{
+		TargetEntry *tle = list_nth(subquery->targetList, var2->varattno - 1);
+		WindowFunc *wfunc = (WindowFunc *) tle->expr;
+
+		if (find_window_run_conditions(subquery, rte, rti, tle->resno, wfunc,
+									   opexpr, false, &keep_original,
+									   run_cond_attrs))
+			return keep_original;
+	}
+
+	return true;
+}
+
+/*
  * set_subquery_pathlist
  *		Generate SubqueryScan access paths for a subquery RTE
  *
@@ -2112,6 +2490,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	pushdown_safety_info safetyInfo;
 	double		tuple_fraction;
 	RelOptInfo *sub_final_rel;
+	Bitmapset  *run_cond_attrs = NULL;
 	ListCell   *lc;
 
 	/*
@@ -2131,13 +2510,14 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	/*
 	 * Zero out result area for subquery_is_pushdown_safe, so that it can set
 	 * flags as needed while recursing.  In particular, we need a workspace
-	 * for keeping track of unsafe-to-reference columns.  unsafeColumns[i]
-	 * will be set true if we find that output column i of the subquery is
-	 * unsafe to use in a pushed-down qual.
+	 * for keeping track of the reasons why columns are unsafe to reference.
+	 * These reasons are stored in the bits inside unsafeFlags[i] when we
+	 * discover reasons that column i of the subquery is unsafe to be used in
+	 * a pushed-down qual.
 	 */
 	memset(&safetyInfo, 0, sizeof(safetyInfo));
-	safetyInfo.unsafeColumns = (bool *)
-		palloc0((list_length(subquery->targetList) + 1) * sizeof(bool));
+	safetyInfo.unsafeFlags = (unsigned char *)
+		palloc0((list_length(subquery->targetList) + 1) * sizeof(unsigned char));
 
 	/*
 	 * If the subquery has the "security_barrier" flag, it means the subquery
@@ -2178,32 +2558,60 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		foreach(l, rel->baserestrictinfo)
 		{
 			RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
+			Node	   *clause = (Node *) rinfo->clause;
 
-			if (!rinfo->pseudoconstant &&
-				qual_is_pushdown_safe(subquery, rti, rinfo, &safetyInfo))
+			if (rinfo->pseudoconstant)
 			{
-				Node	   *clause = (Node *) rinfo->clause;
-
-				/* Push it down */
-				subquery_push_qual(subquery, rte, rti, clause);
-			}
-			else
-			{
-				/* Keep it in the upper query */
 				upperrestrictlist = lappend(upperrestrictlist, rinfo);
+				continue;
+			}
+
+			switch (qual_is_pushdown_safe(subquery, rti, rinfo, &safetyInfo))
+			{
+				case PUSHDOWN_SAFE:
+					/* Push it down */
+					subquery_push_qual(subquery, rte, rti, clause);
+					break;
+
+				case PUSHDOWN_WINDOWCLAUSE_RUNCOND:
+
+					/*
+					 * Since we can't push the qual down into the subquery,
+					 * check if it happens to reference a window function.  If
+					 * so then it might be useful to use for the WindowAgg's
+					 * runCondition.
+					 */
+					if (!subquery->hasWindowFuncs ||
+						check_and_push_window_quals(subquery, rte, rti, clause,
+													&run_cond_attrs))
+					{
+						/*
+						 * subquery has no window funcs or the clause is not a
+						 * suitable window run condition qual or it is, but
+						 * the original must also be kept in the upper query.
+						 */
+						upperrestrictlist = lappend(upperrestrictlist, rinfo);
+					}
+					break;
+
+				case PUSHDOWN_UNSAFE:
+					upperrestrictlist = lappend(upperrestrictlist, rinfo);
+					break;
 			}
 		}
 		rel->baserestrictinfo = upperrestrictlist;
 		/* We don't bother recomputing baserestrict_min_security */
 	}
 
-	pfree(safetyInfo.unsafeColumns);
+	pfree(safetyInfo.unsafeFlags);
 
 	/*
 	 * The upper query might not use all the subquery's output columns; if
-	 * not, we can simplify.
+	 * not, we can simplify.  Pass the attributes that were pushed down into
+	 * WindowAgg run conditions to ensure we don't accidentally think those
+	 * are unused.
 	 */
-	remove_unused_subquery_outputs(subquery, rel);
+	remove_unused_subquery_outputs(subquery, rel, run_cond_attrs);
 
 	/*
 	 * We can safely pass the outer tuple_fraction down to the subquery if the
@@ -2795,8 +3203,8 @@ generate_useful_gather_paths(PlannerInfo *root, RelOptInfo *rel, bool override_r
 			 * gather merge path for every subpath that has pathkeys present.
 			 *
 			 * But since the subpath is already sorted, we know we don't need
-			 * to consider adding a sort (other either kind) on top of it, so
-			 * we can continue here.
+			 * to consider adding a sort (full or incremental) on top of it,
+			 * so we can continue here.
 			 */
 			if (is_sorted)
 				continue;
@@ -3042,7 +3450,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			 * partial paths.  We'll do the same for the topmost scan/join rel
 			 * once we know the final targetlist (see grouping_planner).
 			 */
-			if (lev < levels_needed)
+			if (!bms_equal(rel->relids, root->all_baserels))
 				generate_useful_gather_paths(root, rel, false);
 
 			/* Find and save the cheapest paths for this rel */
@@ -3120,13 +3528,13 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
  *
  * In addition, we make several checks on the subquery's output columns to see
  * if it is safe to reference them in pushed-down quals.  If output column k
- * is found to be unsafe to reference, we set safetyInfo->unsafeColumns[k]
- * to true, but we don't reject the subquery overall since column k might not
- * be referenced by some/all quals.  The unsafeColumns[] array will be
- * consulted later by qual_is_pushdown_safe().  It's better to do it this way
- * than to make the checks directly in qual_is_pushdown_safe(), because when
- * the subquery involves set operations we have to check the output
- * expressions in each arm of the set op.
+ * is found to be unsafe to reference, we set the reason for that inside
+ * safetyInfo->unsafeFlags[k], but we don't reject the subquery overall since
+ * column k might not be referenced by some/all quals.  The unsafeFlags[]
+ * array will be consulted later by qual_is_pushdown_safe().  It's better to
+ * do it this way than to make the checks directly in qual_is_pushdown_safe(),
+ * because when the subquery involves set operations we have to check the
+ * output expressions in each arm of the set op.
  *
  * Note: pushing quals into a DISTINCT subquery is theoretically dubious:
  * we're effectively assuming that the quals cannot distinguish values that
@@ -3174,9 +3582,9 @@ subquery_is_pushdown_safe(Query *subquery, Query *topquery,
 
 	/*
 	 * If we're at a leaf query, check for unsafe expressions in its target
-	 * list, and mark any unsafe ones in unsafeColumns[].  (Non-leaf nodes in
-	 * setop trees have only simple Vars in their tlists, so no need to check
-	 * them.)
+	 * list, and mark any reasons why they're unsafe in unsafeFlags[].
+	 * (Non-leaf nodes in setop trees have only simple Vars in their tlists,
+	 * so no need to check them.)
 	 */
 	if (subquery->setOperations == NULL)
 		check_output_expressions(subquery, safetyInfo);
@@ -3247,9 +3655,9 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
  *
  * There are several cases in which it's unsafe to push down an upper-level
  * qual if it references a particular output column of a subquery.  We check
- * each output column of the subquery and set unsafeColumns[k] to true if
- * that column is unsafe for a pushed-down qual to reference.  The conditions
- * checked here are:
+ * each output column of the subquery and set flags in unsafeFlags[k] when we
+ * see that column is unsafe for a pushed-down qual to reference.  The
+ * conditions checked here are:
  *
  * 1. We must not push down any quals that refer to subselect outputs that
  * return sets, else we'd introduce functions-returning-sets into the
@@ -3273,7 +3681,9 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
  * every row of any one window partition, and totally excluding some
  * partitions will not change a window function's results for remaining
  * partitions.  (Again, this also requires nonvolatile quals, but
- * subquery_is_pushdown_safe handles that.)
+ * subquery_is_pushdown_safe handles that.).  Subquery columns marked as
+ * unsafe for this reason can still have WindowClause run conditions pushed
+ * down.
  */
 static void
 check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
@@ -3287,40 +3697,44 @@ check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
 		if (tle->resjunk)
 			continue;			/* ignore resjunk columns */
 
-		/* We need not check further if output col is already known unsafe */
-		if (safetyInfo->unsafeColumns[tle->resno])
-			continue;
-
 		/* Functions returning sets are unsafe (point 1) */
 		if (subquery->hasTargetSRFs &&
+			(safetyInfo->unsafeFlags[tle->resno] &
+			 UNSAFE_HAS_SET_FUNC) == 0 &&
 			expression_returns_set((Node *) tle->expr))
 		{
-			safetyInfo->unsafeColumns[tle->resno] = true;
+			safetyInfo->unsafeFlags[tle->resno] |= UNSAFE_HAS_SET_FUNC;
 			continue;
 		}
 
 		/* Volatile functions are unsafe (point 2) */
-		if (contain_volatile_functions((Node *) tle->expr))
+		if ((safetyInfo->unsafeFlags[tle->resno] &
+			 UNSAFE_HAS_VOLATILE_FUNC) == 0 &&
+			contain_volatile_functions((Node *) tle->expr))
 		{
-			safetyInfo->unsafeColumns[tle->resno] = true;
+			safetyInfo->unsafeFlags[tle->resno] |= UNSAFE_HAS_VOLATILE_FUNC;
 			continue;
 		}
 
 		/* If subquery uses DISTINCT ON, check point 3 */
 		if (subquery->hasDistinctOn &&
+			(safetyInfo->unsafeFlags[tle->resno] &
+			 UNSAFE_NOTIN_DISTINCTON_CLAUSE) == 0 &&
 			!targetIsInSortList(tle, InvalidOid, subquery->distinctClause))
 		{
 			/* non-DISTINCT column, so mark it unsafe */
-			safetyInfo->unsafeColumns[tle->resno] = true;
+			safetyInfo->unsafeFlags[tle->resno] |= UNSAFE_NOTIN_DISTINCTON_CLAUSE;
 			continue;
 		}
 
 		/* If subquery uses window functions, check point 4 */
 		if (subquery->hasWindowFuncs &&
+			(safetyInfo->unsafeFlags[tle->resno] &
+			 UNSAFE_NOTIN_DISTINCTON_CLAUSE) == 0 &&
 			!targetIsInAllPartitionLists(tle, subquery))
 		{
 			/* not present in all PARTITION BY clauses, so mark it unsafe */
-			safetyInfo->unsafeColumns[tle->resno] = true;
+			safetyInfo->unsafeFlags[tle->resno] |= UNSAFE_NOTIN_PARTITIONBY_CLAUSE;
 			continue;
 		}
 	}
@@ -3332,8 +3746,8 @@ check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
  * subquery columns that suffer no type coercions in the set operation.
  * Otherwise there are possible semantic gotchas.  So, we check the
  * component queries to see if any of them have output types different from
- * the top-level setop outputs.  unsafeColumns[k] is set true if column k
- * has different type in any component.
+ * the top-level setop outputs.  We set the UNSAFE_TYPE_MISMATCH bit in
+ * unsafeFlags[k] if column k has different type in any component.
  *
  * We don't have to care about typmods here: the only allowed difference
  * between set-op input and output typmods is input is a specific typmod
@@ -3341,7 +3755,7 @@ check_output_expressions(Query *subquery, pushdown_safety_info *safetyInfo)
  *
  * tlist is a subquery tlist.
  * colTypes is an OID list of the top-level setop's output column types.
- * safetyInfo->unsafeColumns[] is the result array.
+ * safetyInfo is the pushdown_safety_info to set unsafeFlags[] for.
  */
 static void
 compare_tlist_datatypes(List *tlist, List *colTypes,
@@ -3359,7 +3773,7 @@ compare_tlist_datatypes(List *tlist, List *colTypes,
 		if (colType == NULL)
 			elog(ERROR, "wrong number of tlist entries");
 		if (exprType((Node *) tle->expr) != lfirst_oid(colType))
-			safetyInfo->unsafeColumns[tle->resno] = true;
+			safetyInfo->unsafeFlags[tle->resno] |= UNSAFE_TYPE_MISMATCH;
 		colType = lnext(colTypes, colType);
 	}
 	if (colType != NULL)
@@ -3419,28 +3833,28 @@ targetIsInAllPartitionLists(TargetEntry *tle, Query *query)
  * 5. rinfo's clause must not refer to any subquery output columns that were
  * found to be unsafe to reference by subquery_is_pushdown_safe().
  */
-static bool
+static pushdown_safe_type
 qual_is_pushdown_safe(Query *subquery, Index rti, RestrictInfo *rinfo,
 					  pushdown_safety_info *safetyInfo)
 {
-	bool		safe = true;
+	pushdown_safe_type safe = PUSHDOWN_SAFE;
 	Node	   *qual = (Node *) rinfo->clause;
 	List	   *vars;
 	ListCell   *vl;
 
 	/* Refuse subselects (point 1) */
 	if (contain_subplans(qual))
-		return false;
+		return PUSHDOWN_UNSAFE;
 
 	/* Refuse volatile quals if we found they'd be unsafe (point 2) */
 	if (safetyInfo->unsafeVolatile &&
 		contain_volatile_functions((Node *) rinfo))
-		return false;
+		return PUSHDOWN_UNSAFE;
 
 	/* Refuse leaky quals if told to (point 3) */
 	if (safetyInfo->unsafeLeaky &&
 		contain_leaked_vars(qual))
-		return false;
+		return PUSHDOWN_UNSAFE;
 
 	/*
 	 * It would be unsafe to push down window function calls, but at least for
@@ -3469,7 +3883,7 @@ qual_is_pushdown_safe(Query *subquery, Index rti, RestrictInfo *rinfo,
 		 */
 		if (!IsA(var, Var))
 		{
-			safe = false;
+			safe = PUSHDOWN_UNSAFE;
 			break;
 		}
 
@@ -3481,7 +3895,7 @@ qual_is_pushdown_safe(Query *subquery, Index rti, RestrictInfo *rinfo,
 		 */
 		if (var->varno != rti)
 		{
-			safe = false;
+			safe = PUSHDOWN_UNSAFE;
 			break;
 		}
 
@@ -3491,15 +3905,26 @@ qual_is_pushdown_safe(Query *subquery, Index rti, RestrictInfo *rinfo,
 		/* Check point 4 */
 		if (var->varattno == 0)
 		{
-			safe = false;
+			safe = PUSHDOWN_UNSAFE;
 			break;
 		}
 
 		/* Check point 5 */
-		if (safetyInfo->unsafeColumns[var->varattno])
+		if (safetyInfo->unsafeFlags[var->varattno] != 0)
 		{
-			safe = false;
-			break;
+			if (safetyInfo->unsafeFlags[var->varattno] &
+				(UNSAFE_HAS_VOLATILE_FUNC | UNSAFE_HAS_SET_FUNC |
+				 UNSAFE_NOTIN_DISTINCTON_CLAUSE | UNSAFE_TYPE_MISMATCH))
+			{
+				safe = PUSHDOWN_UNSAFE;
+				break;
+			}
+			else
+			{
+				/* UNSAFE_NOTIN_PARTITIONBY_CLAUSE is ok for run conditions */
+				safe = PUSHDOWN_WINDOWCLAUSE_RUNCOND;
+				/* don't break, we might find another Var that's unsafe */
+			}
 		}
 	}
 
@@ -3601,15 +4026,27 @@ recurse_push_qual(Node *setOp, Query *topquery,
  * compute expressions, but because deletion of output columns might allow
  * optimizations such as join removal to occur within the subquery.
  *
+ * extra_used_attrs can be passed as non-NULL to mark any columns (offset by
+ * FirstLowInvalidHeapAttributeNumber) that we should not remove.  This
+ * parameter is modifed by the function, so callers must make a copy if they
+ * need to use the passed in Bitmapset after calling this function.
+ *
  * To avoid affecting column numbering in the targetlist, we don't physically
  * remove unused tlist entries, but rather replace their expressions with NULL
  * constants.  This is implemented by modifying subquery->targetList.
  */
 static void
-remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel)
+remove_unused_subquery_outputs(Query *subquery, RelOptInfo *rel,
+							   Bitmapset *extra_used_attrs)
 {
-	Bitmapset  *attrs_used = NULL;
+	Bitmapset  *attrs_used;
 	ListCell   *lc;
+
+	/*
+	 * Just point directly to extra_used_attrs. No need to bms_copy as none of
+	 * the current callers use the Bitmapset after calling this function.
+	 */
+	attrs_used = extra_used_attrs;
 
 	/*
 	 * Do nothing if subquery has UNION/INTERSECT/EXCEPT: in principle we

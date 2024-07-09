@@ -4,7 +4,7 @@
  *	  Lightweight lock manager
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/lwlock.h
@@ -118,7 +118,7 @@ typedef enum LWLockMode
 
 
 #ifdef LOCK_DEBUG
-extern bool Trace_lwlocks;
+extern PGDLLIMPORT bool Trace_lwlocks;
 #endif
 
 extern bool LWLockAcquire(LWLock *lock, LWLockMode mode);
@@ -198,6 +198,9 @@ typedef enum BuiltinTrancheIds
 	LWTRANCHE_SHARED_TIDBITMAP,
 	LWTRANCHE_PARALLEL_APPEND,
 	LWTRANCHE_PER_XACT_PREDICATE_LIST,
+	LWTRANCHE_PGSTATS_DSA,
+	LWTRANCHE_PGSTATS_HASH,
+	LWTRANCHE_PGSTATS_DATA,
 	LWTRANCHE_FIRST_USER_DEFINED
 }			BuiltinTrancheIds;
 

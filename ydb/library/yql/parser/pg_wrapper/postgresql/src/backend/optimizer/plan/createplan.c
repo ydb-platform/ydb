@@ -5,7 +5,7 @@
  *	  Planning is complete, we just need to convert the selected
  *	  Path into a Plan.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,7 +16,6 @@
  */
 #include "postgres.h"
 
-#include <limits.h>
 #include <math.h>
 
 #include "access/sysattr.h"
@@ -82,7 +81,7 @@ static List *get_gating_quals(PlannerInfo *root, List *quals);
 static Plan *create_gating_plan(PlannerInfo *root, Path *path, Plan *plan,
 								List *gating_quals);
 static Plan *create_join_plan(PlannerInfo *root, JoinPath *best_path);
-static bool is_async_capable_plan(Plan *plan, Path *path);
+static bool mark_async_capable_plan(Plan *plan, Path *path);
 static Plan *create_append_plan(PlannerInfo *root, AppendPath *best_path,
 								int flags);
 static Plan *create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path,
@@ -288,6 +287,7 @@ static WindowAgg *make_windowagg(List *tlist, Index winref,
 								 int frameOptions, Node *startOffset, Node *endOffset,
 								 Oid startInRangeFunc, Oid endInRangeFunc,
 								 Oid inRangeColl, bool inRangeAsc, bool inRangeNullsFirst,
+								 List *runCondition, List *qual, bool topWindow,
 								 Plan *lefttree);
 static Group *make_group(List *tlist, List *qual, int numGroupCols,
 						 AttrNumber *grpColIdx, Oid *grpOperators, Oid *grpCollations,
@@ -310,7 +310,8 @@ static ModifyTable *make_modifytable(PlannerInfo *root, Plan *subplan,
 									 List *resultRelations,
 									 List *updateColnosLists,
 									 List *withCheckOptionLists, List *returningLists,
-									 List *rowMarks, OnConflictExpr *onconflict, int epqParam);
+									 List *rowMarks, OnConflictExpr *onconflict,
+									 List *mergeActionList, int epqParam);
 static GatherMerge *create_gather_merge_plan(PlannerInfo *root,
 											 GatherMergePath *best_path);
 
@@ -1109,14 +1110,37 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 }
 
 /*
- * is_async_capable_plan
- *		Check whether the Plan node created from a Path node is async-capable.
+ * mark_async_capable_plan
+ *		Check whether the Plan node created from a Path node is async-capable,
+ *		and if so, mark the Plan node as such and return true, otherwise
+ *		return false.
  */
 static bool
-is_async_capable_plan(Plan *plan, Path *path)
+mark_async_capable_plan(Plan *plan, Path *path)
 {
 	switch (nodeTag(path))
 	{
+		case T_SubqueryScanPath:
+			{
+				SubqueryScan *scan_plan = (SubqueryScan *) plan;
+
+				/*
+				 * If the generated plan node includes a gating Result node,
+				 * we can't execute it asynchronously.
+				 */
+				if (IsA(plan, Result))
+					return false;
+
+				/*
+				 * If a SubqueryScan node atop of an async-capable plan node
+				 * is deletable, consider it as async-capable.
+				 */
+				if (trivial_subqueryscan(scan_plan) &&
+					mark_async_capable_plan(scan_plan->subplan,
+											((SubqueryScanPath *) path)->subpath))
+					break;
+				return false;
+			}
 		case T_ForeignPath:
 			{
 				FdwRoutine *fdwroutine = path->parent->fdwroutine;
@@ -1131,13 +1155,33 @@ is_async_capable_plan(Plan *plan, Path *path)
 				Assert(fdwroutine != NULL);
 				if (fdwroutine->IsForeignPathAsyncCapable != NULL &&
 					fdwroutine->IsForeignPathAsyncCapable((ForeignPath *) path))
-					return true;
+					break;
+				return false;
 			}
-			break;
+		case T_ProjectionPath:
+
+			/*
+			 * If the generated plan node includes a Result node for the
+			 * projection, we can't execute it asynchronously.
+			 */
+			if (IsA(plan, Result))
+				return false;
+
+			/*
+			 * create_projection_plan() would have pulled up the subplan, so
+			 * check the capability using the subpath.
+			 */
+			if (mark_async_capable_plan(plan,
+										((ProjectionPath *) path)->subpath))
+				return true;
+			return false;
 		default:
-			break;
+			return false;
 	}
-	return false;
+
+	plan->async_capable = true;
+
+	return true;
 }
 
 /*
@@ -1300,14 +1344,14 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
 			}
 		}
 
-		subplans = lappend(subplans, subplan);
-
 		/* If needed, check to see if subplan can be executed asynchronously */
-		if (consider_async && is_async_capable_plan(subplan, subpath))
+		if (consider_async && mark_async_capable_plan(subplan, subpath))
 		{
-			subplan->async_capable = true;
+			Assert(subplan->async_capable);
 			++nasyncplans;
 		}
+
+		subplans = lappend(subplans, subplan);
 	}
 
 	/*
@@ -2648,6 +2692,9 @@ create_windowagg_plan(PlannerInfo *root, WindowAggPath *best_path)
 						  wc->inRangeColl,
 						  wc->inRangeAsc,
 						  wc->inRangeNullsFirst,
+						  wc->runCondition,
+						  best_path->qual,
+						  best_path->topwindow,
 						  subplan);
 
 	copy_generic_path_info(&plan->plan, (Path *) best_path);
@@ -2676,7 +2723,7 @@ create_setop_plan(PlannerInfo *root, SetOpPath *best_path, int flags)
 								  flags | CP_LABEL_TLIST);
 
 	/* Convert numGroups to long int --- but 'ware overflow! */
-	numGroups = (long) Min(best_path->numGroups, (double) LONG_MAX);
+	numGroups = clamp_cardinality_to_long(best_path->numGroups);
 
 	plan = make_setop(best_path->cmd,
 					  best_path->strategy,
@@ -2713,7 +2760,7 @@ create_recursiveunion_plan(PlannerInfo *root, RecursiveUnionPath *best_path)
 	tlist = build_path_tlist(root, &best_path->path);
 
 	/* Convert numGroups to long int --- but 'ware overflow! */
-	numGroups = (long) Min(best_path->numGroups, (double) LONG_MAX);
+	numGroups = clamp_cardinality_to_long(best_path->numGroups);
 
 	plan = make_recursive_union(tlist,
 								leftplan,
@@ -2782,6 +2829,7 @@ create_modifytable_plan(PlannerInfo *root, ModifyTablePath *best_path)
 							best_path->returningLists,
 							best_path->rowMarks,
 							best_path->onconflict,
+							best_path->mergeActionLists,
 							best_path->epqParam);
 
 	copy_generic_path_info(&plan->plan, &best_path->path);
@@ -2884,7 +2932,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
 							 scan_clauses,
 							 scan_relid);
 
-	copy_generic_path_info(&scan_plan->plan, best_path);
+	copy_generic_path_info(&scan_plan->scan.plan, best_path);
 
 	return scan_plan;
 }
@@ -4271,8 +4319,8 @@ create_nestloop_plan(PlannerInfo *root,
 	NestLoop   *join_plan;
 	Plan	   *outer_plan;
 	Plan	   *inner_plan;
-	List	   *tlist = build_path_tlist(root, &best_path->path);
-	List	   *joinrestrictclauses = best_path->joinrestrictinfo;
+	List	   *tlist = build_path_tlist(root, &best_path->jpath.path);
+	List	   *joinrestrictclauses = best_path->jpath.joinrestrictinfo;
 	List	   *joinclauses;
 	List	   *otherclauses;
 	Relids		outerrelids;
@@ -4280,13 +4328,13 @@ create_nestloop_plan(PlannerInfo *root,
 	Relids		saveOuterRels = root->curOuterRels;
 
 	/* NestLoop can project, so no need to be picky about child tlists */
-	outer_plan = create_plan_recurse(root, best_path->outerjoinpath, 0);
+	outer_plan = create_plan_recurse(root, best_path->jpath.outerjoinpath, 0);
 
 	/* For a nestloop, include outer relids in curOuterRels for inner side */
 	root->curOuterRels = bms_union(root->curOuterRels,
-								   best_path->outerjoinpath->parent->relids);
+								   best_path->jpath.outerjoinpath->parent->relids);
 
-	inner_plan = create_plan_recurse(root, best_path->innerjoinpath, 0);
+	inner_plan = create_plan_recurse(root, best_path->jpath.innerjoinpath, 0);
 
 	/* Restore curOuterRels */
 	bms_free(root->curOuterRels);
@@ -4297,10 +4345,10 @@ create_nestloop_plan(PlannerInfo *root,
 
 	/* Get the join qual clauses (in plain expression form) */
 	/* Any pseudoconstant clauses are ignored here */
-	if (IS_OUTER_JOIN(best_path->jointype))
+	if (IS_OUTER_JOIN(best_path->jpath.jointype))
 	{
 		extract_actual_join_clauses(joinrestrictclauses,
-									best_path->path.parent->relids,
+									best_path->jpath.path.parent->relids,
 									&joinclauses, &otherclauses);
 	}
 	else
@@ -4311,7 +4359,7 @@ create_nestloop_plan(PlannerInfo *root,
 	}
 
 	/* Replace any outer-relation variables with nestloop params */
-	if (best_path->path.param_info)
+	if (best_path->jpath.path.param_info)
 	{
 		joinclauses = (List *)
 			replace_nestloop_params(root, (Node *) joinclauses);
@@ -4323,7 +4371,7 @@ create_nestloop_plan(PlannerInfo *root,
 	 * Identify any nestloop parameters that should be supplied by this join
 	 * node, and remove them from root->curOuterParams.
 	 */
-	outerrelids = best_path->outerjoinpath->parent->relids;
+	outerrelids = best_path->jpath.outerjoinpath->parent->relids;
 	nestParams = identify_current_nestloop_params(root, outerrelids);
 
 	join_plan = make_nestloop(tlist,
@@ -4332,10 +4380,10 @@ create_nestloop_plan(PlannerInfo *root,
 							  nestParams,
 							  outer_plan,
 							  inner_plan,
-							  best_path->jointype,
-							  best_path->inner_unique);
+							  best_path->jpath.jointype,
+							  best_path->jpath.inner_unique);
 
-	copy_generic_path_info(&join_plan->join.plan, &best_path->path);
+	copy_generic_path_info(&join_plan->join.plan, &best_path->jpath.path);
 
 	return join_plan;
 }
@@ -4855,7 +4903,8 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
-		if (!bms_is_member(var->varno, root->curOuterRels))
+		if (IS_SPECIAL_VARNO(var->varno) ||
+			!bms_is_member(var->varno, root->curOuterRels))
 			return node;
 		/* Replace the Var with a nestloop Param */
 		return (Node *) replace_nestloop_param_var(root, var);
@@ -5419,13 +5468,13 @@ make_seqscan(List *qptlist,
 			 Index scanrelid)
 {
 	SeqScan    *node = makeNode(SeqScan);
-	Plan	   *plan = &node->plan;
+	Plan	   *plan = &node->scan.plan;
 
 	plan->targetlist = qptlist;
 	plan->qual = qpqual;
 	plan->lefttree = NULL;
 	plan->righttree = NULL;
-	node->scanrelid = scanrelid;
+	node->scan.scanrelid = scanrelid;
 
 	return node;
 }
@@ -5603,6 +5652,7 @@ make_subqueryscan(List *qptlist,
 	plan->righttree = NULL;
 	node->scan.scanrelid = scanrelid;
 	node->subplan = subplan;
+	node->scanstatus = SUBQUERY_SCAN_UNKNOWN;
 
 	return node;
 }
@@ -6503,7 +6553,7 @@ make_agg(List *tlist, List *qual,
 	long		numGroups;
 
 	/* Reduce to long, but 'ware overflow! */
-	numGroups = (long) Min(dNumGroups, (double) LONG_MAX);
+	numGroups = clamp_cardinality_to_long(dNumGroups);
 
 	node->aggstrategy = aggstrategy;
 	node->aggsplit = aggsplit;
@@ -6532,7 +6582,7 @@ make_windowagg(List *tlist, Index winref,
 			   int frameOptions, Node *startOffset, Node *endOffset,
 			   Oid startInRangeFunc, Oid endInRangeFunc,
 			   Oid inRangeColl, bool inRangeAsc, bool inRangeNullsFirst,
-			   Plan *lefttree)
+			   List *runCondition, List *qual, bool topWindow, Plan *lefttree)
 {
 	WindowAgg  *node = makeNode(WindowAgg);
 	Plan	   *plan = &node->plan;
@@ -6549,17 +6599,20 @@ make_windowagg(List *tlist, Index winref,
 	node->frameOptions = frameOptions;
 	node->startOffset = startOffset;
 	node->endOffset = endOffset;
+	node->runCondition = runCondition;
+	/* a duplicate of the above for EXPLAIN */
+	node->runConditionOrig = runCondition;
 	node->startInRangeFunc = startInRangeFunc;
 	node->endInRangeFunc = endInRangeFunc;
 	node->inRangeColl = inRangeColl;
 	node->inRangeAsc = inRangeAsc;
 	node->inRangeNullsFirst = inRangeNullsFirst;
+	node->topWindow = topWindow;
 
 	plan->targetlist = tlist;
 	plan->lefttree = lefttree;
 	plan->righttree = NULL;
-	/* WindowAgg nodes never have a qual clause */
-	plan->qual = NIL;
+	plan->qual = qual;
 
 	return node;
 }
@@ -6931,7 +6984,8 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 				 List *resultRelations,
 				 List *updateColnosLists,
 				 List *withCheckOptionLists, List *returningLists,
-				 List *rowMarks, OnConflictExpr *onconflict, int epqParam)
+				 List *rowMarks, OnConflictExpr *onconflict,
+				 List *mergeActionLists, int epqParam)
 {
 	ModifyTable *node = makeNode(ModifyTable);
 	List	   *fdw_private_list;
@@ -6939,9 +6993,10 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 	ListCell   *lc;
 	int			i;
 
-	Assert(operation == CMD_UPDATE ?
-		   list_length(resultRelations) == list_length(updateColnosLists) :
-		   updateColnosLists == NIL);
+	Assert(operation == CMD_MERGE ||
+		   (operation == CMD_UPDATE ?
+			list_length(resultRelations) == list_length(updateColnosLists) :
+			updateColnosLists == NIL));
 	Assert(withCheckOptionLists == NIL ||
 		   list_length(resultRelations) == list_length(withCheckOptionLists));
 	Assert(returningLists == NIL ||
@@ -6999,6 +7054,7 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 	node->withCheckOptionLists = withCheckOptionLists;
 	node->returningLists = returningLists;
 	node->rowMarks = rowMarks;
+	node->mergeActionLists = mergeActionLists;
 	node->epqParam = epqParam;
 
 	/*
@@ -7028,12 +7084,32 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 			RelOptInfo *resultRel = root->simple_rel_array[rti];
 
 			fdwroutine = resultRel->fdwroutine;
+
+			/*
+			 * MERGE is not currently supported for foreign tables and we
+			 * already checked when the table mentioned in the query is
+			 * foreign; but we can still get here if a partitioned table has a
+			 * foreign table as partition.  Disallow that now, to avoid an
+			 * uglier error message later.
+			 */
+			if (operation == CMD_MERGE && fdwroutine != NULL)
+			{
+				RangeTblEntry *rte = root->simple_rte_array[rti];
+
+				ereport(ERROR,
+						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("cannot execute MERGE on relation \"%s\"",
+							   get_rel_name(rte->relid)),
+						errdetail_relkind_not_supported(rte->relkind));
+			}
+
 		}
 		else
 		{
 			RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
 			Assert(rte->rtekind == RTE_RELATION);
+			Assert(operation != CMD_MERGE);
 			if (rte->relkind == RELKIND_FOREIGN_TABLE)
 				fdwroutine = GetFdwRoutineByRelId(rte->relid);
 			else
@@ -7098,6 +7174,10 @@ is_projection_capable_path(Path *path)
 		case T_MergeAppend:
 		case T_RecursiveUnion:
 			return false;
+		case T_CustomScan:
+			if (castNode(CustomPath, path)->flags & CUSTOMPATH_SUPPORT_PROJECTION)
+				return true;
+			return false;
 		case T_Append:
 
 			/*
@@ -7143,6 +7223,10 @@ is_projection_capable_plan(Plan *plan)
 		case T_Append:
 		case T_MergeAppend:
 		case T_RecursiveUnion:
+			return false;
+		case T_CustomScan:
+			if (((CustomScan *) plan)->flags & CUSTOMPATH_SUPPORT_PROJECTION)
+				return true;
 			return false;
 		case T_ProjectSet:
 

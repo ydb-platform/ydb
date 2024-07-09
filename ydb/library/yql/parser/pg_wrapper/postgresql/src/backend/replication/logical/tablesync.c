@@ -2,7 +2,7 @@
  * tablesync.c
  *	  PostgreSQL logical replication: initial table data synchronization
  *
- * Copyright (c) 2012-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/tablesync.c
@@ -96,6 +96,7 @@
 
 #include "access/table.h"
 #include "access/xact.h"
+#include "catalog/indexing.h"
 #include "catalog/pg_subscription_rel.h"
 #include "catalog/pg_type.h"
 #include "commands/copy.h"
@@ -110,14 +111,27 @@
 #include "replication/origin.h"
 #include "storage/ipc.h"
 #include "storage/lmgr.h"
+#include "utils/acl.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/rls.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 
-static __thread bool table_states_valid = false;
+typedef enum
+{
+	SYNC_TABLE_STATE_NEEDS_REBUILD,
+	SYNC_TABLE_STATE_REBUILD_STARTED,
+	SYNC_TABLE_STATE_VALID,
+} SyncingTablesState;
 
-__thread StringInfo	copybuf = NULL;
+static __thread SyncingTablesState table_states_validity = SYNC_TABLE_STATE_NEEDS_REBUILD;
+static __thread List *table_states_not_ready = NIL;
+static bool FetchTableStates(bool *started_tx);
+
+static __thread StringInfo copybuf = NULL;
 
 /*
  * Exit routine for synchronization worker.
@@ -133,7 +147,7 @@ finish_sync_worker(void)
 	if (IsTransactionState())
 	{
 		CommitTransactionCommand();
-		pgstat_report_stat(false);
+		pgstat_report_stat(true);
 	}
 
 	/* And flush all writes. */
@@ -263,7 +277,7 @@ wait_for_worker_state_change(char expected_state)
 void
 invalidate_syncing_table_states(Datum arg, int cacheid, uint32 hashvalue)
 {
-	table_states_valid = false;
+	table_states_validity = SYNC_TABLE_STATE_NEEDS_REBUILD;
 }
 
 /*
@@ -362,7 +376,6 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 		Oid			relid;
 		TimestampTz last_start_time;
 	};
-	static __thread List *table_states = NIL;
 	static __thread HTAB *last_start_times = NULL;
 	ListCell   *lc;
 	bool		started_tx = false;
@@ -370,42 +383,14 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 	Assert(!IsTransactionState());
 
 	/* We need up-to-date sync state info for subscription tables here. */
-	if (!table_states_valid)
-	{
-		MemoryContext oldctx;
-		List	   *rstates;
-		ListCell   *lc;
-		SubscriptionRelState *rstate;
-
-		/* Clean the old list. */
-		list_free_deep(table_states);
-		table_states = NIL;
-
-		StartTransactionCommand();
-		started_tx = true;
-
-		/* Fetch all non-ready tables. */
-		rstates = GetSubscriptionNotReadyRelations(MySubscription->oid);
-
-		/* Allocate the tracking info in a permanent memory context. */
-		oldctx = MemoryContextSwitchTo(CacheMemoryContext);
-		foreach(lc, rstates)
-		{
-			rstate = palloc(sizeof(SubscriptionRelState));
-			memcpy(rstate, lfirst(lc), sizeof(SubscriptionRelState));
-			table_states = lappend(table_states, rstate);
-		}
-		MemoryContextSwitchTo(oldctx);
-
-		table_states_valid = true;
-	}
+	FetchTableStates(&started_tx);
 
 	/*
 	 * Prepare a hash table for tracking last start times of workers, to avoid
 	 * immediate restarts.  We don't need it if there are no tables that need
 	 * syncing.
 	 */
-	if (table_states && !last_start_times)
+	if (table_states_not_ready && !last_start_times)
 	{
 		HASHCTL		ctl;
 
@@ -419,16 +404,38 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 	 * Clean up the hash table when we're done with all tables (just to
 	 * release the bit of memory).
 	 */
-	else if (!table_states && last_start_times)
+	else if (!table_states_not_ready && last_start_times)
 	{
 		hash_destroy(last_start_times);
 		last_start_times = NULL;
 	}
 
 	/*
+	 * Even when the two_phase mode is requested by the user, it remains as
+	 * 'pending' until all tablesyncs have reached READY state.
+	 *
+	 * When this happens, we restart the apply worker and (if the conditions
+	 * are still ok) then the two_phase tri-state will become 'enabled' at
+	 * that time.
+	 *
+	 * Note: If the subscription has no tables then leave the state as
+	 * PENDING, which allows ALTER SUBSCRIPTION ... REFRESH PUBLICATION to
+	 * work.
+	 */
+	if (MySubscription->twophasestate == LOGICALREP_TWOPHASE_STATE_PENDING &&
+		AllTablesyncsReady())
+	{
+		ereport(LOG,
+				(errmsg("logical replication apply worker for subscription \"%s\" will restart so that two_phase can be enabled",
+						MySubscription->name)));
+
+		proc_exit(0);
+	}
+
+	/*
 	 * Process all tables that are being synchronized.
 	 */
-	foreach(lc, table_states)
+	foreach(lc, table_states_not_ready)
 	{
 		SubscriptionRelState *rstate = (SubscriptionRelState *) lfirst(lc);
 
@@ -589,7 +596,7 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 	if (started_tx)
 	{
 		CommitTransactionCommand();
-		pgstat_report_stat(false);
+		pgstat_report_stat(true);
 	}
 }
 
@@ -701,19 +708,23 @@ copy_read_data(void *outbuf, int minread, int maxread)
 
 /*
  * Get information about remote relation in similar fashion the RELATION
- * message provides during replication.
+ * message provides during replication. This function also returns the relation
+ * qualifications to be used in the COPY command.
  */
 static void
 fetch_remote_table_info(char *nspname, char *relname,
-						LogicalRepRelation *lrel)
+						LogicalRepRelation *lrel, List **qual)
 {
 	WalRcvExecResult *res;
 	StringInfoData cmd;
 	TupleTableSlot *slot;
 	Oid			tableRow[] = {OIDOID, CHAROID, CHAROID};
-	Oid			attrRow[] = {TEXTOID, OIDOID, BOOLOID};
+	Oid			attrRow[] = {INT2OID, TEXTOID, OIDOID, BOOLOID};
+	Oid			qualRow[] = {TEXTOID};
 	bool		isnull;
 	int			natt;
+	ListCell   *lc;
+	Bitmapset  *included_cols = NULL;
 
 	lrel->nspname = nspname;
 	lrel->relname = relname;
@@ -754,10 +765,108 @@ fetch_remote_table_info(char *nspname, char *relname,
 	ExecDropSingleTupleTableSlot(slot);
 	walrcv_clear_result(res);
 
-	/* Now fetch columns. */
+
+	/*
+	 * Get column lists for each relation.
+	 *
+	 * We need to do this before fetching info about column names and types,
+	 * so that we can skip columns that should not be replicated.
+	 */
+	if (walrcv_server_version(LogRepWorkerWalRcvConn) >= 150000)
+	{
+		WalRcvExecResult *pubres;
+		TupleTableSlot *tslot;
+		Oid			attrsRow[] = {INT2VECTOROID};
+		StringInfoData pub_names;
+		initStringInfo(&pub_names);
+		foreach(lc, MySubscription->publications)
+		{
+			if (foreach_current_index(lc) > 0)
+				appendStringInfo(&pub_names, ", ");
+			appendStringInfoString(&pub_names, quote_literal_cstr(strVal(lfirst(lc))));
+		}
+
+		/*
+		 * Fetch info about column lists for the relation (from all the
+		 * publications).
+		 */
+		resetStringInfo(&cmd);
+		appendStringInfo(&cmd,
+						 "SELECT DISTINCT"
+						 "  (CASE WHEN (array_length(gpt.attrs, 1) = c.relnatts)"
+						 "   THEN NULL ELSE gpt.attrs END)"
+						 "  FROM pg_publication p,"
+						 "  LATERAL pg_get_publication_tables(p.pubname) gpt,"
+						 "  pg_class c"
+						 " WHERE gpt.relid = %u AND c.oid = gpt.relid"
+						 "   AND p.pubname IN ( %s )",
+						 lrel->remoteid,
+						 pub_names.data);
+
+		pubres = walrcv_exec(LogRepWorkerWalRcvConn, cmd.data,
+							 lengthof(attrsRow), attrsRow);
+
+		if (pubres->status != WALRCV_OK_TUPLES)
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_FAILURE),
+					 errmsg("could not fetch column list info for table \"%s.%s\" from publisher: %s",
+							nspname, relname, pubres->err)));
+
+		/*
+		 * We don't support the case where the column list is different for
+		 * the same table when combining publications. See comments atop
+		 * fetch_table_list. So there should be only one row returned.
+		 * Although we already checked this when creating the subscription, we
+		 * still need to check here in case the column list was changed after
+		 * creating the subscription and before the sync worker is started.
+		 */
+		if (tuplestore_tuple_count(pubres->tuplestore) > 1)
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("cannot use different column lists for table \"%s.%s\" in different publications",
+						   nspname, relname));
+
+		/*
+		 * Get the column list and build a single bitmap with the attnums.
+		 *
+		 * If we find a NULL value, it means all the columns should be
+		 * replicated.
+		 */
+		tslot = MakeSingleTupleTableSlot(pubres->tupledesc, &TTSOpsMinimalTuple);
+		if (tuplestore_gettupleslot(pubres->tuplestore, true, false, tslot))
+		{
+			Datum		cfval = slot_getattr(tslot, 1, &isnull);
+
+			if (!isnull)
+			{
+				ArrayType  *arr;
+				int			nelems;
+				int16	   *elems;
+
+				arr = DatumGetArrayTypeP(cfval);
+				nelems = ARR_DIMS(arr)[0];
+				elems = (int16 *) ARR_DATA_PTR(arr);
+
+				for (natt = 0; natt < nelems; natt++)
+					included_cols = bms_add_member(included_cols, elems[natt]);
+			}
+
+			ExecClearTuple(tslot);
+		}
+		ExecDropSingleTupleTableSlot(tslot);
+
+		walrcv_clear_result(pubres);
+
+		pfree(pub_names.data);
+	}
+
+	/*
+	 * Now fetch column names and types.
+	 */
 	resetStringInfo(&cmd);
 	appendStringInfo(&cmd,
-					 "SELECT a.attname,"
+					 "SELECT a.attnum,"
+					 "       a.attname,"
 					 "       a.atttypid,"
 					 "       a.attnum = ANY(i.indkey)"
 					 "  FROM pg_catalog.pg_attribute a"
@@ -785,16 +894,35 @@ fetch_remote_table_info(char *nspname, char *relname,
 	lrel->atttyps = palloc0(MaxTupleAttributeNumber * sizeof(Oid));
 	lrel->attkeys = NULL;
 
+	/*
+	 * Store the columns as a list of names.  Ignore those that are not
+	 * present in the column list, if there is one.
+	 */
 	natt = 0;
 	slot = MakeSingleTupleTableSlot(res->tupledesc, &TTSOpsMinimalTuple);
 	while (tuplestore_gettupleslot(res->tuplestore, true, false, slot))
 	{
-		lrel->attnames[natt] =
-			TextDatumGetCString(slot_getattr(slot, 1, &isnull));
+		char	   *rel_colname;
+		AttrNumber	attnum;
+
+		attnum = DatumGetInt16(slot_getattr(slot, 1, &isnull));
 		Assert(!isnull);
-		lrel->atttyps[natt] = DatumGetObjectId(slot_getattr(slot, 2, &isnull));
+
+		/* If the column is not in the column list, skip it. */
+		if (included_cols != NULL && !bms_is_member(attnum, included_cols))
+		{
+			ExecClearTuple(slot);
+			continue;
+		}
+
+		rel_colname = TextDatumGetCString(slot_getattr(slot, 2, &isnull));
 		Assert(!isnull);
-		if (DatumGetBool(slot_getattr(slot, 3, &isnull)))
+
+		lrel->attnames[natt] = rel_colname;
+		lrel->atttyps[natt] = DatumGetObjectId(slot_getattr(slot, 3, &isnull));
+		Assert(!isnull);
+
+		if (DatumGetBool(slot_getattr(slot, 4, &isnull)))
 			lrel->attkeys = bms_add_member(lrel->attkeys, natt);
 
 		/* Should never happen. */
@@ -809,6 +937,92 @@ fetch_remote_table_info(char *nspname, char *relname,
 	lrel->natts = natt;
 
 	walrcv_clear_result(res);
+
+	/*
+	 * Get relation's row filter expressions. DISTINCT avoids the same
+	 * expression of a table in multiple publications from being included
+	 * multiple times in the final expression.
+	 *
+	 * We need to copy the row even if it matches just one of the
+	 * publications, so we later combine all the quals with OR.
+	 *
+	 * For initial synchronization, row filtering can be ignored in following
+	 * cases:
+	 *
+	 * 1) one of the subscribed publications for the table hasn't specified
+	 * any row filter
+	 *
+	 * 2) one of the subscribed publications has puballtables set to true
+	 *
+	 * 3) one of the subscribed publications is declared as TABLES IN SCHEMA
+	 * that includes this relation
+	 */
+	if (walrcv_server_version(LogRepWorkerWalRcvConn) >= 150000)
+	{
+		StringInfoData pub_names;
+
+		/* Build the pubname list. */
+		initStringInfo(&pub_names);
+		foreach(lc, MySubscription->publications)
+		{
+			char	   *pubname = strVal(lfirst(lc));
+
+			if (foreach_current_index(lc) > 0)
+				appendStringInfoString(&pub_names, ", ");
+
+			appendStringInfoString(&pub_names, quote_literal_cstr(pubname));
+		}
+
+		/* Check for row filters. */
+		resetStringInfo(&cmd);
+		appendStringInfo(&cmd,
+						 "SELECT DISTINCT pg_get_expr(gpt.qual, gpt.relid)"
+						 "  FROM pg_publication p,"
+						 "  LATERAL pg_get_publication_tables(p.pubname) gpt"
+						 " WHERE gpt.relid = %u"
+						 "   AND p.pubname IN ( %s )",
+						 lrel->remoteid,
+						 pub_names.data);
+
+		res = walrcv_exec(LogRepWorkerWalRcvConn, cmd.data, 1, qualRow);
+
+		if (res->status != WALRCV_OK_TUPLES)
+			ereport(ERROR,
+					(errmsg("could not fetch table WHERE clause info for table \"%s.%s\" from publisher: %s",
+							nspname, relname, res->err)));
+
+		/*
+		 * Multiple row filter expressions for the same table will be combined
+		 * by COPY using OR. If any of the filter expressions for this table
+		 * are null, it means the whole table will be copied. In this case it
+		 * is not necessary to construct a unified row filter expression at
+		 * all.
+		 */
+		slot = MakeSingleTupleTableSlot(res->tupledesc, &TTSOpsMinimalTuple);
+		while (tuplestore_gettupleslot(res->tuplestore, true, false, slot))
+		{
+			Datum		rf = slot_getattr(slot, 1, &isnull);
+
+			if (!isnull)
+				*qual = lappend(*qual, makeString(TextDatumGetCString(rf)));
+			else
+			{
+				/* Ignore filters and cleanup as necessary. */
+				if (*qual)
+				{
+					list_free_deep(*qual);
+					*qual = NIL;
+				}
+				break;
+			}
+
+			ExecClearTuple(slot);
+		}
+		ExecDropSingleTupleTableSlot(slot);
+
+		walrcv_clear_result(res);
+	}
+
 	pfree(cmd.data);
 }
 
@@ -822,6 +1036,7 @@ copy_table(Relation rel)
 {
 	LogicalRepRelMapEntry *relmapentry;
 	LogicalRepRelation lrel;
+	List	   *qual = NIL;
 	WalRcvExecResult *res;
 	StringInfoData cmd;
 	CopyFromState cstate;
@@ -830,7 +1045,7 @@ copy_table(Relation rel)
 
 	/* Get the publisher relation info. */
 	fetch_remote_table_info(get_namespace_name(RelationGetNamespace(rel)),
-							RelationGetRelationName(rel), &lrel);
+							RelationGetRelationName(rel), &lrel, &qual);
 
 	/* Put the relation into relmap. */
 	logicalrep_relmap_update(&lrel);
@@ -841,14 +1056,42 @@ copy_table(Relation rel)
 
 	/* Start copy on the publisher. */
 	initStringInfo(&cmd);
-	if (lrel.relkind == RELKIND_RELATION)
-		appendStringInfo(&cmd, "COPY %s TO STDOUT",
+
+	/* Regular table with no row filter */
+	if (lrel.relkind == RELKIND_RELATION && qual == NIL)
+	{
+		appendStringInfo(&cmd, "COPY %s",
 						 quote_qualified_identifier(lrel.nspname, lrel.relname));
+
+		/* If the table has columns, then specify the columns */
+		if (lrel.natts)
+		{
+			appendStringInfoString(&cmd, " (");
+
+			/*
+			 * XXX Do we need to list the columns in all cases? Maybe we're
+			 * replicating all columns?
+			 */
+			for (int i = 0; i < lrel.natts; i++)
+			{
+				if (i > 0)
+					appendStringInfoString(&cmd, ", ");
+
+				appendStringInfoString(&cmd, quote_identifier(lrel.attnames[i]));
+			}
+
+			appendStringInfoString(&cmd, ")");
+		}
+
+		appendStringInfo(&cmd, " TO STDOUT");
+	}
 	else
 	{
 		/*
-		 * For non-tables, we need to do COPY (SELECT ...), but we can't just
-		 * do SELECT * because we need to not copy generated columns.
+		 * For non-tables and tables with row filters, we need to do COPY
+		 * (SELECT ...), but we can't just do SELECT * because we need to not
+		 * copy generated columns. For tables with any row filters, build a
+		 * SELECT query with OR'ed row filters for COPY.
 		 */
 		appendStringInfoString(&cmd, "COPY (SELECT ");
 		for (int i = 0; i < lrel.natts; i++)
@@ -857,8 +1100,33 @@ copy_table(Relation rel)
 			if (i < lrel.natts - 1)
 				appendStringInfoString(&cmd, ", ");
 		}
-		appendStringInfo(&cmd, " FROM %s) TO STDOUT",
-						 quote_qualified_identifier(lrel.nspname, lrel.relname));
+
+		appendStringInfoString(&cmd, " FROM ");
+
+		/*
+		 * For regular tables, make sure we don't copy data from a child that
+		 * inherits the named table as those will be copied separately.
+		 */
+		if (lrel.relkind == RELKIND_RELATION)
+			appendStringInfoString(&cmd, "ONLY ");
+
+		appendStringInfoString(&cmd, quote_qualified_identifier(lrel.nspname, lrel.relname));
+		/* list of OR'ed filters */
+		if (qual != NIL)
+		{
+			ListCell   *lc;
+			char	   *q = strVal(linitial(qual));
+
+			appendStringInfo(&cmd, " WHERE %s", q);
+			for_each_from(lc, qual, 1)
+			{
+				q = strVal(lfirst(lc));
+				appendStringInfo(&cmd, " OR %s", q);
+			}
+			list_free_deep(qual);
+		}
+
+		appendStringInfoString(&cmd, ") TO STDOUT");
 	}
 	res = walrcv_exec(LogRepWorkerWalRcvConn, cmd.data, 0, NULL);
 	pfree(cmd.data);
@@ -937,6 +1205,7 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 	char		relstate;
 	XLogRecPtr	relstate_lsn;
 	Relation	rel;
+	AclResult	aclresult;
 	WalRcvExecResult *res;
 	char		originname[NAMEDATALEN];
 	RepOriginId originid;
@@ -1043,7 +1312,7 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 							   MyLogicalRepWorker->relstate,
 							   MyLogicalRepWorker->relstate_lsn);
 	CommitTransactionCommand();
-	pgstat_report_stat(false);
+	pgstat_report_stat(true);
 
 	StartTransactionCommand();
 
@@ -1054,6 +1323,31 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 	 * RowExclusiveLock when remapping remote relation id to local one.
 	 */
 	rel = table_open(MyLogicalRepWorker->relid, RowExclusiveLock);
+
+	/*
+	 * Check that our table sync worker has permission to insert into the
+	 * target table.
+	 */
+	aclresult = pg_class_aclcheck(RelationGetRelid(rel), GetUserId(),
+								  ACL_INSERT);
+	if (aclresult != ACLCHECK_OK)
+		aclcheck_error(aclresult,
+					   get_relkind_objtype(rel->rd_rel->relkind),
+					   RelationGetRelationName(rel));
+
+	/*
+	 * COPY FROM does not honor RLS policies.  That is not a problem for
+	 * subscriptions owned by roles with BYPASSRLS privilege (or superuser,
+	 * who has it implicitly), but other roles should not be able to
+	 * circumvent RLS.  Disallow logical replication into RLS enabled
+	 * relations for such roles.
+	 */
+	if (check_enable_rls(RelationGetRelid(rel), InvalidOid, false) == RLS_ENABLED)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("user \"%s\" cannot replicate into relation with row-level security enabled: \"%s\"",
+						GetUserNameFromId(GetUserId(), true),
+						RelationGetRelationName(rel))));
 
 	/*
 	 * Start a transaction in the remote node in REPEATABLE READ mode.  This
@@ -1075,7 +1369,8 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 	 * for the catchup phase after COPY is done, so tell it to use the
 	 * snapshot to make the final data consistent.
 	 */
-	walrcv_create_slot(LogRepWorkerWalRcvConn, slotname, false /* permanent */ ,
+	walrcv_create_slot(LogRepWorkerWalRcvConn,
+					   slotname, false /* permanent */ , false /* two_phase */ ,
 					   CRS_USE_SNAPSHOT, origin_startpos);
 
 	/*
@@ -1160,4 +1455,145 @@ copy_table_done:
 	 */
 	wait_for_worker_state_change(SUBREL_STATE_CATCHUP);
 	return slotname;
+}
+
+/*
+ * Common code to fetch the up-to-date sync state info into the static lists.
+ *
+ * Returns true if subscription has 1 or more tables, else false.
+ *
+ * Note: If this function started the transaction (indicated by the parameter)
+ * then it is the caller's responsibility to commit it.
+ */
+static bool
+FetchTableStates(bool *started_tx)
+{
+	static __thread bool has_subrels = false;
+
+	*started_tx = false;
+
+	if (table_states_validity != SYNC_TABLE_STATE_VALID)
+	{
+		MemoryContext oldctx;
+		List	   *rstates;
+		ListCell   *lc;
+		SubscriptionRelState *rstate;
+
+		table_states_validity = SYNC_TABLE_STATE_REBUILD_STARTED;
+
+		/* Clean the old lists. */
+		list_free_deep(table_states_not_ready);
+		table_states_not_ready = NIL;
+
+		if (!IsTransactionState())
+		{
+			StartTransactionCommand();
+			*started_tx = true;
+		}
+
+		/* Fetch all non-ready tables. */
+		rstates = GetSubscriptionNotReadyRelations(MySubscription->oid);
+
+		/* Allocate the tracking info in a permanent memory context. */
+		oldctx = MemoryContextSwitchTo(CacheMemoryContext);
+		foreach(lc, rstates)
+		{
+			rstate = palloc(sizeof(SubscriptionRelState));
+			memcpy(rstate, lfirst(lc), sizeof(SubscriptionRelState));
+			table_states_not_ready = lappend(table_states_not_ready, rstate);
+		}
+		MemoryContextSwitchTo(oldctx);
+
+		/*
+		 * Does the subscription have tables?
+		 *
+		 * If there were not-READY relations found then we know it does. But
+		 * if table_state_not_ready was empty we still need to check again to
+		 * see if there are 0 tables.
+		 */
+		has_subrels = (list_length(table_states_not_ready) > 0) ||
+			HasSubscriptionRelations(MySubscription->oid);
+
+		/*
+		 * If the subscription relation cache has been invalidated since we
+		 * entered this routine, we still use and return the relations we just
+		 * finished constructing, to avoid infinite loops, but we leave the
+		 * table states marked as stale so that we'll rebuild it again on next
+		 * access. Otherwise, we mark the table states as valid.
+		 */
+		if (table_states_validity == SYNC_TABLE_STATE_REBUILD_STARTED)
+			table_states_validity = SYNC_TABLE_STATE_VALID;
+	}
+
+	return has_subrels;
+}
+
+/*
+ * If the subscription has no tables then return false.
+ *
+ * Otherwise, are all tablesyncs READY?
+ *
+ * Note: This function is not suitable to be called from outside of apply or
+ * tablesync workers because MySubscription needs to be already initialized.
+ */
+bool
+AllTablesyncsReady(void)
+{
+	bool		started_tx = false;
+	bool		has_subrels = false;
+
+	/* We need up-to-date sync state info for subscription tables here. */
+	has_subrels = FetchTableStates(&started_tx);
+
+	if (started_tx)
+	{
+		CommitTransactionCommand();
+		pgstat_report_stat(true);
+	}
+
+	/*
+	 * Return false when there are no tables in subscription or not all tables
+	 * are in ready state; true otherwise.
+	 */
+	return has_subrels && list_length(table_states_not_ready) == 0;
+}
+
+/*
+ * Update the two_phase state of the specified subscription in pg_subscription.
+ */
+void
+UpdateTwoPhaseState(Oid suboid, char new_state)
+{
+	Relation	rel;
+	HeapTuple	tup;
+	bool		nulls[Natts_pg_subscription];
+	bool		replaces[Natts_pg_subscription];
+	Datum		values[Natts_pg_subscription];
+
+	Assert(new_state == LOGICALREP_TWOPHASE_STATE_DISABLED ||
+		   new_state == LOGICALREP_TWOPHASE_STATE_PENDING ||
+		   new_state == LOGICALREP_TWOPHASE_STATE_ENABLED);
+
+	rel = table_open(SubscriptionRelationId, RowExclusiveLock);
+	tup = SearchSysCacheCopy1(SUBSCRIPTIONOID, ObjectIdGetDatum(suboid));
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR,
+			 "cache lookup failed for subscription oid %u",
+			 suboid);
+
+	/* Form a new tuple. */
+	memset(values, 0, sizeof(values));
+	memset(nulls, false, sizeof(nulls));
+	memset(replaces, false, sizeof(replaces));
+
+	/* And update/set two_phase state */
+	values[Anum_pg_subscription_subtwophasestate - 1] = CharGetDatum(new_state);
+	replaces[Anum_pg_subscription_subtwophasestate - 1] = true;
+
+	tup = heap_modify_tuple(tup, RelationGetDescr(rel),
+							values, nulls, replaces);
+	CatalogTupleUpdate(rel, &tup->t_self, tup);
+
+	heap_freetuple(tup);
+	table_close(rel, RowExclusiveLock);
 }

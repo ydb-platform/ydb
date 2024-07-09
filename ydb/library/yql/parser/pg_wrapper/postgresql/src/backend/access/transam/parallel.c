@@ -3,7 +3,7 @@
  * parallel.c
  *	  Infrastructure for launching parallel workers
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -14,7 +14,6 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
 #include "access/nbtree.h"
 #include "access/parallel.h"
 #include "access/session.h"
@@ -25,6 +24,7 @@
 #include "catalog/pg_enum.h"
 #include "catalog/storage.h"
 #include "commands/async.h"
+#include "commands/vacuum.h"
 #include "executor/execParallel.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
@@ -1318,7 +1318,7 @@ ParallelWorkerMain(Datum main_arg)
 	/* Arrange to signal the leader if we exit. */
 	ParallelLeaderPid = fps->parallel_leader_pid;
 	ParallelLeaderBackendId = fps->parallel_leader_backend_id;
-	on_shmem_exit(ParallelWorkerShutdown, (Datum) 0);
+	before_shmem_exit(ParallelWorkerShutdown, PointerGetDatum(seg));
 
 	/*
 	 * Now we can find and attach to the error queue provided for us.  That's
@@ -1531,6 +1531,16 @@ ParallelWorkerReportLastRecEnd(XLogRecPtr last_xlog_end)
  * This guards against the case where we exit uncleanly without sending an
  * ErrorResponse to the leader, for example because some code calls proc_exit
  * directly.
+ *
+ * Also explicitly detach from dsm segment so that subsystems using
+ * on_dsm_detach() have a chance to send stats before the stats subsystem is
+ * shut down as part of a before_shmem_exit() hook.
+ *
+ * One might think this could instead be solved by carefully ordering the
+ * attaching to dsm segments, so that the pgstats segments get detached from
+ * later than the parallel query one. That turns out to not work because the
+ * stats hash might need to grow which can cause new segments to be allocated,
+ * which then will be detached from earlier.
  */
 static void
 ParallelWorkerShutdown(int code, Datum arg)
@@ -1538,6 +1548,8 @@ ParallelWorkerShutdown(int code, Datum arg)
 	SendProcSignal(ParallelLeaderPid,
 				   PROCSIG_PARALLEL_MESSAGE,
 				   ParallelLeaderBackendId);
+
+	dsm_detach((dsm_segment *) DatumGetPointer(arg));
 }
 
 /*

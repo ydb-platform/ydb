@@ -3,7 +3,7 @@
  * indexcmds.c
  *	  POSTGRES define and remove index code.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -132,7 +132,7 @@ typedef struct ReindexErrorInfo
  *		prospective index definition, such that the existing index storage
  *		could become the storage of the new index, avoiding a rebuild.
  *
- * 'heapRelation': the relation the index would apply to.
+ * 'oldId': the OID of the existing index
  * 'accessMethodName': name of the AM to use.
  * 'attributeList': a list of IndexElem specifying columns and expressions
  *		to index on.
@@ -228,7 +228,7 @@ CheckIndexCompatible(Oid oldId,
 	 * ii_NumIndexKeyAttrs with same value.
 	 */
 	indexInfo = makeIndexInfo(numberOfAttributes, numberOfAttributes,
-							  accessMethodId, NIL, NIL, false, false, false);
+							  accessMethodId, NIL, NIL, false, false, false, false);
 	typeObjectId = (Oid *) palloc(numberOfAttributes * sizeof(Oid));
 	collationObjectId = (Oid *) palloc(numberOfAttributes * sizeof(Oid));
 	classObjectId = (Oid *) palloc(numberOfAttributes * sizeof(Oid));
@@ -675,22 +675,12 @@ DefineIndex(Oid relationId,
 		case RELKIND_PARTITIONED_TABLE:
 			/* OK */
 			break;
-		case RELKIND_FOREIGN_TABLE:
-
-			/*
-			 * Custom error message for FOREIGN TABLE since the term is close
-			 * to a regular table and can confuse the user.
-			 */
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("cannot create index on foreign table \"%s\"",
-							RelationGetRelationName(rel))));
-			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("\"%s\" is not a table or materialized view",
-							RelationGetRelationName(rel))));
+					 errmsg("cannot create index on relation \"%s\"",
+							RelationGetRelationName(rel)),
+					 errdetail_relkind_not_supported(rel->rd_rel->relkind)));
 			break;
 	}
 
@@ -902,6 +892,7 @@ DefineIndex(Oid relationId,
 							  NIL,	/* expressions, NIL for now */
 							  make_ands_implicit((Expr *) stmt->whereClause),
 							  stmt->unique,
+							  stmt->nulls_not_distinct,
 							  !concurrent,
 							  concurrent);
 
@@ -2351,7 +2342,7 @@ makeObjectName(const char *name1, const char *name2, const char *label)
 	Assert(availchars > 0);		/* else caller chose a bad label */
 
 	/*
-	 * If we must truncate,  preferentially truncate the longer name. This
+	 * If we must truncate, preferentially truncate the longer name. This
 	 * logic could be expressed without a loop, but it's simple and obvious as
 	 * a loop.
 	 */
@@ -3086,8 +3077,7 @@ reindex_error_callback(void *arg)
 {
 	ReindexErrorInfo *errinfo = (ReindexErrorInfo *) arg;
 
-	Assert(errinfo->relkind == RELKIND_PARTITIONED_INDEX ||
-		   errinfo->relkind == RELKIND_PARTITIONED_TABLE);
+	Assert(RELKIND_HAS_PARTITIONS(errinfo->relkind));
 
 	if (errinfo->relkind == RELKIND_PARTITIONED_TABLE)
 		errcontext("while reindexing partitioned table \"%s.%s\"",
@@ -3116,8 +3106,7 @@ ReindexPartitions(Oid relid, ReindexParams *params, bool isTopLevel)
 	ErrorContextCallback errcallback;
 	ReindexErrorInfo errinfo;
 
-	Assert(relkind == RELKIND_PARTITIONED_INDEX ||
-		   relkind == RELKIND_PARTITIONED_TABLE);
+	Assert(RELKIND_HAS_PARTITIONS(relkind));
 
 	/*
 	 * Check if this runs in a transaction block, with an error callback to
@@ -3250,8 +3239,7 @@ ReindexMultipleInternal(List *relids, ReindexParams *params)
 		 * Partitioned tables and indexes can never be processed directly, and
 		 * a list of their leaves should be built first.
 		 */
-		Assert(relkind != RELKIND_PARTITIONED_INDEX &&
-			   relkind != RELKIND_PARTITIONED_TABLE);
+		Assert(!RELKIND_HAS_PARTITIONS(relkind));
 
 		if ((params->options & REINDEXOPT_CONCURRENTLY) != 0 &&
 			relpersistence != RELPERSISTENCE_TEMP)

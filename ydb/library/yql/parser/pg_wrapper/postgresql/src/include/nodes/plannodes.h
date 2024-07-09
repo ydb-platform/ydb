@@ -4,7 +4,7 @@
  *	  definitions for query plan nodes
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/plannodes.h
@@ -19,6 +19,7 @@
 #include "lib/stringinfo.h"
 #include "nodes/bitmapset.h"
 #include "nodes/lockoptions.h"
+#include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
 
 
@@ -43,7 +44,7 @@ typedef struct PlannedStmt
 {
 	NodeTag		type;
 
-	CmdType		commandType;	/* select|insert|update|delete|utility */
+	CmdType		commandType;	/* select|insert|update|delete|merge|utility */
 
 	uint64		queryId;		/* query identifier (copied from Query) */
 
@@ -65,7 +66,7 @@ typedef struct PlannedStmt
 
 	List	   *rtable;			/* list of RangeTblEntry nodes */
 
-	/* rtable indexes of target relations for INSERT/UPDATE/DELETE */
+	/* rtable indexes of target relations for INSERT/UPDATE/DELETE/MERGE */
 	List	   *resultRelations;	/* integer list of RT indexes, or NIL */
 
 	List	   *appendRelations;	/* list of AppendRelInfo nodes */
@@ -120,7 +121,7 @@ typedef struct Plan
 	/*
 	 * planner's estimate of result size of this plan step
 	 */
-	double		plan_rows;		/* number of rows plan is expected to emit */
+	Cardinality plan_rows;		/* number of rows plan is expected to emit */
 	int			plan_width;		/* average row width in bytes */
 
 	/*
@@ -209,7 +210,7 @@ typedef struct ProjectSet
  * partition root or appendrel RTE, which is not otherwise mentioned in the
  * plan.  Otherwise rootRelation is zero.  However, nominalRelation will
  * always be set, as it's the rel that EXPLAIN should claim is the
- * INSERT/UPDATE/DELETE target.
+ * INSERT/UPDATE/DELETE/MERGE target.
  *
  * Note that rowMarks and epqParam are presumed to be valid for all the
  * table(s); they can't contain any info that varies across tables.
@@ -218,7 +219,7 @@ typedef struct ProjectSet
 typedef struct ModifyTable
 {
 	Plan		plan;
-	CmdType		operation;		/* INSERT, UPDATE, or DELETE */
+	CmdType		operation;		/* INSERT, UPDATE, DELETE, or MERGE */
 	bool		canSetTag;		/* do we set the command tag/es_processed? */
 	Index		nominalRelation;	/* Parent RT index for use of EXPLAIN */
 	Index		rootRelation;	/* Root RT index, if partitioned/inherited */
@@ -238,6 +239,8 @@ typedef struct ModifyTable
 	Node	   *onConflictWhere;	/* WHERE for ON CONFLICT UPDATE */
 	Index		exclRelRTI;		/* RTI of the EXCLUDED pseudo relation */
 	List	   *exclRelTlist;	/* tlist of the EXCLUDED pseudo relation */
+	List	   *mergeActionLists;	/* per-target-table lists of actions for
+									 * MERGE */
 } ModifyTable;
 
 struct PartitionPruneInfo;		/* forward reference to struct below */
@@ -349,7 +352,10 @@ typedef struct Scan
  *		sequential scan node
  * ----------------
  */
-typedef Scan SeqScan;
+typedef struct SeqScan
+{
+	Scan		scan;
+} SeqScan;
 
 /* ----------------
  *		table sample scan node
@@ -447,10 +453,10 @@ typedef struct IndexOnlyScan
 	Scan		scan;
 	Oid			indexid;		/* OID of index to scan */
 	List	   *indexqual;		/* list of index quals (usually OpExprs) */
+	List	   *recheckqual;	/* index quals in recheckable form */
 	List	   *indexorderby;	/* list of index ORDER BY exprs */
 	List	   *indextlist;		/* TargetEntry list describing index's cols */
 	ScanDirection indexorderdir;	/* forward or backward or don't care */
-	List	   *recheckqual;	/* index quals in recheckable form */
 } IndexOnlyScan;
 
 /* ----------------
@@ -531,16 +537,28 @@ typedef struct TidRangeScan
  * relation, we make this a descendant of Scan anyway for code-sharing
  * purposes.
  *
+ * SubqueryScanStatus caches the trivial_subqueryscan property of the node.
+ * SUBQUERY_SCAN_UNKNOWN means not yet determined.  This is only used during
+ * planning.
+ *
  * Note: we store the sub-plan in the type-specific subplan field, not in
  * the generic lefttree field as you might expect.  This is because we do
  * not want plan-tree-traversal routines to recurse into the subplan without
  * knowing that they are changing Query contexts.
  * ----------------
  */
+typedef enum SubqueryScanStatus
+{
+	SUBQUERY_SCAN_UNKNOWN,
+	SUBQUERY_SCAN_TRIVIAL,
+	SUBQUERY_SCAN_NONTRIVIAL
+} SubqueryScanStatus;
+
 typedef struct SubqueryScan
 {
 	Scan		scan;
 	Plan	   *subplan;
+	SubqueryScanStatus scanstatus;
 } SubqueryScan;
 
 /* ----------------
@@ -818,7 +836,7 @@ typedef struct Memoize
 	uint32		est_entries;	/* The maximum number of entries that the
 								 * planner expects will fit in the cache, or 0
 								 * if unknown */
-	Bitmapset   *keyparamids;	/* paramids from param_exprs */
+	Bitmapset  *keyparamids;	/* paramids from param_exprs */
 } Memoize;
 
 /* ----------------
@@ -910,12 +928,16 @@ typedef struct WindowAgg
 	int			frameOptions;	/* frame_clause options, see WindowDef */
 	Node	   *startOffset;	/* expression for starting bound, if any */
 	Node	   *endOffset;		/* expression for ending bound, if any */
+	List	   *runCondition;	/* qual to help short-circuit execution */
+	List	   *runConditionOrig;	/* runCondition for display in EXPLAIN */
 	/* these fields are used with RANGE offset PRECEDING/FOLLOWING: */
 	Oid			startInRangeFunc;	/* in_range function for startOffset */
 	Oid			endInRangeFunc; /* in_range function for endOffset */
 	Oid			inRangeColl;	/* collation for in_range tests */
 	bool		inRangeAsc;		/* use ASC sort order for in_range tests? */
 	bool		inRangeNullsFirst;	/* nulls sort first for in_range tests? */
+	bool		topWindow;		/* false for all apart from the WindowAgg
+								 * that's closest to the root of the plan */
 } WindowAgg;
 
 /* ----------------
@@ -993,7 +1015,7 @@ typedef struct Hash
 	AttrNumber	skewColumn;		/* outer join key's column #, or zero */
 	bool		skewInherit;	/* is outer join rel an inheritance tree? */
 	/* all other info is in the parent HashJoin node */
-	double		rows_total;		/* estimate total rows if parallel_aware */
+	Cardinality rows_total;		/* estimate total rows if parallel_aware */
 } Hash;
 
 /* ----------------
@@ -1068,7 +1090,7 @@ typedef struct Limit
  * doing a separate remote query to lock each selected row is usually pretty
  * unappealing, so early locking remains a credible design choice for FDWs.
  *
- * When doing UPDATE, DELETE, or SELECT FOR UPDATE/SHARE, we have to uniquely
+ * When doing UPDATE/DELETE/MERGE/SELECT FOR UPDATE/SHARE, we have to uniquely
  * identify all the source rows, not only those from the target relations, so
  * that we can perform EvalPlanQual rechecking at need.  For plain tables we
  * can just fetch the TID, much as for a target relation; this case is
@@ -1097,7 +1119,7 @@ typedef enum RowMarkType
  * PlanRowMark -
  *	   plan-time representation of FOR [KEY] UPDATE/SHARE clauses
  *
- * When doing UPDATE, DELETE, or SELECT FOR UPDATE/SHARE, we create a separate
+ * When doing UPDATE/DELETE/MERGE/SELECT FOR UPDATE/SHARE, we create a separate
  * PlanRowMark node for each non-target relation in the query.  Relations that
  * are not specified as FOR UPDATE/SHARE are marked ROW_MARK_REFERENCE (if
  * regular tables or supported foreign tables) or ROW_MARK_COPY (if not).
@@ -1307,5 +1329,22 @@ typedef struct PlanInvalItem
 	int			cacheId;		/* a syscache ID, see utils/syscache.h */
 	uint32		hashValue;		/* hash value of object's cache lookup key */
 } PlanInvalItem;
+
+/*
+ * MonotonicFunction
+ *
+ * Allows the planner to track monotonic properties of functions.  A function
+ * is monotonically increasing if a subsequent call cannot yield a lower value
+ * than the previous call.  A monotonically decreasing function cannot yield a
+ * higher value on subsequent calls, and a function which is both must return
+ * the same value on each call.
+ */
+typedef enum MonotonicFunction
+{
+	MONOTONICFUNC_NONE = 0,
+	MONOTONICFUNC_INCREASING = (1 << 0),
+	MONOTONICFUNC_DECREASING = (1 << 1),
+	MONOTONICFUNC_BOTH = MONOTONICFUNC_INCREASING | MONOTONICFUNC_DECREASING
+} MonotonicFunction;
 
 #endif							/* PLANNODES_H */

@@ -3,7 +3,7 @@
  * spell.c
  *		Normalizing word with ISpell
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  * Ispell dictionary
  * -----------------
@@ -1601,7 +1601,8 @@ MergeAffix(IspellDict *Conf, int a1, int a2)
 	else if (*Conf->AffixData[a2] == '\0')
 		return a1;
 
-	while (Conf->nAffixData + 1 >= Conf->lenAffixData)
+	/* Double the size of AffixData if there's not enough space */
+	if (Conf->nAffixData + 1 >= Conf->lenAffixData)
 	{
 		Conf->lenAffixData *= 2;
 		Conf->AffixData = (char **) repalloc(Conf->AffixData,

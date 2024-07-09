@@ -169,6 +169,7 @@ TExecFunc arrow_pg_opclass_is_visible() { return MakeIndirectExec<true, true>(&p
 TExecFunc arrow_pg_operator_is_visible() { return MakeIndirectExec<true, true>(&pg_operator_is_visible); }
 TExecFunc arrow_pg_opfamily_is_visible() { return MakeIndirectExec<true, true>(&pg_opfamily_is_visible); }
 TExecFunc arrow_pg_stat_clear_snapshot() { return MakeIndirectExec<false, true>(&pg_stat_clear_snapshot); }
+TExecFunc arrow_pg_stat_force_next_flush() { return MakeIndirectExec<false, true>(&pg_stat_force_next_flush); }
 TExecFunc arrow_pg_stat_get_analyze_count() { return MakeIndirectExec<true, true>(&pg_stat_get_analyze_count); }
 TExecFunc arrow_pg_stat_get_archiver() { return MakeIndirectExec<false, false>(&pg_stat_get_archiver); }
 TExecFunc arrow_pg_stat_get_autoanalyze_count() { return MakeIndirectExec<true, true>(&pg_stat_get_autoanalyze_count); }
@@ -240,7 +241,9 @@ TExecFunc arrow_pg_stat_get_last_vacuum_time() { return MakeIndirectExec<true, t
 TExecFunc arrow_pg_stat_get_live_tuples() { return MakeIndirectExec<true, true>(&pg_stat_get_live_tuples); }
 TExecFunc arrow_pg_stat_get_mod_since_analyze() { return MakeIndirectExec<true, true>(&pg_stat_get_mod_since_analyze); }
 TExecFunc arrow_pg_stat_get_numscans() { return MakeIndirectExec<true, true>(&pg_stat_get_numscans); }
+TExecFunc arrow_pg_stat_get_replication_slot() { return MakeIndirectExec<true, false>(&pg_stat_get_replication_slot); }
 TExecFunc arrow_pg_stat_get_snapshot_timestamp() { return MakeIndirectExec<true, true>(&pg_stat_get_snapshot_timestamp); }
+TExecFunc arrow_pg_stat_get_subscription_stats() { return MakeIndirectExec<true, false>(&pg_stat_get_subscription_stats); }
 TExecFunc arrow_pg_stat_get_tuples_deleted() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_deleted); }
 TExecFunc arrow_pg_stat_get_tuples_fetched() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_fetched); }
 TExecFunc arrow_pg_stat_get_tuples_hot_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_tuples_hot_updated); }
@@ -261,12 +264,14 @@ TExecFunc arrow_pg_stat_get_xact_tuples_hot_updated() { return MakeIndirectExec<
 TExecFunc arrow_pg_stat_get_xact_tuples_inserted() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_inserted); }
 TExecFunc arrow_pg_stat_get_xact_tuples_returned() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_returned); }
 TExecFunc arrow_pg_stat_get_xact_tuples_updated() { return MakeIndirectExec<true, true>(&pg_stat_get_xact_tuples_updated); }
+TExecFunc arrow_pg_stat_have_stats() { return MakeIndirectExec<true, true>(&pg_stat_have_stats); }
 TExecFunc arrow_pg_stat_reset() { return MakeIndirectExec<false, true>(&pg_stat_reset); }
 TExecFunc arrow_pg_stat_reset_replication_slot() { return MakeIndirectExec<false, true>(&pg_stat_reset_replication_slot); }
 TExecFunc arrow_pg_stat_reset_shared() { return MakeIndirectExec<true, true>(&pg_stat_reset_shared); }
 TExecFunc arrow_pg_stat_reset_single_function_counters() { return MakeIndirectExec<true, true>(&pg_stat_reset_single_function_counters); }
 TExecFunc arrow_pg_stat_reset_single_table_counters() { return MakeIndirectExec<true, true>(&pg_stat_reset_single_table_counters); }
 TExecFunc arrow_pg_stat_reset_slru() { return MakeIndirectExec<false, true>(&pg_stat_reset_slru); }
+TExecFunc arrow_pg_stat_reset_subscription_stats() { return MakeIndirectExec<false, true>(&pg_stat_reset_subscription_stats); }
 TExecFunc arrow_pg_statistics_obj_is_visible() { return MakeIndirectExec<true, true>(&pg_statistics_obj_is_visible); }
 TExecFunc arrow_pg_table_is_visible() { return MakeIndirectExec<true, true>(&pg_table_is_visible); }
 TExecFunc arrow_pg_trigger_depth() { return MakeIndirectExec<true, true>(&pg_trigger_depth); }

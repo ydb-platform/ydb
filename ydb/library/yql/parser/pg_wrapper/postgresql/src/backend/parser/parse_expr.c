@@ -3,7 +3,7 @@
  * parse_expr.c
  *	  handle expressions in parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -130,13 +130,8 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 			break;
 
 		case T_A_Const:
-			{
-				A_Const    *con = (A_Const *) expr;
-				Value	   *val = &con->val;
-
-				result = (Node *) make_const(pstate, val, con->location);
-				break;
-			}
+			result = (Node *) make_const(pstate, (A_Const *) expr);
+			break;
 
 		case T_A_Indirection:
 			result = transformIndirection(pstate, (A_Indirection *) expr);
@@ -487,6 +482,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 		case EXPR_KIND_INSERT_TARGET:
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
+		case EXPR_KIND_MERGE_WHEN:
 		case EXPR_KIND_GROUP_BY:
 		case EXPR_KIND_ORDER_BY:
 		case EXPR_KIND_DISTINCT_ON:
@@ -855,7 +851,7 @@ exprIsNullConstant(Node *arg)
 	{
 		A_Const    *con = (A_Const *) arg;
 
-		if (con->val.type == T_Null)
+		if (con->isnull)
 			return true;
 	}
 	return false;
@@ -1631,7 +1627,7 @@ transformCaseExpr(ParseState *pstate, CaseExpr *c)
 	{
 		A_Const    *n = makeNode(A_Const);
 
-		n->val.type = T_Null;
+		n->isnull = true;
 		n->location = -1;
 		defresult = (Node *) n;
 	}
@@ -1693,8 +1689,8 @@ transformSubLink(ParseState *pstate, SubLink *sublink)
 
 	/*
 	 * Check to see if the sublink is in an invalid place within the query. We
-	 * allow sublinks everywhere in SELECT/INSERT/UPDATE/DELETE, but generally
-	 * not in utility statements.
+	 * allow sublinks everywhere in SELECT/INSERT/UPDATE/DELETE/MERGE, but
+	 * generally not in utility statements.
 	 */
 	err = NULL;
 	switch (pstate->p_expr_kind)
@@ -1722,6 +1718,7 @@ transformSubLink(ParseState *pstate, SubLink *sublink)
 		case EXPR_KIND_INSERT_TARGET:
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
+		case EXPR_KIND_MERGE_WHEN:
 		case EXPR_KIND_GROUP_BY:
 		case EXPR_KIND_ORDER_BY:
 		case EXPR_KIND_DISTINCT_ON:
@@ -3057,6 +3054,8 @@ ParseExprKindName(ParseExprKind exprKind)
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
 			return "UPDATE";
+		case EXPR_KIND_MERGE_WHEN:
+			return "MERGE WHEN";
 		case EXPR_KIND_GROUP_BY:
 			return "GROUP BY";
 		case EXPR_KIND_ORDER_BY:

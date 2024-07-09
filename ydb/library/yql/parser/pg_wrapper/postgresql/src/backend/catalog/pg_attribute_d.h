@@ -3,7 +3,7 @@
  * pg_attribute_d.h
  *    Macro definitions for pg_attribute
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -20,6 +20,8 @@
 
 #define AttributeRelationId 1249
 #define AttributeRelation_Rowtype_Id 75
+#define AttributeRelidNameIndexId 2658
+#define AttributeRelidNumIndexId 2659
 
 #define Anum_pg_attribute_attrelid 1
 #define Anum_pg_attribute_attname 2

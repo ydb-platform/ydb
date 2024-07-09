@@ -4,7 +4,7 @@
  *	  POSTGRES buffer manager definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/bufmgr.h
@@ -65,16 +65,16 @@ struct SMgrRelationData;
 extern __thread PGDLLIMPORT int NBuffers;
 
 /* in bufmgr.c */
-extern __thread bool zero_damaged_pages;
-extern __thread int	bgwriter_lru_maxpages;
-extern __thread double bgwriter_lru_multiplier;
-extern __thread bool track_io_timing;
-extern __thread int	effective_io_concurrency;
-extern __thread int	maintenance_io_concurrency;
+extern __thread PGDLLIMPORT bool zero_damaged_pages;
+extern __thread PGDLLIMPORT int bgwriter_lru_maxpages;
+extern __thread PGDLLIMPORT double bgwriter_lru_multiplier;
+extern __thread PGDLLIMPORT bool track_io_timing;
+extern __thread PGDLLIMPORT int effective_io_concurrency;
+extern __thread PGDLLIMPORT int maintenance_io_concurrency;
 
-extern __thread int	checkpoint_flush_after;
-extern __thread int	backend_flush_after;
-extern __thread int	bgwriter_flush_after;
+extern __thread PGDLLIMPORT int checkpoint_flush_after;
+extern __thread PGDLLIMPORT int backend_flush_after;
+extern __thread PGDLLIMPORT int bgwriter_flush_after;
 
 /* in buf_init.c */
 extern __thread PGDLLIMPORT char *BufferBlocks;
@@ -184,7 +184,8 @@ extern Buffer ReadBufferExtended(Relation reln, ForkNumber forkNum,
 								 BufferAccessStrategy strategy);
 extern Buffer ReadBufferWithoutRelcache(RelFileNode rnode,
 										ForkNumber forkNum, BlockNumber blockNum,
-										ReadBufferMode mode, BufferAccessStrategy strategy);
+										ReadBufferMode mode, BufferAccessStrategy strategy,
+										bool permanent);
 extern void ReleaseBuffer(Buffer buffer);
 extern void UnlockReleaseBuffer(Buffer buffer);
 extern void MarkBufferDirty(Buffer buffer);
@@ -194,7 +195,6 @@ extern Buffer ReleaseAndReadBuffer(Buffer buffer, Relation relation,
 
 extern void InitBufferPool(void);
 extern void InitBufferPoolAccess(void);
-extern void InitBufferPoolBackend(void);
 extern void AtEOXact_Buffers(bool isCommit);
 extern void PrintBufferLeakWarning(Buffer buffer);
 extern void CheckPointBuffers(int flags);
@@ -204,6 +204,9 @@ extern BlockNumber RelationGetNumberOfBlocksInFork(Relation relation,
 extern void FlushOneBuffer(Buffer buffer);
 extern void FlushRelationBuffers(Relation rel);
 extern void FlushRelationsAllBuffers(struct SMgrRelationData **smgrs, int nrels);
+extern void CreateAndCopyRelationData(RelFileNode src_rnode,
+									  RelFileNode dst_rnode,
+									  bool permanent);
 extern void FlushDatabaseBuffers(Oid dbid);
 extern void DropRelFileNodeBuffers(struct SMgrRelationData *smgr_reln, ForkNumber *forkNum,
 								   int nforks, BlockNumber *firstDelBlock);

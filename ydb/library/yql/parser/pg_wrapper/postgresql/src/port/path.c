@@ -869,11 +869,7 @@ get_includeserver_path(const char *my_exec_path, char *ret_path)
 void
 get_lib_path(const char *my_exec_path, char *ret_path)
 {
-	char const * const nix_pglibdir = getenv("NIX_PGLIBDIR");
-	if(nix_pglibdir == NULL)
-		make_relative_path(ret_path, LIBDIR, PGBINDIR, my_exec_path);
-	else
-		make_relative_path(ret_path, nix_pglibdir, PGBINDIR, my_exec_path);
+	make_relative_path(ret_path, LIBDIR, PGBINDIR, my_exec_path);
 }
 
 /*
@@ -882,11 +878,7 @@ get_lib_path(const char *my_exec_path, char *ret_path)
 void
 get_pkglib_path(const char *my_exec_path, char *ret_path)
 {
-	char const * const nix_pglibdir = getenv("NIX_PGLIBDIR");
-	if(nix_pglibdir == NULL)
-		make_relative_path(ret_path, PKGLIBDIR, PGBINDIR, my_exec_path);
-	else
-		make_relative_path(ret_path, nix_pglibdir, PGBINDIR, my_exec_path);
+	make_relative_path(ret_path, PKGLIBDIR, PGBINDIR, my_exec_path);
 }
 
 /*

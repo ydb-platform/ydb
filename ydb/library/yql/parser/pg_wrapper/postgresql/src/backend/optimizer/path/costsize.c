@@ -60,7 +60,7 @@
  * values.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -71,6 +71,7 @@
 
 #include "postgres.h"
 
+#include <limits.h>
 #include <math.h>
 
 #include "access/amapi.h"
@@ -123,6 +124,7 @@ __thread double		cpu_index_tuple_cost = DEFAULT_CPU_INDEX_TUPLE_COST;
 __thread double		cpu_operator_cost = DEFAULT_CPU_OPERATOR_COST;
 __thread double		parallel_tuple_cost = DEFAULT_PARALLEL_TUPLE_COST;
 __thread double		parallel_setup_cost = DEFAULT_PARALLEL_SETUP_COST;
+__thread double		recursive_worktable_factor = DEFAULT_RECURSIVE_WORKTABLE_FACTOR;
 
 __thread int			effective_cache_size = DEFAULT_EFFECTIVE_CACHE_SIZE;
 
@@ -167,7 +169,7 @@ static bool cost_qual_eval_walker(Node *node, cost_qual_eval_context *context);
 static void get_restriction_qual_cost(PlannerInfo *root, RelOptInfo *baserel,
 									  ParamPathInfo *param_info,
 									  QualCost *qpqual_cost);
-static bool has_indexed_join_quals(NestPath *joinpath);
+static bool has_indexed_join_quals(NestPath *path);
 static double approx_tuple_count(PlannerInfo *root, JoinPath *path,
 								 List *quals);
 static double calc_joinrel_size_estimate(PlannerInfo *root,
@@ -212,6 +214,32 @@ clamp_row_est(double nrows)
 		nrows = rint(nrows);
 
 	return nrows;
+}
+
+/*
+ * clamp_cardinality_to_long
+ *		Cast a Cardinality value to a sane long value.
+ */
+long
+clamp_cardinality_to_long(Cardinality x)
+{
+	/*
+	 * Just for paranoia's sake, ensure we do something sane with negative or
+	 * NaN values.
+	 */
+	if (isnan(x))
+		return LONG_MAX;
+	if (x <= 0)
+		return 0;
+
+	/*
+	 * If "long" is 64 bits, then LONG_MAX cannot be represented exactly as a
+	 * double.  Casting it to double and back may well result in overflow due
+	 * to rounding, so avoid doing that.  We trust that any double value that
+	 * compares strictly less than "(double) LONG_MAX" will cast to a
+	 * representable "long" value.
+	 */
+	return (x < (double) LONG_MAX) ? (long) x : LONG_MAX;
 }
 
 
@@ -1394,6 +1422,7 @@ cost_subqueryscan(SubqueryScanPath *path, PlannerInfo *root,
 {
 	Cost		startup_cost;
 	Cost		run_cost;
+	List	   *qpquals;
 	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 
@@ -1401,11 +1430,24 @@ cost_subqueryscan(SubqueryScanPath *path, PlannerInfo *root,
 	Assert(baserel->relid > 0);
 	Assert(baserel->rtekind == RTE_SUBQUERY);
 
-	/* Mark the path with the correct row estimate */
+	/*
+	 * We compute the rowcount estimate as the subplan's estimate times the
+	 * selectivity of relevant restriction clauses.  In simple cases this will
+	 * come out the same as baserel->rows; but when dealing with parallelized
+	 * paths we must do it like this to get the right answer.
+	 */
 	if (param_info)
-		path->path.rows = param_info->ppi_rows;
+		qpquals = list_concat_copy(param_info->ppi_clauses,
+								   baserel->baserestrictinfo);
 	else
-		path->path.rows = baserel->rows;
+		qpquals = baserel->baserestrictinfo;
+
+	path->path.rows = clamp_row_est(path->subpath->rows *
+									clauselist_selectivity(root,
+														   qpquals,
+														   0,
+														   JOIN_INNER,
+														   NULL));
 
 	/*
 	 * Cost of path is cost of evaluating the subplan, plus cost of evaluating
@@ -1420,7 +1462,7 @@ cost_subqueryscan(SubqueryScanPath *path, PlannerInfo *root,
 
 	startup_cost = qpqual_cost.startup;
 	cpu_per_tuple = cpu_tuple_cost + qpqual_cost.per_tuple;
-	run_cost = cpu_per_tuple * baserel->tuples;
+	run_cost = cpu_per_tuple * path->subpath->rows;
 
 	/* tlist eval costs are paid per output row, not per tuple scanned */
 	startup_cost += path->path.pathtarget->cost.startup;
@@ -2978,8 +3020,8 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
 					JoinCostWorkspace *workspace,
 					JoinPathExtraData *extra)
 {
-	Path	   *outer_path = path->outerjoinpath;
-	Path	   *inner_path = path->innerjoinpath;
+	Path	   *outer_path = path->jpath.outerjoinpath;
+	Path	   *inner_path = path->jpath.innerjoinpath;
 	double		outer_path_rows = outer_path->rows;
 	double		inner_path_rows = inner_path->rows;
 	Cost		startup_cost = workspace->startup_cost;
@@ -2994,18 +3036,18 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
 	if (inner_path_rows <= 0)
 		inner_path_rows = 1;
 	/* Mark the path with the correct row estimate */
-	if (path->path.param_info)
-		path->path.rows = path->path.param_info->ppi_rows;
+	if (path->jpath.path.param_info)
+		path->jpath.path.rows = path->jpath.path.param_info->ppi_rows;
 	else
-		path->path.rows = path->path.parent->rows;
+		path->jpath.path.rows = path->jpath.path.parent->rows;
 
 	/* For partial paths, scale row estimate. */
-	if (path->path.parallel_workers > 0)
+	if (path->jpath.path.parallel_workers > 0)
 	{
-		double		parallel_divisor = get_parallel_divisor(&path->path);
+		double		parallel_divisor = get_parallel_divisor(&path->jpath.path);
 
-		path->path.rows =
-			clamp_row_est(path->path.rows / parallel_divisor);
+		path->jpath.path.rows =
+			clamp_row_est(path->jpath.path.rows / parallel_divisor);
 	}
 
 	/*
@@ -3018,7 +3060,7 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
 
 	/* cost of inner-relation source data (we already dealt with outer rel) */
 
-	if (path->jointype == JOIN_SEMI || path->jointype == JOIN_ANTI ||
+	if (path->jpath.jointype == JOIN_SEMI || path->jpath.jointype == JOIN_ANTI ||
 		extra->inner_unique)
 	{
 		/*
@@ -3136,17 +3178,17 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
 	}
 
 	/* CPU costs */
-	cost_qual_eval(&restrict_qual_cost, path->joinrestrictinfo, root);
+	cost_qual_eval(&restrict_qual_cost, path->jpath.joinrestrictinfo, root);
 	startup_cost += restrict_qual_cost.startup;
 	cpu_per_tuple = cpu_tuple_cost + restrict_qual_cost.per_tuple;
 	run_cost += cpu_per_tuple * ntuples;
 
 	/* tlist eval costs are paid per output row, not per tuple scanned */
-	startup_cost += path->path.pathtarget->cost.startup;
-	run_cost += path->path.pathtarget->cost.per_tuple * path->path.rows;
+	startup_cost += path->jpath.path.pathtarget->cost.startup;
+	run_cost += path->jpath.path.pathtarget->cost.per_tuple * path->jpath.path.rows;
 
-	path->path.startup_cost = startup_cost;
-	path->path.total_cost = startup_cost + run_cost;
+	path->jpath.path.startup_cost = startup_cost;
+	path->jpath.path.total_cost = startup_cost + run_cost;
 }
 
 /*
@@ -4777,8 +4819,9 @@ compute_semi_anti_join_factors(PlannerInfo *root,
  * expensive.
  */
 static bool
-has_indexed_join_quals(NestPath *joinpath)
+has_indexed_join_quals(NestPath *path)
 {
+	JoinPath   *joinpath = &path->jpath;
 	Relids		joinrelids = joinpath->path.parent->relids;
 	Path	   *innerpath = joinpath->innerjoinpath;
 	List	   *indexclauses;
@@ -5664,10 +5707,11 @@ set_cte_size_estimates(PlannerInfo *root, RelOptInfo *rel, double cte_rows)
 	if (rte->self_reference)
 	{
 		/*
-		 * In a self-reference, arbitrarily assume the average worktable size
-		 * is about 10 times the nonrecursive term's size.
+		 * In a self-reference, we assume the average worktable size is a
+		 * multiple of the nonrecursive term's size.  The best multiplier will
+		 * vary depending on query "fan-out", so make its value adjustable.
 		 */
-		rel->tuples = 10 * cte_rows;
+		rel->tuples = clamp_row_est(recursive_worktable_factor * cte_rows);
 	}
 	else
 	{
@@ -5966,7 +6010,8 @@ set_pathtarget_cost_width(PlannerInfo *root, PathTarget *target)
 			Assert(var->varlevelsup == 0);
 
 			/* Try to get data from RelOptInfo cache */
-			if (var->varno < root->simple_rel_array_size)
+			if (!IS_SPECIAL_VARNO(var->varno) &&
+				var->varno < root->simple_rel_array_size)
 			{
 				RelOptInfo *rel = root->simple_rel_array[var->varno];
 
@@ -6154,7 +6199,7 @@ compute_bitmap_pages(PlannerInfo *root, RelOptInfo *baserel, Path *bitmapqual,
 		exact_pages = heap_pages - lossy_pages;
 
 		/*
-		 * If there are lossy pages then recompute the  number of tuples
+		 * If there are lossy pages then recompute the number of tuples
 		 * processed by the bitmap heap node.  We assume here that the chance
 		 * of a given tuple coming from an exact page is the same as the
 		 * chance that a given page is exact.  This might not be true, but

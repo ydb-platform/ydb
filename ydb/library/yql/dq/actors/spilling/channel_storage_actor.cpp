@@ -141,7 +141,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[TEvError] " << msg.Message);
+        LOG_E("[TEvError] " << msg.Message);
 
         Error_.ConstructInPlace(msg.Message);
     }

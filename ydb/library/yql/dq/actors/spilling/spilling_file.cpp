@@ -102,7 +102,7 @@ private:
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
-        if (!Send(ClientActorId_, ev->Release().Release())) {
+        if (!Send(ClientActorId_, ev->Release().Release(), NActors::IEventHandle::FlagTrackDelivery)) {
             ClientLost();
         }
     }
@@ -114,13 +114,13 @@ private:
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
-        if (!Send(ClientActorId_, ev->Release().Release())) {
+        if (!Send(ClientActorId_, ev->Release().Release(), NActors::IEventHandle::FlagTrackDelivery)) {
             ClientLost();
         }
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
-        Send(ClientActorId_, ev->Release().Release());
+        Send(ClientActorId_, ev->Release().Release(), NActors::IEventHandle::FlagTrackDelivery);
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr& ev) {
@@ -131,7 +131,8 @@ private:
     }
 
     void HandleUndelivered() {
-        Send(ClientActorId_, new TEvDqSpilling::TEvError("Spilling Service not started"));
+        std::cerr << "MISHA NOT STARTED!!!\n";
+        Send(ClientActorId_, new TEvDqSpilling::TEvError("Spilling Service not started"), NActors::IEventHandle::FlagTrackDelivery);
     }
 
 private:
@@ -255,11 +256,11 @@ private:
 
     void HandleBroken(const TActorId& from) {
         LOG_E("Service is broken, send error to client " << from);
-        Send(from, new TEvDqSpilling::TEvError("Service not started"));
+        Send(from, new TEvDqSpilling::TEvError("Service not started"), NActors::IEventHandle::FlagTrackDelivery);
     }
 
     void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
-        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
+        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"), NActors::IEventHandle::FlagTrackDelivery);
     }
 
 private:
@@ -284,7 +285,7 @@ private:
         if (it != Files_.end()) {
             LOG_E("[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -367,7 +368,7 @@ private:
             LOG_E("[Write] File not found. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -377,7 +378,7 @@ private:
             LOG_E("[Write] File already closed. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -385,7 +386,7 @@ private:
             LOG_E("[Write] File size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"), NActors::IEventHandle::FlagTrackDelivery);
 
             Counters_->SpillingTooBigFileErrors->Inc();
             return;
@@ -395,7 +396,7 @@ private:
             LOG_E("[Write] Total size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"), NActors::IEventHandle::FlagTrackDelivery);
 
             Counters_->SpillingNoSpaceErrors->Inc();
             return;
@@ -487,7 +488,7 @@ private:
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error), NActors::IEventHandle::FlagTrackDelivery);
 
             fd.Ops.clear();
             CloseFile(it, fd.Error);
@@ -496,7 +497,7 @@ private:
 
         Counters_->SpillingWriteBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
+        Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId), NActors::IEventHandle::FlagTrackDelivery);
         RunNextOp(fd);
     }
 
@@ -508,7 +509,7 @@ private:
         if (it == Files_.end()) {
             LOG_E("[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -517,7 +518,7 @@ private:
         if (fd.CloseAt) {
             LOG_E("[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -525,7 +526,7 @@ private:
         if (partIt == fd.Parts.end()) {
             LOG_E("[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"), NActors::IEventHandle::FlagTrackDelivery);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Part not found";
@@ -539,7 +540,7 @@ private:
         if (blobIt == fp->Blobs.end()) {
             LOG_E("[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"), NActors::IEventHandle::FlagTrackDelivery);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Blob not found in the file part";
@@ -585,7 +586,7 @@ private:
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"), NActors::IEventHandle::FlagTrackDelivery);
             return;
         }
 
@@ -620,7 +621,7 @@ private:
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error), NActors::IEventHandle::FlagTrackDelivery);
 
             fd.Ops.clear();
             CloseFile(it, fd.Error);
@@ -629,7 +630,7 @@ private:
 
         Counters_->SpillingReadBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
+        Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)), NActors::IEventHandle::FlagTrackDelivery);
         RunNextOp(fd);
     }
 
@@ -709,7 +710,7 @@ private:
 
         }
 
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()));
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()), NActors::IEventHandle::FlagTrackDelivery);
     }
 
 private:
@@ -773,7 +774,7 @@ private:
             }
             resp->WorkTime = TInstant::Now() - now;
 
-            ActorSystem->Send(Service, resp.Release());
+            ActorSystem->Send(Service, resp.Release(), NActors::IEventHandle::FlagTrackDelivery);
         }
     };
 
@@ -814,7 +815,7 @@ private:
             }
             resp->WorkTime = TInstant::Now() - now;
 
-            ActorSystem->Send(Service, resp.Release());
+            ActorSystem->Send(Service, resp.Release(), NActors::IEventHandle::FlagTrackDelivery);
         }
     };
 
@@ -864,7 +865,7 @@ private:
             }
             resp->WorkTime = TInstant::Now() - now;
 
-            ActorSystem->Send(Service, resp.Release());
+            ActorSystem->Send(Service, resp.Release(), NActors::IEventHandle::FlagTrackDelivery);
         }
     };
 

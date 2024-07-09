@@ -24,12 +24,7 @@ DATA(
 )
 
 PEERDIR(
-    contrib/python/requests
-    contrib/python/tornado/tornado-4
-    ydb/tests/library
     ydb/tests/postgres_integrations/library
-    ydb/tests/oss/ydb_sdk_import
-    ydb/public/sdk/python
 )
 
 REQUIREMENTS(ram:10)

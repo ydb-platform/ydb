@@ -1,9 +1,11 @@
 from typing import List, Set, Optional
+import os
 from os import path
 
 import docker
-
 import pytest
+
+import yatest
 
 
 class IntegrationTests:
@@ -49,14 +51,30 @@ class IntegrationTests:
 
         client: docker.Client = docker.from_env()
 
+
         client.images.build(
             path = self._folder,
             tag=self._image_name,
             network_mode='host',
         )
-        logs = client.containers.run(
-            self._image_name,
-            auto_remove=True,
+
+        try:
+            exchange_folder=path.join(yatest.common.output_path(), "exchange")
+            os.mkdir(exchange_folder)
+        except FileExistsError:
+            pass
+
+        try:
+            test_result_folder=path.join(yatest.common.output_path(), "test-result")
+            os.mkdir(test_result_folder)
+        except FileExistsError:
+            pass
+
+        container = client.containers.create(
+            image=self._image_name,
+            # command="/docker-start.bash",
+            # detach=True,
+            # auto_remove=True,
             environment = [
                 "PGUSER=root",
                 "PGPASSWORD=1234",
@@ -65,23 +83,28 @@ class IntegrationTests:
                 "PGDATABASE=local",
                 "PQGOSSLTESTS=0",
                 "PQSSLCERTTEST_PATH=certs",
-                f"YDB_PG_TESTNAME={test_name}",
+                # f"YDB_PG_TESTNAME={test_name}",
             ],
             mounts = [
                 docker.types.Mount(
                     target="/exchange",
-                    source=path.join(self._folder, "exchange"),
+                    source=exchange_folder,
                     type="bind",
                 ),
                 docker.types.Mount(
                     target="/test-result",
-                    source=path.join(self._folder, "test-result"),
+                    source=test_result_folder,
                     type="bind",
                 ),
             ],
             network_mode='host',
         )
-        print(logs)
+        try:
+            container.start()
+            container.wait()
+            print(container.logs().decode())
+        finally:
+            container.remove()
 
 def _read_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:

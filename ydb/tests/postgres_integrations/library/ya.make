@@ -4,7 +4,7 @@ PY3_LIBRARY()
 ALL_PY_SRCS()
 
 PEERDIR(
-    contrib/docker
+    contrib/python/docker
     contrib/python/requests
     contrib/python/tornado/tornado-4
     ydb/tests/library

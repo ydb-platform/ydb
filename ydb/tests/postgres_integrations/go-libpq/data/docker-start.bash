@@ -34,6 +34,7 @@ echo "Start test"
 
 export SKIP_TESTS
 
+mkdir -p /test-result/raw
 PQTEST_BINARY_PARAMETERS=no /go-run-separate-tests.bash
 
 sed -e 's|classname=""|classname="golang-lib-pq"|' -i /test-result/raw/result.xml

@@ -174,7 +174,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(DatashardReplySize) {
         auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
 
         auto& queryLimits = *app.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(1'000'000'000);

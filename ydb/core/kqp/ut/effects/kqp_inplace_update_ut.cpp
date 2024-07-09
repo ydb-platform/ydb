@@ -70,7 +70,6 @@ void Test(
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()
@@ -400,7 +399,6 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
 
     // source read use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()

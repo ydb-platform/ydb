@@ -168,8 +168,8 @@ using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider, bool enableImmediateEffects)
-        : NYql::TKikimrTransactionContextBase(enableImmediateEffects)
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+        : NYql::TKikimrTransactionContextBase()
         , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
     {
@@ -269,7 +269,6 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (HasUncommittedChangesRead) {
-            YQL_ENSURE(EnableImmediateEffects);
             return !DeferredEffects.Empty();
         }
 
@@ -299,7 +298,6 @@ public:
 
     bool CanDeferEffects() const {
         if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(EnableImmediateEffects);
             return false;
         }
 
@@ -379,7 +377,7 @@ struct THash<NKikimr::NKqp::TTxId> {
 };
 
 namespace NKikimr::NKqp {
-    
+
 class TTransactionsCache {
     size_t MaxActiveSize;
     THashMap<TTxId, TIntrusivePtr<TKqpTransactionContext>, THash<NKikimr::NKqp::TTxId>> Active;

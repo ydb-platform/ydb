@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 }
             }
 
-            auto permissionsSettings = 
+            auto permissionsSettings =
                 NYdb::NScheme::TModifyPermissionsSettings()
                 .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", grantPermissions))
                 .AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", revokePermissions));
@@ -384,10 +384,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(QueryClientTimeout, EnableImmediateEffects) {
+    Y_UNIT_TEST(QueryClientTimeout) {
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        app.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(EnableImmediateEffects);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(app);
 
@@ -1459,8 +1458,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto client = kikimr.GetQueryClient();
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        
-        { 
+
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1623,7 +1622,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1676,7 +1675,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);

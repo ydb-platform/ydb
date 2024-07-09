@@ -1466,10 +1466,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        const auto& config = kikimr.GetTestServer().GetSettings().AppConfig;
-        auto& tableSettings = config->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         {
             auto tableBuilder = db.GetTableBuilder();
             tableBuilder
@@ -1541,8 +1537,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
             // KIKIMR-7997
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(),
-                useSchemeCacheMeta ? NYdb::EStatus::SCHEME_ERROR : NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
 
         {

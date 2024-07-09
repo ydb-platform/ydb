@@ -818,7 +818,6 @@ private:
         FORCE_VALUE(MkqlHeavyProgramMemoryLimit)
         FORCE_VALUE(QueryMemoryLimit)
         FORCE_VALUE(PublishStatisticsIntervalSec);
-        FORCE_VALUE(EnableInstantMkqlMemoryAlloc);
         FORCE_VALUE(MaxTotalChannelBuffersSize);
         FORCE_VALUE(MinChannelBufferSize);
 #undef FORCE_VALUE

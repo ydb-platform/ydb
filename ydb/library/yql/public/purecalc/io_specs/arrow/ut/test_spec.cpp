@@ -194,6 +194,40 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
 }
 
 
+Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
+    Y_UNIT_TEST(TestCount) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePullListProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec({NYT::TNode::CreateEntity()}),
+                "SELECT COUNT(*) FROM Input",
+                ETranslationMode::SQL
+            );
+
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
+
+            auto stream = program->Apply(&items);
+
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        }
+    }
+}
+
+
 Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
     Y_UNIT_TEST(TestSingleInput) {
         using namespace NYql::NPureCalc;

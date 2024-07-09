@@ -862,7 +862,7 @@ arrow::Status TProgramStep::ApplyProjection(std::shared_ptr<arrow::RecordBatch>&
             return arrow::Status::Invalid("Wrong projection column '" + column.GetColumnName() + "'.");
         }
     }
-    batch = NArrow::ExtractColumns(batch, std::make_shared<arrow::Schema>(std::move(fields)));
+    batch = NArrow::TColumnOperator().Adapt(batch, std::make_shared<arrow::Schema>(std::move(fields))).DetachResult();
     return arrow::Status::OK();
 }
 

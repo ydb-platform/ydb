@@ -1564,6 +1564,21 @@ TUserTable::TPtr TDataShard::AlterTableAddIndex(
     return tableInfo;
 }
 
+TUserTable::TPtr TDataShard::AlterTableSwitchIndexState(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion,
+    const TPathId& streamPathId, NKikimrSchemeOp::EIndexState state)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->SwitchIndexState(streamPathId, state);
+
+    // This isn't really necessary now, because no one rely on index state
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
 TUserTable::TPtr TDataShard::AlterTableDropIndex(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
@@ -1724,8 +1739,9 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(newPathId.OwnerId);
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
-        newTableInfo->Indexes[newPathId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
+        auto node = newTableInfo->Indexes.extract(prevPathId);
+        node.key() = newPathId;
+        newTableInfo->Indexes.insert(std::move(node));
     }
     newTableInfo->SetSchema(schema);
 
@@ -1779,21 +1795,13 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
         newTableInfo->Indexes.erase(oldPathId);
 
-        size_t id = 0;
-        bool found = false;
-        for (auto& indexDesc: *schema.MutableTableIndexes()) {
-            Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
-            auto pathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
-            if (oldPathId == pathId) {
-                found = true;
+        auto& indexes = *schema.MutableTableIndexes();
+        for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+            Y_ABORT_UNLESS(it->HasPathOwnerId() && it->HasLocalPathId());
+            if (oldPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+                indexes.erase(it);
                 break;
-            } else {
-                id++;
             }
-        }
-
-        if (found) {
-            schema.MutableTableIndexes()->DeleteSubrange(id, 1);
         }
     }
 
@@ -1812,12 +1820,12 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetPathOwnerId(remapNewId.OwnerId);
         indexDesc.SetLocalPathId(remapNewId.LocalPathId);
 
-        newTableInfo->Indexes[remapNewId] = newTableInfo->Indexes[prevPathId];
-        newTableInfo->Indexes.erase(prevPathId);
 
-        Y_ABORT_UNLESS(move.GetReMapIndex().HasDstName());
-        indexDesc.SetName(dstIndexName);
-        newTableInfo->Indexes[remapNewId].Name = dstIndexName;
+        auto node = newTableInfo->Indexes.extract(prevPathId);
+        node.key() = remapNewId;
+        auto it = newTableInfo->Indexes.insert(std::move(node)).position;
+
+        it->second.Rename(indexDesc, dstIndexName);
     }
 
     newTableInfo->SetSchema(schema);

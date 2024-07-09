@@ -22,7 +22,6 @@ struct TTestRunConfig {
     bool IsBad = false;
     bool IsErasureEncodeUserLog = false;
     ui32 BeforeTestSleepMs = 100;
-    bool UseT1ha0Hasher = KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING;
 };
 
 void Run(TVector<IActor*> tests, TTestRunConfig runCfg);

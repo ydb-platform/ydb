@@ -249,12 +249,19 @@ namespace NActors {
         }
         TDuration SetReschedulingDelay(TDuration delay);
         void SetLogBackend(const TAutoPtr<TLogBackend> logBackend);
+        void SetLogBackendFactory(std::function<TAutoPtr<TLogBackend>()> logBackendFactory);
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
         TIntrusivePtr<IMonotonicTimeProvider> GetMonotonicTimeProvider();
         TInstant GetCurrentTime() const;
         TMonotonic GetCurrentMonotonicTime() const;
-        void UpdateCurrentTime(TInstant newTime);
+        /**
+         * When `rewind` is true allows time to go backwards. This is unsafe,
+         * since both wallclock and monotonic times are currently linked and
+         * both go backwards, but it may be necessary for testing wallclock
+         * time oddities.
+         */
+        void UpdateCurrentTime(TInstant newTime, bool rewind = false);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, TActorSetupCmd cmd, ui32 nodeIndex = 0);
         virtual void Initialize();
@@ -654,6 +661,7 @@ namespace NActors {
         ui64 DispatcherRandomSeed;
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
+        std::function<TAutoPtr<TLogBackend>()> LogBackendFactory;
         bool NeedMonitoring;
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;

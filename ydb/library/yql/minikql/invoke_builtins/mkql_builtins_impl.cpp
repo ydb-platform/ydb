@@ -311,5 +311,294 @@ void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::E
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
 }
 
+arrow::Status ExecScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedUnaryScalarFuncPtr func,
+    bool tz, bool propagateTz) {
+    if (const auto& arg = batch.values.front(); !arg.scalar()->is_valid) {
+        *res = arrow::MakeNullScalar(AddTzType(propagateTz, typeGetter()));
+    } else {
+        const auto argTz = ExtractTz(tz, arg.scalar());
+        const auto valPtr = GetPrimitiveScalarValuePtr(*argTz);
+        auto resDatum = scalarGetter();
+        const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
+        func(valPtr, resPtr);
+        *res = WithTz(propagateTz, arg.scalar(), resDatum.scalar());
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedUnaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz, bool propagateTz) {
+    const auto& arg = batch.values.front();
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg.array(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+
+    const auto& arr = *ExtractTz(tz, arg.array());
+    auto length = arr.length;
+    const auto valPtr = arr.buffers[1]->data();
+    auto resPtr = resArr.buffers[1]->mutable_data();
+    func(valPtr, resPtr, length, arr.offset);
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz, bool propagateTz, size_t outputSizeOf,
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc) {
+    MKQL_ENSURE(batch.values.size() == 1, "Expected single argument");
+    const auto& arg = batch.values[0];
+    if (arg.is_scalar()) {
+        return ExecScalarImpl(batch, res, typeGetter, scalarGetter, scalarFunc, tz, propagateTz);
+    } else {
+        return ExecArrayImpl(kernelCtx, batch, res, arrayFunc, outputSizeOf, typeGetter, tz, propagateTz);
+    }
+}
+
+arrow::Status ExecScalarScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+        *res = arrow::MakeNullScalar(AddTzType(propagateTz, typeGetter()));
+    } else {
+        const auto arg1tz = ExtractTz(tz1, arg1.scalar());
+        const auto arg2tz = ExtractTz(tz2, arg2.scalar());
+        const auto val1Ptr = GetPrimitiveScalarValuePtr(*arg1tz);
+        const auto val2Ptr = GetPrimitiveScalarValuePtr(*arg2tz);
+        auto resDatum = scalarGetter();
+        const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
+        func(val1Ptr, val2Ptr, resPtr);
+        *res = WithTz(propagateTz, arg1.scalar(), arg2.scalar(), resDatum.scalar());
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecScalarArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.scalar(), arg2.array(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    if (arg1.scalar()->is_valid) {
+        const auto arg1tz = ExtractTz(tz1, arg1.scalar());
+        const auto val1Ptr = GetPrimitiveScalarValuePtr(*arg1tz);
+        const auto& arr2 = *ExtractTz(tz2, arg2.array());
+        auto length = arr2.length;
+        const auto val2Ptr = arr2.buffers[1]->data();
+        auto resPtr = resArr.buffers[1]->mutable_data();
+        func(val1Ptr, val2Ptr, resPtr, length, 0, arr2.offset);
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecArrayScalarImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.array(), arg2.scalar(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    if (arg2.scalar()->is_valid) {
+        const auto& arr1 = *ExtractTz(tz1, arg1.array());
+        auto length = arr1.length;
+        const auto val1Ptr = arr1.buffers[1]->data();
+        const auto arg2tz = ExtractTz(tz2, arg2.scalar());
+        const auto val2Ptr = GetPrimitiveScalarValuePtr(*arg2tz);
+        auto resPtr = resArr.buffers[1]->mutable_data();
+        func(val1Ptr, val2Ptr, resPtr, length, arr1.offset, 0);
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecArrayArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    const auto& arr1 = *ExtractTz(tz1, arg1.array());
+    const auto& arr2 = *ExtractTz(tz2, arg2.array());
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.array(), arg2.array(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
+    auto length = arr1.length;
+    const auto val1Ptr = arr1.buffers[1]->data();
+    const auto val2Ptr = arr2.buffers[1]->data();
+    auto resPtr = resArr.buffers[1]->mutable_data();
+    func(val1Ptr, val2Ptr, resPtr, length, arr1.offset, arr2.offset);
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecBinaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayFuncPtr arrayArrayFunc) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (arg1.is_scalar()) {
+        if (arg2.is_scalar()) {
+            return ExecScalarScalarImpl(batch, res, typeGetter, scalarGetter, scalarScalarFunc, tz1, tz2, propagateTz);
+        } else {
+            return ExecScalarArrayImpl(kernelCtx, batch, res, scalarArrayFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        }
+    } else {
+        if (arg2.is_scalar()) {
+            return ExecArrayScalarImpl(kernelCtx, batch, res, arrayScalarFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        } else {
+            return ExecArrayArrayImpl(kernelCtx, batch, res, arrayArrayFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        }
+    }
+}
+
+arrow::Status ExecScalarScalarOptImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarOptFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+        *res = arrow::MakeNullScalar(AddTzType(propagateTz, typeGetter()));
+    } else {
+        const auto arg1tz = ExtractTz(tz1, arg1.scalar());
+        const auto arg2tz = ExtractTz(tz2, arg2.scalar());
+        const auto val1Ptr = GetPrimitiveScalarValuePtr(*arg1tz);
+        const auto val2Ptr = GetPrimitiveScalarValuePtr(*arg2tz);
+        auto resDatum = scalarGetter();
+        const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
+        if (!func(val1Ptr, val2Ptr, resPtr)) {
+            *res = arrow::MakeNullScalar(AddTzType(propagateTz, typeGetter()));
+        } else {
+            *res = WithTz(propagateTz, arg1.scalar(), arg2.scalar(), resDatum.scalar());
+        }
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecScalarArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.scalar(), arg2.array(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    if (arg1.scalar()->is_valid) {
+        const auto arg1tz = ExtractTz(tz1, arg1.scalar());
+        const auto val1Ptr = GetPrimitiveScalarValuePtr(*arg1tz);
+        const auto& arr2 = *ExtractTz(tz2, arg2.array());
+        auto length = arr2.length;
+        const auto val2Ptr = arr2.buffers[1]->data();
+        const auto nullCount2 = arr2.GetNullCount();
+        const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
+        auto resPtr = resArr.buffers[1]->mutable_data();
+        auto resValid = res->array()->GetMutableValues<uint8_t>(0);
+        func(val1Ptr, nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
+    } else {
+        GetBitmap(resArr, 0).SetBitsTo(false);
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecArrayScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.array(), arg2.scalar(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    if (arg2.scalar()->is_valid) {
+        const auto& arr1 = *ExtractTz(tz1, arg1.array());
+        const auto val1Ptr = arr1.buffers[1]->data();
+        auto length = arr1.length;
+        const auto nullCount1 = arr1.GetNullCount();
+        const auto valid1 = (nullCount1 == 0) ? nullptr : arr1.GetValues<uint8_t>(0);
+        const auto arg2tz = ExtractTz(tz2, arg2.scalar());
+        const auto val2Ptr = GetPrimitiveScalarValuePtr(*arg2tz);
+        auto resPtr = resArr.buffers[1]->mutable_data();
+        auto resValid = res->array()->GetMutableValues<uint8_t>(0);
+        func(val1Ptr, valid1, val2Ptr, nullptr, resPtr, resValid, length, arr1.offset, 0);
+    } else {
+        GetBitmap(resArr, 0).SetBitsTo(false);
+    }
+
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecArrayArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    const auto& arr1 = *ExtractTz(tz1, arg1.array());
+    const auto& arr2 = *ExtractTz(tz2, arg2.array());
+    MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
+    auto length = arr1.length;
+    const auto val1Ptr = arr1.buffers[1]->data();
+    const auto nullCount1 = arr1.GetNullCount();
+    const auto valid1 = (nullCount1 == 0) ? nullptr : arr1.GetValues<uint8_t>(0);
+    const auto val2Ptr = arr2.buffers[1]->data();
+    const auto nullCount2 = arr2.GetNullCount();
+    const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
+    auto& resArr = *CopyTzImpl(res->array(), propagateTz, arg1.array(), arg2.array(), kernelCtx->memory_pool(),
+        outputSizeOf, outputTypeGetter());
+    auto resPtr = resArr.buffers[1]->mutable_data();
+    auto resValid = res->array()->GetMutableValues<uint8_t>(0);
+    func(val1Ptr, valid1, val2Ptr, valid2, resPtr, resValid, length, arr1.offset, arr2.offset);
+    return arrow::Status::OK();
+}
+
+arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc) {
+    MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+    const auto& arg1 = batch.values[0];
+    const auto& arg2 = batch.values[1];
+    if (arg1.is_scalar()) {
+        if (arg2.is_scalar()) {
+            return ExecScalarScalarOptImpl(batch, res, typeGetter, scalarGetter, scalarScalarFunc, tz1, tz2, propagateTz);
+        } else {
+            return ExecScalarArrayOptImpl(kernelCtx, batch, res, scalarArrayFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        }
+    } else {
+        if (arg2.is_scalar()) {
+            return ExecArrayScalarOptImpl(kernelCtx, batch, res, arrayScalarFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        } else {
+            return ExecArrayArrayOptImpl(kernelCtx, batch, res, arrayArrayFunc, outputSizeOf, typeGetter, tz1, tz2, propagateTz);
+        }
+    }
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

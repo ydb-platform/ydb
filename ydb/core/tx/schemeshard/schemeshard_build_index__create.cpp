@@ -176,8 +176,6 @@ public:
         buildInfo->Limits.MaxShards = settings.max_shards_in_flight();
         buildInfo->Limits.MaxRetries = settings.max_retries_upload_batch();
 
-        Y_ABORT_UNLESS(buildInfo != nullptr);
-
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
 

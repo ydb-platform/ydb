@@ -159,7 +159,10 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-   TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
+   TKqpSessionActor(const TActorId& owner,
+            std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+            std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory,
+            const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
             const TKqpWorkerSettings& workerSettings,
             std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -168,6 +171,8 @@ public:
             const TActorId& kqpTempTablesAgentActor)
         : Owner(owner)
         , SessionId(sessionId)
+        , ResourceManager_(std::move(resourceManager))
+        , CaFactory_(std::move(caFactory))
         , Counters(counters)
         , Settings(workerSettings)
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -454,7 +459,11 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        PassRequestToResourcePool();
+        if (QueryState->UserRequestContext->PoolId) {
+            PassRequestToResourcePool();
+        } else {
+            CompileQuery();
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1260,9 +1269,13 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.CaFactory_ = CaFactory_;
+        request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        const bool useEvWrite = (HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink());
+        const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
+            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY 
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
@@ -1719,7 +1732,10 @@ public:
 
         if (replyTopicOperations) {
             if (HasTopicWriteId()) {
-                response->MutableTopicOperations()->SetWriteId(GetTopicWriteId());
+                auto* w = response->MutableTopicOperations();
+                auto* writeId = w->MutableWriteId();
+                writeId->SetNodeId(SelfId().NodeId());
+                writeId->SetKeyId(GetTopicWriteId());
             }
         }
 
@@ -2483,6 +2499,8 @@ private:
     TActorId Owner;
     TString SessionId;
 
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     // cached lookups to issue counters
     THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> CachedIssueCounters;
     TInstant CreationTime;
@@ -2522,7 +2540,8 @@ private:
 
 } // namespace
 
-IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
+IActor* CreateKqpSessionActor(const TActorId& owner, std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -2530,7 +2549,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
+    return new TKqpSessionActor(owner, std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
                                 queryServiceConfig, kqpTempTablesAgentActor);
 }

@@ -52,15 +52,15 @@ public:
     static TProto SerializeToProto(const NEvWrite::EModificationType value) {
         switch (value) {
             case NEvWrite::EModificationType::Upsert:
-                return NKikimrTxColumnShard::TEvWrite::UPSERT;
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_UPSERT;
             case NEvWrite::EModificationType::Insert:
-                return NKikimrTxColumnShard::TEvWrite::INSERT;
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_INSERT;
             case NEvWrite::EModificationType::Delete:
-                return NKikimrTxColumnShard::TEvWrite::DELETE;
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE;
             case NEvWrite::EModificationType::Replace:
-                return NKikimrTxColumnShard::TEvWrite::REPLACE;
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE;
             case NEvWrite::EModificationType::Update:
-                return NKikimrTxColumnShard::TEvWrite::UPDATE;
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
         }
     }
 
@@ -83,15 +83,15 @@ public:
 
     static NEvWrite::EModificationType DeserializeFromProto(const NKikimrTxColumnShard::TEvWrite::EModificationType value) {
         switch (value) {
-            case NKikimrTxColumnShard::TEvWrite::UPSERT:
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_UPSERT:
                 return NEvWrite::EModificationType::Upsert;
-            case NKikimrTxColumnShard::TEvWrite::INSERT:
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_INSERT:
                 return NEvWrite::EModificationType::Insert;
-            case NKikimrTxColumnShard::TEvWrite::UPDATE:
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE:
                 return NEvWrite::EModificationType::Update;
-            case NKikimrTxColumnShard::TEvWrite::DELETE:
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE:
                 return NEvWrite::EModificationType::Delete;
-            case NKikimrTxColumnShard::TEvWrite::REPLACE:
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
         }
     }

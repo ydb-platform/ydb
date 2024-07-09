@@ -102,7 +102,7 @@ message TLdapAuthentication {
         optional TCertRequire CertRequire = 3 [default = DEMAND];
     }
 
-    optional string Host = 1;
+    optional string Host = 1; // DEPRECATED: Use Hosts instead it
     optional uint32 Port = 2;
     optional string BaseDn = 3;
     optional string BindDn = 4;
@@ -111,4 +111,6 @@ message TLdapAuthentication {
     optional string SearchAttribute = 7;
     optional TUseTls UseTls = 8;
     optional string RequestedGroupAttribute = 9;
+    repeated string Hosts = 10;
+    optional string Scheme = 11 [default = "ldap"];
 }

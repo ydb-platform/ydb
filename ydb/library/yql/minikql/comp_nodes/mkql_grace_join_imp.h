@@ -18,6 +18,8 @@ const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number 
 const ui64 DefaultTuplesNum = 100; // Default initial number of tuples in one bucket to allocate memory
 const ui64 DefaultTupleBytes = 64; // Default size of all columns in table row for estimations
 const ui64 HashSize = 1; // Using ui64 hash size
+const ui64 SpillingSizeLimit = 1_MB; // Don't try to spill if net effect is lower than this size
+const ui32 SpillingRowLimit = 1024; // Don't try to invoke spilling more often than 1 in this number of rows
 
 /*
 Table data stored in buckets. Table columns are interpreted either as integers, strings or some interface-based type,
@@ -68,11 +70,11 @@ struct TTableBucket {
 
     std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
-    KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
  };
 
  struct TTableBucketStats {
+    KeysHashTable AnyHashTable;      // Hash table to process join only for unique keys (any join attribute)
     ui64 TuplesNum = 0;             // Total number of tuples in bucket
     ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
     ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.

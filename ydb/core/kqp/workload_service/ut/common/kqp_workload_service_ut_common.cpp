@@ -1,6 +1,7 @@
 #include "kqp_workload_service_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -315,8 +316,28 @@ public:
         }
     }
 
-    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) override {
+    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
         return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({Settings_.DomainName_, path}), operation);
+    }
+
+    void WaitPoolAccess(const TString& userSID, ui32 access, const TString& poolId = "") const override {
+        auto token = NACLib::TUserToken(userSID, {});
+
+        TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= FUTURE_WAIT_TIMEOUT) {
+            if (auto response = Navigate(TStringBuilder() << ".resource_pools/" << (poolId ? poolId : Settings_.PoolId_))) {
+                const auto& result = response->ResultSet.at(0);
+                bool resourcePool = result.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool;
+                if (resourcePool && (!result.SecurityObject || result.SecurityObject->CheckAccess(access, token))) {
+                    return;
+                }
+                Cerr << "WaitPoolAccess " << TInstant::Now() - start << ": " << (resourcePool ? TStringBuilder() << "access denied" : TStringBuilder() << "unexpected kind " << result.Kind) << "\n";
+            } else {
+                Cerr << "WaitPoolAccess " << TInstant::Now() - start << ": empty response\n";
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Pool version waiting timeout");
     }
 
     // Generic query helpers
@@ -375,14 +396,47 @@ public:
             if (description.DelayedRequests == state.DelayedRequests && description.RunningRequests == state.RunningRequests) {
                 return;
             }
+
+            Cerr << "WaitPoolState " << TInstant::Now() - start << ": delayed = " << description.DelayedRequests << ", running = " << description.RunningRequests << "\n";
             Sleep(TDuration::Seconds(1));
         }
         UNIT_ASSERT_C(false, "Pool state waiting timeout");
     }
 
+    void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+        auto counter = GetWorkloadManagerCounters(0)->GetCounter("ActivePoolHandlers");
+
+        if (initialCount) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), *initialCount, "Unexpected pool handlers count");
+        }
+
+        TInstant start = TInstant::Now();
+        while (TInstant::Now() - start < timeout) {
+            if (counter->Val() == finalCount) {
+                return;
+            }
+
+            Cerr << "WaitPoolHandlersCount " << TInstant::Now() - start << ": number handlers = " << counter->Val() << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Pool handlers count wait timeout");
+    }
+
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeKqpWorkloadServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
         Sleep(TDuration::Seconds(1));
+    }
+
+    void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const override {
+        for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount_; ++nodeIndex) {
+            auto subgroup = GetWorkloadManagerCounters(nodeIndex)
+                ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
+
+            CheckCommonCounters(subgroup);
+            if (checkTableCounters) {
+                CheckTableCounters(subgroup);
+            }
+        }
     }
 
     TTestActorRuntime* GetRuntime() const override {
@@ -414,6 +468,45 @@ private:
         request->SetPoolId(settings.PoolId_);
 
         return event;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(ui32 nodeIndex) const {
+        return GetServiceCounters(GetRuntime()->GetAppData(nodeIndex).Counters, "kqp")
+            ->GetSubgroup("subsystem", "workload_manager");
+    }
+
+    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalInFly", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("CleanupError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("Cancelled", true)->Val(), 0);
+
+        UNIT_ASSERT_GE(subgroup->GetCounter("ContinueOk", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOk", true)->Val(), subgroup->GetCounter("CleanupOk", true)->Val());
+    }
+
+    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0);
+
+        const std::vector<std::pair<TString, bool>> tableQueries = {
+            {"TCleanupTablesQuery", false},
+            {"TRefreshPoolStateQuery", true},
+            {"TDelayRequestQuery", true},
+            {"TStartFirstDelayedRequestQuery", true},
+            {"TStartRequestQuery", false},
+            {"TCleanupRequestsQuery", true},
+        };
+        for (const auto& [operation, runExpected] : tableQueries) {
+            auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            if (runExpected) {
+                UNIT_ASSERT_GE_C(operationSubgroup->GetCounter("FinishOk", true)->Val(), 1, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            }
+        }
     }
 
 private:

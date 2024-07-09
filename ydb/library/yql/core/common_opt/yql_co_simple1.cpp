@@ -6532,7 +6532,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             if (FindNode(&node->Tail(),
-                    [](const TExprNode::TPtr& child) { return child->IsCallable("EmptyIterator") && child->ChildrenSize() > 1;})) {
+                    [](const TExprNode::TPtr& child) { return child->IsCallable({"EmptyIterator", "ToFlow"}) && child->ChildrenSize() > 1;})) {
                 return node;
             }
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";

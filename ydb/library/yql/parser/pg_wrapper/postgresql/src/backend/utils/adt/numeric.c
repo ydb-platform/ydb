@@ -4124,11 +4124,11 @@ int64_div_fast_to_numeric(int64 val1, int log10val2)
 	if (m > 0)
 	{
 #if DEC_DIGITS == 4
-		static __thread int pow10[] = {1, 10, 100, 1000};
+		static const int pow10[] = {1, 10, 100, 1000};
 #elif DEC_DIGITS == 2
-		static __thread int pow10[] = {1, 10};
+		static const int pow10[] = {1, 10};
 #elif DEC_DIGITS == 1
-		static __thread int pow10[] = {1};
+		static const int pow10[] = {1};
 #else
 #error unsupported NBASE
 #endif
@@ -9896,11 +9896,19 @@ exp_var(const NumericVar *arg, NumericVar *result, int rscale)
  *
  * Essentially, we're approximating log10(abs(ln(var))).  This is used to
  * determine the appropriate rscale when computing natural logarithms.
+ *
+ * Note: many callers call this before range-checking the input.  Therefore,
+ * we must be robust against values that are invalid to apply ln() to.
+ * We don't wish to throw an error here, so just return zero in such cases.
  */
 static int
 estimate_ln_dweight(const NumericVar *var)
 {
 	int			ln_dweight;
+
+	/* Caller should fail on ln(negative), but for the moment return zero */
+	if (var->sign != NUMERIC_POS)
+		return 0;
 
 	if (cmp_var(var, &const_zero_point_nine) >= 0 &&
 		cmp_var(var, &const_one_point_one) <= 0)

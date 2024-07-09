@@ -92,7 +92,14 @@ private:
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
 
-                FillIndexDescription(describeTableResult, tableDescription, splitKeyType);
+                try {
+                    FillIndexDescription(describeTableResult, tableDescription);
+                } catch (const std::exception& ex) {
+                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Unable to fill index description: %s", ex.what());
+                    Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
+                    return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+                }
+
                 FillChangefeedDescription(describeTableResult, tableDescription);
 
                 if (GetProtoRequest()->include_table_stats()) {

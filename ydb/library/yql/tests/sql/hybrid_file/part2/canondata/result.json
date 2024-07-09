@@ -645,9 +645,9 @@
     ],
     "test.test[column_order-select_action-default.txt-Debug]": [
         {
-            "checksum": "a6b67761e5efb93cd1031bda869820cf",
+            "checksum": "f7162c1f1e102ea1e6eda106deeec1cf",
             "size": 2467,
-            "uri": "https://{canondata_backend}/1900335/1c84908d492197ead2c896624a2389b6dc3780ab/resource.tar.gz#test.test_column_order-select_action-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1871182/a8f0dda19ece2eb39da3b275b4504de52525ed97/resource.tar.gz#test.test_column_order-select_action-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_action-default.txt-Plan]": [
@@ -1527,9 +1527,9 @@
     ],
     "test.test[key_filter-contains_tuples-default.txt-Debug]": [
         {
-            "checksum": "53a65a1b82b2a77dfce06ff728e1a31d",
+            "checksum": "f4bc0af17c43318f6ccea36d77d88fd7",
             "size": 4474,
-            "uri": "https://{canondata_backend}/1881367/6b0231c8d602e084e64ddb7719d8290fe1219df6/resource.tar.gz#test.test_key_filter-contains_tuples-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1871182/a8f0dda19ece2eb39da3b275b4504de52525ed97/resource.tar.gz#test.test_key_filter-contains_tuples-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[key_filter-contains_tuples-default.txt-Plan]": [
@@ -2899,9 +2899,9 @@
     ],
     "test.test[window-win_expr_bounds--Debug]": [
         {
-            "checksum": "fc099ce4d86cedd143f02207dc8e67b3",
-            "size": 4061,
-            "uri": "https://{canondata_backend}/212715/b9f267b2022a251b638e7a1f1ebeb788c308ed2f/resource.tar.gz#test.test_window-win_expr_bounds--Debug_/opt.yql_patched"
+            "checksum": "ad834ee371a6072eccd1f19a4d83295c",
+            "size": 4093,
+            "uri": "https://{canondata_backend}/1937492/ee063a1785481b59e1e3de2e39ff9cdf4b142e4b/resource.tar.gz#test.test_window-win_expr_bounds--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_expr_bounds--Plan]": [

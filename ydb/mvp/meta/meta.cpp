@@ -65,6 +65,23 @@ TYdbLocation MetaLocation =
 // TODO(xenoxeno)
 TString LocalEndpoint;
 
+namespace {
+
+std::mutex SeenLock;
+std::unordered_set<TString> SeenIds;
+
+bool HasSeenId(const TString& id) {
+    std::lock_guard<std::mutex> lock(SeenLock);
+    return SeenIds.count(id) != 0;
+}
+
+void MarkIdAsSeen(const TString& id) {
+    std::lock_guard<std::mutex> lock(SeenLock);
+    SeenIds.insert(id);
+}
+
+}
+
 bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
     MetaLocation.GetTableClient(NYdb::NTable::TClientSettings().Database(MetaLocation.RootDomain).AuthToken(MVPAppData()->Tokenator->GetToken("meta-token")))
                 .CreateSession().Subscribe([id, cb = move(cb)](const NYdb::NTable::TAsyncCreateSessionResult& result) {
@@ -73,11 +90,14 @@ bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) 
                     if (res.IsSuccess()) {
                         // got session
                         auto session = res.GetSession();
-                        TString query = "DECLARE $ID AS Text;\n"
-                                        "DECLARE $FORWARD AS Text;\n"
-                                        "UPSERT INTO `ydb/Forwards.db`(Id) VALUES($ID);\n"
-                                        "UPDATE `ydb/Forwards.db` SET Forward=$FORWARD, Deadline=CurrentUtcTimestamp() + Interval('PT60S') WHERE Id=$ID AND (Deadline IS NULL OR (Deadline < CurrentUtcTimestamp()) OR (Forward = $FORWARD AND Deadline < (CurrentUtcTimestamp() + Interval('PT30S'))));\n"
-                                        "SELECT Forward, Deadline FROM `ydb/Forwards.db` WHERE Id=$ID;\n";
+                        TStringBuilder query;
+                        query << "DECLARE $ID AS Text;\n"
+                                 "DECLARE $FORWARD AS Text;\n";
+                        if (!HasSeenId(id)) {
+                            query << "UPSERT INTO `ydb/Forwards.db`(Id) VALUES($ID);\n";
+                        }
+                        query << "UPDATE `ydb/Forwards.db` SET Forward=$FORWARD, Deadline=CurrentUtcTimestamp() + Interval('PT60S') WHERE Id=$ID AND (Deadline IS NULL OR (Deadline < CurrentUtcTimestamp()) OR (Forward = $FORWARD AND Deadline < (CurrentUtcTimestamp() + Interval('PT30S'))));\n"
+                                 "SELECT Forward, Deadline FROM `ydb/Forwards.db` WHERE Id=$ID;\n";
                         NYdb::TParamsBuilder params;
                         params.AddParam("$ID", NYdb::TValueBuilder().Utf8(id).Build());
                         params.AddParam("$FORWARD", NYdb::TValueBuilder().Utf8(LocalEndpoint).Build());
@@ -88,6 +108,7 @@ bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) 
                                 NYdb::NTable::TAsyncDataQueryResult resultCopy = result;
                                 auto res = resultCopy.ExtractValue();
                                 if (res.IsSuccess()) {
+                                    MarkIdAsSeen(id);
                                     try {
                                         // got result
                                         auto resultSet = res.GetResultSet(0);

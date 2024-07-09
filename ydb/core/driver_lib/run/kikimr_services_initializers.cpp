@@ -118,7 +118,7 @@
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
@@ -2149,7 +2149,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         // Create resource manager
         auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources);
+            {}, kqpProxySharedResources, NodeId);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));

@@ -210,8 +210,7 @@ struct HTAB;
 
 typedef struct RecordCacheState {
     struct HTAB *RecordCacheHash;
-    TupleDesc *RecordCacheArray;
-    uint64 *RecordIdentifierArray;
+    void* RecordCacheArray;
     int32 RecordCacheArrayLen;
     int32 NextRecordTypmod;
     uint64 tupledesc_id_counter;

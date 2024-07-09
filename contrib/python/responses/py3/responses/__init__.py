@@ -814,7 +814,11 @@ class RequestsMock:
 
         if adding_headers is not None:
             kwargs.setdefault("headers", adding_headers)
-        if "content_type" in kwargs and "headers" in kwargs:
+        if (
+            "content_type" in kwargs
+            and "headers" in kwargs
+            and kwargs["headers"] is not None
+        ):
             header_keys = [header.lower() for header in kwargs["headers"]]
             if "content-type" in header_keys:
                 raise RuntimeError(
@@ -852,6 +856,7 @@ class RequestsMock:
                 url=rsp["url"],
                 body=rsp["body"],
                 status=rsp["status"],
+                headers=rsp["headers"] if "headers" in rsp else None,
                 content_type=rsp["content_type"],
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )

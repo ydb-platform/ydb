@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/persqueue/write_id.h>
+
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
@@ -20,7 +22,7 @@ public:
     {
     }
 
-    TPartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId, ui32 internalPartitionId) :
+    TPartitionId(ui32 originalPartitionId, const TMaybe<TWriteId>& writeId, ui32 internalPartitionId) :
         OriginalPartitionId(originalPartitionId),
         WriteId(writeId),
         InternalPartitionId(internalPartitionId)
@@ -55,7 +57,7 @@ public:
     }
 
     ui32 OriginalPartitionId = 0;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
     ui32 InternalPartitionId = 0;
 };
 

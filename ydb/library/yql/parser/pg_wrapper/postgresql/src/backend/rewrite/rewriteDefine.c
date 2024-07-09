@@ -29,6 +29,7 @@
 #include "catalog/pg_rewrite.h"
 #include "catalog/storage.h"
 #include "commands/policy.h"
+#include "commands/tablecmds.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_utilcmd.h"
@@ -421,6 +422,9 @@ DefineQueryRewrite(const char *rulename,
 		 * whole business of converting relations to views is just an obsolete
 		 * kluge to allow dump/reload of views that participate in circular
 		 * dependencies.)
+		 *
+		 * Also ensure the relation isn't being manipulated in any outer SQL
+		 * command of our own session.
 		 */
 		if (event_relation->rd_rel->relkind != RELKIND_VIEW &&
 			event_relation->rd_rel->relkind != RELKIND_MATVIEW)
@@ -428,6 +432,8 @@ DefineQueryRewrite(const char *rulename,
 			TableScanDesc scanDesc;
 			Snapshot	snapshot;
 			TupleTableSlot *slot;
+
+			CheckTableNotInUse(event_relation, "CREATE RULE");
 
 			if (event_relation->rd_rel->relkind == RELKIND_PARTITIONED_TABLE)
 				ereport(ERROR,
@@ -531,6 +537,18 @@ DefineQueryRewrite(const char *rulename,
 								RelationGetDescr(event_relation),
 								false, false);
 		}
+
+		/*
+		 * And finally, if it's not an ON SELECT rule then it must *not* be
+		 * named _RETURN.  This prevents accidentally or maliciously replacing
+		 * a view's ON SELECT rule with some other kind of rule.
+		 */
+		if (strcmp(rulename, ViewSelectRuleName) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+					 errmsg("non-view rule for \"%s\" must not be named \"%s\"",
+							RelationGetRelationName(event_relation),
+							ViewSelectRuleName)));
 	}
 
 	/*

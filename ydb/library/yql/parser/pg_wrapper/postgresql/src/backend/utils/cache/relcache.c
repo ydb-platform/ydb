@@ -2296,6 +2296,7 @@ RelationReloadIndexInfo(Relation relation)
 		relation->rd_index->indcheckxmin = index->indcheckxmin;
 		relation->rd_index->indisready = index->indisready;
 		relation->rd_index->indislive = index->indislive;
+		relation->rd_index->indisreplident = index->indisreplident;
 
 		/* Copy xmin too, as that is needed to make sense of indcheckxmin */
 		HeapTupleHeaderSetXmin(relation->rd_indextuple->t_data,
@@ -6485,7 +6486,7 @@ write_item(const void *data, Size len, FILE *fp)
 {
 	if (fwrite(&len, 1, sizeof(len), fp) != sizeof(len))
 		elog(FATAL, "could not write init file");
-	if (fwrite(data, 1, len, fp) != len)
+	if (len > 0 && fwrite(data, 1, len, fp) != len)
 		elog(FATAL, "could not write init file");
 }
 

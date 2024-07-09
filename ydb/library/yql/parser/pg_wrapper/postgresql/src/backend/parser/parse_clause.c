@@ -1054,6 +1054,9 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 						ParseNamespaceItem **top_nsitem,
 						List **namespace)
 {
+	/* Guard against stack overflow due to overly deep subtree */
+	check_stack_depth();
+
 	if (IsA(n, RangeVar))
 	{
 		/* Plain relation reference, or perhaps a CTE reference */
@@ -1437,21 +1440,6 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 			extractRemainingColumns(r_nscolumns, r_colnames, &r_colnos,
 									&res_colnames, &res_colvars,
 									res_nscolumns + res_colindex);
-
-		/*
-		 * Check alias (AS clause), if any.
-		 */
-		if (j->alias)
-		{
-			if (j->alias->colnames != NIL)
-			{
-				if (list_length(j->alias->colnames) > list_length(res_colnames))
-					ereport(ERROR,
-							(errcode(ERRCODE_SYNTAX_ERROR),
-							 errmsg("column alias list for \"%s\" has too many entries",
-									j->alias->aliasname)));
-			}
-		}
 
 		/*
 		 * Now build an RTE and nsitem for the result of the join.

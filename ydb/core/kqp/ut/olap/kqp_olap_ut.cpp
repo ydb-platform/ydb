@@ -938,6 +938,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
             R"(`resource_id` != "10001")",
+            R"("XXX" == "YYY" OR `resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1019,6 +1020,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
 #endif
 #if SSA_RUNTIME_VERSION >= 5U
+            R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
             R"(IF(`level` > 3, -`level`, +`level`) < 2)",
             R"(StartsWith(`message` ?? `resource_id`, "10000"))",
             R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",

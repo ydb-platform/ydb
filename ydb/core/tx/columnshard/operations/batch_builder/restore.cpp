@@ -9,7 +9,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvInternalScan> TModificationRestoreTa
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId);
     request->ReadToSnapshot = Snapshot;
     request->RangesFilter = std::make_shared<TPKRangesFilter>(false);
-    auto pkData = NArrow::ExtractColumns(IncomingData, ActualSchema->GetPKColumnNames());
+    auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData, ActualSchema->GetPKColumnNames());
     for (ui32 i = 0; i < pkData->num_rows(); ++i) {
         auto batch = pkData->Slice(i, 1);
         auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batch);
@@ -28,7 +28,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::sh
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "restore_data_problems")
             ("write_id", WriteData.GetWriteMeta().GetWriteId())("tablet_id", TabletId)("message", result.GetErrorMessage());
-        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+        TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
         auto evResult = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED,
             std::move(buffer), result.GetErrorMessage());
         TActorContext::AsActorContext().Send(ParentActorId, evResult.release());

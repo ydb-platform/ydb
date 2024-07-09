@@ -144,9 +144,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         CheckPoolDescription(ydb, 1, 1, leaseDuration);
 
         ydb->StopWorkloadService();
+        ydb->WaitPoolHandlersCount(0);
 
         // Check that lease expired
-        Sleep(leaseDuration);
+        Sleep(leaseDuration + TDuration::Seconds(5));
         CheckPoolDescription(ydb, 0, 0);
     }
 
@@ -158,6 +159,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         // Create tables
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
         ydb->StopWorkloadService();
+        ydb->WaitPoolHandlersCount(0);
 
         const TDuration leaseDuration = TDuration::Seconds(10);
         StartRequest(ydb, "test_session", leaseDuration);
@@ -165,10 +167,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         CheckPoolDescription(ydb, 1, 1, leaseDuration);
 
         // Wait lease duration time and check state
-        Sleep(leaseDuration / 2);
+        Sleep(2 * leaseDuration / 3);
         CheckPoolDescription(ydb, 1, 1);
 
-        Sleep(leaseDuration / 2);
+        Sleep(2 * leaseDuration / 3);
         CheckPoolDescription(ydb, 1, 1);
     }
 }

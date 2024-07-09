@@ -378,7 +378,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             }
             TSectorRestorator restorator(false, 1, false, format);
             restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
-            UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i <<
+            UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
                     << " GoodSectorCount# " << restorator.GoodSectorCount);
         }
     }

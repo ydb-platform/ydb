@@ -742,6 +742,28 @@ namespace {
 constexpr i32 SOLAR_CYCLE_DAYS = 146097;
 constexpr i32 SOLAR_CYCLE_YEARS = 400;
 
+i32 UpdateBySolarCycleModulo2(i32 date, i32& solarCycles) {
+    solarCycles = date / SOLAR_CYCLE_DAYS;
+    date = date % SOLAR_CYCLE_DAYS;
+    if (Y_UNLIKELY(date < 0)) {
+        solarCycles -= 1;
+        date += SOLAR_CYCLE_DAYS;
+    }
+    Y_ASSERT(0 <= date && date < SOLAR_CYCLE_DAYS);
+    return date;
+}
+
+i32 UpdateBySolarCycleModulo(i32& date) {
+    i32 solarCycles = date / SOLAR_CYCLE_DAYS;
+    date = date % SOLAR_CYCLE_DAYS;
+    if (Y_UNLIKELY(date < 0)) {
+        solarCycles -= 1;
+        date += SOLAR_CYCLE_DAYS;
+    }
+    Y_ASSERT(0 <= date && date < SOLAR_CYCLE_DAYS);
+    return solarCycles;
+}
+
 class TDateTable {
 public:
     TDateTable() {
@@ -804,37 +826,32 @@ public:
         return true;
     }
 
-    bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day) const {
-        auto solarCycles = value / SOLAR_CYCLE_DAYS;
-        value = value % SOLAR_CYCLE_DAYS;
-        if (Y_UNLIKELY(value < 0)) {
-            solarCycles -= 1;
-            value += SOLAR_CYCLE_DAYS;
-        }
-        auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
-        Y_ASSERT(y >= Years_.cbegin());
-        value -= *y;
-        year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
-        if (Y_UNLIKELY(year <= 0)) {
-            --year;
-        }
+    void SplitDate32(i32 value, i32& year, ui32& month, ui32& day) const {
+        i32 solarCycles;
+        value = UpdateBySolarCycleModulo2(value, solarCycles);
+        value = EnrichYear2(value, solarCycles, year);
         EnrichMonthDay(year, value, month, day);
-        /*
-        auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
-        auto m = std::upper_bound(months.cbegin() + 1, months.cend(), value) - 1;
-        Y_ASSERT(m >= months.cbegin());
-        month = std::distance(months.cbegin(), m);
-        day = 1 + value - *m;
-        */
-        return true;
     }
 
-    void EnrichMonthDay(i32 year, ui16 dayOfYear, ui32& month, ui32& day) const {
-        auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
-        auto m = std::upper_bound(months.cbegin() + 1, months.cend(), dayOfYear) - 1;
-        Y_ASSERT(m >= months.cbegin());
-        month = std::distance(months.cbegin(), m);
-        day = 1 + dayOfYear - *m;
+    void FullSplitDate32(i32 date, i32& year, ui32& month, ui32& day,
+            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const
+    {
+        Y_ASSERT(tzId == 0);
+        i32 solarCycles;
+        auto solarDate = UpdateBySolarCycleModulo2(date, solarCycles);
+        date = EnrichYear2(solarDate, solarCycles, year);
+        EnrichMonthDay(year, date, month, day);
+
+        auto cache = -1 + std::upper_bound(YearsCache_.cbegin(), YearsCache_.cend(), solarDate,
+                [](ui32 value, const TYearCache& entry) {
+                    return value < entry.CumulatveDays;
+                });
+        dayOfYear = 1 + date;
+        dayOfWeek = 1 + (3 + solarDate) % 7;
+        weekOfYear = 1 + (date - cache->WeekOffset) / 7;
+            // 1 + date / 7 + (((date % 7) >= i32(dayOfWeek)) ? 1 : 0);
+        weekOfYearIso8601 = DaysCache_[solarDate].WeekOfYearIso8601;
+
     }
 
     bool GetDateOffset(ui32 year, ui32 month, ui32 day, ui16& value) const {
@@ -920,21 +937,19 @@ public:
         return true;
     }
 
+    // Seems it is not used
+    // TODO remove from DateBuilder API in distinct PR
     bool EnrichDate(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
     }
 
-    bool EnrichDate32(i32 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
-        // TODO offset = date % SOLAR_CYCLE_DAYS
-        if (date < 0 || date >= i32(DaysInfo_.size())) {
-            return false;
-        }
-        auto& info = Days_[date];
-        dayOfYear = info.DayOfYear;
+    void EnrichDate32(i32 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
+        UpdateBySolarCycleModulo(date);
+        auto& info = DaysCache_[date];
+        dayOfYear = 1 + info.DayOfYear;
         weekOfYear = info.WeekOfYear;
         weekOfYearIso8601 = info.WeekOfYearIso8601;
-        dayOfWeek = info.DayOfWeek;
-        return true;
+        dayOfWeek = 1 + (3 + date) % 7;
     }
 
     static const TDateTable& Instance() {
@@ -955,46 +970,98 @@ private:
         ui32 DayOfWeek : 3;
     };
 
+    struct TDayCache {
+        ui32 Month : 4;
+        ui32 Day : 5;
+        ui32 DayOfYear : 9;
+        ui32 WeekOfYear : 6;
+        ui32 WeekOfYearIso8601: 6;
+    };
+
+    struct TYearCache {
+        // TODO change to i32?
+        ui32 CumulatveDays : 18; // max SOLAR_CYCLE_DAYS
+        ui32 WeekOffset: 4;
+        ui32 Iso8601WeekOffset: 4;
+    };
+
     std::array<ui16, NUdf::MAX_YEAR - NUdf::MIN_YEAR + 1> YearsOffsets_; // start of linear date for each year
     std::array<TDayInfo, NUdf::MAX_DATE + 2> Days_; // packed info for each date
-    std::array<TDayInfo, SOLAR_CYCLE_DAYS> DaysInfo_; // packed info for each date in solar cycle
+    std::array<TDayCache, SOLAR_CYCLE_DAYS> DaysCache_; // packed info for each date in solar cycle
     std::array<ui32, SOLAR_CYCLE_YEARS> Years_; // start of linear date for each year in [1970, 2370] - solar cycle period
+    std::array<TYearCache, SOLAR_CYCLE_YEARS> YearsCache_; // years cache for solar cycle period
     std::array<ui16, 13> Months_; // cumulative days count for months
     std::array<ui16, 13> LeapMonths_; // cumulative days count for months in a leap year
 
 private:
+    void EnrichMonthDay(i32 year, ui32 dayOfYear, ui32& month, ui32& day) const {
+        auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
+        auto m = std::upper_bound(months.cbegin() + 1, months.cend(), dayOfYear) - 1;
+        Y_ASSERT(m >= months.cbegin());
+        month = std::distance(months.cbegin(), m);
+        day = 1 + dayOfYear - *m;
+    }
+
+    i32 EnrichYear2(i32 value, i32 solarCycles, i32& year) const {
+        auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
+        value -= *y;
+        year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
+        if (Y_UNLIKELY(year <= 0)) {
+            --year;
+        }
+        return value;
+    }
+
+    void EnrichYear(i32& value, i32 solarCycles, i32& year) const {
+        auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
+        value -= *y;
+        year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
+        if (Y_UNLIKELY(year <= 0)) {
+            --year;
+        }
+    }
+
     void InitializeSolarCycle() {
         // starting from 1970-01-01
         ui32 date = 0u;
-        ui32 dayOfWeek = 4;
+        ui32 dayOfWeek = 3;
         ui32 weekOfYearIso8601 = 1;
-        for (auto i = 0u; i < Years_.size(); ++i) {
-            Years_[i] = date;
-            auto daysInYear = IsLeapYear(i + NUdf::MIN_YEAR) ? 366u : 365u;
+        for (auto yearIdx = 0u; yearIdx < Years_.size(); ++yearIdx) {
+            Years_[yearIdx] = date;
+            YearsCache_[yearIdx] = TYearCache(date, 7 - dayOfWeek, (7 - dayOfWeek) % 7);
+            i32 year = yearIdx + NUdf::MIN_YEAR;
+            auto daysInYear = IsLeapYear(year) ? 366u : 365u;
+if (yearIdx <= 5) {
+    Cerr
+        << " year " << year
+        << " days " << YearsCache_[yearIdx].CumulatveDays
+        << " weekOffset " << YearsCache_[yearIdx].WeekOffset
+        << " isoWeekOffset " << YearsCache_[yearIdx].Iso8601WeekOffset
+        << Endl;
+}
             ui32 weekOfYear = 1;
-            for (ui32 dayOfYear = 1; dayOfYear <= daysInYear; ++dayOfYear) {
-                i32 year;
+            for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;
-                Y_ABORT_UNLESS(SplitDate32(date, year, month, day));
-                DaysInfo_[date] = TDayInfo(month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+                EnrichMonthDay(year, dayOfYear, month, day);
+                DaysCache_[date] = TDayCache(month, day, dayOfYear, weekOfYear, weekOfYearIso8601);
 
-// if (dayOfYear == 1) {
-//     Cerr
-//         << "date " << date
-//         << " year " << year
-//         << " Month " << month
-//         << " Day " << day
-//         << " DayOfYear " << dayOfYear
-//         << " WeekOfYear " << weekOfYear
-//         << " WeekOfYearIso8601 " << weekOfYearIso8601
-//         << " DayOfWeek " << dayOfWeek
-//         << Endl;
-// }
+//if (date == 0) {
+//    Cerr
+//        << "date " << date
+//        << " year " << year
+//        << " Month " << DaysCache_[date].Month
+//        << " Day " << DaysCache_[date].Day
+//        << " DayOfYear " << DaysCache_[date].DayOfYear
+//        << " WeekOfYear " << DaysCache_[date].WeekOfYear
+//        << " WeekOfYearIso8601 " << DaysCache_[date].WeekOfYearIso8601
+//        << " DayOfWeek " << DaysCache_[date].DayOfWeek
+//        << Endl;
+//}
                 date++;
-                if (dayOfWeek < 7) {
+                if (dayOfWeek < 6) {
                     dayOfWeek++;
                 } else {
-                    dayOfWeek = 1;
+                    dayOfWeek = 0;
                     weekOfYear++;
                     if ((month == 12 && day >= 28) || (month == 1 && day < 4)) {
                         weekOfYearIso8601 = 1;
@@ -1005,7 +1072,7 @@ private:
             }
         }
         Y_ASSERT(date == SOLAR_CYCLE_DAYS);
-        Y_ASSERT(dayOfWeek == 4);
+        Y_ASSERT(dayOfWeek == 3);
         Y_ASSERT(weekOfYearIso8601 == 1);
     }
 
@@ -1018,7 +1085,8 @@ bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) {
 }
 
 bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day) {
-    return TDateTable::Instance().SplitDate32(value, year, month, day);
+    TDateTable::Instance().SplitDate32(value, year, month, day);
+    return true;
 }
 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) {
@@ -1135,6 +1203,10 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
     return TDateTable::Instance().EnrichByOffset(value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 }
 
+void FullSplitDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
+    TDateTable::Instance().FullSplitDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+}
+
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
     ui16 offset;
     if (tzId) {
@@ -1159,7 +1231,8 @@ bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIs
 }
 
 bool EnrichDate32(i32 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) {
-    return TDateTable::Instance().EnrichDate32(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    TDateTable::Instance().EnrichDate32(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    return true;
 }
 
 bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value) {

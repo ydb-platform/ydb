@@ -11,6 +11,9 @@
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/date.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/pgtime.h>
+#include <time.h>
 }
 
 using namespace NYql;
@@ -45,7 +48,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             const NUdf::TUnboxedValue& strDate32 = ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(value32.Get<i32>()));
             UNIT_ASSERT(strDate32.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
-/*
+
             ui32 dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             EnrichDate(value16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16);
@@ -54,8 +57,59 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(weekOfYear16, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_16, weekOfYearIso8601);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
-*/
         }
+    }
+
+    Y_UNIT_TEST(FullSplitDate16vs32) {
+        for (ui16 date = 0; date < NUdf::MAX_DATE; ++date) {
+            ui32 year16, month16, day16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
+            SplitDate(date, year16, month16, day16);
+            EnrichDate(date, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16);
+
+            i32 year;
+            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+
+            EnrichDate32(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfYear16, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(weekOfYear16, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_16, weekOfYearIso8601);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
+
+            FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(year16, year);
+            UNIT_ASSERT_VALUES_EQUAL(month16, month);
+            UNIT_ASSERT_VALUES_EQUAL(day16, day);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfYear16, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL_C(weekOfYear16, weekOfYear, "doy " << dayOfYear << " dow " << dayOfWeek << " month " << month << " day " << day << " date " << date);
+            UNIT_ASSERT_VALUES_EQUAL_C(weekOfYearIso8601_16, weekOfYearIso8601, "doy " << dayOfYear << " dow " << dayOfWeek << " month " << month << " day " << day << " date " << date);
+        }
+    }
+
+    Y_UNIT_TEST(FullSplitDate32) {
+            i32 year;
+            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+
+            FullSplitDate32(4, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+    }
+
+    Y_UNIT_TEST(GmTime) {
+        // time_t t = time(NULL);
+        time_t t = 4294967295ul;
+        auto* tm = gmtime(&t);
+        UNIT_ASSERT(tm != NULL);
+        Cerr
+            << "\n" << tm->tm_sec
+            << "\n" << tm->tm_min
+            << "\n" << tm->tm_hour
+            << "\n" << tm->tm_mday
+            << "\n" << tm->tm_mon			/* origin 1, not 0! */
+            << "\n" << tm->tm_year + 1900
+            << "\n" << tm->tm_wday
+            << "\n" << tm->tm_yday
+            << "\n" << tm->tm_isdst
+            << "\n" << tm->tm_gmtoff
+            << Endl;
     }
 
     Y_UNIT_TEST(Date32vsPostgres) {
@@ -82,6 +136,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             }
             UNIT_ASSERT(MakeDate32(year, static_cast<ui32>(month), static_cast<ui32>(day), date32));
             UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
+            
+            ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            EnrichDate32(date32, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
+
             if (date32 == NUdf::MAX_DATE32) {
                 break;
             }

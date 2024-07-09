@@ -342,11 +342,11 @@ public:
     TBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
-            ui64 cookie, NWilson::TSpan&& span, TInstant now,
+            ui64 cookie, NWilson::TTraceId&& traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
+                ev->RestartCounter, std::move(traceId), "DSProxy.Range", ev, std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , From(ev->From)
         , To(ev->To)
@@ -407,8 +407,7 @@ IActor* CreateBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroup
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvRange *ev,
         ui64 cookie, NWilson::TTraceId traceId, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Range");
-    return new TBlobStorageGroupRangeRequest(info, state, source, mon, ev, cookie, std::move(span), now,
+    return new TBlobStorageGroupRangeRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
             storagePoolCounters);
 }
 

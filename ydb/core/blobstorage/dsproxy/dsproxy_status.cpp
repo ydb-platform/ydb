@@ -90,7 +90,7 @@ public:
             ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_STATUS, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Status"), std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.Status", ev, std::move(ev->ExecutionRelay))
         , Deadline(ev->Deadline)
         , Requests(0)
         , Responses(0)

@@ -502,14 +502,14 @@ public:
     TBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPut *ev,
-            ui64 cookie, NWilson::TSpan&& span, bool timeStatsEnabled,
+            ui64 cookie, NWilson::TTraceId&& traceId, bool timeStatsEnabled,
             TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             bool enableRequestMod3x3ForMinLatecy)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), nullptr)
+                ev->RestartCounter, std::move(traceId), "DSProxy.Put", ev, nullptr)
         , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId())
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , HandleClass(ev->HandleClass)
@@ -549,7 +549,7 @@ public:
             bool enableRequestMod3x3ForMinLatecy)
         : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0,
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
-                MaxRestartCounter(events), NWilson::TSpan(), nullptr)
+                MaxRestartCounter(events), {}, nullptr, static_cast<TEvBlobStorage::TEvPut*>(nullptr), nullptr)
         , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)
@@ -760,12 +760,7 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         bool enableRequestMod3x3ForMinLatecy) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupPutRequest(info, state, source, mon, ev, cookie, std::move(span), timeStatsEnabled,
+    return new TBlobStorageGroupPutRequest(info, state, source, mon, ev, cookie, std::move(traceId), timeStatsEnabled,
             std::move(stats), latencyQueueKind, now, storagePoolCounters, enableRequestMod3x3ForMinLatecy);
 }
 

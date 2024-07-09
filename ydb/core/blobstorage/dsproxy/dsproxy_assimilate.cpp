@@ -270,7 +270,7 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
             NKikimrServices::BS_PROXY_ASSIMILATE, false, {}, now, storagePoolCounters, ev->RestartCounter,
-            NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Assimilate"), std::move(ev->ExecutionRelay))
+            std::move(traceId), "DSProxy.Assimilate", ev, std::move(ev->ExecutionRelay))
         , SkipBlocksUpTo(ev->SkipBlocksUpTo)
         , SkipBarriersUpTo(ev->SkipBarriersUpTo)
         , SkipBlobsUpTo(ev->SkipBlobsUpTo)

@@ -340,20 +340,22 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            switch (col.GetDefaultValueCase()) {
-                case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-                    if (!localSequences.contains(col.GetDefaultFromSequence())) {
-                        errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+            if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
+                switch (col.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                        if (!localSequences.contains(col.GetDefaultFromSequence())) {
+                            errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+                        break;
+                    }
+                    default: {
+                        errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
                         return nullptr;
                     }
-                    break;
-                }
-                case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
-                    break;
-                }
-                default: {
-                    errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
-                    return nullptr;
                 }
             }
 

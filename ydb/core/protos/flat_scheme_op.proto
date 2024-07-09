@@ -982,10 +982,6 @@ enum EIndexState {
     EIndexStateWriteOnly = 3;
 }
 
-message TExplicitPartitions {
-    repeated TSplitBoundary SplitBoundary = 1;
-}
-
 message TIndexDescription {
     optional string Name = 1;
     optional uint64 LocalPathId = 2;
@@ -1000,22 +996,17 @@ message TIndexDescription {
     optional uint64 PathOwnerId = 7;
 
     repeated string DataColumnNames = 8;
+
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
-
-    // indexImplTable settings
-    oneof Partitions {
-        uint32 UniformPartitions = 10;
-        TExplicitPartitions ExplicitPartitions = 11;
-    }
-    optional TPartitioningPolicy PartitioningPolicy = 12;
+    repeated TTableDescription IndexImplTableDescriptions = 10;
 }
 
 message TIndexCreationConfig {
     optional string Name = 1;
     repeated string KeyColumnNames = 2;
     optional EIndexType Type = 3;
-    optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
+    repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
 }
@@ -1041,9 +1032,16 @@ message TBuildIndexOutcome {
         optional NKikimrProto.TPathID IndexPathId = 1;
     }
 
+    message TApply {
+        // Path id of the index whose creation was done
+        optional NKikimrProto.TPathID IndexPathId = 1;
+    }
+
+    reserved 1; // Apply type was changed from Empty to TApply
+
     oneof Result {
-        google.protobuf.Empty Apply = 1;
         TCancel Cancel = 2;
+        TApply Apply = 3;
     }
 }
 

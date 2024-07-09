@@ -54,7 +54,7 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
     return tx;
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram,
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total,
                                   const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
 
 class TShardDeleter {

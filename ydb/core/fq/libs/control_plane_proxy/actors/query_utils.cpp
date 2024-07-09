@@ -248,6 +248,19 @@ TString MakeCreateExternalDataSourceQuery(
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
 
         }
+        case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="MySQL",
+                    MDB_CLUSTER_ID={mdb_cluster_id},
+                    DATABASE_NAME={database_name},
+                    USE_TLS="{use_tls}"
+                )",
+                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
+
+        }
         break;
     }
 

@@ -175,8 +175,7 @@ private:
         YQL_ENSURE(PerStatementResult);
 
         const auto prepareSettings = PrepareCompilationSettings(ctx);
-
-        auto result = KqpHost->SplitQuery(QueryId.Text, prepareSettings);
+        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));

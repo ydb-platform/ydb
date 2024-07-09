@@ -275,6 +275,21 @@ Y_UNIT_TEST(TestAsInt) {
     }
 }
 
+Y_UNIT_TEST(TestAsIntWide) {
+    {
+        ui32 v = 0x00001234;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+    {
+        ui32 v = 0x12345678;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+}
+
 Y_UNIT_TEST(TestToHex) {
     ui64 v = 0x0102030405060708;
     TString r = NPQ::ToHex<ui64>(v);
@@ -285,7 +300,7 @@ Y_UNIT_TEST(StoreKeys) {
     TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
     UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
 
-    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, 1, 9}, 8, 7, 6, 5, false);
+    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5, false);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
 
     keyNew.SetType(TKeyPrefix::TypeInfo);

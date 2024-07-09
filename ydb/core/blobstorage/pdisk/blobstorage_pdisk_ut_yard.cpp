@@ -168,16 +168,14 @@ YARD_UNIT_TEST(TestChunkWriteReadDifferentHashers) {
 }
 
 YARD_UNIT_TEST(TestLogWriteCutUnequal) {
-    if constexpr (KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-        TTestContext tc(false, true);
-        FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-        Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestContext tc(false, true);
+    FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
+    Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
 
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-    }
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
 }
 
 YARD_UNIT_TEST(TestChunkReadRandomOffset) {

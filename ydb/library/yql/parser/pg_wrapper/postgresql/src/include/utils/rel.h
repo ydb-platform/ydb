@@ -24,6 +24,7 @@
 #include "rewrite/prs2lock.h"
 #include "storage/block.h"
 #include "storage/relfilenode.h"
+#include "storage/smgr.h"
 #include "utils/relcache.h"
 #include "utils/reltrigger.h"
 
@@ -53,8 +54,7 @@ typedef LockInfoData *LockInfo;
 typedef struct RelationData
 {
 	RelFileNode rd_node;		/* relation physical identifier */
-	/* use "struct" here to avoid needing to include smgr.h: */
-	struct SMgrRelationData *rd_smgr;	/* cached file handle, or NULL */
+	SMgrRelation rd_smgr;		/* cached file handle, or NULL */
 	int			rd_refcnt;		/* reference count */
 	BackendId	rd_backend;		/* owning backend id, if temporary relation */
 	bool		rd_islocaltemp; /* rel is a temp rel of this session */
@@ -319,7 +319,6 @@ typedef struct StdRdOptions
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
 	int			fillfactor;		/* page fill factor in percent (0..100) */
-	/* fraction of newly inserted tuples prior to trigger index cleanup */
 	int			toast_tuple_target; /* target for tuple toasting */
 	AutoVacOpts autovacuum;		/* autovacuum-related options */
 	bool		user_catalog_table; /* use as an additional catalog relation */
@@ -527,9 +526,35 @@ typedef struct ViewOptions
 	(RELKIND_HAS_STORAGE((relation)->rd_rel->relkind) && \
 	 ((relation)->rd_rel->relfilenode == InvalidOid))
 
+#ifndef FRONTEND
+/*
+ * RelationGetSmgr
+ *		Returns smgr file handle for a relation, opening it if needed.
+ *
+ * Very little code is authorized to touch rel->rd_smgr directly.  Instead
+ * use this function to fetch its value.
+ *
+ * Note: since a relcache flush can cause the file handle to be closed again,
+ * it's unwise to hold onto the pointer returned by this function for any
+ * long period.  Recommended practice is to just re-execute RelationGetSmgr
+ * each time you need to access the SMgrRelation.  It's quite cheap in
+ * comparison to whatever an smgr function is going to do.
+ */
+static inline SMgrRelation
+RelationGetSmgr(Relation rel)
+{
+	if (unlikely(rel->rd_smgr == NULL))
+		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
+	return rel->rd_smgr;
+}
+#endif							/* !FRONTEND */
+
 /*
  * RelationOpenSmgr
  *		Open the relation at the smgr level, if not already done.
+ *
+ * XXX this is now deprecated, and should not be used in new code.
+ * Instead, call RelationGetSmgr in place of fetching rd_smgr directly.
  */
 #define RelationOpenSmgr(relation) \
 	do { \
@@ -557,7 +582,8 @@ typedef struct ViewOptions
  *		Fetch relation's current insertion target block.
  *
  * Returns InvalidBlockNumber if there is no current target block.  Note
- * that the target block status is discarded on any smgr-level invalidation.
+ * that the target block status is discarded on any smgr-level invalidation,
+ * so there's no need to re-open the smgr handle if it's not currently open.
  */
 #define RelationGetTargetBlock(relation) \
 	( (relation)->rd_smgr != NULL ? (relation)->rd_smgr->smgr_targblock : InvalidBlockNumber )
@@ -568,8 +594,7 @@ typedef struct ViewOptions
  */
 #define RelationSetTargetBlock(relation, targblock) \
 	do { \
-		RelationOpenSmgr(relation); \
-		(relation)->rd_smgr->smgr_targblock = (targblock); \
+		RelationGetSmgr(relation)->smgr_targblock = (targblock); \
 	} while (0)
 
 /*

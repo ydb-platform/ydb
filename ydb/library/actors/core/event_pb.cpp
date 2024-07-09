@@ -1,8 +1,5 @@
 #include "event_pb.h"
 
-// enable only when patch with this macro was successfully deployed
-#define USE_EXTENDED_PAYLOAD_FORMAT 0
-
 namespace NActors {
     bool TRopeStream::Next(const void** data, int* size) {
         *data = Iter.ContiguousData();
@@ -278,7 +275,6 @@ namespace NActors {
                 return append(buf, SerializeNumber(number, buf));
             };
 
-#if USE_EXTENDED_PAYLOAD_FORMAT
             char marker = ExtendedPayloadMarker;
             append(&marker, 1);
             if (!appendNumber(payload.size())) {
@@ -297,29 +293,6 @@ namespace NActors {
                     return false;
                 }
             }
-#else
-            char marker = PayloadMarker;
-            append(&marker, 1);
-            if (!appendNumber(payload.size())) {
-                return false;
-            }
-            for (const TRope& rope : payload) {
-                if (!appendNumber(rope.GetSize())) {
-                    return false;
-                }
-                if (rope) {
-                    if (size) {
-                        chunker->BackUp(std::exchange(size, 0));
-                    }
-                    if (!chunker->WriteRope(&rope)) {
-                        return false;
-                    }
-                }
-            }
-            if (size) {
-                chunker->BackUp(size);
-            }
-#endif
         }
 
         return true;
@@ -398,7 +371,6 @@ namespace NActors {
             if (allowExternalDataChannel) {
                 if (payload) {
                     char temp[MaxNumberBytes];
-#if USE_EXTENDED_PAYLOAD_FORMAT
                     size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
                     for (const TRope& rope : payload) {
                         headerLen += SerializeNumber(rope.size(), temp);
@@ -407,14 +379,6 @@ namespace NActors {
                     for (const TRope& rope : payload) {
                         info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
                     }
-#else
-                    info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(payload.size(), temp), 0, 0, true}); // payload marker and rope count
-                    for (const TRope& rope : payload) {
-                        const size_t ropeSize = rope.GetSize();
-                        info.Sections.back().Size += SerializeNumber(ropeSize, temp);
-                        info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0, false}); // data as a separate section
-                    }
-#endif
                 }
 
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;

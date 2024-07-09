@@ -1672,7 +1672,7 @@ namespace Tests {
             }
 
             indexDesc->SetType(type);
-            indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
+            indexDesc->AddIndexImplTableDescriptions()->SetUniformPartitionsCount(16);
         }
 
         TAutoPtr<NBus::TBusMessage> reply;

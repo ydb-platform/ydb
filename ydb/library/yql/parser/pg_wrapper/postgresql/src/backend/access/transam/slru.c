@@ -181,6 +181,7 @@ SimpleLruShmemSize(int nslots, int nlsns)
  * ctllock: LWLock to use to control access to the shared control structure.
  * subdir: PGDATA-relative subdirectory that will contain the files.
  * tranche_id: LWLock tranche ID to use for the SLRU's per-buffer LWLocks.
+ * sync_handler: which set of functions to use to handle sync requests
  */
 void
 SimpleLruInit(SlruCtl ctl, const char *name, int nslots, int nlsns,
@@ -1601,7 +1602,9 @@ SlruSyncFileTag(SlruCtl ctl, const FileTag *ftag, char *path)
 	if (fd < 0)
 		return -1;
 
+	pgstat_report_wait_start(WAIT_EVENT_SLRU_FLUSH_SYNC);
 	result = pg_fsync(fd);
+	pgstat_report_wait_end();
 	save_errno = errno;
 
 	CloseTransientFile(fd);

@@ -250,8 +250,38 @@ struct SnapBuild
 static __thread ResourceOwner SavedResourceOwnerDuringExport = NULL;
 static __thread bool ExportInProgress = false;
 
-/* ->committed manipulation */
-static void SnapBuildPurgeCommittedTxn(SnapBuild *builder);
+/*
+ * Array of transactions and subtransactions that were running when
+ * the xl_running_xacts record that we decoded was written. The array is
+ * sorted in xidComparator order. We remove xids from this array when
+ * they become old enough to matter, and then it eventually becomes empty.
+ * This array is allocated in builder->context so its lifetime is the same
+ * as the snapshot builder.
+ *
+ * We normally rely on some WAL record types such as HEAP2_NEW_CID to know
+ * if the transaction has changed the catalog. But it could happen that the
+ * logical decoding decodes only the commit record of the transaction after
+ * restoring the previously serialized snapshot in which case we will miss
+ * adding the xid to the snapshot and end up looking at the catalogs with the
+ * wrong snapshot.
+ *
+ * Now to avoid the above problem, if the COMMIT record of the xid listed in
+ * InitialRunningXacts has XACT_XINFO_HAS_INVALS flag, we mark both the top
+ * transaction and its substransactions as containing catalog changes.
+ *
+ * We could end up adding the transaction that didn't change catalog
+ * to the snapshot since we cannot distinguish whether the transaction
+ * has catalog changes only by checking the COMMIT record. It doesn't
+ * have the information on which (sub) transaction has catalog changes,
+ * and XACT_XINFO_HAS_INVALS doesn't necessarily indicate that the
+ * transaction has catalog change. But that won't be a problem since we
+ * use snapshot built during decoding only for reading system catalogs.
+ */
+static __thread TransactionId *InitialRunningXacts = NULL;
+static __thread int	NInitialRunningXacts = 0;
+
+/* ->committed and InitailRunningXacts manipulation */
+static void SnapBuildPurgeOlderTxn(SnapBuild *builder);
 
 /* snapshot building/manipulation/distribution functions */
 static Snapshot SnapBuildBuildSnapshot(SnapBuild *builder);
@@ -271,6 +301,17 @@ static void SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn);
 static bool SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn);
 
 /*
+ * Memory context reset callback for clearing the array of running transactions
+ * and subtransactions.
+ */
+static void
+SnapBuildResetRunningXactsCallback(void *arg)
+{
+	NInitialRunningXacts = 0;
+	InitialRunningXacts = NULL;
+}
+
+/*
  * Allocate a new snapshot builder.
  *
  * xmin_horizon is the xid >= which we can be sure no catalog rows have been
@@ -286,6 +327,7 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	MemoryContext context;
 	MemoryContext oldcontext;
 	SnapBuild  *builder;
+	MemoryContextCallback *mcallback;
 
 	/* allocate memory in own context, to have better accountability */
 	context = AllocSetContextCreate(CurrentMemoryContext,
@@ -311,7 +353,14 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	builder->building_full_snapshot = need_full_snapshot;
 	builder->initial_consistent_point = initial_consistent_point;
 
+	mcallback = palloc0(sizeof(MemoryContextCallback));
+	mcallback->func = SnapBuildResetRunningXactsCallback;
+	MemoryContextRegisterResetCallback(CurrentMemoryContext, mcallback);
+
 	MemoryContextSwitchTo(oldcontext);
+
+	/* The initial running transactions array must be empty. */
+	Assert(NInitialRunningXacts == 0 && InitialRunningXacts == NULL);
 
 	return builder;
 }
@@ -879,12 +928,17 @@ SnapBuildAddCommittedTxn(SnapBuild *builder, TransactionId xid)
 }
 
 /*
- * Remove knowledge about transactions we treat as committed that are smaller
- * than ->xmin. Those won't ever get checked via the ->committed array but via
- * the clog machinery, so we don't need to waste memory on them.
+ * Remove knowledge about transactions we treat as committed and the initial
+ * running transactions that are smaller than ->xmin. Those won't ever get
+ * checked via the ->committed or InitialRunningXacts array, respectively.
+ * The committed xids will get checked via the clog machinery.
+ *
+ * We can ideally remove the transaction from InitialRunningXacts array
+ * once it is finished (committed/aborted) but that could be costly as we need
+ * to maintain the xids order in the array.
  */
 static void
-SnapBuildPurgeCommittedTxn(SnapBuild *builder)
+SnapBuildPurgeOlderTxn(SnapBuild *builder)
 {
 	int			off;
 	TransactionId *workspace;
@@ -918,6 +972,49 @@ SnapBuildPurgeCommittedTxn(SnapBuild *builder)
 		 builder->xmin, builder->xmax);
 	builder->committed.xcnt = surviving_xids;
 
+	pfree(workspace);
+
+	/* Quick exit if there is no initial running transactions */
+	if (NInitialRunningXacts == 0)
+		return;
+
+	/* bound check if there is at least one transaction to remove */
+	if (!NormalTransactionIdPrecedes(InitialRunningXacts[0],
+									 builder->xmin))
+		return;
+
+	/*
+	 * purge xids in InitialRunningXacts as well. The purged array must also
+	 * be sorted in xidComparator order.
+	 */
+	workspace =
+		MemoryContextAlloc(builder->context,
+						   NInitialRunningXacts * sizeof(TransactionId));
+	surviving_xids = 0;
+	for (off = 0; off < NInitialRunningXacts; off++)
+	{
+		if (NormalTransactionIdPrecedes(InitialRunningXacts[off],
+										builder->xmin))
+			;					/* remove */
+		else
+			workspace[surviving_xids++] = InitialRunningXacts[off];
+	}
+
+	if (surviving_xids > 0)
+		memcpy(InitialRunningXacts, workspace,
+			   sizeof(TransactionId) * surviving_xids);
+	else
+	{
+		pfree(InitialRunningXacts);
+		InitialRunningXacts = NULL;
+	}
+
+	elog(DEBUG3, "purged initial running transactions from %u to %u, oldest running xid %u",
+		 (uint32) NInitialRunningXacts,
+		 (uint32) surviving_xids,
+		 builder->xmin);
+
+	NInitialRunningXacts = surviving_xids;
 	pfree(workspace);
 }
 
@@ -1014,6 +1111,9 @@ SnapBuildCommitTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid,
 	else if (sub_needs_timetravel)
 	{
 		/* track toplevel txn as well, subxact alone isn't meaningful */
+		elog(DEBUG2, "forced transaction %u to do timetravel due to one of its subtransactions",
+			 xid);
+		needs_timetravel = true;
 		SnapBuildAddCommittedTxn(builder, xid);
 	}
 	else if (needs_timetravel)
@@ -1126,7 +1226,7 @@ SnapBuildProcessRunningXacts(SnapBuild *builder, XLogRecPtr lsn, xl_running_xact
 	builder->xmin = running->oldestRunningXid;
 
 	/* Remove transactions we don't need to keep track off anymore */
-	SnapBuildPurgeCommittedTxn(builder);
+	SnapBuildPurgeOlderTxn(builder);
 
 	/*
 	 * Advance the xmin limit for the current replication slot, to allow
@@ -1277,6 +1377,20 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 	else if (!builder->building_full_snapshot &&
 			 SnapBuildRestore(builder, lsn))
 	{
+		int			nxacts = running->subxcnt + running->xcnt;
+		Size		sz = sizeof(TransactionId) * nxacts;
+
+		/*
+		 * Remember the transactions and subtransactions that were running
+		 * when xl_running_xacts record that we decoded was written. We use
+		 * this later to identify the transactions have performed catalog
+		 * changes. See SnapBuildXidSetCatalogChanges.
+		 */
+		NInitialRunningXacts = nxacts;
+		InitialRunningXacts = MemoryContextAlloc(builder->context, sz);
+		memcpy(InitialRunningXacts, running->xids, sz);
+		qsort(InitialRunningXacts, nxacts, sizeof(TransactionId), xidComparator);
+
 		/* there won't be any state to cleanup */
 		return false;
 	}
@@ -1992,4 +2106,34 @@ CheckPointSnapBuild(void)
 		}
 	}
 	FreeDir(snap_dir);
+}
+
+/*
+ * If the given xid is in the list of the initial running xacts, we mark the
+ * transaction and its subtransactions as containing catalog changes. See
+ * comments for NInitialRunningXacts and InitialRunningXacts for additional
+ * info.
+ */
+void
+SnapBuildXidSetCatalogChanges(SnapBuild *builder, TransactionId xid, int subxcnt,
+							  TransactionId *subxacts, XLogRecPtr lsn)
+{
+	/*
+	 * Skip if there is no initial running xacts information.
+	 *
+	 * Even if the transaction has been marked as containing catalog
+	 * changes, it cannot be skipped because its subtransactions that
+	 * modified the catalog may not be marked.
+	 */
+	if (NInitialRunningXacts == 0)
+		return;
+
+	if (bsearch(&xid, InitialRunningXacts, NInitialRunningXacts,
+				sizeof(TransactionId), xidComparator) != NULL)
+	{
+		ReorderBufferXidSetCatalogChanges(builder->reorder, xid, lsn);
+
+		for (int i = 0; i < subxcnt; i++)
+			ReorderBufferXidSetCatalogChanges(builder->reorder, subxacts[i], lsn);
+	}
 }

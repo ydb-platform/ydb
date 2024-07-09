@@ -946,6 +946,11 @@ message TPartitionOperation {
     optional uint32 SupportivePartition = 6;
 };
 
+message TWriteId {
+    optional uint64 NodeId = 1;
+    optional fixed64 KeyId = 2;
+};
+
 message TDataTransaction {
     enum ELocksOp {
         Unspecified = 0;
@@ -959,7 +964,7 @@ message TDataTransaction {
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
-    optional fixed64 WriteId = 6;
+    optional TWriteId WriteId = 6;
 }
 
 message TConfigTransaction {
@@ -1116,18 +1121,20 @@ message TTransaction {
     //
     optional NActorsProto.TActorId SourceActor = 14;
 
-    optional uint64 WriteId = 15;
+    optional TWriteId WriteId = 15;
 };
 
 message TTabletTxInfo {
     message TTxWriteInfo {
-        optional uint64 WriteId = 1;
+        optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
     };
 
-    optional uint64 LastStep = 2;
-    optional uint64 LastTxId = 3;
+    optional uint64 PlanStep = 2;
+    optional uint64 PlanTxId = 3;
     repeated TTxWriteInfo TxWrites = 4;
     optional uint64 NextSupportivePartitionId = 5;
+    optional uint64 ExecStep = 6;
+    optional uint64 ExecTxId = 7;
 }

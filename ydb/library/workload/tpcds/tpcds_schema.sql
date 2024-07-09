@@ -13,7 +13,7 @@ CREATE {external} TABLE `{path}/customer_address`
     ca_state                  {string_type} {notnull},
     ca_zip                    {string_type} {notnull},
     ca_country                {string_type} {notnull},
-    ca_gmt_offset             {float_type}  {notnull},
+    ca_gmt_offset             {decimal_5_2_type}  {notnull},
     ca_location_type          {string_type} {notnull}
     {primary_key} (ca_address_sk)
 )
@@ -95,7 +95,7 @@ CREATE {external} TABLE `{path}/warehouse`
     w_state                   {string_type} {notnull},
     w_zip                     {string_type} {notnull},
     w_country                 {string_type} {notnull},
-    w_gmt_offset              {float_type}  {notnull}
+    w_gmt_offset              {decimal_5_2_type}  {notnull}
     {primary_key} (w_warehouse_sk)
 )
 {partition_by}(w_warehouse_sk)
@@ -173,8 +173,8 @@ CREATE {external} TABLE `{path}/item`
     i_rec_start_date          {date_type}   {notnull},
     i_rec_end_date            {date_type}   {notnull},
     i_item_desc               {string_type} {notnull},
-    i_current_price           {float_type}  {notnull},
-    i_wholesale_cost          {float_type}  {notnull},
+    i_current_price           {decimal_7_2_type}  {notnull},
+    i_wholesale_cost          {decimal_7_2_type}  {notnull},
     i_brand_id                Int64         {notnull},
     i_brand                   {string_type} {notnull},
     i_class_id                Int64         {notnull},
@@ -227,8 +227,8 @@ CREATE {external} TABLE `{path}/store`
     s_state                   {string_type} {notnull},
     s_zip                     {string_type} {notnull},
     s_country                 {string_type} {notnull},
-    s_gmt_offset              {float_type}  {notnull},
-    s_tax_precentage          {float_type}  {notnull}
+    s_gmt_offset              {decimal_5_2_type}  {notnull},
+    s_tax_precentage          {decimal_5_2_type}  {notnull}
     {primary_key} (s_store_sk)
 )
 {partition_by}(s_store_sk)
@@ -268,8 +268,8 @@ CREATE {external} TABLE `{path}/call_center`
     cc_state                  {string_type} {notnull},
     cc_zip                    {string_type} {notnull},
     cc_country                {string_type} {notnull},
-    cc_gmt_offset             {float_type}  {notnull},
-    cc_tax_percentage         {float_type}  {notnull}
+    cc_gmt_offset             {decimal_5_2_type}  {notnull},
+    cc_tax_percentage         {decimal_5_2_type}  {notnull}
     {primary_key} (cc_call_center_sk)
 )
 {partition_by}(cc_call_center_sk)
@@ -332,8 +332,8 @@ CREATE {external} TABLE `{path}/web_site`
     web_state                 {string_type} {notnull},
     web_zip                   {string_type} {notnull},
     web_country               {string_type} {notnull},
-    web_gmt_offset            {float_type}  {notnull},
-    web_tax_percentage        {float_type}  {notnull}
+    web_gmt_offset            {decimal_5_2_type}  {notnull},
+    web_tax_percentage        {decimal_5_2_type}  {notnull}
     {primary_key} (web_site_sk)
 )
 {partition_by}(web_site_sk)
@@ -355,15 +355,15 @@ CREATE {external} TABLE `{path}/store_returns`
     sr_reason_sk              Int64         {notnull},
     sr_ticket_number          Int64         {notnull},
     sr_return_quantity        Int64         {notnull},
-    sr_return_amt             {float_type}  {notnull},
-    sr_return_tax             {float_type}  {notnull},
-    sr_return_amt_inc_tax     {float_type}  {notnull},
-    sr_fee                    {float_type}  {notnull},
-    sr_return_ship_cost       {float_type}  {notnull},
-    sr_refunded_cash          {float_type}  {notnull},
-    sr_reversed_charge        {float_type}  {notnull},
-    sr_store_credit           {float_type}  {notnull},
-    sr_net_loss               {float_type}  {notnull}
+    sr_return_amt             {decimal_7_2_type}  {notnull},
+    sr_return_tax             {decimal_7_2_type}  {notnull},
+    sr_return_amt_inc_tax     {decimal_7_2_type}  {notnull},
+    sr_fee                    {decimal_7_2_type}  {notnull},
+    sr_return_ship_cost       {decimal_15_2_type}  {notnull},
+    sr_refunded_cash          {decimal_7_2_type}  {notnull},
+    sr_reversed_charge        {decimal_7_2_type}  {notnull},
+    sr_store_credit           {decimal_7_2_type}  {notnull},
+    sr_net_loss               {decimal_7_2_type}  {notnull}
     {primary_key} (sr_item_sk, sr_ticket_number)
 )
 {partition_by}(sr_item_sk, sr_ticket_number)
@@ -418,7 +418,7 @@ CREATE {external} TABLE `{path}/promotion`
     p_start_date_sk           Int64         {notnull},
     p_end_date_sk             Int64         {notnull},
     p_item_sk                 Int64         {notnull},
-    p_cost                    {float_type}  {notnull},
+    p_cost                    {decimal_7_2_type}  {notnull},
     p_response_target         Int64         {notnull},
     p_promo_name              {string_type} {notnull},
     p_channel_dmail           {string_type} {notnull},
@@ -493,15 +493,15 @@ CREATE {external} TABLE `{path}/catalog_returns`
     cr_reason_sk              Int64         {notnull},
     cr_order_number           Int64         {notnull},
     cr_return_quantity        Int64         {notnull},
-    cr_return_amount          {float_type}  {notnull},
-    cr_return_tax             {float_type}  {notnull},
-    cr_return_amt_inc_tax     {float_type}  {notnull},
-    cr_fee                    {float_type}  {notnull},
-    cr_return_ship_cost       {float_type}  {notnull},
-    cr_refunded_cash          {float_type}  {notnull},
-    cr_reversed_charge        {float_type}  {notnull},
-    cr_store_credit           {float_type}  {notnull},
-    cr_net_loss               {float_type}  {notnull}
+    cr_return_amount          {decimal_7_2_type}  {notnull},
+    cr_return_tax             {decimal_7_2_type}  {notnull},
+    cr_return_amt_inc_tax     {decimal_7_2_type}  {notnull},
+    cr_fee                    {decimal_7_2_type}  {notnull},
+    cr_return_ship_cost       {decimal_7_2_type}  {notnull},
+    cr_refunded_cash          {decimal_7_2_type}  {notnull},
+    cr_reversed_charge        {decimal_7_2_type}  {notnull},
+    cr_store_credit           {decimal_7_2_type}  {notnull},
+    cr_net_loss               {decimal_7_2_type}  {notnull}
     {primary_key} (cr_item_sk, cr_order_number)
 )
 {partition_by}(cr_item_sk, cr_order_number)
@@ -527,15 +527,15 @@ CREATE {external} TABLE `{path}/web_returns`
     wr_reason_sk              Int64         {notnull},
     wr_order_number           Int64         {notnull},
     wr_return_quantity        Int64         {notnull},
-    wr_return_amt             {float_type}  {notnull},
-    wr_return_tax             {float_type}  {notnull},
-    wr_return_amt_inc_tax     {float_type}  {notnull},
-    wr_fee                    {float_type}  {notnull},
-    wr_return_ship_cost       {float_type}  {notnull},
-    wr_refunded_cash          {float_type}  {notnull},
-    wr_reversed_charge        {float_type}  {notnull},
-    wr_account_credit         {float_type}  {notnull},
-    wr_net_loss               {float_type}  {notnull}
+    wr_return_amt             {decimal_7_2_type}  {notnull},
+    wr_return_tax             {decimal_7_2_type}  {notnull},
+    wr_return_amt_inc_tax     {decimal_7_2_type}  {notnull},
+    wr_fee                    {decimal_7_2_type}  {notnull},
+    wr_return_ship_cost       {decimal_7_2_type}  {notnull},
+    wr_refunded_cash          {decimal_7_2_type}  {notnull},
+    wr_reversed_charge        {decimal_7_2_type}  {notnull},
+    wr_account_credit         {decimal_7_2_type}  {notnull},
+    wr_net_loss               {decimal_7_2_type}  {notnull}
     {primary_key} (wr_item_sk, wr_order_number)
 )
 {partition_by}(wr_item_sk, wr_order_number)
@@ -565,21 +565,21 @@ CREATE {external} TABLE `{path}/web_sales`
     ws_promo_sk               Int64         {notnull},
     ws_order_number           Int64         {notnull},
     ws_quantity               Int64         {notnull},
-    ws_wholesale_cost         {float_type}  {notnull},
-    ws_list_price             {float_type}  {notnull},
-    ws_sales_price            {float_type}  {notnull},
-    ws_ext_discount_amt       {float_type}  {notnull},
-    ws_ext_sales_price        {float_type}  {notnull},
-    ws_ext_wholesale_cost     {float_type}  {notnull},
-    ws_ext_list_price         {float_type}  {notnull},
-    ws_ext_tax                {float_type}  {notnull},
-    ws_coupon_amt             {float_type}  {notnull},
-    ws_ext_ship_cost          {float_type}  {notnull},
-    ws_net_paid               {float_type}  {notnull},
-    ws_net_paid_inc_tax       {float_type}  {notnull},
-    ws_net_paid_inc_ship      {float_type}  {notnull},
-    ws_net_paid_inc_ship_tax  {float_type}  {notnull},
-    ws_net_profit             {float_type}  {notnull}
+    ws_wholesale_cost         {decimal_7_2_type}  {notnull},
+    ws_list_price             {decimal_7_2_type}  {notnull},
+    ws_sales_price            {decimal_7_2_type}  {notnull},
+    ws_ext_discount_amt       {decimal_7_2_type}  {notnull},
+    ws_ext_sales_price        {decimal_7_2_type}  {notnull},
+    ws_ext_wholesale_cost     {decimal_7_2_type}  {notnull},
+    ws_ext_list_price         {decimal_7_2_type}  {notnull},
+    ws_ext_tax                {decimal_7_2_type}  {notnull},
+    ws_coupon_amt             {decimal_7_2_type}  {notnull},
+    ws_ext_ship_cost          {decimal_7_2_type}  {notnull},
+    ws_net_paid               {decimal_7_2_type}  {notnull},
+    ws_net_paid_inc_tax       {decimal_7_2_type}  {notnull},
+    ws_net_paid_inc_ship      {decimal_7_2_type}  {notnull},
+    ws_net_paid_inc_ship_tax  {decimal_7_2_type}  {notnull},
+    ws_net_profit             {decimal_7_2_type}  {notnull}
     {primary_key} (ws_item_sk, ws_order_number)
 )
 {partition_by}(ws_item_sk, ws_order_number)
@@ -609,21 +609,21 @@ CREATE {external} TABLE `{path}/catalog_sales`
     cs_promo_sk               Int64         {notnull},
     cs_order_number           Int64         {notnull},
     cs_quantity               Int64         {notnull},
-    cs_wholesale_cost         {float_type}  {notnull},
-    cs_list_price             {float_type}  {notnull},
-    cs_sales_price            {float_type}  {notnull},
-    cs_ext_discount_amt       {float_type}  {notnull},
-    cs_ext_sales_price        {float_type}  {notnull},
-    cs_ext_wholesale_cost     {float_type}  {notnull},
-    cs_ext_list_price         {float_type}  {notnull},
-    cs_ext_tax                {float_type}  {notnull},
-    cs_coupon_amt             {float_type}  {notnull},
-    cs_ext_ship_cost          {float_type}  {notnull},
-    cs_net_paid               {float_type}  {notnull},
-    cs_net_paid_inc_tax       {float_type}  {notnull},
-    cs_net_paid_inc_ship      {float_type}  {notnull},
-    cs_net_paid_inc_ship_tax  {float_type}  {notnull},
-    cs_net_profit             {float_type}  {notnull}
+    cs_wholesale_cost         {decimal_7_2_type}  {notnull},
+    cs_list_price             {decimal_7_2_type}  {notnull},
+    cs_sales_price            {decimal_7_2_type}  {notnull},
+    cs_ext_discount_amt       {decimal_7_2_type}  {notnull},
+    cs_ext_sales_price        {decimal_7_2_type}  {notnull},
+    cs_ext_wholesale_cost     {decimal_7_2_type}  {notnull},
+    cs_ext_list_price         {decimal_7_2_type}  {notnull},
+    cs_ext_tax                {decimal_7_2_type}  {notnull},
+    cs_coupon_amt             {decimal_7_2_type}  {notnull},
+    cs_ext_ship_cost          {decimal_7_2_type}  {notnull},
+    cs_net_paid               {decimal_7_2_type}  {notnull},
+    cs_net_paid_inc_tax       {decimal_7_2_type}  {notnull},
+    cs_net_paid_inc_ship      {decimal_7_2_type}  {notnull},
+    cs_net_paid_inc_ship_tax  {decimal_7_2_type}  {notnull},
+    cs_net_profit             {decimal_7_2_type}  {notnull}
     {primary_key} (cs_item_sk, cs_order_number)
 )
 {partition_by}(cs_item_sk, cs_order_number)
@@ -645,18 +645,18 @@ CREATE {external} TABLE `{path}/store_sales`
     ss_promo_sk               Int64         {notnull},
     ss_ticket_number          Int64         {notnull},
     ss_quantity               Int64         {notnull},
-    ss_wholesale_cost         {float_type}  {notnull},
-    ss_list_price             {float_type}  {notnull},
-    ss_sales_price            {float_type}  {notnull},
-    ss_ext_discount_amt       {float_type}  {notnull},
-    ss_ext_sales_price        {float_type}  {notnull},
-    ss_ext_wholesale_cost     {float_type}  {notnull},
-    ss_ext_list_price         {float_type}  {notnull},
-    ss_ext_tax                {float_type}  {notnull},
-    ss_coupon_amt             {float_type}  {notnull},
-    ss_net_paid               {float_type}  {notnull},
-    ss_net_paid_inc_tax       {float_type}  {notnull},
-    ss_net_profit             {float_type}  {notnull}
+    ss_wholesale_cost         {decimal_7_2_type}  {notnull},
+    ss_list_price             {decimal_7_2_type}  {notnull},
+    ss_sales_price            {decimal_7_2_type}  {notnull},
+    ss_ext_discount_amt       {decimal_7_2_type}  {notnull},
+    ss_ext_sales_price        {decimal_7_2_type}  {notnull},
+    ss_ext_wholesale_cost     {decimal_7_2_type}  {notnull},
+    ss_ext_list_price         {decimal_7_2_type}  {notnull},
+    ss_ext_tax                {decimal_7_2_type}  {notnull},
+    ss_coupon_amt             {decimal_7_2_type}  {notnull},
+    ss_net_paid               {decimal_7_2_type}  {notnull},
+    ss_net_paid_inc_tax       {decimal_7_2_type}  {notnull},
+    ss_net_profit             {decimal_7_2_type}  {notnull}
     {primary_key} (ss_item_sk, ss_ticket_number)
 )
 {partition_by}(ss_item_sk, ss_ticket_number)

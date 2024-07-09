@@ -116,7 +116,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         auto& indexImplTableDescription = *outTx.MutableCreateTable();
 
         // This description provided by user to override partition policy
-        const auto& userIndexDesc = indexDesc.GetIndexImplTableDescription();
+        const auto& userIndexDesc = indexDesc.GetIndexImplTableDescriptions(0);
         indexImplTableDescription = CalcImplTableDesc(tableInfo, implTableColumns, userIndexDesc);
 
         indexImplTableDescription.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);

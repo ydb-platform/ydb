@@ -518,15 +518,25 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 					/* Now safe to release the LWLock */
 					LWLockRelease(LogicalRepWorkerLock);
 
+					if (started_tx)
+					{
+						/*
+						 * We must commit the existing transaction to release
+						 * the existing locks before entering a busy loop.
+						 * This is required to avoid any undetected deadlocks
+						 * due to any existing lock as deadlock detector won't
+						 * be able to detect the waits on the latch.
+						 */
+						CommitTransactionCommand();
+						pgstat_report_stat(false);
+					}
+
 					/*
 					 * Enter busy loop and wait for synchronization worker to
 					 * reach expected state (or die trying).
 					 */
-					if (!started_tx)
-					{
-						StartTransactionCommand();
-						started_tx = true;
-					}
+					StartTransactionCommand();
+					started_tx = true;
 
 					wait_for_relation_state_change(rstate->relid,
 												   SUBREL_STATE_SYNCDONE);
@@ -1064,16 +1074,9 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 	 * Create a new permanent logical decoding slot. This slot will be used
 	 * for the catchup phase after COPY is done, so tell it to use the
 	 * snapshot to make the final data consistent.
-	 *
-	 * Prevent cancel/die interrupts while creating slot here because it is
-	 * possible that before the server finishes this command, a concurrent
-	 * drop subscription happens which would complete without removing this
-	 * slot leading to a dangling slot on the server.
 	 */
-	HOLD_INTERRUPTS();
 	walrcv_create_slot(LogRepWorkerWalRcvConn, slotname, false /* permanent */ ,
 					   CRS_USE_SNAPSHOT, origin_startpos);
-	RESUME_INTERRUPTS();
 
 	/*
 	 * Setup replication origin tracking. The purpose of doing this before the

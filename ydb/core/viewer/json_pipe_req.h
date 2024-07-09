@@ -135,8 +135,20 @@ protected:
             traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
         }
         TStringBuf wantTrace = Event->Get()->Request.GetHeader("X-Want-Trace");
-        if (!traceId && FromStringWithDefault<bool>(wantTrace)) {
-            traceId = NWilson::TTraceId::NewTraceId(TComponentTracingLevels::ProductionVerbose, Max<ui32>());
+        TStringBuf traceVerbosity = Event->Get()->Request.GetHeader("X-Trace-Verbosity");
+        TStringBuf traceTTL = Event->Get()->Request.GetHeader("X-Trace-TTL");
+        if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
+            ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+            if (traceVerbosity) {
+                verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
+                verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+            }
+            ui32 ttl = Max<ui32>();
+            if (traceTTL) {
+                ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
+                ttl = std::min(ttl, NWilson::TTraceId::MAX_TIME_TO_LIVE);
+            }
+            traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
         }
         if (traceId) {
             Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};

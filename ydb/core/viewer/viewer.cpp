@@ -15,6 +15,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <library/cpp/yaml/as/tstring.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <util/system/fstat.h>
 #include <util/stream/file.h>
 #include "viewer.h"
@@ -211,7 +212,7 @@ public:
     TString GetHTTPOK(const TRequestState& request, TString type, TString response, TInstant lastModified) override;
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
-    TString GetHTTPFORBIDDEN(const TRequestState& request) override;
+    TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location) override;
@@ -698,13 +699,19 @@ TString TViewer::GetHTTPBADREQUEST(const TRequestState& request, TString content
     return res;
 }
 
-TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request) {
+TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 403 Forbidden\r\n"
         << "Connection: Close\r\n";
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
     FillCORS(res, request);
     FillTraceId(res, request);
     res << "\r\n";
+    if (response) {
+        res << response;
+    }
     return res;
 }
 
@@ -765,6 +772,41 @@ TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& loc
     FillTraceId(res, request);
     res << "\r\n";
     return res;
+}
+
+void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
+    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
+    NYql::IssuesToMessage(status.GetIssues(), &protoIssues);
+
+    message.clear();
+    // find first deepest error
+    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
+        return a.severity() < b.severity();
+    });
+
+    while (protoIssues.size() > 0 && protoIssues[0].issuesSize() > 0) {
+        protoIssues = protoIssues[0].issues();
+    }
+
+    if (protoIssues.size() > 0) {
+        const Ydb::Issue::IssueMessage& issue = protoIssues[0];
+        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
+        message = issue.message();
+    }
+
+    NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
+    for (const auto& queryIssue : protoIssues) {
+        NJson::TJsonValue& issue = jsonIssues.AppendValue({});
+        NProtobufJson::Proto2Json(queryIssue, issue);
+    }
+
+    TString textStatus = TStringBuilder() << status.GetStatus();
+
+    jsonResponse["status"] = textStatus;
+
+    if (message.empty()) {
+        message = textStatus;
+    }
 }
 
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {

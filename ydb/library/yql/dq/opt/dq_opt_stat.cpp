@@ -392,6 +392,22 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
 }
 
 /***
+ * Infer statistics for a list of structs
+ */
+void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto param = TCoParameter(input);
+    if (auto maybeListType = param.Type().Maybe<TCoListType>()) {
+        auto itemType = maybeListType.Cast().ItemType();
+        if (auto maybeStructType = itemType.Maybe<TCoStructType>()) {
+            int nRows = 100;
+            int nAttrs = maybeStructType.Cast().Ptr()->ChildrenSize();
+            typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+                EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+        }
+    }
+}
+
+/***
  * For callables that include lambdas, we want to propagate the statistics from lambda's input to its argument, so
  * that the operators inside lambda receive the correct statistics
 */

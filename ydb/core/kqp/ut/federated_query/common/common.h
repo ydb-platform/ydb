@@ -17,5 +17,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::NConnector::IClient::TPtr connectorClient = nullptr,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr);
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
+        const TString& domainRoot = "Root");
 }

@@ -1004,7 +1004,7 @@ relation_can_be_sorted_early(PlannerInfo *root, RelOptInfo *rel,
 		 * one are effectively checking properties of targetexpr, so there's
 		 * no point in asking whether some other EC member would be better.)
 		 */
-		if (IS_SRF_CALL((Node *) em->em_expr))
+		if (expression_returns_set((Node *) em->em_expr))
 			continue;
 
 		/*
@@ -1032,7 +1032,7 @@ relation_can_be_sorted_early(PlannerInfo *root, RelOptInfo *rel,
 	 * member in this case; since SRFs can't appear in WHERE, they cannot
 	 * belong to multi-member ECs.)
 	 */
-	if (IS_SRF_CALL((Node *) em->em_expr))
+	if (expression_returns_set((Node *) em->em_expr))
 		return false;
 
 	return true;
@@ -1879,6 +1879,21 @@ create_join_clause(PlannerInfo *root,
 										bms_union(leftem->em_nullable_relids,
 												  rightem->em_nullable_relids),
 										ec->ec_min_security);
+
+	/*
+	 * If either EM is a child, force the clause's clause_relids to include
+	 * the relid(s) of the child rel.  In normal cases it would already, but
+	 * not if we are considering appendrel child relations with pseudoconstant
+	 * translated variables (i.e., UNION ALL sub-selects with constant output
+	 * items).  We must do this so that join_clause_is_movable_into() will
+	 * think that the clause should be evaluated at the correct place.
+	 */
+	if (leftem->em_is_child)
+		rinfo->clause_relids = bms_add_members(rinfo->clause_relids,
+											   leftem->em_relids);
+	if (rightem->em_is_child)
+		rinfo->clause_relids = bms_add_members(rinfo->clause_relids,
+											   rightem->em_relids);
 
 	/* Mark the clause as redundant, or not */
 	rinfo->parent_ec = parent_ec;

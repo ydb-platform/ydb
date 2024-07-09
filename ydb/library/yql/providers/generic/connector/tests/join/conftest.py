@@ -9,7 +9,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse 
     make_client as make_clickhouse_client,
     Client as ClickHouseClient,
 )
-from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client as PostgreSQLClient
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import (
+    Client as PostgreSQLClient
+)
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 
 

@@ -9,7 +9,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
 
 
-docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/postgresql")
+docker_compose_dir: Final = pathlib.Path(
+    "ydb/library/yql/providers/generic/connector/tests/datasource/postgresql"
+)
 
 
 @pytest.fixture

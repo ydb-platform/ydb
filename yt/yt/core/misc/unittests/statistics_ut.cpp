@@ -3,6 +3,8 @@
 #include <yt/yt/core/misc/statistics.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/yson/format.h>
+
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -10,6 +12,16 @@ namespace NYT {
 
 using namespace NYTree;
 using namespace NYson;
+
+template <>
+struct TYsonFormatTraits<TSummary>
+    : public TYsonTextFormatTraits
+{ };
+
+std::ostream& operator<<(std::ostream& out, const TSummary& summary)
+{
+    return out << ToStringViaBuilder(summary);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

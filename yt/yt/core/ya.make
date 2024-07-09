@@ -251,6 +251,7 @@ SRCS(
     yson/pull_parser_deserialize.cpp
     yson/stream.cpp
     yson/string.cpp
+    yson/string_builder_stream.cpp
     yson/string_filter.cpp
     yson/syntax_checker.cpp
     yson/token.cpp

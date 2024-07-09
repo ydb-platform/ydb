@@ -155,7 +155,7 @@ private:
     }
 
     void PassAway() override {
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 

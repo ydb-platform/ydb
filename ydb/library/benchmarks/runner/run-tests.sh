@@ -78,6 +78,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
     --pragma config.flags=LLVM_OFF \
     --pragma dq.ComputeActorType="async" \
     --pragma dq.UseFinalizeByKey=true \
+    --pragma dq.EnableSpillingNodes=All \
     $xpragma \
     #
 [ -e ${qX}-${datasize}-$tasks ] || ln -s ${qs}-${datasize}-$tasks ${qX}-${datasize}-$tasks
@@ -90,6 +91,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
     --pragma dq.ComputeActorType="async" \
     --pragma dq.UseFinalizeByKey=true \
     --pragma dq.OptLLVM=ON \
+    --pragma dq.EnableSpillingNodes=GraceJoin \
     $xpragma \
 #
 [ -e ${qL}-${datasize}-$tasks ] || ln -s ${qsL}-${datasize}-$tasks ${qL}-${datasize}-$tasks

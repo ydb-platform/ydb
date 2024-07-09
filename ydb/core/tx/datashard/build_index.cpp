@@ -51,16 +51,32 @@ static TColumnsTypes GetAllTypes(const TUserTable::TCPtr tableInfo) {
     return result;
 }
 
-static TTags BuildTags(const TColumnsTags& allTags, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
+static TTags BuildTags(
+    const TColumnsTags& allTags,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings
+)
+{
     TTags result;
-    result.reserve(indexColumns.size());
 
-    for (const auto& colName: indexColumns) {
-        result.push_back(allTags.at(colName));
-    }
+    if (checkingNotNullSettings.columnSize() > 0) {
+        result.reserve(checkingNotNullSettings.columnSize());
 
-    for (const auto& colName: dataColumns) {
-        result.push_back(allTags.at(colName));
+        for (size_t i = 0; i < checkingNotNullSettings.columnSize(); i++) {
+            const auto& colName = checkingNotNullSettings.column(i).GetColumnName();
+            result.push_back(allTags.at(colName));
+        }
+    } else {
+        result.reserve(indexColumns.size() + dataColumns.size());
+
+        for (const auto& colName: indexColumns) {
+            result.push_back(allTags.at(colName));
+        }
+
+        for (const auto& colName: dataColumns) {
+            result.push_back(allTags.at(colName));
+        }
     }
 
     return result;
@@ -164,37 +180,15 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 
 bool CheckNotNullConstraint(
     const TConstArrayRef<TCell>& cells,
-    const TColumnsTags& allTags,
-    const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings,
     TString& err
 )
 {
-    std::cerr << "==========================================================================================" << std::endl;
-    std::cerr << "size = " << checkingNotNullSettings.columnSize() << std::endl;
-    for (size_t i = 0; i < checkingNotNullSettings.columnSize(); i++) {
-        const auto& colName = checkingNotNullSettings.column(i).GetColumnName();
-        std::cerr << "colName = " << colName << std::endl;
-
-        if (!allTags.contains(colName)) {
-            err = "DATASHARD: Table hasn\'t column " + colName + ".";
+    for (const auto& cell : cells) {
+        if (cell.IsNull()) {
+            err = "DATASHARD: Column contains null value, so not-null constraint was not set.";
             return false;
         }
-
-        // const auto& tag = AllTags.at(colName);
-
-        std::cerr << cells.size() << std::endl;
-        for (size_t i = 0; i < cells.size(); i++) {
-            const auto& cell = cells[i];
-            std::cerr << "i, cell.Size() = " << i << " " << cell.Size() << std::endl;
-        }
-
-        // if (cell.IsNull()) {
-        //     std::cerr << "cell is null!!!" << std::endl;
-        //     err = "DATASHARD: Column " + colName + " contains null value, so not-null constraint was not set.";
-        //     return false;
-        // }
     }
-    std::cerr << "==========================================================================================" << std::endl;
 
     return true;
 }
@@ -369,7 +363,7 @@ public:
         , DataShardId(dataShardId)
         , DatashardActorId(datashardActorId)
         , SchemeShardActorID(schemeshardActorId)
-        , ScanTags(BuildTags(AllTags, targetIndexColumns, targetDataColumns))
+        , ScanTags(BuildTags(AllTags, targetIndexColumns, targetDataColumns, CheckingNotNullSettings))
         , UploadColumnsTypes(BuildTypes(GetAllTypes(tableInfo), tableInfo, ColumnBuildSettings, CheckingNotNullSettings, targetIndexColumns, targetDataColumns))
         , TargetDataColumnPos(targetIndexColumns.size())
         , KeyColumnIds(tableInfo->KeyColumnIds)
@@ -377,10 +371,6 @@ public:
         , TableRange(tableInfo->Range)
         , RequestedRange(range)
     {
-        std::cerr << "****************************************************************************" << std::endl;
-        std::cerr << "i am in datashard" << std::endl;
-        std::cerr << "tableInfo = " << tableInfo->Name << std::endl;
-        std::cerr << "****************************************************************************" << std::endl;
     }
 
     ~TBuildIndexScan() override = default;
@@ -458,13 +448,7 @@ public:
                 std::move(serializedValue));
         } else if (CheckingNotNullSettings.columnSize() > 0) {
             TString err;
-            Y_ABORT_UNLESS(CheckNotNullConstraint(rowCells, AllTags, CheckingNotNullSettings, err));
-
-            TSerializedCellVec keyCopy(key);
-            ReadBuf.AddRow(
-                TSerializedCellVec(key),
-                std::move(keyCopy),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)));
+            Y_ABORT_UNLESS(CheckNotNullConstraint(rowCells, err));
         } else {
             ReadBuf.AddRow(
                 TSerializedCellVec(key),

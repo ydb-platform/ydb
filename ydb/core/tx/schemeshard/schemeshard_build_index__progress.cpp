@@ -375,6 +375,11 @@ public:
                 } else if (buildInfo->IsBuildColumn()) {
                     buildInfo->SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
                 } else if (buildInfo->IsCheckingNotNull()) {
+                    THashSet<TString> columns = buildInfo->ImplTableColumns.Columns;
+                    for (const auto& x: columns) {
+                        *ev->Record.AddDataColumns() = x;
+                    }
+
                     buildInfo->SerializeToProto(Self, ev->Record.MutableCheckingNotNullSettings());
                 }
 

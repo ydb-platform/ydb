@@ -11,7 +11,6 @@
 namespace NKikimr::NSchemeShard {
 
 TVector<ISubOperation::TPtr> CreateBuildOrCheckColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    
     const auto& opType = tx.GetOperationType();
     Y_ABORT_UNLESS(opType == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild
                 || opType == NKikimrSchemeOp::EOperationType::ESchemeOpCheckingNotNull

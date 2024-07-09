@@ -7,7 +7,9 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client, make_client
 
-docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse")
+docker_compose_dir: Final = pathlib.Path(
+    "ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse"
+)
 
 
 @pytest.fixture

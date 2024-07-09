@@ -90,11 +90,13 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             Cout << "..." << colors.Default() << Endl;
         }
 
+        TInstant startTime = TInstant::Now();
         switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
             if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
+            Cout << colors.Cyan() << "Script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
@@ -111,12 +113,14 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             if (!runner.ExecuteQuery(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
+            Cout << colors.Cyan() << "Generic request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::YqlScript:
             if (!runner.ExecuteYqlScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
+            Cout << colors.Cyan() << "Yql script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::AsyncQuery:

@@ -98,11 +98,11 @@ public:
     TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TSpan&& span, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
+            NWilson::TTraceId&& traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
-                std::move(span), std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.MultiGet", ev, std::move(ev->ExecutionRelay))
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -213,12 +213,7 @@ IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGr
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
         ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind,
         TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiGet");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(span),
+    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
         latencyQueueKind, now, storagePoolCounters);
 }
 

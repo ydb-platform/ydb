@@ -33,7 +33,7 @@ public:
 
     ///
     /// Construct counter from counters node.
-    TJobCounters(const NYT::TNode& counters);
+    TJobCounters(const TNode& counters);
 
     const TJobCounter& GetAborted() const;
     const TJobCounter& GetAbortedScheduled() const;

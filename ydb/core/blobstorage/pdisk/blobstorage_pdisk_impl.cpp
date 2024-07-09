@@ -483,7 +483,7 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
     auto it = LogChunks.begin();
 
     // Gap search requires whole LogChunks list traversal
-    if (LogChunks.size() > 3 && KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
+    if (LogChunks.size() > 3) {
         while (it != LogChunks.end() && ChunkState[it->ChunkIdx].CommitState == TChunkState::LOG_COMMITTED
                 && it->CurrentUserCount != 0) {
             gapStart = *it;
@@ -535,7 +535,6 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
         return true;
     // Case 2: Chunks to be deleted located in the middle of LogChunksList
     } else if (gapStart && gapEnd) {
-        Y_ABORT_UNLESS(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
         IsLogChunksReleaseInflight = true;
         Mon.SplicedLogChunks->Add(chunksToRelease.size());
         completion->Req = THolder<TRequestBase>(ReqCreator.CreateFromArgs<TReleaseChunks>(*gapStart, *gapEnd, std::move(chunksToRelease), NWilson::TSpan{}));

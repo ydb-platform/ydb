@@ -17,13 +17,13 @@ TString TTpchWorkloadGenerator::DoGetDDLQueries() const {
     auto schema = NResource::Find("tpch_schema.sql");
     TString floatType;
     switch (Params.GetFloatMode()) {
-    case TTpchWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         floatType = "Double";
         break;
-    case TTpchWorkloadParams::EFloatMode::DECIMAL:
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         floatType = "Decimal(12,2)";
         break;
-    case TTpchWorkloadParams::EFloatMode::DECIMAL_YDB:
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
         floatType = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
                      + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
         break;

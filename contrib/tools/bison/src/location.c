@@ -1,6 +1,7 @@
 /* Locations for Bison
 
-   Copyright (C) 2002, 2005-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2005-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -37,7 +38,7 @@ static inline int
 add_column_width (int column, char const *buf, size_t bufsize)
 {
   size_t width;
-  unsigned int remaining_columns = INT_MAX - column;
+  unsigned remaining_columns = INT_MAX - column;
 
   if (buf)
     {
@@ -137,7 +138,7 @@ location_print (location loc, FILE *out)
 }
 
 
-/* Persistant data used by location_caret to avoid reopening and rereading the
+/* Persistent data used by location_caret to avoid reopening and rereading the
    same file all over for each error.  */
 struct caret_info
 {
@@ -188,7 +189,7 @@ location_caret (location loc, FILE *out)
   /* Read the actual line.  Don't update the offset, so that we keep a pointer
      to the start of the line.  */
   {
-    char c = getc (caret_info.source);
+    int c = getc (caret_info.source);
     if (c != EOF)
       {
         /* Quote the file, indent by a single column.  */
@@ -208,11 +209,18 @@ location_caret (location loc, FILE *out)
           /* Print the carets (at least one), with the same indent as above.*/
           fprintf (out, " %*s", loc.start.column - 1, "");
           for (i = loc.start.column; i == loc.start.column || i < len; ++i)
-            putc ('^', out);
+            putc (i == loc.start.column ? '^' : '~', out);
           }
         putc ('\n', out);
       }
   }
+}
+
+bool
+location_empty (location loc)
+{
+  return !loc.start.file && !loc.start.line && !loc.start.column
+    && !loc.end.file && !loc.end.line && !loc.end.column;
 }
 
 void

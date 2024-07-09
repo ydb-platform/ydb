@@ -477,6 +477,8 @@ rewriteRuleAction(Query *parsetree,
 					/* other RTE types don't contain bare expressions */
 					break;
 			}
+			sub_action->hasSubLinks |=
+				checkExprHasSubLink((Node *) rte->securityQuals);
 			if (sub_action->hasSubLinks)
 				break;			/* no need to keep scanning rtable */
 		}
@@ -1078,9 +1080,9 @@ process_matched_tle(TargetEntry *src_tle,
 	 * resulting in each assignment containing a CoerceToDomain node over a
 	 * FieldStore or SubscriptingRef.  These should have matching target
 	 * domains, so we strip them and reconstitute a single CoerceToDomain over
-	 * the combined FieldStore/SubscriptingRef nodes.  (Notice that this has the
-	 * result that the domain's checks are applied only after we do all the
-	 * field or element updates, not after each one.  This is arguably desirable.)
+	 * the combined FieldStore/SubscriptingRef nodes.  (Notice that this has
+	 * the result that the domain's checks are applied only after we do all
+	 * the field or element updates, not after each one.  This is desirable.)
 	 *----------
 	 */
 	src_expr = (Node *) src_tle->expr;
@@ -3338,7 +3340,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 								  view_targetlist,
 								  REPLACEVARS_REPORT_ERROR,
 								  0,
-								  &parsetree->hasSubLinks);
+								  NULL);
 
 	/*
 	 * Update all other RTI references in the query that point to the view
@@ -3358,7 +3360,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * columns to be affected.
 	 *
 	 * Note that this destroys the resno ordering of the targetlist, but that
-	 * will be fixed when we recurse through rewriteQuery, which will invoke
+	 * will be fixed when we recurse through RewriteQuery, which will invoke
 	 * rewriteTargetListIU again on the updated targetlist.
 	 */
 	if (parsetree->commandType != CMD_DELETE)

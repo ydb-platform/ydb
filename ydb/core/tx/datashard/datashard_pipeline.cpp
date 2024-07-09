@@ -1604,16 +1604,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                 tx->SetForceOnlineFlag();
             } else if (tx->IsReadTable()) {
                 // Feature flag tells us txproxy supports immediate mode for ReadTable
-                const bool immediateSupported = (
-                        KIKIMR_ALLOW_READTABLE_IMMEDIATE ||
-                        AppData()->AllowReadTableImmediate);
-
-                if (!immediateSupported) {
-                    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                            "Shard " << Self->TabletID() << " force immediate tx "
-                            << tx->GetTxId() << " to online because immediate ReadTable is NYI");
-                    tx->SetForceOnlineFlag();
-                }
             } else if (dataTx->RequirePrepare()) {
                 LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                            "Shard " << Self->TabletID() << " force immediate tx "

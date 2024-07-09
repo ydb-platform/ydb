@@ -2541,7 +2541,6 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-    runtime.GetAppData().AllowReadTableImmediate = true;
 
     InitRoot(server, sender);
 

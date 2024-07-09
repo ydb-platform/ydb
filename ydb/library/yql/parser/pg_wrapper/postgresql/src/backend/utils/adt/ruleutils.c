@@ -347,8 +347,7 @@ static char *pg_get_partkeydef_worker(Oid relid, int prettyFlags,
 									  bool attrsOnly, bool missing_ok);
 static char *pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 										 int prettyFlags, bool missing_ok);
-static text *pg_get_expr_worker(text *expr, Oid relid, const char *relname,
-								int prettyFlags);
+static text *pg_get_expr_worker(text *expr, Oid relid, int prettyFlags);
 static int	print_function_arguments(StringInfo buf, HeapTuple proctup,
 									 bool print_table_args, bool print_defaults);
 static void print_function_rettype(StringInfo buf, HeapTuple proctup);
@@ -1189,6 +1188,22 @@ pg_get_indexdef_columns(Oid indexrelid, bool pretty)
 
 	return pg_get_indexdef_worker(indexrelid, 0, NULL,
 								  true, true,
+								  false, false,
+								  prettyFlags, false);
+}
+
+/* Internal version, extensible with flags to control its behavior */
+char *
+pg_get_indexdef_columns_extended(Oid indexrelid, bits16 flags)
+{
+	bool		pretty = ((flags & RULE_INDEXDEF_PRETTY) != 0);
+	bool		keys_only = ((flags & RULE_INDEXDEF_KEYS_ONLY) != 0);
+	int			prettyFlags;
+
+	prettyFlags = pretty ? (PRETTYFLAG_PAREN | PRETTYFLAG_INDENT | PRETTYFLAG_SCHEMA) : PRETTYFLAG_INDENT;
+
+	return pg_get_indexdef_worker(indexrelid, 0, NULL,
+								  true, keys_only,
 								  false, false,
 								  prettyFlags, false);
 }
@@ -2559,6 +2574,11 @@ decompile_column_index_array(Datum column_index_array, Oid relId,
  * the one specified by the second parameter.  This is sufficient for
  * partial indexes, column default expressions, etc.  We also support
  * Var-free expressions, for which the OID can be InvalidOid.
+ *
+ * If the OID is nonzero but not actually valid, don't throw an error,
+ * just return NULL.  This is a bit questionable, but it's what we've
+ * done historically, and it can help avoid unwanted failures when
+ * examining catalog entries for just-deleted relations.
  * ----------
  */
 Datum
@@ -2566,29 +2586,16 @@ pg_get_expr(PG_FUNCTION_ARGS)
 {
 	text	   *expr = PG_GETARG_TEXT_PP(0);
 	Oid			relid = PG_GETARG_OID(1);
+	text	   *result;
 	int			prettyFlags;
-	char	   *relname;
 
 	prettyFlags = PRETTYFLAG_INDENT;
 
-	if (OidIsValid(relid))
-	{
-		/* Get the name for the relation */
-		relname = get_rel_name(relid);
-
-		/*
-		 * If the OID isn't actually valid, don't throw an error, just return
-		 * NULL.  This is a bit questionable, but it's what we've done
-		 * historically, and it can help avoid unwanted failures when
-		 * examining catalog entries for just-deleted relations.
-		 */
-		if (relname == NULL)
-			PG_RETURN_NULL();
-	}
+	result = pg_get_expr_worker(expr, relid, prettyFlags);
+	if (result)
+		PG_RETURN_TEXT_P(result);
 	else
-		relname = NULL;
-
-	PG_RETURN_TEXT_P(pg_get_expr_worker(expr, relid, relname, prettyFlags));
+		PG_RETURN_NULL();
 }
 
 Datum
@@ -2597,31 +2604,25 @@ pg_get_expr_ext(PG_FUNCTION_ARGS)
 	text	   *expr = PG_GETARG_TEXT_PP(0);
 	Oid			relid = PG_GETARG_OID(1);
 	bool		pretty = PG_GETARG_BOOL(2);
+	text	   *result;
 	int			prettyFlags;
-	char	   *relname;
 
 	prettyFlags = pretty ? (PRETTYFLAG_PAREN | PRETTYFLAG_INDENT | PRETTYFLAG_SCHEMA) : PRETTYFLAG_INDENT;
 
-	if (OidIsValid(relid))
-	{
-		/* Get the name for the relation */
-		relname = get_rel_name(relid);
-		/* See notes above */
-		if (relname == NULL)
-			PG_RETURN_NULL();
-	}
+	result = pg_get_expr_worker(expr, relid, prettyFlags);
+	if (result)
+		PG_RETURN_TEXT_P(result);
 	else
-		relname = NULL;
-
-	PG_RETURN_TEXT_P(pg_get_expr_worker(expr, relid, relname, prettyFlags));
+		PG_RETURN_NULL();
 }
 
 static text *
-pg_get_expr_worker(text *expr, Oid relid, const char *relname, int prettyFlags)
+pg_get_expr_worker(text *expr, Oid relid, int prettyFlags)
 {
 	Node	   *node;
 	List	   *context;
 	char	   *exprstr;
+	Relation	rel = NULL;
 	char	   *str;
 
 	/* Convert input TEXT object to C string */
@@ -2632,15 +2633,28 @@ pg_get_expr_worker(text *expr, Oid relid, const char *relname, int prettyFlags)
 
 	pfree(exprstr);
 
-	/* Prepare deparse context if needed */
+	/*
+	 * Prepare deparse context if needed.  If we are deparsing with a relid,
+	 * we need to transiently open and lock the rel, to make sure it won't go
+	 * away underneath us.  (set_relation_column_names would lock it anyway,
+	 * so this isn't really introducing any new behavior.)
+	 */
 	if (OidIsValid(relid))
-		context = deparse_context_for(relname, relid);
+	{
+		rel = try_relation_open(relid, AccessShareLock);
+		if (rel == NULL)
+			return NULL;
+		context = deparse_context_for(RelationGetRelationName(rel), relid);
+	}
 	else
 		context = NIL;
 
 	/* Deparse */
 	str = deparse_expression_pretty(node, context, false, false,
 									prettyFlags, 0);
+
+	if (rel != NULL)
+		relation_close(rel, AccessShareLock);
 
 	return string_to_text(str);
 }
@@ -7600,22 +7614,28 @@ get_name_for_var_field(Var *var, int fieldno,
 						 * Recurse into the sub-select to see what its Var
 						 * refers to. We have to build an additional level of
 						 * namespace to keep in step with varlevelsup in the
-						 * subselect.
+						 * subselect; furthermore, the subquery RTE might be
+						 * from an outer query level, in which case the
+						 * namespace for the subselect must have that outer
+						 * level as parent namespace.
 						 */
+						List	   *save_nslist = context->namespaces;
+						List	   *parent_namespaces;
 						deparse_namespace mydpns;
 						const char *result;
 
-						set_deparse_for_query(&mydpns, rte->subquery,
-											  context->namespaces);
+						parent_namespaces = list_copy_tail(context->namespaces,
+														   netlevelsup);
 
-						context->namespaces = lcons(&mydpns,
-													context->namespaces);
+						set_deparse_for_query(&mydpns, rte->subquery,
+											  parent_namespaces);
+
+						context->namespaces = lcons(&mydpns, parent_namespaces);
 
 						result = get_name_for_var_field((Var *) expr, fieldno,
 														0, context);
 
-						context->namespaces =
-							list_delete_first(context->namespaces);
+						context->namespaces = save_nslist;
 
 						return result;
 					}
@@ -7707,7 +7727,7 @@ get_name_for_var_field(Var *var, int fieldno,
 														attnum);
 
 					if (ste == NULL || ste->resjunk)
-						elog(ERROR, "subquery %s does not have attribute %d",
+						elog(ERROR, "CTE %s does not have attribute %d",
 							 rte->eref->aliasname, attnum);
 					expr = (Node *) ste->expr;
 					if (IsA(expr, Var))
@@ -7715,21 +7735,22 @@ get_name_for_var_field(Var *var, int fieldno,
 						/*
 						 * Recurse into the CTE to see what its Var refers to.
 						 * We have to build an additional level of namespace
-						 * to keep in step with varlevelsup in the CTE.
-						 * Furthermore it could be an outer CTE, so we may
-						 * have to delete some levels of namespace.
+						 * to keep in step with varlevelsup in the CTE;
+						 * furthermore it could be an outer CTE (compare
+						 * SUBQUERY case above).
 						 */
 						List	   *save_nslist = context->namespaces;
-						List	   *new_nslist;
+						List	   *parent_namespaces;
 						deparse_namespace mydpns;
 						const char *result;
 
-						set_deparse_for_query(&mydpns, ctequery,
-											  context->namespaces);
+						parent_namespaces = list_copy_tail(context->namespaces,
+														   ctelevelsup);
 
-						new_nslist = list_copy_tail(context->namespaces,
-													ctelevelsup);
-						context->namespaces = lcons(&mydpns, new_nslist);
+						set_deparse_for_query(&mydpns, ctequery,
+											  parent_namespaces);
+
+						context->namespaces = lcons(&mydpns, parent_namespaces);
 
 						result = get_name_for_var_field((Var *) expr, fieldno,
 														0, context);

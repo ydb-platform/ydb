@@ -3395,7 +3395,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(SimpleColumnFamilies) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3653,7 +3652,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3695,7 +3693,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3752,7 +3749,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesExternalBlobsWithoutDefaultProfile) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true);
         InitSubDomain(server, EDefaultTableProfile::Disabled);
 

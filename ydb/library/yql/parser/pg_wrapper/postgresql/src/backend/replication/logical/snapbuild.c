@@ -301,6 +301,17 @@ static void SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn);
 static bool SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn);
 
 /*
+ * Memory context reset callback for clearing the array of running transactions
+ * and subtransactions.
+ */
+static void
+SnapBuildResetRunningXactsCallback(void *arg)
+{
+	NInitialRunningXacts = 0;
+	InitialRunningXacts = NULL;
+}
+
+/*
  * Allocate a new snapshot builder.
  *
  * xmin_horizon is the xid >= which we can be sure no catalog rows have been
@@ -316,6 +327,7 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	MemoryContext context;
 	MemoryContext oldcontext;
 	SnapBuild  *builder;
+	MemoryContextCallback *mcallback;
 
 	/* allocate memory in own context, to have better accountability */
 	context = AllocSetContextCreate(CurrentMemoryContext,
@@ -340,6 +352,10 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	builder->start_decoding_at = start_lsn;
 	builder->building_full_snapshot = need_full_snapshot;
 	builder->initial_consistent_point = initial_consistent_point;
+
+	mcallback = palloc0(sizeof(MemoryContextCallback));
+	mcallback->func = SnapBuildResetRunningXactsCallback;
+	MemoryContextRegisterResetCallback(CurrentMemoryContext, mcallback);
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -366,10 +382,6 @@ FreeSnapshotBuilder(SnapBuild *builder)
 
 	/* other resources are deallocated via memory context reset */
 	MemoryContextDelete(context);
-
-	/* InitialRunningXacts is freed along with the context */
-	NInitialRunningXacts = 0;
-	InitialRunningXacts = NULL;
 }
 
 /*
@@ -2107,11 +2119,13 @@ SnapBuildXidSetCatalogChanges(SnapBuild *builder, TransactionId xid, int subxcnt
 							  TransactionId *subxacts, XLogRecPtr lsn)
 {
 	/*
-	 * Skip if there is no initial running xacts information or the
-	 * transaction is already marked as containing catalog changes.
+	 * Skip if there is no initial running xacts information.
+	 *
+	 * Even if the transaction has been marked as containing catalog
+	 * changes, it cannot be skipped because its subtransactions that
+	 * modified the catalog may not be marked.
 	 */
-	if (NInitialRunningXacts == 0 ||
-		ReorderBufferXidHasCatalogChanges(builder->reorder, xid))
+	if (NInitialRunningXacts == 0)
 		return;
 
 	if (bsearch(&xid, InitialRunningXacts, NInitialRunningXacts,

@@ -20,7 +20,6 @@ namespace NYT::NProfiling {
 struct IEndpointProvider
     : public TRefCounted
 {
-public:
     struct TEndpoint
     {
         //! Logical name of the endpoint.

@@ -1,5 +1,8 @@
 #include "event_pb.h"
 
+
+#include <google/protobuf/io/coded_stream.h>
+
 namespace NActors {
     bool TRopeStream::Next(const void** data, int* size) {
         *data = Iter.ContiguousData();

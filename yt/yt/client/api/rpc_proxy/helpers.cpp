@@ -708,6 +708,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
     }
 
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
+    }
+
     if (operation.TaskNames) {
         protoOperation->set_task_names(operation.TaskNames.ToString());
     }
@@ -838,6 +842,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString(protoOperation.slot_index_per_pool_tree());
     } else {
         operation->SlotIndexPerPoolTree = TYsonString();
+    }
+
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
     }
 
     if (protoOperation.has_task_names()) {

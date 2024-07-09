@@ -1,4 +1,5 @@
 #include <queue>
+#include <util/stream/format.h>
 #include "ldap_defines.h"
 
 namespace LdapMock {
@@ -7,23 +8,30 @@ namespace {
 
 bool checkFilters(const TSearchRequestInfo::TSearchFilter& filter1, const TSearchRequestInfo::TSearchFilter& filter2) {
     if (filter1.Type != filter2.Type) {
+        Cerr << "+++ Check Type: " << static_cast<int>(filter1.Type) << " != " << static_cast<int>(filter2.Type) << Endl;
         return false;
     }
     if (filter1.Attribute != filter2.Attribute) {
+        Cerr << "+++ Check Attribute: " << filter1.Attribute << " != " << filter2.Attribute << Endl;
         return false;
     }
     if (filter1.Value != filter2.Value) {
+        Cerr << "+++ Check Value: " << filter1.Value << " != " << filter2.Value << Endl;
         return false;
     }
     if (filter1.Type == EFilterType::LDAP_FILTER_EXT) {
+        Cerr << "+++ filter1.Type == EFilterType::LDAP_FILTER_EXT: " << Endl;
         if (filter1.MatchingRule != filter2.MatchingRule) {
+            Cerr << "+++ Check MatchingRule: " << filter1.MatchingRule << " != " << filter2.MatchingRule << Endl;
             return false;
         }
         if (filter1.DnAttributes != filter2.DnAttributes) {
+            Cerr << "+++ Check DnAttributes: " << filter1.DnAttributes << " != " << filter2.DnAttributes << Endl;
             return false;
         }
     }
     if (filter1.NestedFilters.size() != filter2.NestedFilters.size()) {
+        Cerr << "+++ Check NestedFilters.size(): " << filter1.NestedFilters.size() << " != " << filter2.NestedFilters.size() << Endl;
         return false;
     }
     return true;

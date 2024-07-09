@@ -314,6 +314,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         requestInfo.Attributes.push_back(GetString());
     }
 
+    Cerr << "+++ responses.size(): " << responses.size() << Endl;
     const auto it = std::find_if(responses.begin(), responses.end(), [&requestInfo] (const std::pair<TSearchRequestInfo, TSearchResponseInfo>& el) {
         const auto& expectedRequestInfo = el.first;
         return requestInfo == expectedRequestInfo;

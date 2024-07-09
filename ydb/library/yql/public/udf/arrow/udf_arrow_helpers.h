@@ -368,7 +368,7 @@ struct TUnaryKernelExec {
             auto* builderImpl = CastToScalarBuilderImpl<TScalarBuilderImpl>(builder);
 
             auto item = readerImpl->GetScalarItem(*arg.scalar());
-            TDerived::Process(item, state.GetValueBuilder(), [&](TBlockItem out) {
+            TDerived::Process(item, state.GetValueBuilder(), [&](auto out) {
                 *res = builderImpl->Build(out);
             });
         }
@@ -383,7 +383,7 @@ struct TUnaryKernelExec {
             for (int64_t i = 0; i < array.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array.length; ++j, ++i) {
                     auto item = readerImpl->GetItem(array, i);
-                    TDerived::Process(item, state.GetValueBuilder(), [&](TBlockItem out) {
+                    TDerived::Process(item, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }

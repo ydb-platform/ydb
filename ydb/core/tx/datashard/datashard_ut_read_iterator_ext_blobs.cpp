@@ -140,6 +140,33 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             }
         }
     }
+    
+    template <ui8 resultSize>
+    void ValidateReadResult(TTestActorRuntime& runtime, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> readFuture, std::array<i32, resultSize> expectedResult) {
+        Ydb::Table::ExecuteDataQueryResponse res = AwaitResponse(runtime, std::move(readFuture));
+        auto& operation = res.Getoperation();
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Table::ExecuteQueryResult result;
+        operation.result().UnpackTo(&result);
+        UNIT_ASSERT_EQUAL(result.result_sets().size(), 1);
+        auto& resultSet = result.result_sets()[0];
+        UNIT_ASSERT_EQUAL(resultSet.rows_size(), resultSize);
+
+        for (int i = 0; i < resultSet.rows_size(); i++) {
+            auto& row = resultSet.get_idx_rows(i);
+
+            UNIT_ASSERT_EQUAL(row.items_size(), 3);
+
+            auto& chunkNumValue = row.get_idx_items(1);
+
+            UNIT_ASSERT(chunkNumValue.has_int32_value());
+            UNIT_ASSERT_EQUAL(chunkNumValue.Getint32_value(), expectedResult[i]);
+            
+            auto& dataValue = row.get_idx_items(2);
+            UNIT_ASSERT(dataValue.has_bytes_value());
+            UNIT_ASSERT_EQUAL(dataValue.bytes_value().size(), 1_MB);
+        }
+    }
 
     Y_UNIT_TEST(ExtBlobs) {
         Node node(true);
@@ -241,7 +268,7 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 3, 7);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 1);
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
     }
@@ -293,6 +320,62 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
+    }
+
+    Y_UNIT_TEST(ExtBlobsWithDeletesInTheMiddle) {
+        Node node(true);
+
+        auto server = node.Server;
+        auto& runtime = *node.Runtime;
+        auto& sender = node.Sender;
+        auto shard1 = node.Shard;
+        auto tableId1 = node.TableId;
+
+        TString largeValue(1_MB, 'L');
+
+        for (int i = 0; i < 10; i++) {
+            TString chunkNum = ToString(i);
+            TString query = R"___(
+                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            TString query = R"___(
+                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=0;)___";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        for (int i = 2; i < 5; i++) {
+            TString chunkNum = ToString(i);
+            TString query = R"___(
+                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___"
+                + chunkNum + ";";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        auto iteratorCounter = SetupReadIteratorObserver(runtime);
+
+        auto readFuture = KqpSimpleSend(runtime, R"(SELECT blob_id, chunk_num, data0
+                FROM `/Root/table-1`
+                WHERE
+                    blob_id = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") AND
+                    chunk_num >= 0
+                ORDER BY blob_id, chunk_num ASC
+                LIMIT 100;)");
+
+        ValidateReadResult<6>(runtime, std::move(readFuture), {1, 5, 6, 7, 8, 9});
+
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 2);
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 6);
     }
 
     Y_UNIT_TEST(ExtBlobsMultipleColumns) {

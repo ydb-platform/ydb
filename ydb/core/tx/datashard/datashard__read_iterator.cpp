@@ -860,12 +860,26 @@ private:
 
             if (!precharging && env.MissingReferencesSize()) {
                 precharging = true;
-                if (RowsRead > 0) {
+
+                const ui64 processedRecords = ResetRowSkips(iter->Stats);
+                
+                if ((RowsProcessed + processedRecords) > 0) {
+                    // There were some rows (regular, erased or invisible), so
+                    // this transaction won't be restarting and there is no point in precharging missing references.
+                    RowsSinceLastCheck += processedRecords;
+                    RowsProcessed += processedRecords;
+
+                    // We will be continuing from the current key (inclusive).
+                    LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                    LastProcessedKeyErasedOrMissing = true;
                     break;
                 }
             }
 
             if (precharging) {
+                // Precharge only if we didn't meet any rows prior to a row with a missing reference.
+                // Meanwhile, RowsProcessed, RowsSinceLastCheck and LastProcessed key are not updated,
+                // so we will restart the transaction from the exact same key we started iterating from.
                 prechargedCount++;
                 prechargedRowsSize += EstimateSize(rowValues.Cells());
 
@@ -877,6 +891,7 @@ private:
             }
 
             advanced = true;
+
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
 
@@ -910,14 +925,16 @@ private:
         // row). When there are not enough rows we would prefer restarting in
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
-        auto lastKey = iter->GetKey().Cells();
-           
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && (iter->Last() == NTable::EReady::Page || precharging)) {
-            LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
-            LastProcessedKeyErasedOrMissing = precharging || iter->GetKeyState() == NTable::ERowOp::Erase;
-            advanced = true;
-        } else {
-            LastProcessedKey.clear();
+        if (!precharging) {
+            auto lastKey = iter->GetKey().Cells();
+            
+            if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
+                LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
+                LastProcessedKeyErasedOrMissing = iter->GetKeyState() == NTable::ERowOp::Erase;
+                advanced = true;
+            } else {
+                LastProcessedKey.clear();
+            }
         }
 
         // last iteration to Page or Gone might also have deleted or invisible rows

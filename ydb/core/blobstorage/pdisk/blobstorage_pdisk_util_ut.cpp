@@ -364,9 +364,6 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             footer->Nonce = nonce++;
             NPDisk::TPDiskHashCalculator hasher;
             switch (i) {
-            case 0:
-                footer->Hash = hasher.OldHashSector(offset, magic, sectors[i].Begin(), sectors[i].Size());
-                break;
             case 1:
                 footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(offset, magic, sectors[i].Begin(), sectors[i].Size());
                 break;

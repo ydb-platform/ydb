@@ -291,12 +291,15 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     }
     requestInfo.TypesOnly = GetByte();
 
+    Cerr << "+++ Before ProcessFilter" << Endl;
     requestInfo.Filter = ProcessFilter();
 
     // Extract Attributes
     elementType = GetByte();
+    Cerr << "+++ Extract Attributes: " << static_cast<int>(elementType) << Endl;
     if (elementType != EElementType::SEQUENCE) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "+++ Extract Attributes return" << Endl;
         return {responseOpData};
     }
     length = GetLength();
@@ -305,6 +308,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
             responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "+++ Extract Attributes STRING return" << Endl;
             return {responseOpData};
         }
         requestInfo.Attributes.push_back(GetString());
@@ -317,6 +321,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     if (it == responses.end()) {
         responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+        Cerr << "++ Response not found" << Endl;
         return {responseOpData};
     }
 
@@ -403,12 +408,14 @@ void TLdapRequestProcessor::ProcessFilterEquality(TSearchRequestInfo::TSearchFil
 }
 
 void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter) {
+    Cerr << "+++ ProcessFilterExtensibleMatch" << Endl;
     const size_t limit = ReadBytes + lengthFilter;
     size_t lastCheckedField = 0;
     unsigned char elementType = GetByte();
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_OID) {
         filter->MatchingRule = GetString();
         lastCheckedField = 1;
+        Cerr << "+++ EXT_OID" << Endl;
     }
 
     if (lastCheckedField == 1 && ReadBytes < limit) {
@@ -417,6 +424,7 @@ void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSe
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_TYPE) {
         filter->Attribute = GetString();
         lastCheckedField = 2;
+        Cerr << "+++ EXT_TYPE" << Endl;
     }
 
     if (lastCheckedField == 2 && ReadBytes < limit) {
@@ -424,6 +432,7 @@ void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSe
     }
     if (elementType == EExtendedFilterType::LDAP_FILTER_EXT_VALUE) {
         filter->Value = GetString();
+        Cerr << "+++ EXT_VALUE" << Endl;
     }
 
     if (ReadBytes < limit) {
@@ -432,6 +441,7 @@ void TLdapRequestProcessor::ProcessFilterExtensibleMatch(TSearchRequestInfo::TSe
             size_t length = GetLength();
             Y_UNUSED(length);
             filter->DnAttributes = GetByte();
+            Cerr << "+++ EXT_DNATTRS" << Endl;
         }
     }
 }

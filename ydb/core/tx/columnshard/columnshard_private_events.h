@@ -11,6 +11,10 @@
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 
+namespace NKikimr::NOlap::NReader {
+class IApplyAction;
+}
+
 namespace NKikimr::NColumnShard {
 
 struct TEvPrivate {
@@ -41,10 +45,26 @@ struct TEvPrivate {
         EvExportCursorSaved,
         EvExportSaveCursor,
 
+        EvTaskProcessedResult,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
+    private:
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
+
+    public:
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
+            return std::move(Result);
+        }
+
+        TEvTaskProcessedResult(const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result)
+            : Result(result) {
+        }
+    };
 
     struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {
     };

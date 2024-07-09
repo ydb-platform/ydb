@@ -30,7 +30,7 @@ namespace NYql::NDqs {
         NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
         THashMap<TString, TString> ClusterNamesMapping;
 
-        ui64 MkqlInitialMemoryLimit = 50_MB;
+        ui64 MkqlInitialMemoryLimit = 8_GB;
         ui64 MkqlTotalMemoryLimit = 0;
         ui64 MkqlMinAllocSize = 30_MB;
         ui64 MkqlProgramHardMemoryLimit = 0;

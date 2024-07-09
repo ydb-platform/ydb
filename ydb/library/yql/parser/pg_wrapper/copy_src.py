@@ -327,6 +327,7 @@ def make_sources_list(build_dir):
             for line in fsrc:
                 #print(line.strip())
                 name = line.strip()
+                if name.endswith("_scanner.c"): continue
                 if name.endswith(".c") and need_copy(name) and name not in exclude_from_source_list:
                     fdst.write("    " + name + "\n")
             fdst.write(")\n")

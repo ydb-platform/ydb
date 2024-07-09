@@ -3,7 +3,7 @@
  * fmgr.c
  *	  The Postgres function manager.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -580,20 +580,6 @@ record_C_func(HeapTuple procedureTuple,
 	entry->fn_tid = procedureTuple->t_self;
 	entry->user_fn = user_fn;
 	entry->inforec = inforec;
-}
-
-/*
- * clear_external_function_hash: remove entries for a library being closed
- *
- * Presently we just zap the entire hash table, but later it might be worth
- * the effort to remove only the entries associated with the given handle.
- */
-void
-clear_external_function_hash(void *filehandle)
-{
-	if (CFuncHash)
-		hash_destroy(CFuncHash);
-	CFuncHash = NULL;
 }
 
 

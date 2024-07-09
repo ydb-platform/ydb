@@ -3,7 +3,7 @@
  * spi.c
  *				Server Programming Interface
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -228,6 +228,7 @@ static void
 _SPI_commit(bool chain)
 {
 	MemoryContext oldcontext = CurrentMemoryContext;
+	SavedTransactionCharacteristics savetc;
 
 	/*
 	 * Complain if we are in a context that doesn't permit transaction
@@ -255,9 +256,8 @@ _SPI_commit(bool chain)
 				(errcode(ERRCODE_INVALID_TRANSACTION_TERMINATION),
 				 errmsg("cannot commit while a subtransaction is active")));
 
-	/* XXX this ain't re-entrant enough for my taste */
 	if (chain)
-		SaveTransactionCharacteristics();
+		SaveTransactionCharacteristics(&savetc);
 
 	/* Catch any error occurring during the COMMIT */
 	PG_TRY();
@@ -281,7 +281,7 @@ _SPI_commit(bool chain)
 		/* Immediately start a new transaction */
 		StartTransactionCommand();
 		if (chain)
-			RestoreTransactionCharacteristics();
+			RestoreTransactionCharacteristics(&savetc);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -305,7 +305,7 @@ _SPI_commit(bool chain)
 		/* ... and start a new one */
 		StartTransactionCommand();
 		if (chain)
-			RestoreTransactionCharacteristics();
+			RestoreTransactionCharacteristics(&savetc);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -333,6 +333,7 @@ static void
 _SPI_rollback(bool chain)
 {
 	MemoryContext oldcontext = CurrentMemoryContext;
+	SavedTransactionCharacteristics savetc;
 
 	/* see under SPI_commit() */
 	if (_SPI_current->atomic)
@@ -346,9 +347,8 @@ _SPI_rollback(bool chain)
 				(errcode(ERRCODE_INVALID_TRANSACTION_TERMINATION),
 				 errmsg("cannot roll back while a subtransaction is active")));
 
-	/* XXX this ain't re-entrant enough for my taste */
 	if (chain)
-		SaveTransactionCharacteristics();
+		SaveTransactionCharacteristics(&savetc);
 
 	/* Catch any error occurring during the ROLLBACK */
 	PG_TRY();
@@ -373,7 +373,7 @@ _SPI_rollback(bool chain)
 		/* Immediately start a new transaction */
 		StartTransactionCommand();
 		if (chain)
-			RestoreTransactionCharacteristics();
+			RestoreTransactionCharacteristics(&savetc);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -398,7 +398,7 @@ _SPI_rollback(bool chain)
 		/* ... and start a new one */
 		StartTransactionCommand();
 		if (chain)
-			RestoreTransactionCharacteristics();
+			RestoreTransactionCharacteristics(&savetc);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -420,16 +420,6 @@ void
 SPI_rollback_and_chain(void)
 {
 	_SPI_rollback(true);
-}
-
-/*
- * SPICleanup is a no-op, kept for backwards compatibility. We rely on
- * AtEOXact_SPI to cleanup. Extensions should not (need to) fiddle with the
- * internal SPI state directly.
- */
-void
-SPICleanup(void)
-{
 }
 
 /*
@@ -1150,7 +1140,7 @@ SPI_modifytuple(Relation rel, HeapTuple tuple, int natts, int *attnum,
 		if (attnum[i] <= 0 || attnum[i] > numberOfAttributes)
 			break;
 		v[attnum[i] - 1] = Values[i];
-		n[attnum[i] - 1] = (Nulls && Nulls[i] == 'n') ? true : false;
+		n[attnum[i] - 1] = (Nulls && Nulls[i] == 'n');
 	}
 
 	if (i == natts)				/* no errors in *attnum */
@@ -2041,6 +2031,8 @@ SPI_result_code_string(int code)
 			return "SPI_OK_REL_UNREGISTER";
 		case SPI_OK_TD_REGISTER:
 			return "SPI_OK_TD_REGISTER";
+		case SPI_OK_MERGE:
+			return "SPI_OK_MERGE";
 	}
 	/* Unrecognized code ... return something useful ... */
 	sprintf(buf, "Unrecognized SPI code %d", code);
@@ -2270,7 +2262,7 @@ _SPI_prepare_plan(const char *src, SPIPlanPtr plan)
 		if (plan->parserSetup != NULL)
 		{
 			Assert(plan->nargs == 0);
-			stmt_list = pg_analyze_and_rewrite_params(parsetree,
+			stmt_list = pg_analyze_and_rewrite_withcb(parsetree,
 													  src,
 													  plan->parserSetup,
 													  plan->parserSetupArg,
@@ -2278,11 +2270,11 @@ _SPI_prepare_plan(const char *src, SPIPlanPtr plan)
 		}
 		else
 		{
-			stmt_list = pg_analyze_and_rewrite(parsetree,
-											   src,
-											   plan->argtypes,
-											   plan->nargs,
-											   _SPI_current->queryEnv);
+			stmt_list = pg_analyze_and_rewrite_fixedparams(parsetree,
+														   src,
+														   plan->argtypes,
+														   plan->nargs,
+														   _SPI_current->queryEnv);
 		}
 
 		/* Finish filling in the CachedPlanSource */
@@ -2507,7 +2499,7 @@ _SPI_execute_plan(SPIPlanPtr plan, const SPIExecuteOptions *options,
 			else if (plan->parserSetup != NULL)
 			{
 				Assert(plan->nargs == 0);
-				stmt_list = pg_analyze_and_rewrite_params(parsetree,
+				stmt_list = pg_analyze_and_rewrite_withcb(parsetree,
 														  src,
 														  plan->parserSetup,
 														  plan->parserSetupArg,
@@ -2515,11 +2507,11 @@ _SPI_execute_plan(SPIPlanPtr plan, const SPIExecuteOptions *options,
 			}
 			else
 			{
-				stmt_list = pg_analyze_and_rewrite(parsetree,
-												   src,
-												   plan->argtypes,
-												   plan->nargs,
-												   _SPI_current->queryEnv);
+				stmt_list = pg_analyze_and_rewrite_fixedparams(parsetree,
+															   src,
+															   plan->argtypes,
+															   plan->nargs,
+															   _SPI_current->queryEnv);
 			}
 
 			/* Finish filling in the CachedPlanSource */
@@ -2892,6 +2884,9 @@ _SPI_pquery(QueryDesc *queryDesc, bool fire_triggers, uint64 tcount)
 				res = SPI_OK_UPDATE_RETURNING;
 			else
 				res = SPI_OK_UPDATE;
+			break;
+		case CMD_MERGE:
+			res = SPI_OK_MERGE;
 			break;
 		default:
 			return SPI_ERROR_OPUNKNOWN;

@@ -80,7 +80,7 @@
  * general, after logging in, but let's do what we can here.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/libpq/auth-scram.c
@@ -101,10 +101,25 @@
 #include "common/sha2.h"
 #include "libpq/auth.h"
 #include "libpq/crypt.h"
+#include "libpq/sasl.h"
 #include "libpq/scram.h"
 #include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/timestamp.h"
+
+static void scram_get_mechanisms(Port *port, StringInfo buf);
+static void *scram_init(Port *port, const char *selected_mech,
+						const char *shadow_pass);
+static int	scram_exchange(void *opaq, const char *input, int inputlen,
+						   char **output, int *outputlen,
+						   const char **logdetail);
+
+/* Mechanism declaration */
+const pg_be_sasl_mech pg_be_scram_mech = {
+	scram_get_mechanisms,
+	scram_init,
+	scram_exchange
+};
 
 /*
  * Status data for a SCRAM authentication exchange.  This should be kept
@@ -170,16 +185,14 @@ static char *sanitize_str(const char *s);
 static char *scram_mock_salt(const char *username);
 
 /*
- * pg_be_scram_get_mechanisms
- *
  * Get a list of SASL mechanisms that this module supports.
  *
  * For the convenience of building the FE/BE packet that lists the
  * mechanisms, the names are appended to the given StringInfo buffer,
  * separated by '\0' bytes.
  */
-void
-pg_be_scram_get_mechanisms(Port *port, StringInfo buf)
+static void
+scram_get_mechanisms(Port *port, StringInfo buf)
 {
 	/*
 	 * Advertise the mechanisms in decreasing order of importance.  So the
@@ -199,15 +212,13 @@ pg_be_scram_get_mechanisms(Port *port, StringInfo buf)
 }
 
 /*
- * pg_be_scram_init
- *
  * Initialize a new SCRAM authentication exchange status tracker.  This
  * needs to be called before doing any exchange.  It will be filled later
  * after the beginning of the exchange with authentication information.
  *
  * 'selected_mech' identifies the SASL mechanism that the client selected.
  * It should be one of the mechanisms that we support, as returned by
- * pg_be_scram_get_mechanisms().
+ * scram_get_mechanisms().
  *
  * 'shadow_pass' is the role's stored secret, from pg_authid.rolpassword.
  * The username was provided by the client in the startup message, and is
@@ -215,10 +226,8 @@ pg_be_scram_get_mechanisms(Port *port, StringInfo buf)
  * an authentication exchange, but it will fail, as if an incorrect password
  * was given.
  */
-void *
-pg_be_scram_init(Port *port,
-				 const char *selected_mech,
-				 const char *shadow_pass)
+static void *
+scram_init(Port *port, const char *selected_mech, const char *shadow_pass)
 {
 	scram_state *state;
 	bool		got_secret;
@@ -325,9 +334,9 @@ pg_be_scram_init(Port *port,
  * string at *logdetail that will be sent to the postmaster log (but not
  * the client).
  */
-int
-pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
-					 char **output, int *outputlen, char **logdetail)
+static int
+scram_exchange(void *opaq, const char *input, int inputlen,
+			   char **output, int *outputlen, const char **logdetail)
 {
 	scram_state *state = (scram_state *) opaq;
 	int			result;
@@ -346,7 +355,7 @@ pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
 
 		*output = pstrdup("");
 		*outputlen = 0;
-		return SASL_EXCHANGE_CONTINUE;
+		return PG_SASL_EXCHANGE_CONTINUE;
 	}
 
 	/*
@@ -379,7 +388,7 @@ pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
 			*output = build_server_first_message(state);
 
 			state->state = SCRAM_AUTH_SALT_SENT;
-			result = SASL_EXCHANGE_CONTINUE;
+			result = PG_SASL_EXCHANGE_CONTINUE;
 			break;
 
 		case SCRAM_AUTH_SALT_SENT:
@@ -408,7 +417,8 @@ pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
 			 * erroring out in an application-specific way.  We choose to do
 			 * the latter, so that the error message for invalid password is
 			 * the same for all authentication methods.  The caller will call
-			 * ereport(), when we return SASL_EXCHANGE_FAILURE with no output.
+			 * ereport(), when we return PG_SASL_EXCHANGE_FAILURE with no
+			 * output.
 			 *
 			 * NB: the order of these checks is intentional.  We calculate the
 			 * client proof even in a mock authentication, even though it's
@@ -417,7 +427,7 @@ pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
 			 */
 			if (!verify_client_proof(state) || state->doomed)
 			{
-				result = SASL_EXCHANGE_FAILURE;
+				result = PG_SASL_EXCHANGE_FAILURE;
 				break;
 			}
 
@@ -425,16 +435,16 @@ pg_be_scram_exchange(void *opaq, const char *input, int inputlen,
 			*output = build_server_final_message(state);
 
 			/* Success! */
-			result = SASL_EXCHANGE_SUCCESS;
+			result = PG_SASL_EXCHANGE_SUCCESS;
 			state->state = SCRAM_AUTH_FINISHED;
 			break;
 
 		default:
 			elog(ERROR, "invalid SCRAM exchange state");
-			result = SASL_EXCHANGE_FAILURE;
+			result = PG_SASL_EXCHANGE_FAILURE;
 	}
 
-	if (result == SASL_EXCHANGE_FAILURE && state->logdetail && logdetail)
+	if (result == PG_SASL_EXCHANGE_FAILURE && state->logdetail && logdetail)
 		*logdetail = state->logdetail;
 
 	if (*output)
@@ -455,6 +465,7 @@ pg_be_scram_build_secret(const char *password)
 	pg_saslprep_rc rc;
 	char		saltbuf[SCRAM_DEFAULT_SALT_LEN];
 	char	   *result;
+	const char *errstr = NULL;
 
 	/*
 	 * Normalize the password with SASLprep.  If that doesn't work, because
@@ -472,7 +483,8 @@ pg_be_scram_build_secret(const char *password)
 				 errmsg("could not generate random salt")));
 
 	result = scram_build_secret(saltbuf, SCRAM_DEFAULT_SALT_LEN,
-								SCRAM_DEFAULT_ITERATIONS, password);
+								SCRAM_DEFAULT_ITERATIONS, password,
+								&errstr);
 
 	if (prep_password)
 		pfree(prep_password);
@@ -499,6 +511,7 @@ scram_verify_plain_password(const char *username, const char *password,
 	uint8		computed_key[SCRAM_KEY_LEN];
 	char	   *prep_password;
 	pg_saslprep_rc rc;
+	const char *errstr = NULL;
 
 	if (!parse_scram_secret(secret, &iterations, &encoded_salt,
 							stored_key, server_key))
@@ -529,10 +542,10 @@ scram_verify_plain_password(const char *username, const char *password,
 
 	/* Compute Server Key based on the user-supplied plaintext password */
 	if (scram_SaltedPassword(password, salt, saltlen, iterations,
-							 salted_password) < 0 ||
-		scram_ServerKey(salted_password, computed_key) < 0)
+							 salted_password, &errstr) < 0 ||
+		scram_ServerKey(salted_password, computed_key, &errstr) < 0)
 	{
-		elog(ERROR, "could not compute server key");
+		elog(ERROR, "could not compute server key: %s", errstr);
 	}
 
 	if (prep_password)
@@ -1103,6 +1116,7 @@ verify_client_proof(scram_state *state)
 	uint8		client_StoredKey[SCRAM_KEY_LEN];
 	pg_hmac_ctx *ctx = pg_hmac_create(PG_SHA256);
 	int			i;
+	const char *errstr = NULL;
 
 	/*
 	 * Calculate ClientSignature.  Note that we don't log directly a failure
@@ -1123,7 +1137,8 @@ verify_client_proof(scram_state *state)
 					   strlen(state->client_final_message_without_proof)) < 0 ||
 		pg_hmac_final(ctx, ClientSignature, sizeof(ClientSignature)) < 0)
 	{
-		elog(ERROR, "could not calculate client signature");
+		elog(ERROR, "could not calculate client signature: %s",
+			 pg_hmac_error(ctx));
 	}
 
 	pg_hmac_free(ctx);
@@ -1133,8 +1148,8 @@ verify_client_proof(scram_state *state)
 		ClientKey[i] = state->ClientProof[i] ^ ClientSignature[i];
 
 	/* Hash it one more time, and compare with StoredKey */
-	if (scram_H(ClientKey, SCRAM_KEY_LEN, client_StoredKey) < 0)
-		elog(ERROR, "could not hash stored key");
+	if (scram_H(ClientKey, SCRAM_KEY_LEN, client_StoredKey, &errstr) < 0)
+		elog(ERROR, "could not hash stored key: %s", errstr);
 
 	if (memcmp(client_StoredKey, state->StoredKey, SCRAM_KEY_LEN) != 0)
 		return false;
@@ -1199,7 +1214,7 @@ build_server_first_message(scram_state *state)
 	state->server_nonce[encoded_len] = '\0';
 
 	state->server_first_message =
-		psprintf("r=%s%s,s=%s,i=%u",
+		psprintf("r=%s%s,s=%s,i=%d",
 				 state->client_nonce, state->server_nonce,
 				 state->salt, state->iterations);
 
@@ -1379,7 +1394,8 @@ build_server_final_message(scram_state *state)
 					   strlen(state->client_final_message_without_proof)) < 0 ||
 		pg_hmac_final(ctx, ServerSignature, sizeof(ServerSignature)) < 0)
 	{
-		elog(ERROR, "could not calculate server signature");
+		elog(ERROR, "could not calculate server signature: %s",
+			 pg_hmac_error(ctx));
 	}
 
 	pg_hmac_free(ctx);

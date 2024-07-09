@@ -3,7 +3,7 @@
  * explain.c
  *	  Explain query execution plans
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1188,6 +1188,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 				case CMD_DELETE:
 					pname = operation = "Delete";
 					break;
+				case CMD_MERGE:
+					pname = operation = "Merge";
+					break;
 				default:
 					pname = "???";
 					break;
@@ -1984,6 +1987,14 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
+			break;
+		case T_WindowAgg:
+			show_upper_qual(plan->qual, "Filter", planstate, ancestors, es);
+			if (plan->qual)
+				show_instrumentation_count("Rows Removed by Filter", 1,
+										   planstate, es);
+			show_upper_qual(((WindowAgg *) plan)->runConditionOrig,
+							"Run Condition", planstate, ancestors, es);
 			break;
 		case T_Group:
 			show_group_keys(castNode(GroupState, planstate), ancestors, es);
@@ -3102,7 +3113,7 @@ show_memoize_info(MemoizeState *mstate, List *ancestors, ExplainState *es)
 	ListCell   *lc;
 	List	   *context;
 	StringInfoData keystr;
-	char	   *seperator = "";
+	char	   *separator = "";
 	bool		useprefix;
 	int64		memPeakKb;
 
@@ -3123,11 +3134,11 @@ show_memoize_info(MemoizeState *mstate, List *ancestors, ExplainState *es)
 	{
 		Node	   *expr = (Node *) lfirst(lc);
 
-		appendStringInfoString(&keystr, seperator);
+		appendStringInfoString(&keystr, separator);
 
 		appendStringInfoString(&keystr, deparse_expression(expr, context,
 														   useprefix, false));
-		seperator = ", ";
+		separator = ", ";
 	}
 
 	if (es->format != EXPLAIN_FORMAT_TEXT)
@@ -3510,8 +3521,11 @@ show_buffer_usage(ExplainState *es, const BufferUsage *usage, bool planning)
 								usage->temp_blks_written > 0);
 		bool		has_timing = (!INSTR_TIME_IS_ZERO(usage->blk_read_time) ||
 								  !INSTR_TIME_IS_ZERO(usage->blk_write_time));
+		bool		has_temp_timing = (!INSTR_TIME_IS_ZERO(usage->temp_blk_read_time) ||
+									   !INSTR_TIME_IS_ZERO(usage->temp_blk_write_time));
 		bool		show_planning = (planning && (has_shared ||
-												  has_local || has_temp || has_timing));
+												  has_local || has_temp || has_timing ||
+												  has_temp_timing));
 
 		if (show_planning)
 		{
@@ -3576,16 +3590,33 @@ show_buffer_usage(ExplainState *es, const BufferUsage *usage, bool planning)
 		}
 
 		/* As above, show only positive counter values. */
-		if (has_timing)
+		if (has_timing || has_temp_timing)
 		{
 			ExplainIndentText(es);
 			appendStringInfoString(es->str, "I/O Timings:");
-			if (!INSTR_TIME_IS_ZERO(usage->blk_read_time))
-				appendStringInfo(es->str, " read=%0.3f",
-								 INSTR_TIME_GET_MILLISEC(usage->blk_read_time));
-			if (!INSTR_TIME_IS_ZERO(usage->blk_write_time))
-				appendStringInfo(es->str, " write=%0.3f",
-								 INSTR_TIME_GET_MILLISEC(usage->blk_write_time));
+
+			if (has_timing)
+			{
+				appendStringInfoString(es->str, " shared");
+				if (!INSTR_TIME_IS_ZERO(usage->blk_read_time))
+					appendStringInfo(es->str, " read=%0.3f",
+									 INSTR_TIME_GET_MILLISEC(usage->blk_read_time));
+				if (!INSTR_TIME_IS_ZERO(usage->blk_write_time))
+					appendStringInfo(es->str, " write=%0.3f",
+									 INSTR_TIME_GET_MILLISEC(usage->blk_write_time));
+				if (has_temp_timing)
+					appendStringInfoChar(es->str, ',');
+			}
+			if (has_temp_timing)
+			{
+				appendStringInfoString(es->str, " temp");
+				if (!INSTR_TIME_IS_ZERO(usage->temp_blk_read_time))
+					appendStringInfo(es->str, " read=%0.3f",
+									 INSTR_TIME_GET_MILLISEC(usage->temp_blk_read_time));
+				if (!INSTR_TIME_IS_ZERO(usage->temp_blk_write_time))
+					appendStringInfo(es->str, " write=%0.3f",
+									 INSTR_TIME_GET_MILLISEC(usage->temp_blk_write_time));
+			}
 			appendStringInfoChar(es->str, '\n');
 		}
 
@@ -3621,6 +3652,12 @@ show_buffer_usage(ExplainState *es, const BufferUsage *usage, bool planning)
 								 3, es);
 			ExplainPropertyFloat("I/O Write Time", "ms",
 								 INSTR_TIME_GET_MILLISEC(usage->blk_write_time),
+								 3, es);
+			ExplainPropertyFloat("Temp I/O Read Time", "ms",
+								 INSTR_TIME_GET_MILLISEC(usage->temp_blk_read_time),
+								 3, es);
+			ExplainPropertyFloat("Temp I/O Write Time", "ms",
+								 INSTR_TIME_GET_MILLISEC(usage->temp_blk_write_time),
 								 3, es);
 		}
 	}
@@ -3758,7 +3795,7 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 			Assert(rte->rtekind == RTE_RELATION);
 			objectname = get_rel_name(rte->relid);
 			if (es->verbose)
-				namespace = get_namespace_name(get_rel_namespace(rte->relid));
+				namespace = get_namespace_name_or_temp(get_rel_namespace(rte->relid));
 			objecttag = "Relation Name";
 			break;
 		case T_FunctionScan:
@@ -3785,8 +3822,7 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 
 						objectname = get_func_name(funcid);
 						if (es->verbose)
-							namespace =
-								get_namespace_name(get_func_namespace(funcid));
+							namespace = get_namespace_name_or_temp(get_func_namespace(funcid));
 					}
 				}
 				objecttag = "Function Name";
@@ -3877,6 +3913,11 @@ show_modifytable_info(ModifyTableState *mtstate, List *ancestors,
 		case CMD_DELETE:
 			operation = "Delete";
 			foperation = "Foreign Delete";
+			break;
+		case CMD_MERGE:
+			operation = "Merge";
+			/* XXX unsupported for now, but avoid compiler noise */
+			foperation = "Foreign Merge";
 			break;
 		default:
 			operation = "???";
@@ -3998,6 +4039,53 @@ show_modifytable_info(ModifyTableState *mtstate, List *ancestors,
 								 insert_path, 0, es);
 			ExplainPropertyFloat("Conflicting Tuples", NULL,
 								 other_path, 0, es);
+		}
+	}
+	else if (node->operation == CMD_MERGE)
+	{
+		/* EXPLAIN ANALYZE display of tuples processed */
+		if (es->analyze && mtstate->ps.instrument)
+		{
+			double		total;
+			double		insert_path;
+			double		update_path;
+			double		delete_path;
+			double		skipped_path;
+
+			InstrEndLoop(outerPlanState(mtstate)->instrument);
+
+			/* count the number of source rows */
+			total = outerPlanState(mtstate)->instrument->ntuples;
+			insert_path = mtstate->mt_merge_inserted;
+			update_path = mtstate->mt_merge_updated;
+			delete_path = mtstate->mt_merge_deleted;
+			skipped_path = total - insert_path - update_path - delete_path;
+			Assert(skipped_path >= 0);
+
+			if (es->format == EXPLAIN_FORMAT_TEXT)
+			{
+				if (total > 0)
+				{
+					ExplainIndentText(es);
+					appendStringInfoString(es->str, "Tuples:");
+					if (insert_path > 0)
+						appendStringInfo(es->str, " inserted=%.0f", insert_path);
+					if (update_path > 0)
+						appendStringInfo(es->str, " updated=%.0f", update_path);
+					if (delete_path > 0)
+						appendStringInfo(es->str, " deleted=%.0f", delete_path);
+					if (skipped_path > 0)
+						appendStringInfo(es->str, " skipped=%.0f", skipped_path);
+					appendStringInfoChar(es->str, '\n');
+				}
+			}
+			else
+			{
+				ExplainPropertyFloat("Tuples Inserted", NULL, insert_path, 0, es);
+				ExplainPropertyFloat("Tuples Updated", NULL, update_path, 0, es);
+				ExplainPropertyFloat("Tuples Deleted", NULL, delete_path, 0, es);
+				ExplainPropertyFloat("Tuples Skipped", NULL, skipped_path, 0, es);
+			}
 		}
 	}
 

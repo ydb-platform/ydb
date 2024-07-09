@@ -4,13 +4,17 @@ TExecFunc arrow_binary_upgrade_create_empty_extension() { return MakeIndirectExe
 TExecFunc arrow_binary_upgrade_set_missing_value() { return MakeIndirectExec<true, true>(&binary_upgrade_set_missing_value); }
 TExecFunc arrow_binary_upgrade_set_next_array_pg_type_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_array_pg_type_oid); }
 TExecFunc arrow_binary_upgrade_set_next_heap_pg_class_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_heap_pg_class_oid); }
+TExecFunc arrow_binary_upgrade_set_next_heap_relfilenode() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_heap_relfilenode); }
 TExecFunc arrow_binary_upgrade_set_next_index_pg_class_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_index_pg_class_oid); }
+TExecFunc arrow_binary_upgrade_set_next_index_relfilenode() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_index_relfilenode); }
 TExecFunc arrow_binary_upgrade_set_next_multirange_array_pg_type_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_multirange_array_pg_type_oid); }
 TExecFunc arrow_binary_upgrade_set_next_multirange_pg_type_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_multirange_pg_type_oid); }
 TExecFunc arrow_binary_upgrade_set_next_pg_authid_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_pg_authid_oid); }
 TExecFunc arrow_binary_upgrade_set_next_pg_enum_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_pg_enum_oid); }
+TExecFunc arrow_binary_upgrade_set_next_pg_tablespace_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_pg_tablespace_oid); }
 TExecFunc arrow_binary_upgrade_set_next_pg_type_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_pg_type_oid); }
 TExecFunc arrow_binary_upgrade_set_next_toast_pg_class_oid() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_toast_pg_class_oid); }
+TExecFunc arrow_binary_upgrade_set_next_toast_relfilenode() { return MakeIndirectExec<true, true>(&binary_upgrade_set_next_toast_relfilenode); }
 TExecFunc arrow_binary_upgrade_set_record_init_privs() { return MakeIndirectExec<true, true>(&binary_upgrade_set_record_init_privs); }
 TExecFunc arrow_btnametextcmp() { return MakeIndirectExec<true, true>(&btnametextcmp); }
 TExecFunc arrow_bttext_pattern_cmp() { return MakeIndirectExec<true, true>(&bttext_pattern_cmp); }

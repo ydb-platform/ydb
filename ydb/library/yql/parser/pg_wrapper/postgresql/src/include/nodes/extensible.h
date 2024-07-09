@@ -4,7 +4,7 @@
  *	  Definitions for extensible nodes and custom scans
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/extensible.h
@@ -76,10 +76,12 @@ extern const ExtensibleNodeMethods *GetExtensibleNodeMethods(const char *name,
 
 /*
  * Flags for custom paths, indicating what capabilities the resulting scan
- * will have.
+ * will have.  The flags fields of CustomPath and CustomScan nodes are
+ * bitmasks of these flags.
  */
 #define CUSTOMPATH_SUPPORT_BACKWARD_SCAN	0x0001
 #define CUSTOMPATH_SUPPORT_MARK_RESTORE		0x0002
+#define CUSTOMPATH_SUPPORT_PROJECTION		0x0004
 
 /*
  * Custom path methods.  Mostly, we just need to know how to convert a

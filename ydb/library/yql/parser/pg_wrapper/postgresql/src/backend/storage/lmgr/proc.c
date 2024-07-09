@@ -3,7 +3,7 @@
  * proc.c
  *	  routines to manage per-process shared memory data structure
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,7 +37,7 @@
 
 #include "access/transam.h"
 #include "access/twophase.h"
-#include "access/xact.h"
+#include "access/xlogutils.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "postmaster/autovacuum.h"
@@ -177,8 +177,6 @@ InitProcGlobal(void)
 	ProcGlobal->autovacFreeProcs = NULL;
 	ProcGlobal->bgworkerFreeProcs = NULL;
 	ProcGlobal->walsenderFreeProcs = NULL;
-	ProcGlobal->startupProc = NULL;
-	ProcGlobal->startupProcPid = 0;
 	ProcGlobal->startupBufferPinWaitBufId = -1;
 	ProcGlobal->walwriterLatch = NULL;
 	ProcGlobal->checkpointerLatch = NULL;
@@ -394,8 +392,7 @@ InitProcess(void)
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
 	MyProc->isBackgroundWorker = IsBackgroundWorker;
-	MyProc->delayChkpt = false;
-	MyProc->delayChkptEnd = false;
+	MyProc->delayChkptFlags = 0;
 	MyProc->statusFlags = 0;
 	/* NB -- autovac launcher intentionally does not set IS_AUTOVACUUM */
 	if (IsAutoVacuumWorkerProcess())
@@ -580,8 +577,7 @@ InitAuxiliaryProcess(void)
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
 	MyProc->isBackgroundWorker = IsBackgroundWorker;
-	MyProc->delayChkpt = false;
-	MyProc->delayChkptEnd = false;
+	MyProc->delayChkptFlags = 0;
 	MyProc->statusFlags = 0;
 	MyProc->lwWaiting = LW_WS_NOT_WAITING;
 	MyProc->lwWaitMode = 0;
@@ -624,21 +620,6 @@ InitAuxiliaryProcess(void)
 	 * Arrange to clean up at process exit.
 	 */
 	on_shmem_exit(AuxiliaryProcKill, Int32GetDatum(proctype));
-}
-
-/*
- * Record the PID and PGPROC structures for the Startup process, for use in
- * ProcSendSignal().  See comments there for further explanation.
- */
-void
-PublishStartupProcessInformation(void)
-{
-	SpinLockAcquire(ProcStructLock);
-
-	ProcGlobal->startupProc = MyProc;
-	ProcGlobal->startupProcPid = MyProcPid;
-
-	SpinLockRelease(ProcStructLock);
 }
 
 /*
@@ -852,13 +833,6 @@ ProcKill(int code, Datum arg)
 
 	/* Cancel any pending condition variable sleep, too */
 	ConditionVariableCancelSleep();
-
-	/* Make sure active replication slots are released */
-	if (MyReplicationSlot != NULL)
-		ReplicationSlotRelease();
-
-	/* Also cleanup all the temporary slots. */
-	ReplicationSlotCleanup();
 
 	/*
 	 * Detach from any lock group of which we are a member.  If the leader
@@ -1919,38 +1893,15 @@ ProcWaitForSignal(uint32 wait_event_info)
 }
 
 /*
- * ProcSendSignal - send a signal to a backend identified by PID
+ * ProcSendSignal - set the latch of a backend identified by pgprocno
  */
 void
-ProcSendSignal(int pid)
+ProcSendSignal(int pgprocno)
 {
-	PGPROC	   *proc = NULL;
+	if (pgprocno < 0 || pgprocno >= ProcGlobal->allProcCount)
+		elog(ERROR, "pgprocno out of range");
 
-	if (RecoveryInProgress())
-	{
-		SpinLockAcquire(ProcStructLock);
-
-		/*
-		 * Check to see whether it is the Startup process we wish to signal.
-		 * This call is made by the buffer manager when it wishes to wake up a
-		 * process that has been waiting for a pin in so it can obtain a
-		 * cleanup lock using LockBufferForCleanup(). Startup is not a normal
-		 * backend, so BackendPidGetProc() will not return any pid at all. So
-		 * we remember the information for this special case.
-		 */
-		if (pid == ProcGlobal->startupProcPid)
-			proc = ProcGlobal->startupProc;
-
-		SpinLockRelease(ProcStructLock);
-	}
-
-	if (proc == NULL)
-		proc = BackendPidGetProc(pid);
-
-	if (proc != NULL)
-	{
-		SetLatch(&proc->procLatch);
-	}
+	SetLatch(&ProcGlobal->allProcs[pgprocno].procLatch);
 }
 
 /*

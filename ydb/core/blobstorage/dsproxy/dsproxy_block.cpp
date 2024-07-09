@@ -135,11 +135,11 @@ public:
     TBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-            ui64 cookie, NWilson::TSpan&& span, TInstant now,
+            ui64 cookie, NWilson::TTraceId&& traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(span), std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.Block", ev, std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , Generation(ev->Generation)
         , Deadline(ev->Deadline)
@@ -179,12 +179,7 @@ IActor* CreateBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroup
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
         ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Block");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, std::move(span), now, storagePoolCounters);
+    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
 }
 
 } // NKikimr

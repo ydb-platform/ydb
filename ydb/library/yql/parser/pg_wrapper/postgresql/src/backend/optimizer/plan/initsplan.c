@@ -3,7 +3,7 @@
  * initsplan.c
  *	  Target list, qualification, joininfo initialization routines
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -2711,8 +2711,8 @@ check_hashjoinable(RestrictInfo *restrictinfo)
 /*
  * check_memoizable
  *	  If the restrictinfo's clause is suitable to be used for a Memoize node,
- *	  set the hasheqoperator to the hash equality operator that will be needed
- *	  during caching.
+ *	  set the lefthasheqoperator and righthasheqoperator to the hash equality
+ *	  operator that will be needed during caching.
  */
 static void
 check_memoizable(RestrictInfo *restrictinfo)
@@ -2730,22 +2730,23 @@ check_memoizable(RestrictInfo *restrictinfo)
 		return;
 
 	lefttype = exprType(linitial(((OpExpr *) clause)->args));
+
+	typentry = lookup_type_cache(lefttype, TYPECACHE_HASH_PROC |
+								 TYPECACHE_EQ_OPR);
+
+	if (OidIsValid(typentry->hash_proc) && OidIsValid(typentry->eq_opr))
+		restrictinfo->left_hasheqoperator = typentry->eq_opr;
+
 	righttype = exprType(lsecond(((OpExpr *) clause)->args));
 
 	/*
-	 * Really there should be a field for both the left and right hash
-	 * equality operator, however, in v14, there's only a single field in
-	 * RestrictInfo to record the operator in, so we must insist that the left
-	 * and right types match.
+	 * Lookup the right type, unless it's the same as the left type, in which
+	 * case typentry is already pointing to the required TypeCacheEntry.
 	 */
 	if (lefttype != righttype)
-		return;
+		typentry = lookup_type_cache(righttype, TYPECACHE_HASH_PROC |
+									 TYPECACHE_EQ_OPR);
 
-	typentry = lookup_type_cache(lefttype, TYPECACHE_HASH_PROC |
-										   TYPECACHE_EQ_OPR);
-
-	if (!OidIsValid(typentry->hash_proc) || !OidIsValid(typentry->eq_opr))
-		return;
-
-	restrictinfo->hasheqoperator = typentry->eq_opr;
+	if (OidIsValid(typentry->hash_proc) && OidIsValid(typentry->eq_opr))
+		restrictinfo->right_hasheqoperator = typentry->eq_opr;
 }

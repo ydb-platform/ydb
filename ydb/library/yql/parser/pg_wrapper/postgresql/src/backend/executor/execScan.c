@@ -7,7 +7,7 @@
  *	  stuff - checking the qualification and projecting the tuple
  *	  appropriately.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -281,7 +281,7 @@ ExecAssignScanProjectionInfo(ScanState *node)
  *		As above, but caller can specify varno expected in Vars in the tlist.
  */
 void
-ExecAssignScanProjectionInfoWithVarno(ScanState *node, Index varno)
+ExecAssignScanProjectionInfoWithVarno(ScanState *node, int varno)
 {
 	TupleDesc	tupdesc = node->ss_ScanTupleSlot->tts_tupleDescriptor;
 

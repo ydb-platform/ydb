@@ -102,11 +102,6 @@ protected:
         if (Replica.NodeId() != TDerived::SelfId().NodeId())
             TDerived::Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe);
 
-        if (KIKIMR_ALLOW_SSREPLICA_PROBES) {
-            const TActorId ssProxyId = MakeStateStorageProxyID();
-            TDerived::Send(ssProxyId, new TEvStateStorage::TEvReplicaProbeUnsubscribe(Replica));
-        }
-
         TActorBootstrapped<TDerived>::PassAway();
     }
 
@@ -170,13 +165,7 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
     friend class TBaseGuardian;
 
     void RequestInfo() {
-        if (KIKIMR_ALLOW_SSREPLICA_PROBES) {
-            const TActorId ssProxyId = MakeStateStorageProxyID();
-            Send(ssProxyId, new TEvStateStorage::TEvReplicaProbeSubscribe(Replica));
-            Become(&TThis::StateLookup);
-        } else {
-            MakeRequest();
-        }
+        MakeRequest();
     }
 
     void MakeRequest() {
@@ -264,8 +253,6 @@ public:
     STATEFN(StateLookup) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
-            cFunc(TEvStateStorage::TEvReplicaProbeConnected::EventType, MakeRequest);
-            cFunc(TEvStateStorage::TEvReplicaProbeDisconnected::EventType, Gone);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
@@ -315,13 +302,7 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
     }
 
     void UpdateInfo() {
-        if (KIKIMR_ALLOW_SSREPLICA_PROBES) {
-            const TActorId ssProxyId = MakeStateStorageProxyID();
-            Send(ssProxyId, new TEvStateStorage::TEvReplicaProbeSubscribe(Replica));
-            Become(&TThis::StateCalm);
-        } else {
-            MakeRequest();
-        }
+        MakeRequest();
     }
 
     void MakeRequest() {
@@ -360,8 +341,6 @@ public:
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvRefreshFollowerState, UpdateInfo);
-            cFunc(TEvStateStorage::TEvReplicaProbeConnected::EventType, MakeRequest);
-            cFunc(TEvStateStorage::TEvReplicaProbeDisconnected::EventType, Gone);
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvTablet::TEvPing::EventType, Ping);

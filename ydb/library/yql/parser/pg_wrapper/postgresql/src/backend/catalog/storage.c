@@ -3,7 +3,7 @@
  * storage.c
  *	  code to create and destroy physical storage for relations
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -73,7 +73,7 @@ typedef struct PendingRelSync
 } PendingRelSync;
 
 static __thread PendingRelDelete *pendingDeletes = NULL; /* head of linked list */
-__thread HTAB	   *pendingSyncHash = NULL;
+static __thread HTAB *pendingSyncHash = NULL;
 
 
 /*
@@ -112,12 +112,14 @@ AddPendingSync(const RelFileNode *rnode)
  * modules that need them.
  *
  * This function is transactional. The creation is WAL-logged, and if the
- * transaction aborts later on, the storage will be destroyed.
+ * transaction aborts later on, the storage will be destroyed.  A caller
+ * that does not want the storage to be destroyed in case of an abort may
+ * pass register_delete = false.
  */
 SMgrRelation
-RelationCreateStorage(RelFileNode rnode, char relpersistence)
+RelationCreateStorage(RelFileNode rnode, char relpersistence,
+					  bool register_delete)
 {
-	PendingRelDelete *pending;
 	SMgrRelation srel;
 	BackendId	backend;
 	bool		needs_wal;
@@ -149,15 +151,23 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
 	if (needs_wal)
 		log_smgrcreate(&srel->smgr_rnode.node, MAIN_FORKNUM);
 
-	/* Add the relation to the list of stuff to delete at abort */
-	pending = (PendingRelDelete *)
-		MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));
-	pending->relnode = rnode;
-	pending->backend = backend;
-	pending->atCommit = false;	/* delete if abort */
-	pending->nestLevel = GetCurrentTransactionNestLevel();
-	pending->next = pendingDeletes;
-	pendingDeletes = pending;
+	/*
+	 * Add the relation to the list of stuff to delete at abort, if we are
+	 * asked to do so.
+	 */
+	if (register_delete)
+	{
+		PendingRelDelete *pending;
+
+		pending = (PendingRelDelete *)
+			MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));
+		pending->relnode = rnode;
+		pending->backend = backend;
+		pending->atCommit = false;	/* delete if abort */
+		pending->nestLevel = GetCurrentTransactionNestLevel();
+		pending->next = pendingDeletes;
+		pendingDeletes = pending;
+	}
 
 	if (relpersistence == RELPERSISTENCE_PERMANENT && !XLogIsNeeded())
 	{
@@ -330,16 +340,16 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	 * is in progress.
 	 *
 	 * The truncation operation might drop buffers that the checkpoint
-	 * otherwise would have flushed. If it does, then it's essential that
-	 * the files actually get truncated on disk before the checkpoint record
-	 * is written. Otherwise, if reply begins from that checkpoint, the
+	 * otherwise would have flushed. If it does, then it's essential that the
+	 * files actually get truncated on disk before the checkpoint record is
+	 * written. Otherwise, if reply begins from that checkpoint, the
 	 * to-be-truncated blocks might still exist on disk but have older
-	 * contents than expected, which can cause replay to fail. It's OK for
-	 * the blocks to not exist on disk at all, but not for them to have the
-	 * wrong contents.
+	 * contents than expected, which can cause replay to fail. It's OK for the
+	 * blocks to not exist on disk at all, but not for them to have the wrong
+	 * contents.
 	 */
-	Assert(!MyProc->delayChkptEnd);
-	MyProc->delayChkptEnd = true;
+	Assert((MyProc->delayChkptFlags & DELAY_CHKPT_COMPLETE) == 0);
+	MyProc->delayChkptFlags |= DELAY_CHKPT_COMPLETE;
 
 	/*
 	 * We WAL-log the truncation before actually truncating, which means
@@ -387,7 +397,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	smgrtruncate(RelationGetSmgr(rel), forks, nforks, blocks);
 
 	/* We've done all the critical work, so checkpoints are OK now. */
-	MyProc->delayChkptEnd = false;
+	MyProc->delayChkptFlags &= ~DELAY_CHKPT_COMPLETE;
 
 	/*
 	 * Update upper-level FSM pages to account for the truncation. This is

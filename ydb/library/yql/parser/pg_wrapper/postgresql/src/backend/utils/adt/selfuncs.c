@@ -10,7 +10,7 @@
  *	  Index cost functions are located via the index AM's API struct,
  *	  which is obtained from the handler function registered in pg_am.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -3596,7 +3596,6 @@ estimate_num_groups(PlannerInfo *root, List *groupExprs, double input_rows,
 					 */
 					if (estinfo != NULL && varinfo2->isdefault)
 						estinfo->flags |= SELFLAG_USED_DEFAULT;
-
 				}
 
 				/* we're done with this relation */
@@ -3913,21 +3912,10 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 	Oid			statOid = InvalidOid;
 	MVNDistinct *stats;
 	StatisticExtInfo *matched_info = NULL;
-	RangeTblEntry		*rte;
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
 	/* bail out immediately if the table has no extended statistics */
 	if (!rel->statlist)
-		return false;
-
-	/*
-	 * When dealing with regular inheritance trees, ignore extended stats
-	 * (which were built without data from child rels, and thus do not
-	 * represent them). For partitioned tables data there's no data in the
-	 * non-leaf relations, so we build stats only for the inheritance tree.
-	 * So for partitioned tables we do consider extended stats.
-	 */
-	rte = planner_rt_fetch(rel->relid, root);
-	if (rte->inh && rte->relkind != RELKIND_PARTITIONED_TABLE)
 		return false;
 
 	/* look for the ndistinct statistics object matching the most vars */
@@ -3942,6 +3930,10 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 
 		/* skip statistics of other kinds */
 		if (info->kind != STATS_EXT_NDISTINCT)
+			continue;
+
+		/* skip statistics with mismatching stxdinherit value */
+		if (info->inherit != rte->inh)
 			continue;
 
 		/*
@@ -4015,7 +4007,7 @@ estimate_multivariate_ndistinct(PlannerInfo *root, RelOptInfo *rel,
 
 	Assert(nmatches_vars + nmatches_exprs > 1);
 
-	stats = statext_ndistinct_load(statOid);
+	stats = statext_ndistinct_load(statOid, rte->inh);
 
 	/*
 	 * If we have a match, search it for the specific item that matches (there
@@ -5236,7 +5228,7 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 		foreach(slist, onerel->statlist)
 		{
 			StatisticExtInfo *info = (StatisticExtInfo *) lfirst(slist);
-			RangeTblEntry	 *rte = planner_rt_fetch(onerel->relid, root);
+			RangeTblEntry *rte = planner_rt_fetch(onerel->relid, root);
 			ListCell   *expr_item;
 			int			pos;
 
@@ -5247,19 +5239,12 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 			if (vardata->statsTuple)
 				break;
 
-			/*
-			 * When dealing with regular inheritance trees, ignore extended
-			 * stats (which were built without data from child rels, and thus
-			 * do not represent them). For partitioned tables data there's no
-			 * data in the non-leaf relations, so we build stats only for the
-			 * inheritance tree. So for partitioned tables we do consider
-			 * extended stats.
-			 */
-			if (rte->inh && rte->relkind != RELKIND_PARTITIONED_TABLE)
-				break;
-
 			/* skip stats without per-expression stats */
 			if (info->kind != STATS_EXT_EXPRESSIONS)
+				continue;
+
+			/* skip stats with mismatching stxdinherit value */
+			if (info->inherit != rte->inh)
 				continue;
 
 			pos = 0;
@@ -5276,22 +5261,16 @@ examine_variable(PlannerInfo *root, Node *node, int varRelid,
 				/* found a match, see if we can extract pg_statistic row */
 				if (equal(node, expr))
 				{
-					HeapTuple	t = statext_expressions_load(info->statOid, pos);
-
-					/* Get statistics object's table for permission check */
-					RangeTblEntry *rte;
 					Oid			userid;
-
-					vardata->statsTuple = t;
 
 					/*
 					 * XXX Not sure if we should cache the tuple somewhere.
 					 * Now we just create a new copy every time.
 					 */
-					vardata->freefunc = ReleaseDummy;
+					vardata->statsTuple =
+						statext_expressions_load(info->statOid, rte->inh, pos);
 
-					rte = planner_rt_fetch(onerel->relid, root);
-					Assert(rte->rtekind == RTE_RELATION);
+					vardata->freefunc = ReleaseDummy;
 
 					/*
 					 * Use checkAsUser if it's set, in case we're accessing

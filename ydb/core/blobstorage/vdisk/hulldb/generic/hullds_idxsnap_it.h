@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "hullds_idxsnap.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 
@@ -63,12 +64,17 @@ namespace NKikimr {
 
         TIndexRecordMerger Merger;
         TForwardIterator It;
+        THeapIterator<TKey, TMemRec, true> HeapIt;
+        std::optional<TKey> CurrentKey;
 
-        void Merge() {
+        void MergeAndAdvance() {
             Merger.Clear();
-            if (It.Valid()) {
-                It.PutToMerger(&Merger);
+            if (HeapIt.Valid()) {
+                CurrentKey.emplace(HeapIt.GetCurKey());
+                HeapIt.PutToMergerAndAdvance(&Merger);
                 Merger.Finish();
+            } else{
+                CurrentKey.reset();
             }
         }
 
@@ -76,38 +82,34 @@ namespace NKikimr {
         TIndexForwardIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot *levelSnap)
             : Merger(hullCtx->VCtx->Top->GType)
             , It(hullCtx, levelSnap)
-        {}
+        {
+            It.PutToHeap(HeapIt);
+        }
 
         bool Valid() const {
-            return It.Valid();
+            return CurrentKey.has_value();
         }
 
         void SeekToFirst() {
-            It.SeekToFirst();
-            Merge();
+            HeapIt.SeekToFirst();
+            MergeAndAdvance();
         }
 
         void Seek(const TKey& key) {
-            It.Seek(key);
-            Merge();
+            HeapIt.Seek(key);
+            MergeAndAdvance();
         }
 
         void Next() {
-            It.Next();
-            Merge();
+            MergeAndAdvance();
         }
 
         TKey GetCurKey() const {
-            return It.GetCurKey();
+            return *CurrentKey;
         }
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
-        }
-
-        template <typename THeap>
-        void PutToHeap(THeap& heap) {
-            heap.Add(this);
         }
     };
 
@@ -122,12 +124,17 @@ namespace NKikimr {
 
         TIndexRecordMerger Merger;
         TBackwardIterator It;
+        THeapIterator<TKey, TMemRec, false> HeapIt;
+        std::optional<TKey> CurrentKey;
 
-        void Merge() {
+        void MergeAndAdvance() {
             Merger.Clear();
-            if (It.Valid()) {
-                It.PutToMerger(&Merger);
+            if (HeapIt.Valid()) {
+                CurrentKey.emplace(HeapIt.GetCurKey());
+                HeapIt.PutToMergerAndAdvance(&Merger);
                 Merger.Finish();
+            } else{
+                CurrentKey.reset();
             }
         }
 
@@ -135,33 +142,29 @@ namespace NKikimr {
         TIndexBackwardIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot *levelSnap)
             : Merger(hullCtx->VCtx->Top->GType)
             , It(hullCtx, levelSnap)
-        {}
+        {
+            It.PutToHeap(HeapIt);
+        }
 
         bool Valid() const {
-            return It.Valid();
+            return CurrentKey.has_value();
         }
 
         void Seek(const TKey& key) {
-            It.Seek(key);
-            Merge();
+            HeapIt.Seek(key);
+            MergeAndAdvance();
         }
 
         void Prev() {
-            It.Prev();
-            Merge();
+            MergeAndAdvance();
         }
 
         TKey GetCurKey() const {
-            return It.GetCurKey();
+            return *CurrentKey;
         }
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
-        }
-
-        template <typename THeap>
-        void PutToHeap(THeap& heap) {
-            heap.Add(this);
         }
     };
 } // NKikimr

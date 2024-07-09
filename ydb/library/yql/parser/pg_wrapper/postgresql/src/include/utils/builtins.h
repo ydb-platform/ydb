@@ -4,7 +4,7 @@
  *	  Declarations for operations on built-in types.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/builtins.h
@@ -43,9 +43,9 @@ extern void namestrcpy(Name name, const char *str);
 extern int	namestrcmp(Name name, const char *str);
 
 /* numutils.c */
-extern int32 pg_atoi(const char *s, int size, int c);
 extern int16 pg_strtoint16(const char *s);
 extern int32 pg_strtoint32(const char *s);
+extern int64 pg_strtoint64(const char *s);
 extern int	pg_itoa(int16 i, char *a);
 extern int	pg_ultoa_n(uint32 l, char *a);
 extern int	pg_ulltoa_n(uint64 l, char *a);
@@ -53,7 +53,6 @@ extern int	pg_ltoa(int32 l, char *a);
 extern int	pg_lltoa(int64 ll, char *a);
 extern char *pg_ultostr_zeropad(char *str, uint32 value, int32 minwidth);
 extern char *pg_ultostr(char *str, uint32 value);
-extern uint64 pg_strtouint64(const char *str, char **endptr, int base);
 
 /* oid.c */
 extern oidvector *buildoidvector(const Oid *oids, int n);
@@ -65,7 +64,7 @@ extern char *regexp_fixed_prefix(text *text_re, bool case_insensitive,
 								 Oid collation, bool *exact);
 
 /* ruleutils.c */
-extern __thread bool quote_all_identifiers;
+extern __thread PGDLLIMPORT bool quote_all_identifiers;
 extern const char *quote_identifier(const char *ident);
 extern char *quote_qualified_identifier(const char *qualifier,
 										const char *ident);

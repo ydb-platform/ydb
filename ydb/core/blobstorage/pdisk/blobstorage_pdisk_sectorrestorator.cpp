@@ -52,7 +52,6 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                     << " IsErasureEncode# " << (ui32)IsErasureEncode
                     << " ErasureDataParts# " << (ui32)ErasureDataParts << " i# " << (ui32)i
                     << " readHash# " << (ui64)sectorFooter->Hash
-                    << " calculatedOldHash# " << hasher.OldHashSector(sectorOffset, magic, sectorData, Format.SectorSize)
                     << " calculatedT1ha0NoAvxHash# "
                         << hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sectorData, Format.SectorSize)
                     << " sectorOffset# " << sectorOffset

@@ -77,8 +77,11 @@ namespace NKikimr {
 
             TMerger merger{*res, Max<ui32>()};
             TFreshDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TForwardIterator iter(Snap.HullCtx, &Snap.LogoBlobsSnap.FreshSnap);
-            for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
-                iter.PutToMerger(&merger);
+            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt;
+            iter.PutToHeap(heapIt);
+            heapIt.SeekToFirst();
+            while (heapIt.Valid()) {
+                heapIt.PutToMergerAndAdvance(&merger);
             }
 
             Send(Ev->Sender, res.release(), 0, Ev->Cookie);

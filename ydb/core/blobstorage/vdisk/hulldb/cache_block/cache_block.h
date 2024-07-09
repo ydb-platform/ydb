@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/vdisk/hulldb/defs.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 

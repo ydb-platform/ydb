@@ -13,6 +13,7 @@ void pg_thread_init(void) {
     lsn_mapping_init();
     mainrdata_last_init();
     pcxt_list_init();
+    pgStatPending_init();
     saved_plan_list_init();
 
     setup_pg_thread_cleanup();

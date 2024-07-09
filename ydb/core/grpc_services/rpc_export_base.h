@@ -52,6 +52,10 @@ struct TExportConv {
             *operation.mutable_end_time() = exprt.GetEndTime();
         }
 
+        if (exprt.HasUserSID()) {
+            operation.set_user(exprt.GetUserSID());
+        }
+
         using namespace Ydb::Export;
         switch (exprt.GetSettingsCase()) {
         case NKikimrExport::TExport::kExportToYtSettings:

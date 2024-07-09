@@ -37,6 +37,10 @@ namespace {
             }
         }
         
+        if (!operation.User().Empty()) {
+            freeText << "User: " << operation.User() << Endl;
+        }
+
         if (operation.StartTime() != TInstant::Zero()) {
             freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
         }
@@ -122,6 +126,10 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
+        if (!operation.User().Empty()) {
+            freeText << "User: " << operation.User() << Endl;
+        }
+
         if (operation.StartTime() != TInstant::Zero()) {
             freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
         }
@@ -182,6 +190,10 @@ namespace {
 
         if (settings.NumberOfRetries_) {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
+        }
+
+        if (!operation.User().Empty()) {
+            freeText << "User: " << operation.User() << Endl;
         }
 
         if (operation.StartTime() != TInstant::Zero()) {

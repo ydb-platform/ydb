@@ -49,6 +49,10 @@ struct TImportConv {
             *operation.mutable_end_time() = import.GetEndTime();
         }
 
+        if (import.HasUserSID()) {
+            operation.set_user(import.GetUserSID());
+        }
+
         using namespace Ydb::Import;
         switch (import.GetSettingsCase()) {
         case NKikimrImport::TImport::kImportFromS3Settings:

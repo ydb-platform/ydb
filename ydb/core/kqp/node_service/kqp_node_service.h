@@ -91,6 +91,8 @@ public:
 };
 
 NActors::IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
     TIntrusivePtr<TKqpCounters> counters, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory = nullptr,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt);
 

@@ -167,27 +167,27 @@ class TKqpResourceManager : public IKqpResourceManager {
 public:
 
     TKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters)
-        : Config(config)
-        , Counters(counters)
-        , ExecutionUnitsResource(Config.GetComputeActorsCount())
-        , ExecutionUnitsLimit(Config.GetComputeActorsCount())
-        , ScanQueryMemoryResource(Config.GetQueryMemoryLimit())
-        , PublishResourcesByExchanger(Config.GetEnablePublishResourcesByExchanger()) {
-
+        : Counters(counters)
+        , ExecutionUnitsResource(config.GetComputeActorsCount())
+        , ExecutionUnitsLimit(config.GetComputeActorsCount())
+        , ScanQueryMemoryResource(config.GetQueryMemoryLimit())
+        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
+    {
+        SetConfigValues(config);
     }
 
-    void Bootstrap(TActorSystem* actorSystem, TActorId selfId) {
+    void Bootstrap(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
         if (!Counters) {
             Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
         }
         ActorSystem = actorSystem;
         SelfId = selfId;
-        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes(),
-            Config.GetKqpPatternCacheCompiledCapacityBytes(),
-            Config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
+        UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
+            config.GetKqpPatternCacheCompiledCapacityBytes(),
+            config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         if (PublishResourcesByExchanger) {
-            CreateResourceInfoExchanger(Config.GetInfoExchangerSettings());
+            CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
             return;
         }
     }
@@ -278,7 +278,7 @@ public:
             hasScanQueryMemory = ScanQueryMemoryResource.Has(resources.Memory);
             if (hasScanQueryMemory) {
                 ScanQueryMemoryResource.Acquire(resources.Memory);
-                queryMemoryLimit = Config.GetQueryMemoryLimit();
+                queryMemoryLimit = QueryMemoryLimit.load();
             }
         } // with_lock (Lock)
 
@@ -505,16 +505,45 @@ public:
         return result;
     }
 
-    NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() override {
-        with_lock (Lock) {
-            return Config;
-        }
-    }
-
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
         with_lock (Lock) {
             return PatternCache;
         }
+    }
+
+    TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) override
+    {
+        TTaskResourceEstimation ret = BuildInitialTaskResources(task);
+        EstimateTaskResources(ret, tasksCount);
+        return ret;
+    }
+
+    void EstimateTaskResources(TTaskResourceEstimation& ret, const ui32 tasksCount) override
+    {
+        ui64 totalChannels = std::max(tasksCount, (ui32)1) * std::max(ret.ChannelBuffersCount, (ui32)1);
+        ui64 optimalChannelBufferSizeEstimation = totalChannels * ChannelBufferSize.load();
+
+        optimalChannelBufferSizeEstimation = std::min(optimalChannelBufferSizeEstimation, MaxTotalChannelBuffersSize.load());
+
+        ret.ChannelBufferMemoryLimit = std::max(MinChannelBufferSize.load(), optimalChannelBufferSizeEstimation / totalChannels);
+
+        if (ret.HeavyProgram) {
+            ret.MkqlProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
+        } else {
+            ret.MkqlProgramMemoryLimit = MkqlLightProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
+        }
+
+        ret.TotalMemoryLimit = ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
+            + ret.MkqlProgramMemoryLimit;
+    }
+
+    void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
+        MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
+        MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
+        ChannelBufferSize.store(config.GetChannelBufferSize());
+        MinChannelBufferSize.store(config.GetMinChannelBufferSize());
+        MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
+        QueryMemoryLimit.store(config.GetQueryMemoryLimit());
     }
 
     ui32 GetNodeId() override {
@@ -549,7 +578,13 @@ public:
 
     TActorId SelfId;
 
-    NKikimrConfig::TTableServiceConfig::TResourceManager Config;  // guarded by Lock
+    std::atomic<ui64> QueryMemoryLimit;
+    std::atomic<ui64> MkqlHeavyProgramMemoryLimit;
+    std::atomic<ui64> MkqlLightProgramMemoryLimit;
+    std::atomic<ui64> ChannelBufferSize;
+    std::atomic<ui64> MinChannelBufferSize;
+    std::atomic<ui64> MaxTotalChannelBuffersSize;
+
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NResourceBroker::IResourceBroker> ResourceBroker;
     TActorSystem* ActorSystem = nullptr;
@@ -601,16 +636,21 @@ public:
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
-        : ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId)
+        : Config(config)
+        , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
+        with_lock (ResourceManagers.Lock) {
+            ResourceManagers.ByNodeId[nodeId] = ResourceManager;
+            ResourceManagers.Default = ResourceManager;
+        }
     }
 
     void Bootstrap() {
-        ResourceManager->Bootstrap(TlsActivationContext->ActorSystem(), SelfId());
+        ResourceManager->Bootstrap(Config, TlsActivationContext->ActorSystem(), SelfId());
 
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
 
@@ -639,11 +679,6 @@ public:
 
         AskSelfNodeInfo();
         SendWhiteboardRequest();
-
-        with_lock (ResourceManagers.Lock) {
-            ResourceManagers.ByNodeId[SelfId().NodeId()] = ResourceManager;
-            ResourceManagers.Default = ResourceManager;
-        }
     }
 
 public:
@@ -841,9 +876,9 @@ private:
             i32 prev = ResourceManager->ExecutionUnitsLimit.load();
             ResourceManager->ExecutionUnitsLimit.store(config.GetComputeActorsCount());
             ResourceManager->ExecutionUnitsResource.fetch_add((i32)config.GetComputeActorsCount() - prev);
-            ResourceManager->Config.Swap(&config);
+            ResourceManager->SetConfigValues(config);
+            Config.Swap(&config);
         }
-
     }
 
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
@@ -881,11 +916,6 @@ private:
 
         HTML(str) {
             PRE() {
-                str << "Current config:" << Endl;
-                with_lock (ResourceManager->Lock) {
-                    str << ResourceManager->Config.DebugString() << Endl;
-                }
-
                 str << "State storage key: " << WbState.Tenant << Endl;
                 with_lock (ResourceManager->Lock) {
                     str << "ScanQuery memory resource: " << ResourceManager->ScanQueryMemoryResource.ToString() << Endl;
@@ -989,7 +1019,7 @@ private:
         std::optional<TInstant> publishScheduledAt;
 
         with_lock (ResourceManager->Lock) {
-            publishInterval = TDuration::Seconds(ResourceManager->Config.GetPublishStatisticsIntervalSec());
+            publishInterval = TDuration::Seconds(Config.GetPublishStatisticsIntervalSec());
             publishScheduledAt = ResourceManager->PublishScheduledAt;
         }
 
@@ -1072,6 +1102,8 @@ private:
     }
 
 private:
+    NKikimrConfig::TTableServiceConfig::TResourceManager Config;
+
     const TActorId ResourceBrokerId;
 
     // Whiteboard specific fields
@@ -1100,9 +1132,9 @@ private:
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources));
+    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId);
 }
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
@@ -1111,6 +1143,10 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
     }
 
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
+    if (auto rm = TryGetKqpResourceManager(nodeId)) {
+        return rm;
+    }
+
     Y_ABORT("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
 }
 

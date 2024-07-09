@@ -1,4 +1,5 @@
 #include "functions_executor_wrapper.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -14,6 +15,7 @@ bool FunctionExecutorWrapper::IsAsync() const
 
 void FunctionExecutorWrapper::Post(TFunction &&f)
 {
+    DBGTRACE("FunctionExecutorWrapper::Post");
     with_lock (Mutex) {
         Funcs.push_back(std::move(f));
         ++Planned;
@@ -27,7 +29,9 @@ void FunctionExecutorWrapper::DoStart()
 
 auto FunctionExecutorWrapper::MakeTask(TFunction func) -> TFunction
 {
+    DBGTRACE("FunctionExecutorWrapper::MakeTask");
     return [this, func = std::move(func)]() {
+        DBGTRACE("FunctionExecutorWrapper::MakeTask::lambda");
         ++Running;
 
         func();
@@ -39,6 +43,7 @@ auto FunctionExecutorWrapper::MakeTask(TFunction func) -> TFunction
 
 void FunctionExecutorWrapper::RunTask(TFunction&& func)
 {
+    DBGTRACE("FunctionExecutorWrapper::RunTask");
     Y_ABORT_UNLESS(Planned > 0);
     --Planned;
     Executor->Post(MakeTask(std::move(func)));
@@ -46,6 +51,7 @@ void FunctionExecutorWrapper::RunTask(TFunction&& func)
 
 void FunctionExecutorWrapper::StartFuncs(const std::vector<size_t>& indicies)
 {
+    DBGTRACE("FunctionExecutorWrapper::StartFuncs");
     with_lock (Mutex) {
         for (auto index : indicies) {
             Y_ABORT_UNLESS(index < Funcs.size());
@@ -80,6 +86,7 @@ size_t FunctionExecutorWrapper::GetExecutedCount() const
 
 void FunctionExecutorWrapper::RunAllTasks()
 {
+    DBGTRACE("FunctionExecutorWrapper::RunAllTasks");
     with_lock (Mutex) {
         for (auto& func : Funcs) {
             if (func) {

@@ -34,7 +34,9 @@ static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
 
 template<bool UseMigrationProtocol>
 TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         return session->GetLog();
     }
     return {};
@@ -43,7 +45,9 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 endOffset) {
     std::vector<std::pair<ui64, ui64>> toCommit;
+    DBGTRACE_LOG("try acquire lock");
     if (auto sessionShared = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         Y_ABORT_UNLESS(endOffset > startOffset);
         with_lock(sessionShared->Lock) {
             if (!AddToCommitRanges(startOffset, endOffset, true)) // Add range for real commit always.
@@ -64,28 +68,36 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 e
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
+    DBGTRACE_LOG("try acquire lock");
     if (auto sessionShared = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         sessionShared->RequestPartitionStreamStatus(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
+    DBGTRACE_LOG("try acquire lock");
     if (auto sessionShared = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
+    DBGTRACE_LOG("try acquire lock");
     if (auto sessionShared = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         sessionShared->ConfirmPartitionStreamDestroy(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(const std::vector<ui32>& childIds) {
+    DBGTRACE_LOG("try acquire lock");
     if (auto sessionShared = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         sessionShared->ConfirmPartitionStreamEnd(this, childIds);
     }
 }
@@ -140,8 +152,11 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    DBGTRACE("TRawPartitionStreamEventQueue::SignalReadyEvents");
     if constexpr (!UseMigrationProtocol) {
+        DBGTRACE_LOG("try acquire lock");
         if (auto session = CbContext->LockShared()) {
+            DBGTRACE_LOG("lock acquired");
             if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
                 return;
             }
@@ -277,7 +292,9 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
 
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
         if (!connectContext || !connectTimeoutContext) {
@@ -395,7 +412,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (ConnectTimeoutContext == connectTimeoutContext) {
             Cancel(ConnectContext);
             ConnectContext = nullptr;
@@ -423,7 +442,9 @@ template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
     TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext) {
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (ConnectContext == connectContext) {
             Cancel(ConnectTimeoutContext);
             ConnectContext = nullptr;
@@ -603,7 +624,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             << ". Read offset: " << readOffset << commitOffsetLogStr
     );
 
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             LOG_LAZY(Log,
                 TLOG_DEBUG,
@@ -653,7 +676,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
     );
 
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             LOG_LAZY(Log,
                 TLOG_DEBUG,
@@ -710,7 +735,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Commit(const TPartitio
         GetLogPrefix() << "Commit offsets [" << startOffset << ", " << endOffset
             << "). Partition stream id: " << GetPartitionStreamId(partitionStream)
     );
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             return;
         }
@@ -756,7 +783,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStream
         TLOG_DEBUG,
         GetLogPrefix() << "Requesting status for partition stream id: " << GetPartitionStreamId(partitionStream)
     );
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             return;
         }
@@ -781,6 +810,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStream
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount)
 {
+    DBGTRACE("TSingleClusterReadSessionImpl::OnUserRetrievedEvent");
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix()
                           << "The application data is transferred to the client. Number of messages "
                           << messagesCount
@@ -793,7 +823,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
     *Settings.Counters_->BytesInflightUncompressed -= decompressedSize;
 
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         UpdateMemoryUsageStatisticsImpl();
 
         Y_ABORT_UNLESS(decompressedSize <= DecompressedDataSize);
@@ -802,6 +834,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);
     }
+    DBGTRACE_LOG("lock released");
 }
 
 template <bool UseMigrationProtocol>
@@ -864,7 +897,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
     }
 
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting) {
             return;
         }
@@ -975,7 +1010,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch&& msg,
-    TDeferredActions<true>& deferred) {
+    TDeferredActions<true>& deferred)
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::OnReadDoneImpl");
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (Closing || Aborting) {
         return; // Don't process new data.
@@ -1228,7 +1265,9 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::ReadResponse&& msg,
-    TDeferredActions<false>& deferred) {
+    TDeferredActions<false>& deferred)
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::OnReadDoneImpl");
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (Closing || Aborting) {
@@ -1494,7 +1533,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 //////////////
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTasksImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTasksImpl(TDeferredActions<UseMigrationProtocol>& deferred)
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::StartDecompressionTasksImpl");
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (Aborting) {
@@ -1503,6 +1544,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
     UpdateMemoryUsageStatisticsImpl();
     const i64 limit = GetDecompressedDataSizeLimit();
     Y_ABORT_UNLESS(limit > 0);
+    DBGTRACE_LOG("DecompressionQueue.size=" << DecompressionQueue.size());
     while (DecompressedDataSize < limit
            && (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) < Settings.MaxMemoryUsageBytes_
                || DecompressedDataSize == 0 /* Allow decompression of at least one message even if memory is full. */)
@@ -1550,33 +1592,52 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroyImpl(i64 compressedSize,
+                                                                                         i64 decompressedSize,
+                                                                                         i64 messagesCount,
+                                                                                         i64 serverBytesSize,
+                                                                                         TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    DBGTRACE("TSingleClusterReadSessionImpl::OnDecompressionInfoDestroyImpl");
 
     *Settings.Counters_->MessagesInflight -= messagesCount;
     *Settings.Counters_->BytesInflightUncompressed -= decompressedSize;
     *Settings.Counters_->BytesInflightCompressed -= compressedSize;
     *Settings.Counters_->BytesInflightTotal -= (compressedSize + decompressedSize);
 
+    UpdateMemoryUsageStatisticsImpl();
+
+    CompressedDataSize -= compressedSize;
+    DecompressedDataSize -= decompressedSize;
+
+    if constexpr (!UseMigrationProtocol) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
+        ReadSizeBudget += serverBytesSize;
+    }
+
+    ContinueReadingDataImpl();
+
+    StartDecompressionTasksImpl(deferred);
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::OnDecompressionInfoDestroy");
+
     TDeferredActions<UseMigrationProtocol> deferred;
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
-        UpdateMemoryUsageStatisticsImpl();
-
-        CompressedDataSize -= compressedSize;
-        DecompressedDataSize -= decompressedSize;
-
-        if constexpr (!UseMigrationProtocol) {
-            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
-            ReadSizeBudget += serverBytesSize;
-        }
-
-        ContinueReadingDataImpl();
-        StartDecompressionTasksImpl(deferred);
+        DBGTRACE_LOG("lock acquired");
+	OnDecompressionInfoDestroyImpl(compressedSize, decompressedSize, messagesCount, serverBytesSize, deferred);
     }
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize)
+{
+    DBGTRACE("TSingleClusterReadSessionImpl::OnDataDecompressed");
+
     TDeferredActions<UseMigrationProtocol> deferred;
 
     Y_ABORT_UNLESS(DecompressionTasksInflight > 0);
@@ -1589,7 +1650,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
     *Settings.Counters_->BytesInflightCompressed -= sourceSize;
     *Settings.Counters_->BytesInflightTotal += (decompressedSize - sourceSize);
 
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         UpdateMemoryUsageStatisticsImpl();
         CompressedDataSize -= sourceSize;
         DecompressedDataSize += decompressedSize - estimatedDecompressedSize;
@@ -1613,7 +1676,9 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         AbortImpl();
     }
 }
@@ -1648,7 +1713,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<void()> callback) {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (Aborting) {
             callback();
         }
@@ -1689,14 +1756,18 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl(
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StopReadingData() {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         DataReadingSuspended = true;
     }
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ResumeReadingData() {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         if (DataReadingSuspended) {
             DataReadingSuspended = false;
             ContinueReadingDataImpl();
@@ -1706,7 +1777,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ResumeReadingData() {
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DumpStatisticsToLog(TLogElement& log) {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         // cluster:topic:partition:stream-id:read-offset:committed-offset
         for (auto&& [key, partitionStream] : PartitionStreams) {
             if constexpr (UseMigrationProtocol) {
@@ -1746,7 +1819,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UpdateMemoryUsageStati
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UpdateMemoryUsageStatistics() {
+    DBGTRACE_LOG("try acquire lock");
     with_lock (Lock) {
+        DBGTRACE_LOG("lock acquired");
         UpdateMemoryUsageStatisticsImpl();
     }
 }
@@ -2162,7 +2237,9 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             if constexpr (!UseMigrationProtocol) {
                 if (std::holds_alternative<TReadSessionEvent::TPartitionSessionClosedEvent>(*event)) {
                      auto& e = std::get<TReadSessionEvent::TPartitionSessionClosedEvent>(*event);
+                     DBGTRACE_LOG("try acquire lock");
                      if (auto session = frontCbContext->LockShared()) {
+                        DBGTRACE_LOG("lock acquired");
                         session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
                      }
                 }
@@ -2183,6 +2260,7 @@ template <bool UseMigrationProtocol>
 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize)
 {
+    DBGTRACE("TReadSessionEventsQueue::GetEvents");
     if (!maxByteSize) {
         ThrowFatalError("the maxByteSize value must be greater than 0");
     }
@@ -2223,6 +2301,7 @@ template <bool UseMigrationProtocol>
 TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxByteSize)
 {
+    DBGTRACE("TReadSessionEventsQueue::GetEvent");
     if (!maxByteSize) {
         ThrowFatalError("the maxByteSize value must be greater than 0");
     }
@@ -2303,12 +2382,14 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TAD
                                                                              TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
                                                                              TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    DBGTRACE("TReadSessionEventsQueue::ApplyCallbackToEventImpl");
     Y_ABORT_UNLESS(HasEventCallbacks);
 
     if (TParent::Settings.EventHandlers_.DataReceivedHandler_) {
         auto action = [func = TParent::Settings.EventHandlers_.DataReceivedHandler_,
                        data = std::move(data),
                        eventsInfo = std::move(eventsInfo)]() mutable {
+            DBGTRACE("TReadSessionEventsQueue::ApplyCallbackToEventImpl::action");
             func(data);
             eventsInfo.OnUserRetrievedEvent();
         };
@@ -2318,6 +2399,7 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TAD
         auto action = [func = TParent::Settings.EventHandlers_.CommonHandler_,
                        data = std::move(data),
                        eventsInfo = std::move(eventsInfo)]() mutable {
+            DBGTRACE("TReadSessionEventsQueue::ApplyCallbackToEventImpl::action");
             typename TParent::TEvent event(std::move(data));
 
             func(event);
@@ -2386,7 +2468,9 @@ template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 {
     DBGTRACE("TDataDecompressionInfo::~TDataDecompressionInfo");
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         session->OnDecompressionInfoDestroy(CompressedDataSize, DecompressedDataSize, MessagesInflight, ServerBytesSize);
     }
 }
@@ -2460,11 +2544,15 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
     const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, i64 availableMemory,
     TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    DBGTRACE("TDataDecompressionInfo::StartDecompressionTasks");
+    DBGTRACE_LOG("try acquire lock");
     auto session = CbContext->LockShared();
+    DBGTRACE_LOG("lock acquired");
     Y_ASSERT(session);
 
     i64 used = 0;
 
+    DBGTRACE_LOG("Tasks.size=" << Tasks.size());
     while (availableMemory > 0 && !Tasks.empty()) {
         auto& task = Tasks.front();
 
@@ -2482,10 +2570,14 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
 
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
-                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
+                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream)
+{
+    DBGTRACE("TDataDecompressionInfo::PlanDecompressionTasks");
     constexpr size_t TASK_LIMIT = 512_KB;
 
+    DBGTRACE_LOG("try acquire lock");
     auto session = CbContext->LockShared();
+    DBGTRACE_LOG("lock acquired");
     Y_ASSERT(session);
 
     ReadyThresholds.emplace_back();
@@ -2644,7 +2736,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 source
     CompressedDataSize -= sourceSize;
     DecompressedDataSize += decompressedSize;
 
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         // TODO (ildar-khisam@): distribute total ServerBytesSize in proportion of source size
         // Use CompressedDataSize, sourceSize, ServerBytesSize
         session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, std::exchange(ServerBytesSize, 0));
@@ -2654,10 +2748,13 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 source
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount)
 {
+    DBGTRACE("TDataDecompressionInfo::OnUserRetrievedEvent");
     MessagesInflight -= messagesCount;
     DecompressedDataSize -= decompressedSize;
 
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         session->OnUserRetrievedEvent(decompressedSize, messagesCount);
     }
 }
@@ -2752,13 +2849,17 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                 parent->PutDecompressionError(std::current_exception(), messages.Batch, i);
                 data.clear_data(); // Free memory, because we don't count it.
 
+                DBGTRACE_LOG("try acquire lock");
                 if (auto session = parent->CbContext->LockShared()) {
+                    DBGTRACE_LOG("lock acquired");
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();
                 }
             }
         }
     }
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = parent->CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         LOG_LAZY(session->GetLog(), TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
                                                                  << partition_id << " (" << minOffset << "-"
                                                                  << maxOffset << ")");
@@ -2770,7 +2871,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     parent->SourceDataNotProcessed -= dataProcessed;
     Ready->Ready = true;
 
+    DBGTRACE_LOG("try acquire lock");
     if (auto session = parent->CbContext->LockShared()) {
+        DBGTRACE_LOG("lock acquired");
         session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
     }
 }
@@ -2790,6 +2893,7 @@ void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::Add(TDataDecompr
 template<bool UseMigrationProtocol>
 void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::OnUserRetrievedEvent() const
 {
+    DBGTRACE("TUserRetrievedEventsInfoAccumulator::OnUserRetrievedEvent");
     for (auto& [parent, counter] : Counters) {
         parent->OnUserRetrievedEvent(counter.DecompressedSize, counter.MessagesCount);
     }
@@ -2812,7 +2916,9 @@ void TDeferredActions<UseMigrationProtocol>::DeferReadFromProcessor(const typena
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task) {
+void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task)
+{
+    DBGTRACE("TDeferredActions::DeferStartExecutorTask");
     ExecutorsTasks.emplace_back(executor, std::move(task));
 }
 
@@ -2891,7 +2997,9 @@ void TDeferredActions<UseMigrationProtocol>::Read() {
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::StartExecutorTasks() {
+void TDeferredActions<UseMigrationProtocol>::StartExecutorTasks()
+{
+    DBGTRACE("TDeferredActions::StartExecutorTasks");
     for (auto&& [executor, task] : ExecutorsTasks) {
         executor->Post(std::move(task));
     }
@@ -2901,7 +3009,9 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::AbortSession() {
     if (SessionClosedEvent) {
         Y_ABORT_UNLESS(CbContext);
+        DBGTRACE_LOG("try acquire lock");
         if (auto session = CbContext->LockShared()) {
+            DBGTRACE_LOG("lock acquired");
             session->AbortSession(std::move(*SessionClosedEvent));
         }
     }
@@ -2910,7 +3020,9 @@ void TDeferredActions<UseMigrationProtocol>::AbortSession() {
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::Reconnect() {
     if (CbContext) {
+        DBGTRACE_LOG("try acquire lock");
         if (auto session = CbContext->LockShared()) {
+            DBGTRACE_LOG("lock acquired");
             if (!session->Reconnect(ReconnectionStatus)) {
                 session->AbortSession(std::move(ReconnectionStatus));
             }

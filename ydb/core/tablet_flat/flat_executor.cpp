@@ -3556,23 +3556,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 }
 
 void TExecutor::UpdateUsedTabletMemory() {
-    UsedTabletMemory = 0;
-    // Estimate memory usage for internal executor structures.
-    UsedTabletMemory += 50 << 10; // 50kb
-    // Count the number of bytes exclusive to private cache.
+    // Estimate memory usage for internal executor structures:
+    UsedTabletMemory = 50 << 10; // 50kb
+
+    // Count the number of bytes kept in private cache (can't be offloaded right now):
     if (PrivatePageCache) {
-        UsedTabletMemory += PrivatePageCache->GetStats().TotalExclusive;
+        UsedTabletMemory += PrivatePageCache->GetStats().TotalPinnedBody;
+        UsedTabletMemory += PrivatePageCache->GetStats().PinnedLoadSize;
     }
-    // Estimate memory used by database structures.
+
+    // Estimate memory used by internal database structures:
     auto &counters = Database->Counters();
     UsedTabletMemory += counters.MemTableWaste;
     UsedTabletMemory += counters.MemTableBytes;
-    UsedTabletMemory += counters.Parts.IndexBytes;
     UsedTabletMemory += counters.Parts.OtherBytes;
-    UsedTabletMemory += counters.Parts.ByKeyBytes;
     UsedTabletMemory += Stats->PacksMetaBytes;
 
-    // Add tablet memory usage.
+    // Add tablet memory usage:
     UsedTabletMemory += Owner->GetMemoryUsage();
 }
 

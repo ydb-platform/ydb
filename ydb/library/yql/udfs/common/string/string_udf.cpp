@@ -31,59 +31,59 @@ using namespace NUdf;
 
 namespace {
 
-#define STRING_UDF(udfName, function)                                                      \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) {                   \
-        const TString input(args[0].AsStringRef());                                       \
-        const auto& result = function(input);                                             \
-        return valueBuilder->NewString(result);                                           \
-    }                                                                                     \
-                                                                                          \
-    struct T##udfName##KernelExec                                                         \
-        : public TUnaryKernelExec<T##udfName##KernelExec>                                 \
-    {                                                                                     \
-        template <typename TSink>                                                         \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {   \
-            const TString input(arg1.AsStringRef());                                      \
-            const auto& result = function(input);                                         \
-            sink(TBlockItem(result));                                                     \
-        }                                                                                 \
-    };                                                                                    \
-                                                                                          \
+#define STRING_UDF(udfName, function)                                                   \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) {                \
+        const TString input(args[0].AsStringRef());                                    \
+        const auto& result = function(input);                                          \
+        return valueBuilder->NewString(result);                                        \
+    }                                                                                  \
+                                                                                       \
+    struct T##udfName##KernelExec                                                      \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                              \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            const TString input(arg1.AsStringRef());                                   \
+            const auto& result = function(input);                                      \
+            sink(TBlockItem(result));                                                  \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 
 // 'unsafe' udf is actually strict - it returns null on any exception
-#define STRING_UNSAFE_UDF(udfName, function)                                        \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0);                                               \
-        const TString input(args[0].AsStringRef());                                 \
-        try {                                                                       \
-            const auto& result = function(input);                                   \
-            return valueBuilder->NewString(result);                                 \
-        } catch (yexception&) {                                                     \
-            return TUnboxedValue();                                                 \
-        }                                                                           \
-    }                                                                               \
-                                                                                    \
-    struct T##udfName##KernelExec                                                   \
-        : public TUnaryKernelExec<T##udfName##KernelExec>                           \
-    {                                                                               \
-        template <typename TSink>                                                   \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {                   \
-            if (!arg1) {                                                            \
-                return sink(TBlockItem());                                          \
-            }                                                                       \
-                                                                                    \
-            const TString input(arg1.AsStringRef());                                \
-            try {                                                                   \
-                const auto& result = function(input);                               \
-                sink(TBlockItem(result));                                           \
-            } catch (yexception&) {                                                 \
-                return sink(TBlockItem());                                          \
-            }                                                                       \
-        }                                                                           \
-    };                                                                              \
-                                                                                    \
+#define STRING_UNSAFE_UDF(udfName, function)                                            \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) {    \
+        EMPTY_RESULT_ON_EMPTY_ARG(0);                                                  \
+        const TString input(args[0].AsStringRef());                                    \
+        try {                                                                          \
+            const auto& result = function(input);                                      \
+            return valueBuilder->NewString(result);                                    \
+        } catch (yexception&) {                                                        \
+            return TUnboxedValue();                                                    \
+        }                                                                              \
+    }                                                                                  \
+                                                                                       \
+    struct T##udfName##KernelExec                                                      \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                              \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            if (!arg1) {                                                               \
+                return sink(TBlockItem());                                             \
+            }                                                                          \
+                                                                                       \
+            const TString input(arg1.AsStringRef());                                   \
+            try {                                                                      \
+                const auto& result = function(input);                                  \
+                sink(TBlockItem(result));                                              \
+            } catch (yexception&) {                                                    \
+                return sink(TBlockItem());                                             \
+            }                                                                          \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define STROKA_UDF(udfName, function)                                   \
@@ -112,30 +112,30 @@ namespace {
         }                                                               \
     }
 
-#define STROKA_ASCII_CASE_UDF(udfName, function)                        \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) { \
-        TString input(args[0].AsStringRef());                           \
-        if (input.function()) {                                         \
-            return valueBuilder->NewString(input);                      \
-        } else {                                                        \
-            return args[0];                                             \
-        }                                                               \
-    }                                                                   \
-                                                                        \
-    struct T##udfName##KernelExec                                       \
-        : public TUnaryKernelExec<T##udfName##KernelExec>               \
-    {                                                                   \
-        template <typename TSink>                                       \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {       \
-            TString input(arg1.AsStringRef());                          \
-            if (input.function()) {                                     \
-                sink(TBlockItem(input));                                \
-            } else {                                                    \
-                sink(arg1);                                             \
-            }                                                           \
-        }                                                               \
-    };                                                                  \
-                                                                        \
+#define STROKA_ASCII_CASE_UDF(udfName, function)                                        \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) {                \
+        TString input(args[0].AsStringRef());                                          \
+        if (input.function()) {                                                        \
+            return valueBuilder->NewString(input);                                     \
+        } else {                                                                       \
+            return args[0];                                                            \
+        }                                                                              \
+    }                                                                                  \
+                                                                                       \
+    struct T##udfName##KernelExec                                                      \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                              \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            TString input(arg1.AsStringRef());                                         \
+            if (input.function()) {                                                    \
+                sink(TBlockItem(input));                                               \
+            } else {                                                                   \
+                sink(arg1);                                                            \
+            }                                                                          \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 
@@ -164,44 +164,44 @@ namespace {
     }
 
 #define IS_ASCII_UDF(function)                                           \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) { \
-        Y_UNUSED(valueBuilder);                                          \
-        if (args[0]) {                                                   \
-            const TStringBuf input(args[0].AsStringRef());               \
-            bool result = true;                                          \
-            for (auto c : input) {                                       \
-                if (!function(c)) {                                      \
-                    result = false;                                      \
-                    break;                                               \
-                }                                                        \
-            }                                                            \
-            return TUnboxedValuePod(result);                             \
-        } else {                                                         \
-            return TUnboxedValuePod(false);                              \
-        }                                                                \
-    }                                                                    \
-                                                                         \
-    struct T##function##KernelExec                                       \
-        : public TUnaryKernelExec<T##function##KernelExec>               \
-    {                                                                    \
-        template <typename TSink>                                        \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {        \
-            if (arg1) {                                                  \
-                const TStringBuf input(arg1.AsStringRef());              \
-                bool result = true;                                      \
-                for (auto c : input) {                                   \
-                    if (!function(c)) {                                  \
-                        result = false;                                  \
-                        break;                                           \
-                    }                                                    \
-                }                                                        \
-                sink(TBlockItem(result));                                \
-            } else {                                                     \
-                sink(TBlockItem(false));                                 \
-            }                                                            \
-        }                                                                \
-    };                                                                   \
-                                                                         \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {               \
+        Y_UNUSED(valueBuilder);                                                        \
+        if (args[0]) {                                                                 \
+            const TStringBuf input(args[0].AsStringRef());                             \
+            bool result = true;                                                        \
+            for (auto c : input) {                                                     \
+                if (!function(c)) {                                                    \
+                    result = false;                                                    \
+                    break;                                                             \
+                }                                                                      \
+            }                                                                          \
+            return TUnboxedValuePod(result);                                           \
+        } else {                                                                       \
+            return TUnboxedValuePod(false);                                            \
+        }                                                                              \
+    }                                                                                  \
+                                                                                       \
+    struct T##function##KernelExec                                                     \
+        : public TUnaryKernelExec<T##function##KernelExec>                             \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            if (arg1) {                                                                \
+                const TStringBuf input(arg1.AsStringRef());                            \
+                bool result = true;                                                    \
+                for (auto c : input) {                                                 \
+                    if (!function(c)) {                                                \
+                        result = false;                                                \
+                        break;                                                         \
+                    }                                                                  \
+                }                                                                      \
+                sink(TBlockItem(result));                                              \
+            } else {                                                                   \
+                sink(TBlockItem(false));                                               \
+            }                                                                          \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 
@@ -231,7 +231,7 @@ namespace {
         : public TGenericKernelExec<T##function##KernelExec, 3>                                      \
     {                                                                                                \
         template <typename TSink>                                                                    \
-        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {                                    \
+        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {              \
             TStringStream result;                                                                    \
             const TStringBuf input(args.GetElement(0).AsStringRef());                                \
             char paddingSymbol = ' ';                                                                \
@@ -253,67 +253,67 @@ namespace {
                                                                                                      \
     END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
-#define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                        \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<argType>)) {        \
-        TStringStream result;                                                     \
-        result << function(args[0].Get<argType>());                               \
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }                                                                             \
-                                                                                  \
-    struct T##function##KernelExec                                                \
-        : public TUnaryKernelExec<T##function##KernelExec>                        \
-    {                                                                             \
-        template <typename TSink>                                                 \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {                 \
-            TStringStream result;                                                 \
-            result << function(arg1.Get<argType>());                              \
-            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
-        }                                                                         \
-    };                                                                            \
-                                                                                  \
+#define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                              \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<argType>)) {             \
+        TStringStream result;                                                          \
+        result << function(args[0].Get<argType>());                                    \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));      \
+    }                                                                                  \
+                                                                                       \
+    struct T##function##KernelExec                                                     \
+        : public TUnaryKernelExec<T##function##KernelExec>                             \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            TStringStream result;                                                      \
+            result << function(arg1.Get<argType>());                                   \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));                \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
-#define STRING_STREAM_TEXT_FORMATTER_UDF(function)                                \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<char*>)) {          \
-        TStringStream result;                                                     \
-        const TStringBuf input(args[0].AsStringRef());                            \
-        result << function(input);                                                \
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }                                                                             \
-                                                                                  \
-    struct T##function##KernelExec                                                \
-        : public TUnaryKernelExec<T##function##KernelExec>                        \
-    {                                                                             \
-        template <typename TSink>                                                 \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {                 \
-            TStringStream result;                                                 \
-            const TStringBuf input(arg1.AsStringRef());                           \
-            result << function(input);                                            \
-            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
-        }                                                                         \
-    };                                                                            \
-                                                                                  \
+#define STRING_STREAM_TEXT_FORMATTER_UDF(function)                                      \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<char*>)) {               \
+        TStringStream result;                                                          \
+        const TStringBuf input(args[0].AsStringRef());                                 \
+        result << function(input);                                                     \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));      \
+    }                                                                                  \
+                                                                                       \
+    struct T##function##KernelExec                                                     \
+        : public TUnaryKernelExec<T##function##KernelExec>                             \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            TStringStream result;                                                      \
+            const TStringBuf input(arg1.AsStringRef());                                \
+            result << function(input);                                                 \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));                \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 
-#define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                         \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<ui64>)) {            \
-        TStringStream result;                                                     \
-        result << HumanReadableSize(args[0].Get<ui64>(), hrSize);                 \
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); \
-    }                                                                             \
-                                                                                  \
-    struct T##udfName##KernelExec                                                 \
-        : public TUnaryKernelExec<T##udfName##KernelExec>                         \
-    {                                                                             \
-        template <typename TSink>                                                 \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {                 \
-            TStringStream result;                                                 \
-            result << HumanReadableSize(arg1.Get<ui64>(), hrSize);                \
-            sink(TBlockItem(TStringRef(result.Data(), result.Size())));           \
-        }                                                                         \
-    };                                                                            \
-                                                                                  \
+#define STRING_STREAM_HRSZ_FORMATTER_UDF(udfName, hrSize)                               \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<ui64>)) {                 \
+        TStringStream result;                                                          \
+        result << HumanReadableSize(args[0].Get<ui64>(), hrSize);                      \
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));      \
+    }                                                                                  \
+                                                                                       \
+    struct T##udfName##KernelExec                                                      \
+        : public TUnaryKernelExec<T##udfName##KernelExec>                              \
+    {                                                                                  \
+        template <typename TSink>                                                      \
+        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+            TStringStream result;                                                      \
+            result << HumanReadableSize(arg1.Get<ui64>(), hrSize);                     \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));                \
+        }                                                                              \
+    };                                                                                 \
+                                                                                       \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define STRING_UDF_MAP(XX)           \

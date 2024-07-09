@@ -36,13 +36,6 @@ EChannelMode GetChannelMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMod
     }
 }
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildWideBlockChannelsTransformer(
-        TTypeAnnotationContext& typesCtx,
-        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
-    const EChannelMode mode = GetChannelMode(blockChannelsMode);
-    return NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, mode);
-}
-
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
         bool allowDependantConsumers,
         TTypeAnnotationContext& typesCtx,

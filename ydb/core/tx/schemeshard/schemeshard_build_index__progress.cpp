@@ -93,7 +93,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         modifyScheme.SetInternal(true);
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo->TablePathId, ss).Parent().PathString());
         modifyScheme.MutableAlterTable()->SetName(TPath::Init(buildInfo->TablePathId, ss).LeafName());
-        for(auto& colInfo : buildInfo->BuildColumns) {
+        for (auto& colInfo : buildInfo->BuildColumns) {
             auto col = modifyScheme.MutableAlterTable()->AddColumns();
             NScheme::TTypeInfo typeInfo;
             TString typeMod;
@@ -119,6 +119,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
         }
 
+    } else if (buildInfo->IsCheckingNotNull()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo->TablePathId, ss).Parent().PathString());
+        modifyScheme.MutableAlterTable()->SetName(TPath::Init(buildInfo->TablePathId, ss).LeafName());
+
+        for (auto& colInfo : buildInfo->CheckNotNullColumns) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            col->SetName(colInfo.ColumnName);
+            col->SetIsCheckingNotNullInProgress(true);
+        }
     } else {
         Y_ABORT("Unknown operation kind while building AlterMainTablePropose");
     }

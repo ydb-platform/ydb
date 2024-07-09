@@ -3551,7 +3551,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto createTable = client.ExecuteQuery(R"sql(
                 CREATE TABLE `/Root/test/alterNotNull` (
                     id Int32 NOT NULL,
-                    val Int32 DEFAULT 0,
+                    val Int32 DEFAULT(0),
                     PRIMARY KEY (id)
                 );
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -3599,7 +3599,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto createTable = client.ExecuteQuery(R"sql(
                 CREATE TABLE `/Root/test/alterNotNull` (
                     id Int32 NOT NULL,
-                    val Int32 DEFAULT 0,
+                    val Int32 DEFAULT(0),
                     PRIMARY KEY (id)
                 );
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -3621,6 +3621,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
+    std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3628,10 +3629,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
+    std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
 
         {
             auto initNullValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, value)
+                REPLACE INTO `/Root/test/alterNotNull` (id, val)
                 VALUES
                 ( 1, NULL ),
                 ( 2, NULL );

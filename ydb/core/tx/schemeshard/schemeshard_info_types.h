@@ -2882,12 +2882,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         {
         }
 
-        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
-            setting->SetColumnName(ColumnName);
-            setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
-            setting->SetNotNull(NotNull);
-            setting->SetFamily(FamilyName);
-        }
+        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const;
     };
 
     struct TColumnCheckingInfo {
@@ -2897,9 +2892,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             : ColumnName(name)
         {}
 
-        void SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const {
-            setting->SetColumnName(ColumnName);
-        }
+        void SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const;
     };
 
     enum class EBuildKind : ui32 {

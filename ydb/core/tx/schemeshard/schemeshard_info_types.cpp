@@ -2086,12 +2086,23 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     *index.AddIndexImplTableDescriptions() = ImplTableDescription;
 }
 
+void TIndexBuildInfo::TColumnBuildInfo::SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
+    setting->SetColumnName(ColumnName);
+    setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+    setting->SetNotNull(NotNull);
+    setting->SetFamily(FamilyName);
+}
+
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumn());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
     for (const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }
+}
+
+void TIndexBuildInfo::TColumnCheckingInfo::SerializeToProto(NKikimrIndexBuilder::TCheckingNotNullSetting* setting) const {
+    setting->SetColumnName(ColumnName);
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* result) const {

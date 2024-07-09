@@ -110,11 +110,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        if (col.GetNotNull() && !hasDefault) {
-            errStr = Sprintf("Not null columns without defaults are not supported.");
-            status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr;
-        }
+        // if (col.GetNotNull() && !hasDefault) {
+        //     errStr = Sprintf("Not null columns without defaults are not supported.");
+        //     status = NKikimrScheme::StatusInvalidParameter;
+        //     return nullptr;
+        // }
 
         col.ClearId();
     }

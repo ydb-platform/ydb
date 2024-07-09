@@ -141,16 +141,29 @@ class Builder:
                 try:
                     s = 0
                     g = 1.0
+                    count = 0
                     for i, v in enumerate(values):
-                        s = s + float(v)
-                        g = g * float(v)
+                        try:
+                            s = s + float(v)
+                            g = g * float(v)
+                            count = count + 1
+                        except ValueError:
+                            pass
+
+                    allValues = count == len(values)
+                    if count == 0:
+                        raise ValueError
 
                     g = pow(g, 1.0/len(values))
+                    res = ""
                     if col.name in self.shames:
                         base, test, _ = self.shames[col.name]
-                        values.append("%.2f/%.2f" % (float(test.values[-1])/float(base.values[-1]), g))
+                        res = "%.2f/%.2f" % (float(test.values[-1])/float(base.values[-1]), g)
                     else:
-                        values.append(format % (s))
+                        res = format % (s)
+                    if not allValues:
+                        res += "(*)"
+                    values.append(res)
                 except ValueError:
                     if col.name in self.special:
                         values.append("SUM")

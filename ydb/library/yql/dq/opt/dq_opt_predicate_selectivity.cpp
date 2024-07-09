@@ -1,6 +1,5 @@
 #include "dq_opt_stat.h"
 
-#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -55,6 +54,71 @@ namespace {
         }
     }
 
+    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType, const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+        if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>() ) {
+            maybeLiteral = maybeJust.Cast().Input();
+        }
+
+        if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
+            auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
+            auto value = literal.Literal().Value();
+
+            if (columnType == "Bool") {
+                ui8 v = FromString<bool>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint8") {
+                ui8 v = FromString<ui8>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int8") {
+                i8 v = FromString<i8>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint32") {
+                ui32 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int32") {
+                i32 v = FromString<i32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uint64") {
+                ui64 v = FromString<ui64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Int64") {
+                i64 v = FromString<i64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Float") {
+                float v = FromString<float>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Double") {
+                double v = FromString<double>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Date") {
+                ui16 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Datetime") {
+                ui32 v = FromString<ui32>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
+                return countMinSketch->Probe(value.Data(), value.Size());
+            } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
+                i64 v = FromString<i64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Timestamp") {
+                ui64 v = FromString<ui64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else if (columnType == "Uuid") {
+                const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+                std::pair<ui64, ui64> v{};
+                v.first = uuidData[0]; // low128
+                v.second = uuidData[1]; // high128
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
+            } else {
+                return std::nullopt;
+            }
+
+        }
+
+        return std::nullopt;
+    }
+
     double ComputeEqualitySelectivity(TExprBase& left, TExprBase& right, const std::shared_ptr<TOptimizerStatistics>& stats) {
 
         TString attributeName;
@@ -78,14 +142,12 @@ namespace {
                 }
                 
                 if (auto countMinSketch = stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
-                    
-                    TMemoryPool valueDataPool(256);
-                    NKikimr::TCell cell;
-                    if (!NKikimr::CellFromLiteralExprNode(right, cell, valueDataPool)) {
+                    auto columnType = stats->ColumnStatistics->Data[attributeName].Type;
+                    std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType,  countMinSketch);
+                    if (!countMinEstimation.has_value()) {
                         return DefaultSelectivity(stats, attributeName);
                     }
-                    ui32 countMinEstimation = countMinSketch->Probe(cell.Data(), cell.Size());
-                    return countMinEstimation / stats->Nrows;
+                    return countMinEstimation.value() / stats->Nrows;
                 }
                 
                 return DefaultSelectivity(stats, attributeName);

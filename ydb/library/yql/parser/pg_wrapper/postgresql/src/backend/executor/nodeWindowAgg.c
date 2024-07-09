@@ -41,6 +41,7 @@
 #include "executor/nodeWindowAgg.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/clauses.h"
 #include "optimizer/optimizer.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_coerce.h"
@@ -2273,6 +2274,9 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 	winstate->ss.ps.state = estate;
 	winstate->ss.ps.ExecProcNode = ExecWindowAgg;
 
+	/* copy frame options to state node for easy access */
+	winstate->frameOptions = frameOptions;
+
 	/*
 	 * Create expression contexts.  We need two, one for per-input-tuple
 	 * processing and one for per-output-tuple processing.  We cheat a little
@@ -2500,9 +2504,6 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 		winstate->agg_winobj = agg_winobj;
 	}
 
-	/* copy frame options to state node for easy access */
-	winstate->frameOptions = frameOptions;
-
 	/* initialize frame bound offset expressions */
 	winstate->startOffset = ExecInitExpr((Expr *) node->startOffset,
 										 (PlanState *) winstate);
@@ -2653,7 +2654,7 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 
 	/*
 	 * Figure out whether we want to use the moving-aggregate implementation,
-	 * and collect the right set of fields from the pg_attribute entry.
+	 * and collect the right set of fields from the pg_aggregate entry.
 	 *
 	 * It's possible that an aggregate would supply a safe moving-aggregate
 	 * implementation and an unsafe normal one, in which case our hand is
@@ -2662,16 +2663,24 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 	 * aggregate's arguments (and FILTER clause if any) contain any calls to
 	 * volatile functions.  Otherwise, the difference between restarting and
 	 * not restarting the aggregation would be user-visible.
+	 *
+	 * We also don't risk using moving aggregates when there are subplans in
+	 * the arguments or FILTER clause.  This is partly because
+	 * contain_volatile_functions() doesn't look inside subplans; but there
+	 * are other reasons why a subplan's output might be volatile.  For
+	 * example, syncscan mode can render the results nonrepeatable.
 	 */
 	if (!OidIsValid(aggform->aggminvtransfn))
 		use_ma_code = false;	/* sine qua non */
 	else if (aggform->aggmfinalmodify == AGGMODIFY_READ_ONLY &&
-			 aggform->aggfinalmodify != AGGMODIFY_READ_ONLY)
+		aggform->aggfinalmodify != AGGMODIFY_READ_ONLY)
 		use_ma_code = true;		/* decision forced by safety */
 	else if (winstate->frameOptions & FRAMEOPTION_START_UNBOUNDED_PRECEDING)
 		use_ma_code = false;	/* non-moving frame head */
 	else if (contain_volatile_functions((Node *) wfunc))
 		use_ma_code = false;	/* avoid possible behavioral change */
+	else if (contain_subplans((Node *) wfunc))
+		use_ma_code = false;	/* subplans might contain volatile functions */
 	else
 		use_ma_code = true;		/* yes, let's use it */
 	if (use_ma_code)

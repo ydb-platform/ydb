@@ -20,18 +20,21 @@ DEPENDS(
 )
 
 TEST_SRCS(
-    test_bindings.py
+    test_bindings_0.py
+    test_bindings_1.py
     test_compressions.py
     test_early_finish.py
     test_empty.py
-    test_explicit_partitioning.py
+    test_explicit_partitioning_0.py
+    test_explicit_partitioning_1.py
     test_format_setting.py
     test_formats.py
     test_inflight.py
     test_insert.py
     test_public_metrics.py
     test_push_down.py
-    test_s3.py
+    test_s3_0.py
+    test_s3_1.py
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
@@ -49,11 +52,9 @@ DATA(
 )
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

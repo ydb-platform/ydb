@@ -304,7 +304,6 @@ void TGenCompactionStrategy::Stop() {
     ForcedState = EForcedState::None;
     ForcedMemCompactionId = 0;
     ForcedGeneration = 0;
-    MaxOverloadFactor = 0.0;
 
     CurrentForcedGenCompactionId = 0;
     NextForcedGenCompactionId = 0;
@@ -343,10 +342,6 @@ void TGenCompactionStrategy::ReflectRemovedRowVersions() {
     if (Generations && MaybeAutoStartForceCompaction()) {
         CheckGeneration(1);
     }
-}
-
-float TGenCompactionStrategy::GetOverloadFactor() {
-    return MaxOverloadFactor;
 }
 
 ui64 TGenCompactionStrategy::GetBackingSize() {
@@ -1435,9 +1430,9 @@ void TGenCompactionStrategy::UpdateStats() {
 }
 
 void TGenCompactionStrategy::UpdateOverload() {
-    MaxOverloadFactor = 0.0;
+    OverloadFactor = 0.0;
     for (const auto& gen : Generations) {
-        MaxOverloadFactor = Max(MaxOverloadFactor, gen.OverloadFactor);
+        OverloadFactor = Max(OverloadFactor, gen.OverloadFactor);
     }
 }
 

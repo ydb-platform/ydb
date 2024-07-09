@@ -234,6 +234,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"JoinDict", &WrapJoinDict},
         {"GraceJoin", &WrapGraceJoin},
         {"GraceSelfJoin", &WrapGraceSelfJoin},
+        {"GraceJoinWithSpilling", &WrapGraceJoin},
+        {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
         {"CombineCore", &WrapCombineCore},

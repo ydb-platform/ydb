@@ -36,21 +36,23 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     Counters.ExecuteHistogram->Collect(dExecution.MilliSeconds());
     if (Waiting.size()) {
         auto task = Waiting.pop();
-        Counters.WaitingHistogram->Collect((ev->Get()->GetStartInstant() - task.GetCreateInstant()).MilliSeconds());
+        Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MilliSeconds());
         task.OnBeforeStart();
         Send(ev->Sender, new TEvInternal::TEvNewTask(task));
     } else {
         Workers.emplace_back(ev->Sender);
     }
-    if (ev->Get()->IsFail()) {
-        ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=on_error;owner=" << ev->Get()->GetOwnerId() << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
-        Send(ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetError()));
-    } else {
-        Send(ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetResult()));
+    if (ev->Get()->GetOwnerId()) {
+        if (ev->Get()->IsFail()) {
+            ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=on_error;owner=" << *ev->Get()->GetOwnerId() << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
+            Send(*ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetError()));
+        } else {
+            Send(*ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetResult()));
+        }
     }
     Counters.WaitingQueueSize->Set(Waiting.size());
     Counters.AvailableWorkersCount->Set(Workers.size());
-    ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=processed;owner=" << ev->Get()->GetOwnerId() << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
+    ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=processed;owner=" << ev->Get()->GetOwnerId().value_or(NActors::TActorId()) << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
@@ -63,7 +65,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
     }
 
-    TWorkerTask wTask(ev->Get()->GetTask(), ev->Get()->GetTask()->GetOwnerId().value_or(ev->Sender), itSignal->second);
+    TWorkerTask wTask(ev->Get()->GetTask(), ev->Get()->GetTask()->GetOwnerId(), itSignal->second);
 
     if (Workers.size()) {
         Counters.WaitingHistogram->Collect(0);

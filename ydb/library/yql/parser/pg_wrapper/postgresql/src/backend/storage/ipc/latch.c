@@ -43,6 +43,9 @@
 #ifdef HAVE_SYS_EVENT_H
 #include <sys/event.h>
 #endif
+#ifdef HAVE_SYS_SIGNALFD_H
+#include <sys/signalfd.h>
+#endif
 #ifdef HAVE_POLL_H
 #include <poll.h>
 #endif
@@ -81,8 +84,20 @@
 #error "no wait set implementation available"
 #endif
 
-#ifdef WAIT_USE_EPOLL
-#include <sys/signalfd.h>
+/*
+ * By default, we use a self-pipe with poll() and a signalfd with epoll(), if
+ * available.  We avoid signalfd on illumos for now based on problem reports.
+ * For testing the choice can also be manually specified.
+ */
+#if defined(WAIT_USE_POLL) || defined(WAIT_USE_EPOLL)
+#if defined(WAIT_USE_SELF_PIPE) || defined(WAIT_USE_SIGNALFD)
+/* don't overwrite manual choice */
+#elif defined(WAIT_USE_EPOLL) && defined(HAVE_SYS_SIGNALFD_H) && \
+	!defined(__illumos__)
+#define WAIT_USE_SIGNALFD
+#else
+#define WAIT_USE_SELF_PIPE
+#endif
 #endif
 
 /* typedef in latch.h */
@@ -147,25 +162,25 @@ static __thread WaitEventSet *LatchWaitSet;
 static __thread volatile sig_atomic_t waiting = false;
 #endif
 
-#ifdef WAIT_USE_EPOLL
+#ifdef WAIT_USE_SIGNALFD
 /* On Linux, we'll receive SIGURG via a signalfd file descriptor. */
-static __thread int	signal_fd = -1;
+static int	signal_fd = -1;
 #endif
 
-#if defined(WAIT_USE_POLL)
+#ifdef WAIT_USE_SELF_PIPE
 /* Read and write ends of the self-pipe */
-static int	selfpipe_readfd = -1;
-static int	selfpipe_writefd = -1;
+static __thread int	selfpipe_readfd = -1;
+static __thread int	selfpipe_writefd = -1;
 
 /* Process owning the self-pipe --- needed for checking purposes */
-static int	selfpipe_owner_pid = 0;
+static __thread int	selfpipe_owner_pid = 0;
 
 /* Private function prototypes */
 static void latch_sigurg_handler(SIGNAL_ARGS);
 static void sendSelfPipeByte(void);
 #endif
 
-#if defined(WAIT_USE_POLL) || defined(WAIT_USE_EPOLL)
+#if defined(WAIT_USE_SELF_PIPE) || defined(WAIT_USE_SIGNALFD)
 static void drain(void);
 #endif
 
@@ -191,7 +206,7 @@ static inline int WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 void
 InitializeLatchSupport(void)
 {
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 	int			pipefd[2];
 
 	if (IsUnderPostmaster)
@@ -265,7 +280,7 @@ InitializeLatchSupport(void)
 	pqsignal(SIGURG, latch_sigurg_handler);
 #endif
 
-#ifdef WAIT_USE_EPOLL
+#ifdef WAIT_USE_SIGNALFD
 	sigset_t	signalfd_mask;
 
 	/* Block SIGURG, because we'll receive it through a signalfd. */
@@ -317,7 +332,7 @@ ShutdownLatchSupport(void)
 		LatchWaitSet = NULL;
 	}
 
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 	close(selfpipe_readfd);
 	close(selfpipe_writefd);
 	selfpipe_readfd = -1;
@@ -325,7 +340,7 @@ ShutdownLatchSupport(void)
 	selfpipe_owner_pid = InvalidPid;
 #endif
 
-#if defined(WAIT_USE_EPOLL)
+#if defined(WAIT_USE_SIGNALFD)
 	close(signal_fd);
 	signal_fd = -1;
 #endif
@@ -342,9 +357,12 @@ InitLatch(Latch *latch)
 	latch->owner_pid = MyProcPid;
 	latch->is_shared = false;
 
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 	/* Assert InitializeLatchSupport has been called in this process */
 	Assert(selfpipe_readfd >= 0 && selfpipe_owner_pid == MyProcPid);
+#elif defined(WAIT_USE_SIGNALFD)
+	/* Assert InitializeLatchSupport has been called in this process */
+	Assert(signal_fd >= 0);
 #elif defined(WAIT_USE_WIN32)
 	latch->event = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (latch->event == NULL)
@@ -406,9 +424,12 @@ OwnLatch(Latch *latch)
 	/* Sanity checks */
 	Assert(latch->is_shared);
 
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 	/* Assert InitializeLatchSupport has been called in this process */
 	Assert(selfpipe_readfd >= 0 && selfpipe_owner_pid == MyProcPid);
+#elif defined(WAIT_USE_SIGNALFD)
+	/* Assert InitializeLatchSupport has been called in this process */
+	Assert(signal_fd >= 0);
 #endif
 
 	if (latch->owner_pid != 0)
@@ -505,48 +526,54 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 	WaitEvent	event;
 	WaitEventSet *set = CreateWaitEventSet(CurrentMemoryContext, 3);
 
-	if (wakeEvents & WL_TIMEOUT)
-		Assert(timeout >= 0);
-	else
-		timeout = -1;
-
-	if (wakeEvents & WL_LATCH_SET)
-		AddWaitEventToSet(set, WL_LATCH_SET, PGINVALID_SOCKET,
-						  latch, NULL);
-
-	/* Postmaster-managed callers must handle postmaster death somehow. */
-	Assert(!IsUnderPostmaster ||
-		   (wakeEvents & WL_EXIT_ON_PM_DEATH) ||
-		   (wakeEvents & WL_POSTMASTER_DEATH));
-
-	if ((wakeEvents & WL_POSTMASTER_DEATH) && IsUnderPostmaster)
-		AddWaitEventToSet(set, WL_POSTMASTER_DEATH, PGINVALID_SOCKET,
-						  NULL, NULL);
-
-	if ((wakeEvents & WL_EXIT_ON_PM_DEATH) && IsUnderPostmaster)
-		AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET,
-						  NULL, NULL);
-
-	if (wakeEvents & WL_SOCKET_MASK)
+	PG_TRY();
 	{
-		int			ev;
+		if (wakeEvents & WL_TIMEOUT)
+			Assert(timeout >= 0);
+		else
+			timeout = -1;
 
-		ev = wakeEvents & WL_SOCKET_MASK;
-		AddWaitEventToSet(set, ev, sock, NULL, NULL);
+		if (wakeEvents & WL_LATCH_SET)
+			AddWaitEventToSet(set, WL_LATCH_SET, PGINVALID_SOCKET,
+							  latch, NULL);
+
+		/* Postmaster-managed callers must handle postmaster death somehow. */
+		Assert(!IsUnderPostmaster ||
+			   (wakeEvents & WL_EXIT_ON_PM_DEATH) ||
+			   (wakeEvents & WL_POSTMASTER_DEATH));
+
+		if ((wakeEvents & WL_POSTMASTER_DEATH) && IsUnderPostmaster)
+			AddWaitEventToSet(set, WL_POSTMASTER_DEATH, PGINVALID_SOCKET,
+							  NULL, NULL);
+
+		if ((wakeEvents & WL_EXIT_ON_PM_DEATH) && IsUnderPostmaster)
+			AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET,
+							  NULL, NULL);
+
+		if (wakeEvents & WL_SOCKET_MASK)
+		{
+			int			ev;
+
+			ev = wakeEvents & WL_SOCKET_MASK;
+			AddWaitEventToSet(set, ev, sock, NULL, NULL);
+		}
+
+		rc = WaitEventSetWait(set, timeout, &event, 1, wait_event_info);
+
+		if (rc == 0)
+			ret |= WL_TIMEOUT;
+		else
+		{
+			ret |= event.events & (WL_LATCH_SET |
+								   WL_POSTMASTER_DEATH |
+								   WL_SOCKET_MASK);
+		}
 	}
-
-	rc = WaitEventSetWait(set, timeout, &event, 1, wait_event_info);
-
-	if (rc == 0)
-		ret |= WL_TIMEOUT;
-	else
+	PG_FINALLY();
 	{
-		ret |= event.events & (WL_LATCH_SET |
-							   WL_POSTMASTER_DEATH |
-							   WL_SOCKET_MASK);
+		FreeWaitEventSet(set);
 	}
-
-	FreeWaitEventSet(set);
+	PG_END_TRY();
 
 	return ret;
 }
@@ -618,7 +645,7 @@ SetLatch(Latch *latch)
 		return;
 	else if (owner_pid == MyProcPid)
 	{
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 		if (waiting)
 			sendSelfPipeByte();
 #else
@@ -691,7 +718,7 @@ CreateWaitEventSet(MemoryContext context, int nevents)
 	 * Use MAXALIGN size/alignment to guarantee that later uses of memory are
 	 * aligned correctly. E.g. epoll_event might need 8 byte alignment on some
 	 * platforms, but earlier allocations like WaitEventSet and WaitEvent
-	 * might not sized to guarantee that when purely using sizeof().
+	 * might not be sized to guarantee that when purely using sizeof().
 	 */
 	sz += MAXALIGN(sizeof(WaitEventSet));
 	sz += MAXALIGN(sizeof(WaitEvent) * nevents);
@@ -905,9 +932,9 @@ AddWaitEventToSet(WaitEventSet *set, uint32 events, pgsocket fd, Latch *latch,
 	{
 		set->latch = latch;
 		set->latch_pos = event->pos;
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 		event->fd = selfpipe_readfd;
-#elif defined(WAIT_USE_EPOLL)
+#elif defined(WAIT_USE_SIGNALFD)
 		event->fd = signal_fd;
 #else
 		event->fd = PGINVALID_SOCKET;
@@ -1448,7 +1475,7 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 
 	/* Sleep */
 	rc = epoll_wait(set->epoll_fd, set->epoll_ret_events,
-					nevents, cur_timeout);
+					Min(nevents, set->nevents_space), cur_timeout);
 
 	/* Check return code */
 	if (rc < 0)
@@ -1599,7 +1626,8 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 
 	/* Sleep */
 	rc = kevent(set->kqueue_fd, NULL, 0,
-				set->kqueue_ret_events, nevents,
+				set->kqueue_ret_events,
+				Min(nevents, set->nevents_space),
 				timeout_p);
 
 	/* Check return code */
@@ -2024,7 +2052,7 @@ GetNumRegisteredWaitEvents(WaitEventSet *set)
 	return set->nevents;
 }
 
-#if defined(WAIT_USE_POLL)
+#if defined(WAIT_USE_SELF_PIPE)
 
 /*
  * SetLatch uses SIGURG to wake up the process waiting on the latch.
@@ -2075,7 +2103,7 @@ retry:
 
 #endif
 
-#if defined(WAIT_USE_POLL) || defined(WAIT_USE_EPOLL)
+#if defined(WAIT_USE_SELF_PIPE) || defined(WAIT_USE_SIGNALFD)
 
 /*
  * Read all available data from self-pipe or signalfd.
@@ -2091,7 +2119,7 @@ drain(void)
 	int			rc;
 	int			fd;
 
-#ifdef WAIT_USE_POLL
+#ifdef WAIT_USE_SELF_PIPE
 	fd = selfpipe_readfd;
 #else
 	fd = signal_fd;
@@ -2109,7 +2137,7 @@ drain(void)
 			else
 			{
 				waiting = false;
-#ifdef WAIT_USE_POLL
+#ifdef WAIT_USE_SELF_PIPE
 				elog(ERROR, "read() on self-pipe failed: %m");
 #else
 				elog(ERROR, "read() on signalfd failed: %m");
@@ -2119,7 +2147,7 @@ drain(void)
 		else if (rc == 0)
 		{
 			waiting = false;
-#ifdef WAIT_USE_POLL
+#ifdef WAIT_USE_SELF_PIPE
 			elog(ERROR, "unexpected EOF on self-pipe");
 #else
 			elog(ERROR, "unexpected EOF on signalfd");

@@ -1,5 +1,6 @@
+# FIXME: this is actually a glibc (libc6-dev) headers listing.
+#        It should be disassembled and libc-to-nothing should be used instead.
 - includes:
-  - _G_config.h
   - a.out.h
   - aliases.h
   - ansidecl.h
@@ -23,9 +24,6 @@
   - gshadow.h
   - ieee754.h
   - libio.h
-  - linux/compiler.h
-  - linux/irda.h
-  - linux/smb.h
   - mcheck.h
   - netash/ash.h
   - netatalk/at.h
@@ -52,16 +50,3 @@
   - ttyent.h
   - ustat.h
   - xlocale.h
-
-- includes:
-  - jni.h: contrib/libs/jdk/include/jni.h
-  - jni_md.h:
-    - contrib/libs/jdk/include/darwin/jni_md.h
-    - contrib/libs/jdk/include/linux/jni_md.h
-    - contrib/libs/jdk/include/win32/jni_md.h
-
-# These are stubs for actual resolving into system
-- source_filter: "^contrib/libs/glibcasm"
-  includes:
-  - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
-  - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h

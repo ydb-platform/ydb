@@ -953,14 +953,6 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (familyId != 0) {
-            const bool allowColumnFamilies = (
-                KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES ||
-                AppData()->AllowColumnFamiliesForTest);
-            if (!allowColumnFamilies) {
-                errDescr = TStringBuilder()
-                    << "Server support for column families is not yet available";
-                return false;
-            }
             if (changesFamily.HasStorageConfig()) {
                 if (changesFamily.GetStorageConfig().HasDataThreshold() ||
                     changesFamily.GetStorageConfig().HasExternalThreshold() ||
@@ -1295,22 +1287,6 @@ bool TPartitionConfigMerger::VerifyAlterParams(
                     << "', in request '" << cfgStorage.ShortDebugString() << "'";
             return false;
         }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow changes to data channels
-            // This is so we stay compatible without surprises during migration periods
-            if (srcStorage.HasData() != cfgStorage.HasData() ||
-                    srcStorage.HasExternal() != cfgStorage.HasExternal() ||
-                    !IsEquivalent(srcStorage.GetData(), cfgStorage.GetData()) ||
-                    !IsEquivalent(srcStorage.GetExternal(), cfgStorage.GetExternal()))
-            {
-                errDescr = TStringBuilder()
-                        << "Changing column family storage is currently disabled on the server."
-                        << " Was '" << srcStorage.ShortDebugString()
-                        << "', in request '" << cfgStorage.ShortDebugString() << "'";
-                return false;
-            }
-        }
     }
 
     if (isStorageConfig) {
@@ -1359,30 +1335,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
                 return false;
             }
 
-            if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-                // When feature flag is not enabled we don't allow changes to data channels
-                // This is so we stay compatible without surprises during migration periods
-                if (srcStorage.HasData() != dstStorage.HasData() ||
-                        !IsEquivalent(srcStorage.GetData(), dstStorage.GetData()))
-                {
-                    errDescr = TStringBuilder()
-                            << "Changing column family storage is currently disabled on the server."
-                            << " Was '" << srcStorage.ShortDebugString()
-                            << "', in request '" << dstStorage.ShortDebugString() << "'";
-                    return false;
-                }
-            }
-
             continue;
-        }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow adding StorageConfig
-            if (family.HasStorageConfig() && (!srcFamily || !srcFamily->HasStorageConfig())) {
-                errDescr = TStringBuilder()
-                        << "Adding column family storage is currently disabled on the server.";
-                return false;
-            }
         }
     }
 
@@ -2114,7 +2067,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         *index.AddDataColumnNames() = x;
     }
 
-    *index.MutableIndexImplTableDescription() = ImplTableDescription;
+    *index.AddIndexImplTableDescriptions() = ImplTableDescription;
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {

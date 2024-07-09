@@ -750,11 +750,12 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK)
 	 * the rowtype column into multiple columns, since we have no way to
 	 * notify the caller that it should do that.)
 	 */
-	fcache->returnsTuple = check_sql_fn_retval(queryTree_list,
-											   rettype,
-											   rettupdesc,
-											   false,
-											   &resulttlist);
+	fcache->returnsTuple = check_sql_fn_retval_ext(queryTree_list,
+												   rettype,
+												   rettupdesc,
+												   procedureStruct->prokind,
+												   false,
+												   &resulttlist);
 
 	/*
 	 * Construct a JunkFilter we can use to coerce the returned rowtype to the
@@ -886,7 +887,7 @@ postquel_getnext(execution_state *es, SQLFunctionCachePtr fcache)
 	{
 		ProcessUtility(es->qd->plannedstmt,
 					   fcache->src,
-					   false,
+					   true,	/* protect function cache's parsetree */
 					   PROCESS_UTILITY_QUERY,
 					   es->qd->params,
 					   es->qd->queryEnv,
@@ -941,6 +942,7 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 	if (nargs > 0)
 	{
 		ParamListInfo paramLI;
+		Oid		   *argtypes = fcache->pinfo->argtypes;
 
 		if (fcache->paramLI == NULL)
 		{
@@ -957,10 +959,24 @@ postquel_sub_params(SQLFunctionCachePtr fcache,
 		{
 			ParamExternData *prm = &paramLI->params[i];
 
-			prm->value = fcinfo->args[i].value;
+			/*
+			 * If an incoming parameter value is a R/W expanded datum, we
+			 * force it to R/O.  We'd be perfectly entitled to scribble on it,
+			 * but the problem is that if the parameter is referenced more
+			 * than once in the function, earlier references might mutate the
+			 * value seen by later references, which won't do at all.  We
+			 * could do better if we could be sure of the number of Param
+			 * nodes in the function's plans; but we might not have planned
+			 * all the statements yet, nor do we have plan tree walker
+			 * infrastructure.  (Examining the parse trees is not good enough,
+			 * because of possible function inlining during planning.)
+			 */
 			prm->isnull = fcinfo->args[i].isnull;
+			prm->value = MakeExpandedObjectReadOnly(fcinfo->args[i].value,
+													prm->isnull,
+													get_typlen(argtypes[i]));
 			prm->pflags = 0;
-			prm->ptype = fcache->pinfo->argtypes[i];
+			prm->ptype = argtypes[i];
 		}
 	}
 	else
@@ -1601,6 +1617,21 @@ check_sql_fn_retval(List *queryTreeLists,
 					bool insertDroppedCols,
 					List **resultTargetList)
 {
+	/* Wrapper function to preserve ABI compatibility in released branches */
+	return check_sql_fn_retval_ext(queryTreeLists,
+								   rettype, rettupdesc,
+								   PROKIND_FUNCTION,
+								   insertDroppedCols,
+								   resultTargetList);
+}
+
+bool
+check_sql_fn_retval_ext(List *queryTreeLists,
+						Oid rettype, TupleDesc rettupdesc,
+						char prokind,
+						bool insertDroppedCols,
+						List **resultTargetList)
+{
 	bool		is_tuple_result = false;
 	Query	   *parse;
 	ListCell   *parse_cell;
@@ -1617,7 +1648,7 @@ check_sql_fn_retval(List *queryTreeLists,
 
 	/*
 	 * If it's declared to return VOID, we don't care what's in the function.
-	 * (This takes care of the procedure case, as well.)
+	 * (This takes care of procedures with no output parameters, as well.)
 	 */
 	if (rettype == VOIDOID)
 		return false;
@@ -1772,8 +1803,13 @@ check_sql_fn_retval(List *queryTreeLists,
 		 * or not the record type really matches.  For the moment we rely on
 		 * runtime type checking to catch any discrepancy, but it'd be nice to
 		 * do better at parse time.
+		 *
+		 * We must *not* do this for a procedure, however.  Procedures with
+		 * output parameter(s) have rettype RECORD, and the CALL code expects
+		 * to get results corresponding to the list of output parameters, even
+		 * when there's just one parameter that's composite.
 		 */
-		if (tlistlen == 1)
+		if (tlistlen == 1 && prokind != PROKIND_PROCEDURE)
 		{
 			TargetEntry *tle = (TargetEntry *) linitial(tlist);
 

@@ -1001,7 +1001,7 @@ struct TEvBlobStorage {
         NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
@@ -1011,6 +1011,16 @@ struct TEvBlobStorage {
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 TGroupId groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
+            : Status(status)
+            , Id(id)
+            , StatusFlags(statusFlags)
+            , GroupId(groupId.GetRawId())
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+            , StorageId(storageId)
+        {}
+
+        TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
+                ui32 groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
@@ -1231,7 +1241,7 @@ struct TEvBlobStorage {
         // todo: replace with queue-like thing
         ui32 ResponseSz;
         TArrayHolder<TResponse> Responses;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
         TString DebugInfo;
         TString ErrorReason;
@@ -1242,6 +1252,13 @@ struct TEvBlobStorage {
         TInstant Sent;
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(sz == 0 ? nullptr : new TResponse[sz])
+            , GroupId(groupId.GetRawId())
+        {}
+
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
             : Status(status)
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
@@ -1838,11 +1855,18 @@ struct TEvBlobStorage {
         TLogoBlobID To;
 
         TVector<TResponse> Responses;
-        const TGroupId GroupId;
+        const ui32 GroupId;
         TString ErrorReason;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, TGroupId groupId)
+            : Status(status)
+            , From(from)
+            , To(to)
+            , GroupId(groupId.GetRawId())
+        {}
+
+        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
             : Status(status)
             , From(from)
             , To(to)

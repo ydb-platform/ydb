@@ -48,7 +48,7 @@ Buffer compiler (protoc) execute the following:
 
 
      ./configure
-     make
+     make -j$(nproc) # $(nproc) ensures it uses all cores for compilation
      make check
      sudo make install
      sudo ldconfig # refresh shared library cache.
@@ -128,6 +128,10 @@ https://www.macports.org . This will reside in /opt/local/bin/port for most
 Mac installations.
 
     sudo /opt/local/bin/port install autoconf automake libtool
+
+Alternative for Homebrew users:
+
+    brew install autoconf automake libtool
 
 Then follow the Unix instructions above.
 

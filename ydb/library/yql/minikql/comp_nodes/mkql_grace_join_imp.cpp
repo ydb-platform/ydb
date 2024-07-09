@@ -87,7 +87,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
     std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
     std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
-    KeysHashTable & kh = TableBuckets[bucket].AnyHashTable;
+    KeysHashTable & kh = TableBucketsStats[bucket].AnyHashTable;
 
     ui32 offset = keyIntVals.size();  // Offset of tuple inside the keyIntVals vector
 
@@ -1066,6 +1066,12 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit)
 
         td1.AllNulls = true;
 
+        if (!Table2Initialized_) {
+            CurrIterBucket = 0;
+            CurrJoinIdsIterIndex = 0;
+            Table2Initialized_ = true;
+        }
+
         while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, bucketLimit)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {
@@ -1156,7 +1162,7 @@ bool TTable::TryToReduceMemoryAndWait() {
         }
     }
 
-    if (!largestBucketSize) return false;
+    if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 

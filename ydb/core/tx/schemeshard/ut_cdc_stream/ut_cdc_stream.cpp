@@ -1286,6 +1286,78 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         InitialScan(false);
     }
 
+    Y_UNIT_TEST(InitialScanProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> blockedScanRequest;
+        auto blockScanRequest = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>(
+            [&](TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
+                blockedScanRequest.Reset(ev.Release());
+            }
+        );
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blockedScanRequest](IEventHandle&) {
+                return bool(blockedScanRequest);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamInitialScanProgress(1, 0),
+        });
+        blockScanRequest.Remove();
+
+        THolder<IEventHandle> blockedAlterStream;
+        auto blockAlterStream = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+                    blockedAlterStream.Reset(ev.Release());
+                }
+            }
+        );
+
+        runtime.Send(blockedScanRequest.Release(), 0, true);
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blockedAlterStream](IEventHandle&) {
+                return bool(blockedAlterStream);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamInitialScanProgress(1, 1),
+        });
+        blockAlterStream.Remove();
+
+        runtime.Send(blockedAlterStream.Release(), 0, true);
+    }
+
     Y_UNIT_TEST(AlterStream) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

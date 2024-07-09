@@ -118,7 +118,7 @@ message TFeatureFlags {
     optional bool SuppressCompatibilityCheck = 103 [default = false];
     optional bool EnableUniqConstraint = 104 [default = false];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
-    optional bool EnableStatistics = 106 [default = false];
+    optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = true];
@@ -136,11 +136,12 @@ message TFeatureFlags {
     optional bool ExtendedPDiskSensors = 121 [default = true];
     optional bool EnableStableNodeNames = 122 [default = false];
     optional bool EnableBackupService = 123 [default = false];
-    optional bool EnableVolatileTransactionArbiters = 124 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = false];
     optional bool EnableResourcePools  = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableSingleCompositeActionGroup = 131 [default = false];
 }

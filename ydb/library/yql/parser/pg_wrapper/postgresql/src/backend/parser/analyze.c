@@ -296,6 +296,11 @@ transformStmt(ParseState *pstate, Node *parseTree)
 	}
 #endif							/* RAW_EXPRESSION_COVERAGE_TEST */
 
+	/*
+	 * Caution: when changing the set of statement types that have non-default
+	 * processing here, see also stmt_requires_parse_analysis() and
+	 * analyze_requires_snapshot().
+	 */
 	switch (nodeTag(parseTree))
 	{
 			/*
@@ -378,14 +383,22 @@ transformStmt(ParseState *pstate, Node *parseTree)
 }
 
 /*
- * analyze_requires_snapshot
- *		Returns true if a snapshot must be set before doing parse analysis
- *		on the given raw parse tree.
+ * stmt_requires_parse_analysis
+ *		Returns true if parse analysis will do anything non-trivial
+ *		with the given raw parse tree.
  *
- * Classification here should match transformStmt().
+ * Generally, this should return true for any statement type for which
+ * transformStmt() does more than wrap a CMD_UTILITY Query around it.
+ * When it returns false, the caller can assume that there is no situation
+ * in which parse analysis of the raw statement could need to be re-done.
+ *
+ * Currently, since the rewriter and planner do nothing for CMD_UTILITY
+ * Queries, a false result means that the entire parse analysis/rewrite/plan
+ * pipeline will never need to be re-done.  If that ever changes, callers
+ * will likely need adjustment.
  */
 bool
-analyze_requires_snapshot(RawStmt *parseTree)
+stmt_requires_parse_analysis(RawStmt *parseTree)
 {
 	bool		result;
 
@@ -398,6 +411,7 @@ analyze_requires_snapshot(RawStmt *parseTree)
 		case T_DeleteStmt:
 		case T_UpdateStmt:
 		case T_SelectStmt:
+		case T_ReturnStmt:
 		case T_PLAssignStmt:
 			result = true;
 			break;
@@ -408,17 +422,41 @@ analyze_requires_snapshot(RawStmt *parseTree)
 		case T_DeclareCursorStmt:
 		case T_ExplainStmt:
 		case T_CreateTableAsStmt:
-			/* yes, because we must analyze the contained statement */
+		case T_CallStmt:
 			result = true;
 			break;
 
 		default:
-			/* other utility statements don't have any real parse analysis */
+			/* all other statements just get wrapped in a CMD_UTILITY Query */
 			result = false;
 			break;
 	}
 
 	return result;
+}
+
+/*
+ * analyze_requires_snapshot
+ *		Returns true if a snapshot must be set before doing parse analysis
+ *		on the given raw parse tree.
+ */
+bool
+analyze_requires_snapshot(RawStmt *parseTree)
+{
+	/*
+	 * Currently, this should return true in exactly the same cases that
+	 * stmt_requires_parse_analysis() does, so we just invoke that function
+	 * rather than duplicating it.  We keep the two entry points separate for
+	 * clarity of callers, since from the callers' standpoint these are
+	 * different conditions.
+	 *
+	 * While there may someday be a statement type for which transformStmt()
+	 * does something nontrivial and yet no snapshot is needed for that
+	 * processing, it seems likely that making such a choice would be fragile.
+	 * If you want to install an exception, document the reasoning for it in a
+	 * comment.
+	 */
+	return stmt_requires_parse_analysis(parseTree);
 }
 
 /*
@@ -982,17 +1020,28 @@ transformInsertRow(ParseState *pstate, List *exprlist,
 
 		if (strip_indirection)
 		{
+			/*
+			 * We need to remove top-level FieldStores and SubscriptingRefs,
+			 * as well as any CoerceToDomain appearing above one of those ---
+			 * but not a CoerceToDomain that isn't above one of those.
+			 */
 			while (expr)
 			{
-				if (IsA(expr, FieldStore))
+				Expr	   *subexpr = expr;
+
+				while (IsA(subexpr, CoerceToDomain))
 				{
-					FieldStore *fstore = (FieldStore *) expr;
+					subexpr = ((CoerceToDomain *) subexpr)->arg;
+				}
+				if (IsA(subexpr, FieldStore))
+				{
+					FieldStore *fstore = (FieldStore *) subexpr;
 
 					expr = (Expr *) linitial(fstore->newvals);
 				}
-				else if (IsA(expr, SubscriptingRef))
+				else if (IsA(subexpr, SubscriptingRef))
 				{
-					SubscriptingRef *sbsref = (SubscriptingRef *) expr;
+					SubscriptingRef *sbsref = (SubscriptingRef *) subexpr;
 
 					if (sbsref->refassgnexpr == NULL)
 						break;
@@ -1381,7 +1430,7 @@ static Query *
 transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
-	List	   *exprsLists;
+	List	   *exprsLists = NIL;
 	List	   *coltypes = NIL;
 	List	   *coltypmods = NIL;
 	List	   *colcollations = NIL;
@@ -1465,6 +1514,9 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 
 		/* Release sub-list's cells to save memory */
 		list_free(sublist);
+
+		/* Prepare an exprsLists element for this row */
+		exprsLists = lappend(exprsLists, NIL);
 	}
 
 	/*
@@ -1508,17 +1560,7 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 	/*
 	 * Finally, rearrange the coerced expressions into row-organized lists.
 	 */
-	exprsLists = NIL;
-	foreach(lc, colexprs[0])
-	{
-		Node	   *col = (Node *) lfirst(lc);
-		List	   *sublist;
-
-		sublist = list_make1(col);
-		exprsLists = lappend(exprsLists, sublist);
-	}
-	list_free(colexprs[0]);
-	for (i = 1; i < sublist_length; i++)
+	for (i = 0; i < sublist_length; i++)
 	{
 		forboth(lc, colexprs[i], lc2, exprsLists)
 		{
@@ -1526,6 +1568,7 @@ transformValuesClause(ParseState *pstate, SelectStmt *stmt)
 			List	   *sublist = lfirst(lc2);
 
 			sublist = lappend(sublist, col);
+			lfirst(lc2) = sublist;
 		}
 		list_free(colexprs[i]);
 	}
@@ -3251,11 +3294,28 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 			foreach(rt, qry->rtable)
 			{
 				RangeTblEntry *rte = (RangeTblEntry *) lfirst(rt);
+				char	   *rtename;
 
 				++i;
 				if (!rte->inFromCl)
 					continue;
-				if (strcmp(rte->eref->aliasname, thisrel->relname) == 0)
+
+				/*
+				 * A join RTE without an alias is not visible as a relation
+				 * name and needs to be skipped (otherwise it might hide a
+				 * base relation with the same name), except if it has a USING
+				 * alias, which *is* visible.
+				 */
+				if (rte->rtekind == RTE_JOIN && rte->alias == NULL)
+				{
+					if (rte->join_using_alias == NULL)
+						continue;
+					rtename = rte->join_using_alias->aliasname;
+				}
+				else
+					rtename = rte->eref->aliasname;
+
+				if (strcmp(rtename, thisrel->relname) == 0)
 				{
 					switch (rte->rtekind)
 					{

@@ -21,9 +21,9 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
     NYdb::NScheme::TSchemeClient schemeClient(*driver);
     auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
 
-    for (const auto& user: acl) {
-        NYdb::NScheme::TPermissions permissions(user.first, user.second);
-        modifyPermissionsSettings.AddSetPermissions(permissions);
+    for (const auto& [token, permissions]: acl) {
+        auto p = NYdb::NScheme::TPermissions(token, permissions);
+        modifyPermissionsSettings.AddSetPermissions(p);
     }
 
     Cerr << "BEFORE MODIFY PERMISSIONS\n";
@@ -31,10 +31,6 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
     auto result = schemeClient.ModifyPermissions(topic, modifyPermissionsSettings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
-
-
-
-
 
 #define SET_LOCALS                                              \
     auto& pqClient = server.Server->AnnoyingClient;             \
@@ -181,8 +177,20 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
         }
 
         void ModifyTopicACL(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
-
             ::ModifyTopicACL(YdbDriver.get(), topic, acl);
+        }
+
+        void ModifyTopicACLAndWait(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+            auto driver = YdbDriver.get();
+            auto schemeClient = NYdb::NScheme::TSchemeClient(*driver);
+            auto desc = schemeClient.DescribePath(topic).ExtractValueSync();
+            auto size = desc.GetEntry().EffectivePermissions.size();
+
+            ::ModifyTopicACL(driver, topic, acl);
+
+            do {
+                desc = schemeClient.DescribePath(topic).ExtractValueSync();
+            } while (size == desc.GetEntry().EffectivePermissions.size());
         }
 
 

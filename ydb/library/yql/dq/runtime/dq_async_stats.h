@@ -55,6 +55,7 @@ struct TDqAsyncStats {
 
     // basic stats
     ui64 Bytes = 0;
+    ui64 DecompressedBytes = 0;
     ui64 Rows = 0;
     ui64 Chunks = 0;
     ui64 Splits = 0;
@@ -69,6 +70,7 @@ struct TDqAsyncStats {
 
     void MergeData(const TDqAsyncStats& other) {
         Bytes += other.Bytes;
+        DecompressedBytes += other.DecompressedBytes;
         Rows += other.Rows;
         Chunks += other.Chunks;
         Splits += other.Splits;

@@ -117,8 +117,12 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), GetLag().GetRef());
+        Replication->UpdateLag(GetId(), TLagProvider::GetLag().GetRef());
     }
+}
+
+const TMaybe<TDuration> TTargetBase::GetLag() const {
+    return TLagProvider::GetLag();
 }
 
 void TTargetBase::Progress(const TActorContext& ctx) {

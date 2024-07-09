@@ -20,8 +20,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     ui32 indexesCount = indexedTable.IndexDescriptionSize();
     ui32 indexedTableShards = 0;
     for (const auto& desc : indexedTable.GetIndexDescription()) {
-        if (desc.HasIndexImplTableDescription()) {
-            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescription());
+        if (desc.IndexImplTableDescriptionsSize()) {
+            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescriptions(0));
         } else {
             indexedTableShards += 1;
         }
@@ -101,8 +101,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         bool uniformIndexTable = false;
-        if (indexDescription.HasIndexImplTableDescription()) {
-            if (indexDescription.GetIndexImplTableDescription().HasUniformPartitionsCount()) {
+        if (indexDescription.IndexImplTableDescriptionsSize()) {
+            if (indexDescription.GetIndexImplTableDescriptions(0).HasUniformPartitionsCount()) {
                 uniformIndexTable = true;
             }
         }
@@ -248,8 +248,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             const auto& implTableColumns = indexes.at(indexDescription.GetName());
 
             auto& indexImplTableDescription = *scheme.MutableCreateTable();
-            // This description provided by user to override partition policy
-            const auto& userIndexDesc = indexDescription.GetIndexImplTableDescription();
+
+            NKikimrSchemeOp::TTableDescription userIndexDesc;
+            if (indexDescription.IndexImplTableDescriptionsSize()) {
+                // This description provided by user to override partition policy
+                userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+            }
             indexImplTableDescription = CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc);
 
             result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));

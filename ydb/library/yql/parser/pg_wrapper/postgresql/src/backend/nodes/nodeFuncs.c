@@ -733,8 +733,16 @@ expression_returns_set_walker(Node *node, void *context)
 		/* else fall through to check args */
 	}
 
+	/*
+	 * If you add any more cases that return sets, also fix
+	 * expression_returns_set_rows() in clauses.c and IS_SRF_CALL() in
+	 * tlist.c.
+	 */
+
 	/* Avoid recursion for some cases that parser checks not to return a set */
 	if (IsA(node, Aggref))
+		return false;
+	if (IsA(node, GroupingFunc))
 		return false;
 	if (IsA(node, WindowFunc))
 		return false;
@@ -3915,8 +3923,6 @@ raw_expression_tree_walker(Node *node,
 				ColumnDef  *coldef = (ColumnDef *) node;
 
 				if (walker(coldef->typeName, context))
-					return true;
-				if (walker(coldef->compression, context))
 					return true;
 				if (walker(coldef->raw_default, context))
 					return true;

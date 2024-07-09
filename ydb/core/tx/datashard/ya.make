@@ -256,6 +256,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber
+    ydb/library/minsketch
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli

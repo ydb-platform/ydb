@@ -4,9 +4,26 @@ title: Frontend build platform build/plugins/lib/nots
 arcanum:
   review:
     auto_assign: true
+    groups:
+      - name: fbp_team
+        roles: frontend_build_platform:developer
+      - name: ya_make_team
+        roles: ya_make:developer
     rules:
-      - reviewers:
-          name: developer
-          # мы хотим автоматом назначать всю команду
-          assign: 3
+      # Если изменения от команды ya_make, то ревью на них
+      # FBP добавляется, чтобы они были в курсе, как владельцы кода
+      - authors: ya_make:developer
+        reviewers:
+          - name: ya_make_team
+            assign: 1
+            ship: 1
+            ignore_self_ship: false
+          - name: fbp_team
+            assign: 5
+            ship: 0
+      # Если изменения от кого-то стороннего, то ревью на FBP
+      - authors: "!ya_make:developer"
+        reviewers:
+          name: fbp_team
+          assign: 5
           ship: 1

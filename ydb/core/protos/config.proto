@@ -279,6 +279,7 @@ message TBlobStorageConfig {
         optional string ErasureSpecies = 1;
         optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
         repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
@@ -432,6 +433,8 @@ message TInterconnectConfig {
     optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
+
+    optional uint64 EventDelayMicrosec = 49;
 }
 
 message TChannelProfileConfig {
@@ -1511,6 +1514,8 @@ message TColumnShardConfig {
         optional string Description = 2;
     }
     repeated TRepairInfo Repairs = 15;
+
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
 }
 
 message TSchemeShardConfig {
@@ -1531,6 +1536,9 @@ message TSchemeShardConfig {
     optional uint32 StatsMaxExecuteMs = 3 [default = 10];
 
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
+
+    // number of shards per table
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
 }
 
 message TCompactionConfig {

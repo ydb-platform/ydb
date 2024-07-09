@@ -45,4 +45,6 @@ GENERATE_ENUM_SERIALIZATION(protobuf_format.h)
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

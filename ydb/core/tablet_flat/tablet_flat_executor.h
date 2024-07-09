@@ -621,9 +621,10 @@ namespace NFlatExecutorSetup {
         // Returns current database scheme (executor must be active)
         virtual const NTable::TScheme& Scheme() const noexcept = 0;
 
+        virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
+
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
-
     protected:
         //
         IExecutor()

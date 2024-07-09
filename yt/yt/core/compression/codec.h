@@ -33,9 +33,9 @@ struct ICodec
 ICodec* GetCodec(ECodec id);
 
 //! Deprecated codecs information.
-const THashSet<ECodec>& GetDeprecatedCodecIds();
-const THashMap<TString, TString>& GetDeprecatedCodecNameToAlias();
-const std::vector<ECodec>& GetSupportedCodecIds();
+const THashSet<ECodec>& GetForbiddenCodecs();
+const THashMap<TString, TString>& GetForbiddenCodecNameToAlias();
+const std::vector<ECodec>& GetSupportedCodecs();
 
 ////////////////////////////////////////////////////////////////////////////////
 

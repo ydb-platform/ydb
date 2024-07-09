@@ -291,6 +291,17 @@ public:
     }
 };
 
+class TDeletionFilter: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TDeletionFilter()
+        : TBase("DELETION") {
+    }
+};
+
 class TShardingFilter : public IFetchingStep {
 private:
     using TBase = IFetchingStep;

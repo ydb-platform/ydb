@@ -749,7 +749,7 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGCompatarorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable() const
 {
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
@@ -983,8 +983,12 @@ TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
             }
         }
     }
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, DeletedColumns());
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToWrite() const
@@ -1007,8 +1011,12 @@ TTableSchemaPtr TTableSchema::ToWrite() const
             }
         }
     }
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, DeletedColumns());
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::WithTabletIndex() const
@@ -1019,8 +1027,12 @@ TTableSchemaPtr TTableSchema::WithTabletIndex() const
         auto columns = Columns();
         // XXX: Is it ok? $tablet_index is usually a key column.
         columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1032,8 +1044,12 @@ TTableSchemaPtr TTableSchema::ToVersionedWrite() const
         auto columns = Columns();
         columns.insert(columns.begin(), TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
             .SetSortOrder(ESortOrder::Ascending));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1075,8 +1091,12 @@ TTableSchemaPtr TTableSchema::ToKeys() const
     }
     const auto& info = *ColumnInfo_;
     std::vector<TColumnSchema> columns(info.Columns.begin(), info.Columns.begin() + KeyColumnCount_);
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToUniqueKeys() const
@@ -1090,8 +1110,12 @@ TTableSchemaPtr TTableSchema::ToUniqueKeys() const
             std::vector<TDeletedColumn>());
     }
     const auto& info = *ColumnInfo_;
-    return New<TTableSchema>(info.Columns, Strict_, /*uniqueKeys*/ true,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        info.Columns,
+        Strict_,
+        /*uniqueKeys*/ true,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
@@ -1110,8 +1134,12 @@ TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, /*uniqueKeys*/ false,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        /*uniqueKeys*/ false,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
@@ -1130,8 +1158,12 @@ TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType(), column.SortOrder());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToCanonical() const
@@ -1152,8 +1184,12 @@ TTableSchemaPtr TTableSchema::ToCanonical() const
         [] (const TColumnSchema& lhs, const TColumnSchema& rhs) {
             return lhs.Name() < rhs.Name();
         });
-    return New<TTableSchema>(columns, Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        columns,
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
@@ -1252,11 +1288,11 @@ TTableSchemaPtr TTableSchema::ToReplicationLog() const
         columns.push_back(TColumnSchema(TReplicationLogTable::ValueColumnNamePrefix + TabletIndexColumnName, ESimpleLogicalValueType::Int64));
     }
     return New<TTableSchema>(
-            std::move(columns),
-            /* strict */ true,
-            /* uniqueKeys */ false,
-            ETableSchemaModification::None,
-            DeletedColumns());
+        std::move(columns),
+        /* strict */ true,
+        /* uniqueKeys */ false,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
@@ -1294,11 +1330,11 @@ TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
     }
 
     return New<TTableSchema>(
-            std::move(columns),
-            /*strict*/ true,
-            /*uniqueKeys*/ sorted,
-            ETableSchemaModification::None,
-            info.DeletedColumns);
+        std::move(columns),
+        /*strict*/ true,
+        /*uniqueKeys*/ sorted,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaModification) const

@@ -93,7 +93,12 @@ namespace NKikimr::NTesting {
             QueryToGroup.erase(it);
 
             auto& msg = *ev.Get<T>();
-            if constexpr (T::EventType != TEvBlobStorage::EvBlockResult &&
+
+            if constexpr (T::EventType == TEvBlobStorage::EvGetResult || T::EventType == TEvBlobStorage::EvPutResult ||
+                    T::EventType == TEvBlobStorage::EvRangeResult) {
+                Y_ABORT_UNLESS(groupId == msg.GroupId);
+            }
+            else if constexpr (T::EventType != TEvBlobStorage::EvBlockResult &&
                     T::EventType != TEvBlobStorage::EvInplacePatchResult &&
                     T::EventType != TEvBlobStorage::EvCollectGarbageResult &&
                     T::EventType != TEvBlobStorage::EvDiscoverResult) {

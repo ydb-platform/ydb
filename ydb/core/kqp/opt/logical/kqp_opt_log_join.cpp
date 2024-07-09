@@ -337,7 +337,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     const TDqJoin& join,
     TExprBase leftInput,
     const TPrefixLookup& rightLookup,
-
     const TKqpMatchReadResult& rightReadMatch,
     TExprContext& ctx)
 {
@@ -532,7 +531,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     static THashSet<TStringBuf> supportedJoinKinds = {"Inner", "Left", "LeftOnly", "LeftSemi", "RightSemi"};
-    static THashSet<TStringBuf> supportedStreamJoinKinds = {"Inner", "Left", "LeftOnly"};
     if (!supportedJoinKinds.contains(join.JoinType().Value())) {
         return {};
     }
@@ -600,7 +598,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
-        && supportedStreamJoinKinds.contains(join.JoinType().Value())
         && !indexName;
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
@@ -787,7 +784,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         }
     };
 
-    if (useStreamIndexLookupJoin) {
+    // RightSemi strategy can be executed without join
+    if (useStreamIndexLookupJoin && join.JoinType().Value() != "RightSemi") {
         TMaybeNode<TExprBase> joinKeyPredicate;
 
         if (!equalLeftKeysConditions.empty()) {
@@ -928,8 +926,11 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     }
     auto join = node.Cast<TDqJoin>();
 
-    if (useCBO && FromString<EJoinAlgoType>(join.JoinAlgo().StringValue()) != EJoinAlgoType::LookupJoin) {
-        return node;
+    if (useCBO){
+         auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse && algo != EJoinAlgoType::Undefined) {
+            return node;
+         }
     }
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));

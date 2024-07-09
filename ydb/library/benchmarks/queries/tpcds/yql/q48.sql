@@ -19,7 +19,7 @@ select sum (ss_quantity)
    and
    cd_education_status = 'Unknown'
    and
-   ss_sales_price between 100.00 and 150.00
+   ss_sales_price between 100 and 150
    )
  or
   (
@@ -29,7 +29,7 @@ select sum (ss_quantity)
    and
    cd_education_status = 'College'
    and
-   ss_sales_price between 50.00 and 100.00
+   ss_sales_price between 50 and 100
   )
  or
  (
@@ -39,7 +39,7 @@ select sum (ss_quantity)
    and
    cd_education_status = 'Primary'
    and
-   ss_sales_price between 150.00 and 200.00
+   ss_sales_price between 150 and 200
  )
  )
  and

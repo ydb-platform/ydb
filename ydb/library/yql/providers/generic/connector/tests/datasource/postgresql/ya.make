@@ -1,7 +1,5 @@
 PY3TEST()
 
-STYLE_PYTHON()
-
 NO_CHECK_IMPORTS()
 
 DATA(
@@ -15,6 +13,8 @@ DATA(
 ENV(COMPOSE_PROJECT_NAME=postgresql)
 
 IF (AUTOCHECK)
+    # YQ-3351: enabling python style checks only for opensource
+    NO_LINT()
     # Temporarily disable these tests due to infrastructure incompatibility
     SKIP_TEST("DEVTOOLSUPPORT-44637")
     # Split tests to chunks only when they're running on different machines with distbuild,
@@ -37,6 +37,8 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
+    # YQ-3351: enabling python style checks only for opensource
+    STYLE_PYTHON()
     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
     # which makes it impossible to run them during precommit checks on Github CI. 
     # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.

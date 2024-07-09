@@ -188,6 +188,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             }
             CSTransferStatus->Reset();
             AFL_VERIFY(!Controller->IsTrivialLinks());
+            Controller->CheckInvariants();
         }
     };
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
@@ -401,6 +402,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
+            csController->CheckInvariants();
         }
     };
 

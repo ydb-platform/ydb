@@ -138,6 +138,7 @@ namespace NActors {
             EvCloseInputSession,
             EvPoisonSession,
             EvTerminate,
+            EvForwardDelayed,
             EvEnd
         };
 
@@ -264,5 +265,7 @@ namespace NActors {
         struct TEvPoisonSession : TEventLocal<TEvPoisonSession, EvPoisonSession> {};
 
         struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {};
+
+        struct TEvForwardDelayed : TEventLocal<TEvForwardDelayed, EvForwardDelayed> {};
     };
 }

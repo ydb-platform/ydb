@@ -510,6 +510,7 @@ message TCoreAttr {
 
 message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
+    optional TActivationPercentage QPlayerActivation = 2;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////

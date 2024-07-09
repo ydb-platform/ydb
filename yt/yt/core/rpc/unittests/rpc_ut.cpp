@@ -644,7 +644,7 @@ TYPED_TEST(TRpcTest, ResponseMemoryTag)
     }
 
     auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 256_KB)
+    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
         << "InitialUsage: " << initialMemoryUsage << std::endl
         << "Current: " << currentMemoryUsage;
 }

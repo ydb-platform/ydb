@@ -347,22 +347,24 @@ namespace NActors {
         }
     }
 
-    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize) {
-        // TODO: calc totalPayloadSize via payload? 
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
         ssize_t result = recordSize;
         if (result >= 0 && payload) {
             ++result; // marker
             char buf[MaxNumberBytes];
             result += SerializeNumber(payload.size(), buf);
+            size_t totalPayloadSize = 0;
             for (const TRope& rope : payload) {
-                result += SerializeNumber(rope.GetSize(), buf);
+                size_t ropeSize = rope.GetSize();
+                totalPayloadSize += ropeSize;
+                result += SerializeNumber(ropeSize, buf);
             }
             result += totalPayloadSize;
         }
         return result;
     }
 
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, size_t totalPayloadSize, ssize_t recordSize) {
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
             TEventSerializationInfo info;
             info.IsExtendedFormat = static_cast<bool>(payload);
 
@@ -382,14 +384,12 @@ namespace NActors {
                 const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
                 info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
 
-#ifdef NDEBUG
-                Y_UNUSED(totalPayloadSize);
-#else
+#ifndef NDEBUG
                 size_t total = 0;
                 for (const auto& section : info.Sections) {
                     total += section.Size;
                 }
-                size_t serialized = CalculateSerializedSizeImpl(payload, totalPayloadSize, recordSize);
+                size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
                 Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd payload.size# %zu", total,
                     serialized, byteSize, payload.size());
 #endif

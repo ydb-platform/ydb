@@ -511,7 +511,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq1" }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )");
+        env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"

@@ -1,4 +1,0 @@
-RECURSE(
-    docker-test
-    library
-)

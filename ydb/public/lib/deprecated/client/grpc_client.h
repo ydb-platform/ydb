@@ -23,7 +23,6 @@ namespace NKikimr {
 
         using TResponseCallback = TCallback<NKikimrClient::TResponse>;
         using TJSONCallback = TCallback<NKikimrClient::TJSON>;
-        using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>;
         using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>;
         using TSqsResponseCallback = TCallback<NKikimrClient::TSqsResponse>;
         using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
@@ -75,11 +74,6 @@ namespace NKikimr {
             void HiveCreateTablet(const NKikimrClient::THiveCreateTablet& request, TResponseCallback callback);
             void LocalEnumerateTablets(const NKikimrClient::TLocalEnumerateTablets& request, TResponseCallback callback);
             void KeyValue(const NKikimrClient::TKeyValueRequest& request, TResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // DYNAMIC NODES INTERNAL INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void RegisterNode(const NKikimrClient::TNodeRegistrationRequest& request, TNodeRegistrationResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // CMS INTERFACE

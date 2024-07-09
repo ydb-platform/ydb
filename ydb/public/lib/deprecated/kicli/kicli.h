@@ -625,41 +625,6 @@ protected:
     EPathType PathType;
 };
 
-class TRegistrationResult : public TResult {
-    friend class TNodeRegistrant;
-public:
-    TRegistrationResult(const TRegistrationResult& other) = default;
-    TRegistrationResult(TRegistrationResult&& other) = default;
-    TRegistrationResult& operator=(const TRegistrationResult& other) = default;
-    TRegistrationResult& operator=(TRegistrationResult&& other) = default;
-
-    bool IsSuccess() const;
-    TString GetErrorMessage() const;
-
-    ui32 GetNodeId() const;
-    NActors::TScopeId GetScopeId() const;
-
-    const NKikimrClient::TNodeRegistrationResponse& Record() const;
-
-private:
-    TRegistrationResult(const TResult& result);
-};
-
-class TNodeRegistrant {
-    friend class TKikimr;
-public:
-    TRegistrationResult SyncRegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                         const TString& address, const TString& resolveHost,
-                                         const NActors::TNodeLocation& location,
-                                         bool fixedNodeId = false, TMaybe<TString> path = {}) const;
-
-private:
-    TNodeRegistrant(TKikimr& kikimr);
-
-private:
-    TKikimr* Kikimr;
-};
-
 class TTableStream {
     friend class TKikimr;
 public:
@@ -778,7 +743,6 @@ public:
     void SetSecurityToken(const TString& securityToken);
     TString GetCurrentLocation() const;
 
-    TNodeRegistrant GetNodeRegistrant();
     TNodeConfigurator GetNodeConfigurator();
 
     // execute arbitrary message bus request
@@ -804,10 +768,6 @@ protected:
     NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
                                              const TTablePartitionConfig* partitionConfig);
     NBus::EMessageStatus ExecuteRequestInternal(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request);
-    NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                              const TString& address, const TString& resolveHost,
-                                              const NActors::TNodeLocation& location,
-                                              bool fixedNodeId, TMaybe<TString> path);
     NThreading::TFuture<TResult> GetNodeConfig(ui32 nodeId,
                                                const TString &host,
                                                const TString &tenant,

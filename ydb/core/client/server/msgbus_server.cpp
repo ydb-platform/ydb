@@ -113,7 +113,6 @@ public:
             MTYPE(TBusOldFlatDescribeRequest)
             MTYPE(TBusOldFlatDescribeResponse)
             MTYPE(TBusBlobStorageConfigRequest)
-            MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
@@ -162,7 +161,6 @@ public:
             }
 
             REPLY_OPTION(TBusResponse)
-            REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusConsoleResponse)

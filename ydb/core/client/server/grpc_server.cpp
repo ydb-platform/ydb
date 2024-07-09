@@ -160,14 +160,6 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) override {
-        try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) {
-            Y_ABORT("unexpected response type generated");
-        }
-    }
-
     void Reply(const NKikimrClient::TCmsResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -204,11 +196,6 @@ public:
         if (reason) {
             resp.SetErrorReason(reason);
         }
-    }
-
-    static void GenerateErrorResponse(NKikimrClient::TNodeRegistrationResponse& resp, const TString& reason) {
-        resp.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::ERROR);
-        resp.MutableStatus()->SetReason(reason);
     }
 
     static void GenerateErrorResponse(NKikimrClient::TCmsResponse& resp, const TString& reason) {
@@ -454,12 +441,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
     ADD_ACTOR_REQUEST(LoginRequest,              TLoginRequest,                     MTYPE_CLIENT_LOGIN_REQUEST)
-
-    // dynamic node registration
-    ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
-    })
 
     // CMS request
     ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {

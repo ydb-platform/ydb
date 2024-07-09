@@ -2489,7 +2489,9 @@ private:
             .FederatedQuerySetup = FederatedQuerySetup,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
             .GUCSettings = GUCSettings,
-            .MayRunTasksLocally = mayRunTasksLocally
+            .MayRunTasksLocally = mayRunTasksLocally,
+            .ResourceManager_ = Request.ResourceManager_,
+            .CaFactory_ = Request.CaFactory_
         });
 
         auto err = Planner->PlanExecution();

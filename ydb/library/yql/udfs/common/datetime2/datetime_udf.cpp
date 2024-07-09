@@ -874,7 +874,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     // Get*
 
 #define GET_METHOD(field, type)                                                 \
-    struct TGet##field##KernelExec : TUnaryKernelExec<TGet##field##KernelExec, TReaderTraits::TResource<true>, TFixedSizeArrayBuilder<type, false>> { \
+    struct TGet##field##KernelExec : TUnaryKernelExec<TGet##field##KernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<type, false>> { \
         template<typename TSink> \
         static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) { \
             Y_UNUSED(valueBuilder); \

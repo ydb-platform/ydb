@@ -117,6 +117,17 @@ TEST(TStatistics, AddSample)
     EXPECT_EQ(42, GetNumericValue(deserializedStatistics, "/key/sub"));
 }
 
+TEST(TStatistics, InvalidNames) {
+    // For the statistic merge to work correctly, symbols with code points
+    // less than '/' must be forbidden. See YT-22118.
+    TStatistics statistics;
+    for (char c = std::numeric_limits<char>::min(); c < '/'; ++c) {
+        EXPECT_THROW(
+            statistics.AddSample("/key/abc" + TString{c} + "def", 5),
+            std::exception);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStatisticsUpdater
@@ -196,6 +207,61 @@ TEST(TStatistics, BuildingConsumer)
     };
 
     EXPECT_EQ(expectedData, data);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TTaggedStatistics, AppendStatistics)
+{
+    TTaggedStatistics<int> taggedStatistics;
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 1);
+        statistics.AddSample("/abc/defg", 2);
+        statistics.AddSample("/xyz", 3);
+        taggedStatistics.AppendStatistics(statistics, 1);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 1);
+        statistics.AddSample("/ijk", 2);
+        taggedStatistics.AppendStatistics(statistics, 2);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 2);
+        taggedStatistics.AppendStatistics(statistics, 1);
+    }
+
+    {
+        auto actualData = taggedStatistics.GetData();
+
+        std::map<TString, THashMap<int, TSummary>> expectedData {
+            // std::nullopt because Last is always dropped during merge, see TSummary::Merge.
+            {"/abc/def", {
+                    {1, TSummary(3, 2, 1, 2, std::nullopt)},
+                    {2, TSummary(1, 1, 1, 1, 1)}}},
+            {"/abc/defg", {{1, TSummary(2, 1, 2, 2, 2)}}},
+            {"/xyz", {{1, TSummary(3, 1, 3, 3, 3)}}},
+            {"/ijk", {{2, TSummary(2, 1, 2, 2, 2)}}}
+        };
+
+        EXPECT_EQ(expectedData, actualData);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/xyz/suffix", 1);
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc", 1); // prefix
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

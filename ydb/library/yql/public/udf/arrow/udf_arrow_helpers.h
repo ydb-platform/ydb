@@ -384,7 +384,7 @@ static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute
                 for (size_t j = 0; j < maxBlockLength && i < array.length; ++j, ++i) {
                     auto item = readerImpl->GetItem(array, i);
                     TDerived::Process(item, state.GetValueBuilder(), [&](auto out) {
-                        builder.Add(out);
+                        builderImpl->Add(out);
                     });
                 }
                 auto outputDatum = builderImpl->Build(false);

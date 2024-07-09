@@ -1,5 +1,4 @@
 import codecs
-import os
 
 import pytest
 
@@ -154,7 +153,7 @@ def validate_sql(sql_query):
 
 
 def read_test_whitelist():
-    test_whitelist_path = yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'test_whitelist.txt'))
+    test_whitelist_path = yql_source_path('ydb/tests/fq/yt/cfg/test_whitelist.txt')
     with codecs.open(test_whitelist_path, 'r', encoding='utf-8') as test_whitelist_file:
         return set(test_whitelist_file.read().split('\n'))
 

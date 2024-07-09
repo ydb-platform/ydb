@@ -151,7 +151,7 @@ public:
     void CreateKqpResourceManager(
             const NKikimrConfig::TTableServiceConfig::TResourceManager& config, ui32 nodeInd = 0) {
         auto kqpCounters = MakeIntrusive<TKqpCounters>(Counters);
-        auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd]);
+        auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd], nullptr, Runtime->GetNodeId(nodeInd));
         ResourceManagers.push_back(Runtime->Register(resman, nodeInd));
         Runtime->RegisterService(MakeKqpResourceManagerServiceID(
             Runtime->GetNodeId(nodeInd)), ResourceManagers.back(), nodeInd);

@@ -72,6 +72,11 @@ protected:
         Y_ABORT("Error: %s", error.c_str());
     }
 
+    void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
+        bool isSent = Send(recipient, ev, flags);
+        Y_ABORT_UNLESS(isSent, "Event was not sent");
+    }
+
 private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
@@ -87,11 +92,6 @@ private:
                     ev->GetTypeRewrite(),
                     ev->ToString().data());
         }
-    }
-
-    void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        bool isSent = Send(recipient, ev, flags);
-        Y_ABORT_UNLESS(isSent, "Event was not sent");
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr&) {

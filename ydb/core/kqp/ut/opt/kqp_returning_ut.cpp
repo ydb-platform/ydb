@@ -90,7 +90,13 @@ Y_UNIT_TEST(ReturningTwice) {
             SELECT eta, hashed_key, queue_name, task_id FROM $to_move;
         )");
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto params = TParamsBuilder()
+            .AddParam("$eta").Timestamp(TInstant::Zero()).Build()
+            .AddParam("$expiration_ts").Timestamp(TInstant::Zero()).Build()
+            .AddParam("$limit").Int32(1).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         //CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));

@@ -3102,6 +3102,7 @@ message TJob
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
 }
 
 message TListJobsStatistics

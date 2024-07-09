@@ -1358,9 +1358,7 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
  * in the core backend and need to be accessible by loadable modules.
  * No special marking is required on most ports.
  */
-#ifndef PGDLLIMPORT
 #define PGDLLIMPORT
-#endif
 
 /*
  * Use "extern PGDLLEXPORT ..." to declare functions that are defined in
@@ -1369,9 +1367,7 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
  * such symbols, but sometimes manual marking is required.)
  * No special marking is required on most ports.
  */
-#ifndef PGDLLEXPORT
 #define PGDLLEXPORT
-#endif
 
 /*
  * The following is used as the arg list for signal handlers.  Any ports

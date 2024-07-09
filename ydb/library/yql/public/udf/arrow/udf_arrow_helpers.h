@@ -418,7 +418,7 @@ struct TBinaryKernelExec {
             auto item1 = reader1Impl->GetScalarItem(*arg1.scalar());
             auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
 
-            TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
+            TDerived::Process(item1, item2, state.GetValueBuilder(), [&](auto out) {
                 *res = builderImpl->Build(out);
             });
         }
@@ -434,7 +434,7 @@ struct TBinaryKernelExec {
             for (int64_t i = 0; i < array2.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array2.length; ++j, ++i) {
                     auto item2 = reader2Impl->GetItem(array2, i);
-                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -455,7 +455,7 @@ struct TBinaryKernelExec {
             for (int64_t i = 0; i < array1.length;) {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
                     auto item1 = reader1Impl->GetItem(array1, i);
-                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -479,7 +479,7 @@ struct TBinaryKernelExec {
                 for (size_t j = 0; j < maxBlockLength && i < array1.length; ++j, ++i) {
                     auto item1 = reader1Impl->GetItem(array1, i);
                     auto item2 = reader2Impl->GetItem(array2, i);
-                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](TBlockItem out) {
+                    TDerived::Process(item1, item2, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }
@@ -536,7 +536,7 @@ struct TGenericKernelExec {
                 auto& reader = state.GetReader(k);
                 args[k] = reader.GetScalarItem(*batch[k].scalar());
             }
-            TDerived::Process(items, state.GetValueBuilder(), [&](TBlockItem out) {
+            TDerived::Process(items, state.GetValueBuilder(), [&](auto out) {
                 *res = builderImpl->Build(out);
             });
         } else {
@@ -566,7 +566,7 @@ struct TGenericKernelExec {
 
                         args[k] = reader.GetItem(*batch[k].array(), i);
                     }
-                    TDerived::Process(items, state.GetValueBuilder(), [&](TBlockItem out) {
+                    TDerived::Process(items, state.GetValueBuilder(), [&](auto out) {
                         builderImpl->Add(out);
                     });
                 }

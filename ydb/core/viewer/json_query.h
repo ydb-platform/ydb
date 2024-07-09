@@ -481,7 +481,7 @@ private:
         NViewer::MakeErrorReply(jsonResponse, message, status);
 
         if (Span) {
-            Span.EndError("Error");
+            Span.EndError(message);
         }
     }
 

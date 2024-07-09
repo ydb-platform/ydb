@@ -234,7 +234,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     NBlobOperations::NBlobStorage::TGCTask::TGCListsByGroup perGroupGCListsInFlight;
     // Clear all possibly not kept trash in channel's groups: create an event for each group
 
-    static const ui32 blobsGCCountLimit = 700000;
+    static const ui32 blobsGCCountLimit = 500000;
 
     const auto predShared = [&](const TUnifiedBlobId& id, const THashSet<TTabletId>& /*tabletIds*/) {
         return id.GetLogoBlobId().TabletID() != (ui64)SelfTabletId;

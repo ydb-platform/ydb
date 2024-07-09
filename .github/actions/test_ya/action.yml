@@ -278,7 +278,7 @@ runs:
         echo "JOB_ID=${JOB_ID}"
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
         
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run_timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: archive unitest reports (transformed)
       shell: bash

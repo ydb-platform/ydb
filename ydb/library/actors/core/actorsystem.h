@@ -161,6 +161,7 @@ namespace NActors {
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
+        mutable std::vector<TActorId> DynamicProxies;
 
         bool StartExecuted;
         bool StopExecuted;

@@ -861,21 +861,28 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
 
     TNodeOnNodeOwnedMap replaces;
-    VisitExpr(node.Ptr(), [&replaces](const TExprNode::TPtr& input) -> bool {
+    std::unordered_set<std::string> pgDynTables = {"pg_tables", "tables", "pg_class"};
+    std::unordered_map<const NYql::TExprNode*, TString> tableNames;
+    VisitExpr(node.Ptr(), [&replaces, &tableNames, &pgDynTables](const TExprNode::TPtr& input) -> bool {
         if (input->IsCallable("PgTableContent")) {
             TPgTableContent content(input);
-            if (content.Table().StringValue() == "pg_tables") {
+            if (pgDynTables.contains(content.Table().StringValue())) {
                 replaces[input.Get()] = nullptr;
+                tableNames[input.Get()] = content.Table().StringValue();
             }
         }
         return true;
     });
     if (!replaces.empty()) {
-        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/pg_tables") });
-        auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
-        auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
-
         for (auto& [key, _] : replaces) {
+            TExprNode::TPtr path = ctx.NewCallable(
+                node.Pos(),
+                "String",
+                { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/" << tableNames[key]) }
+            );
+            auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
+            auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
+
             auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
                 .World<TCoWorld>().Build()
                 .DataSource<TCoDataSource>()

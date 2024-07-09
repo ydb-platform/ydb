@@ -562,7 +562,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         static void Split(TBlockItem arg, TTMStorage& storage, const IValueBuilder& valueBuilder);
 
         template<typename TSink>
-        static void Process(TBlockItem arg, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem arg, const IValueBuilder& valueBuilder, const TSink& sink) {
             try {
                 TBlockItem res {0};
                 Split(arg, Reference(res), valueBuilder);
@@ -784,7 +784,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         static TBlockItem Make(TTMStorage& storage, const IValueBuilder& valueBuilder);
 
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             auto& storage = Reference(item);
             sink(TBlockItem(Make(storage, valueBuilder)));
         }
@@ -876,7 +876,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 #define GET_METHOD(field, type)                                                 \
     struct TGet##field##KernelExec : TUnaryKernelExec<TGet##field##KernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<type, false>> { \
         template<typename TSink> \
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) { \
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) { \
             Y_UNUSED(valueBuilder); \
             sink(TBlockItem(Get##field(item))); \
         } \
@@ -912,7 +912,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TGetMonthNameKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             sink(GetMonthNameValue<TBlockItem>(GetMonth(item) - 1U));
         }
@@ -929,7 +929,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TGetDayOfMonthKernelExec : TUnaryKernelExec<TGetMonthNameKernelExec, TReaderTraits::TResource<true>, TFixedSizeArrayBuilder<ui8, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, TSink& sink) {
+        static void Process(TBlockItem item, const TSink& sink) {
             sink(GetDay(item));
         }
     };
@@ -958,7 +958,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TGetDayOfWeekNameKernelExec : TUnaryKernelExec<TGetDayOfWeekNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             sink(GetDayNameValue<TBlockItem>(GetDayOfWeek(item) - 1U));
         }
@@ -974,7 +974,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TTGetTimezoneNameKernelExec : TUnaryKernelExec<TTGetTimezoneNameKernelExec, TReaderTraits::TResource<true>, TStringArrayBuilder<arrow::StringType, true>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             auto timezoneId = GetTimezoneId(item);
             if (timezoneId >= NUdf::GetTimezones().size()) {
                 sink(TBlockItem{});
@@ -1236,7 +1236,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     template<auto Core>
     struct TStartOfKernelExec : TUnaryKernelExec<TStartOfKernelExec<Core>, TResourceBlockReader<false>, TResourceArrayBuilder<true>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             if (auto res = Core(Reference(item), valueBuilder)) {
                 Reference(item) = res.GetRef();
                 sink(item);
@@ -1408,7 +1408,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     struct TStartOfBinaryKernelExec : TBinaryKernelExec<TStartOfBinaryKernelExec> {
         template<typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder& valueBuilder, const TSink& sink) {
             auto& storage = Reference(arg1);
             ui64 interval = std::abs(arg2.Get<i64>());
             if (interval == 0) {
@@ -1441,7 +1441,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     
     struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
         template<typename TSink>
-        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem item, const IValueBuilder& valueBuilder, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             auto& storage = Reference(item);
             sink(TBlockItem{(TDataType<TInterval>::TLayout)storage.ToTimeOfDay()});
@@ -1462,7 +1462,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     template<auto Core>
     struct TAddKernelExec : TBinaryKernelExec<TAddKernelExec<Core>> {
         template<typename TSink>
-        static void Process(TBlockItem date, TBlockItem arg, const IValueBuilder& valueBuilder, TSink& sink) {
+        static void Process(TBlockItem date, TBlockItem arg, const IValueBuilder& valueBuilder, const TSink& sink) {
             sink(Core(date, arg.Get<i32>(), valueBuilder.GetDateBuilder()));
         }
     };

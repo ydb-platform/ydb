@@ -40,13 +40,13 @@ if [ "X${rebuild-0}" != X0 ]; then
     branch=`git branch --show-current`
     base=`git describe --always ${branch}-base`
     git checkout $base
-    (cd ${dq_path} && $ya_path/ya make --build relwithdebinfo && git describe --always --dirty >$dq_path/dqrun-unspilled.commit && cp -L $dq_path/dqrun $dq_path/dqrun-unspilled)
+    (cd ${dq_path} && $ya_path/ya make --build ${rebuild:-relwithdebinfo} && git describe --always --dirty >$dq_path/dqrun-unspilled.commit && cp -L $dq_path/dqrun $dq_path/dqrun-unspilled)
     git checkout @{-1}
-    (cd ${dq_path} && $ya_path/ya make --build relwithdebinfo)
-    (cd ${ydb_path}/ydb/library/yql/udfs/common && $ya_path/ya make --build relwithdebinfo datetime datetime2 string re2 set math unicode_base)
-    (cd ${ydb_path}/ydb/library/benchmarks/gen_queries && $ya_path/ya make --build relwithdebinfo)
+    (cd ${dq_path} && $ya_path/ya make --build ${rebuild:-relwithdebinfo})
+    (cd ${ydb_path}/ydb/library/yql/udfs/common && $ya_path/ya make --build ${rebuild:-relwithdebinfo} datetime datetime2 string re2 set math unicode_base)
+    (cd ${ydb_path}/ydb/library/benchmarks/gen_queries && $ya_path/ya make --build ${rebuild:-relwithdebinfo})
     )
-    (cd ${script_path} && ${script_path}/../../../../ya make --build relwithdebinfo)
+    (cd ${script_path} && ${script_path}/../../../../ya make --build ${rebuild:-relwithdebinfo})
 fi
 [ -d tpc/$variant/$datasize ] || {
     echo FIXME; false

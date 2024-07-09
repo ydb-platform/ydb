@@ -1,18 +1,26 @@
 from typing import List, Set, Optional
 from os import path
 
+import docker
+
 import pytest
+
 
 class IntegrationTests:
     _folder: str
+    _image_name: str
     _all_tests: Set[str]
     _selected_test: Set[str]
+    _docker_executed: bool
 
-    def __init__(self, folder):
+    def __init__(self, folder: str, image_name: str = 'ydb-pg-test-image'):
         self._folder = folder
+        self._image_name = image_name
 
         self._all_tests = _read_tests(folder)
         self._selected_test = set(self._all_tests)
+
+        self._docker_executed = False
 
     def pytest_generate_tests(self, metafunc: pytest.Metafunc):
         """
@@ -29,7 +37,51 @@ class IntegrationTests:
             self._selected_test.remove(test_name)
 
     def execute_test(self, testname: str):
-        pass
+        self._run_tests_in_docker(testname)
+
+    def _run_tests_in_docker(self, test_name: Optional[str]):
+        if self._docker_executed:
+            return
+        self._docker_executed = True
+
+        if test_name is None:
+            test_name=""
+
+        client: docker.Client = docker.from_env()
+
+        client.images.build(
+            path = self._folder,
+            tag=self._image_name,
+            network_mode='host',
+        )
+        logs = client.containers.run(
+            self._image_name,
+            auto_remove=True,
+            environment = [
+                "PGUSER=root",
+                "PGPASSWORD=1234",
+                "PGHOST=ydb",
+                "PGPORT=5432",
+                "PGDATABASE=local",
+                "PQGOSSLTESTS=0",
+                "PQSSLCERTTEST_PATH=certs",
+                f"YDB_PG_TESTNAME={test_name}",
+            ],
+            mounts = [
+                docker.types.Mount(
+                    target="/exchange",
+                    source=path.join(self._folder, "exchange"),
+                    type="bind",
+                ),
+                docker.types.Mount(
+                    target="/test-result",
+                    source=path.join(self._folder, "test-result"),
+                    type="bind",
+                ),
+            ],
+            network_mode='host',
+        )
+        print(logs)
 
 def _read_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:

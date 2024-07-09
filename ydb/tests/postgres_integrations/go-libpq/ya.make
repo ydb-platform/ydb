@@ -20,7 +20,7 @@ TEST_SRCS(
 
 
 DATA(
-    arcadia/ydb/tests/postgres_integrations/psycopg2/data
+    arcadia/ydb/tests/postgres_integrations/go-libpq/data
 )
 
 PEERDIR(

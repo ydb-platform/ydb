@@ -9,7 +9,7 @@ import pytest
 
 from ydb.tests.postgres_integrations.library import IntegrationTests
 
-integrations=IntegrationTests(yatest.common.source_path("ydb/tests/postgres_integrations/psycopg2/data"))
+integrations=IntegrationTests(yatest.common.source_path("ydb/tests/postgres_integrations/go-libpq/data"))
 
 def pytest_generate_tests(metafunc: pytest.Metafunc):
     integrations.pytest_generate_tests(metafunc)

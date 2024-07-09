@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 #include <ydb/core/util/count_min_sketch.h>
 
+
 namespace NKikimr::NOlap::NStatistics::NCountMinSketch {
 
 class TCountMinSketchAggregator {
@@ -25,7 +26,26 @@ public:
     }
 
     void AddArray(const std::shared_ptr<arrow::Array>& array) {
-        Y_UNUSED(array);
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+            const TArray& arrTyped = static_cast<const TArray&>(*array);
+            for (ui32 i = 0; i < array->length(); ++i) {
+                if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                    auto cell = TCell::Make(arrTyped.Value(i));
+                    Sketch->Count(cell.Data(), cell.Size());
+                    continue;
+                }
+                if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                    auto view = arrTyped.GetView(i);
+                    Sketch->Count(view.data(), view.size());
+                    continue;
+                }
+                AFL_VERIFY(false);
+            }
+            return true;
+        });
     }
 };
 

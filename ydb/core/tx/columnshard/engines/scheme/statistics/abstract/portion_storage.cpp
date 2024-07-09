@@ -2,6 +2,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.pb.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+
 namespace NKikimr::NOlap::NStatistics {
 
 NKikimrColumnShardStatisticsProto::TScalar TPortionStorage::ScalarToProto(const arrow::Scalar& scalar) {
@@ -48,7 +50,7 @@ NKikimrColumnShardStatisticsProto::TScalar TPortionStorage::ScalarToProto(const 
             break;
         }
         case arrow::Type::FIXED_SIZE_BINARY:
-            result.SetBinary(static_cast<const arrow::FixedSizeBinaryScalar&>(scalar).value);
+            result.SetBinary(static_cast<const arrow::FixedSizeBinaryScalar&>(scalar).value->ToString());
             break;
         default:
             AFL_VERIFY(false)("problem", "incorrect type for statistics usage")("type", scalar.type->ToString());
@@ -83,7 +85,7 @@ std::shared_ptr<arrow::Scalar> TPortionStorage::ProtoToScalar(const NKikimrColum
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(proto.GetTimestamp().GetUnit());
         return std::make_shared<arrow::TimestampScalar>(proto.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
     } else if (proto.HasBinary()) {
-        return std::make_shared<arrow::FixedSizeBinaryScalar>(proto.GetBinary());
+        return std::make_shared<arrow::FixedSizeBinaryScalar>(proto.GetBinary(), std::make_shared<arrow::FixedSizeBinaryType>());
     }
     AFL_VERIFY(false)("problem", "incorrect statistics proto")("proto", proto.DebugString());
     return nullptr;

@@ -381,7 +381,6 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         THashMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
-        bool IsIncrementalBackup = true;
 
         NKikimrSchemeOp::TTableDescription TableDescriptionDiff;
         TMaybeFail<NKikimrSchemeOp::TTableDescription> TableDescriptionFull;
@@ -426,7 +425,6 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
     bool IsTemporary = false;
-    bool IsIncrementalBackup = true;
     TActorId OwnerActorId;
 
     TAlterTableInfo::TPtr AlterData;
@@ -535,7 +533,6 @@ public:
         , Columns(std::move(alterData.Columns))
         , KeyColumnIds(std::move(alterData.KeyColumnIds))
         , IsBackup(alterData.IsBackup)
-        , IsIncrementalBackup(alterData.IsIncrementalBackup)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
     }

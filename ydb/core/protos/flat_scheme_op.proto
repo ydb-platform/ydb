@@ -396,8 +396,6 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 
     optional bool Temporary = 41;
-
-    optional bool IncrementalBackup = 42;
 }
 
 message TDictionaryEncodingSettings {
@@ -1802,7 +1800,6 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
-    optional bool ReturnBackupMetaInfo = 11 [default = false];
 }
 
 // Request to read scheme for a specific path

@@ -15,11 +15,23 @@
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
+using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
+
 namespace {
 
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
+    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
+
+        TTablesWithAttrs tables;
+
+        if (std::holds_alternative<TVector<TString>>(tablesVar)) {
+            for (const auto& table : std::get<TVector<TString>>(tablesVar)) {
+                tables.emplace_back(table, TMap<TString, TString>{});
+            }
+        } else {
+            tables = std::get<TTablesWithAttrs>(tablesVar);
+        }
 
         ui64 txId = 100;
 
@@ -90,11 +102,14 @@ namespace {
             });
         }
 
-        for (const auto& table : tables) {
+        for (const auto& [table, attrs] : tables) {
+            TVector<std::pair<TString, TString>> attrsVec;
+            attrsVec.assign(attrs.begin(), attrs.end());
+            const auto userAttrs = AlterUserAttrs(attrsVec);
             TestCreateTable(runtime, schemeshardId, ++txId, dbName, table, {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
-            });
+            }, userAttrs);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -244,29 +259,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )");
-    }
-
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardBackupTable) {
-        TTestBasicRuntime runtime;
-
-        RunS3(runtime, {
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                IncrementalBackup: true
                 KeyColumnNames: ["key"]
             )",
         }, R"(
@@ -496,47 +488,51 @@ partitioning_settings {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        const TVector<TString> tables = {R"(
-            Name: "Table"
-            Columns {
-                Name: "key"
-                Type: "Utf8"
-                DefaultFromLiteral {
-                    type {
-                        optional_type {
-                            item {
-                                type_id: UTF8
+        const TTablesWithAttrs tables{
+            {
+                R"(
+                Name: "Table"
+                Columns {
+                    Name: "key"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "b"
                             }
                         }
                     }
-                    value {
-                        items {
-                            text_value: "b"
-                        }
-                    }
                 }
-            }
-            Columns {
-                Name: "value"
-                Type: "Utf8"
-                DefaultFromLiteral {
-                    type {
-                        optional_type {
-                            item {
-                                type_id: UTF8
+                Columns {
+                    Name: "value"
+                    Type: "Utf8"
+                    DefaultFromLiteral {
+                        type {
+                            optional_type {
+                                item {
+                                    type_id: UTF8
+                                }
+                            }
+                        }
+                        value {
+                            items {
+                                text_value: "a"
                             }
                         }
                     }
-                    value {
-                        items {
-                            text_value: "a"
-                        }
-                    }
                 }
-            }
-            IncrementalBackup: true
-            KeyColumnNames: ["key"]
-        )"};
+                KeyColumnNames: ["key"]
+                )",
+                {{"__incremental_backup", "{}"}},
+            },
+        };
 
         Run(runtime, env, tables, Sprintf(R"(
             ExportToS3Settings {
@@ -603,12 +599,15 @@ columns {
   }
 }
 primary_key: "key"
+attributes {
+  key: "__incremental_backup"
+  value: "{}"
+}
 partitioning_settings {
   partitioning_by_size: DISABLED
   partitioning_by_load: DISABLED
   min_partitions_count: 1
 }
-incremental_backup: true
 )");
     }
 
@@ -1867,7 +1866,7 @@ incremental_backup: true
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        Run(runtime, env, {
+        Run(runtime, env, TVector<TString>{
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint32" }

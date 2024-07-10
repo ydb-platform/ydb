@@ -2625,7 +2625,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ExtractTenantSchemeshard(&schemeshardId)
         });
 
-        TestDescribeResult(DescribePath(runtime, schemeshardId, "/MyRoot/User/Table", true, true, false, false, true), checks);
+        TestDescribeResult(DescribePath(runtime, schemeshardId, "/MyRoot/User/Table", true, true), checks);
     }
 
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInDateTypeColumnMode) {
@@ -2706,15 +2706,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlag) {
         ShouldRestoreSettings(R"(
-            incremental_backup: true
+            attributes {
+              key: "__incremental_backup"
+              value: "{}"
+            }
         )", {
             NLs::IncrementalBackup(true),
         });
     }
 
-    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlagExplicitFalse) {
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlagNullAsFalse) {
         ShouldRestoreSettings(R"(
-            incremental_backup: false
+            attributes {
+              key: "__incremental_backup"
+              value: "null"
+            }
         )", {
             NLs::IncrementalBackup(false),
         });

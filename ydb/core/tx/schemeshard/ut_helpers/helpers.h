@@ -79,8 +79,8 @@ namespace NSchemeShardUT_Private {
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts);
     NKikimrScheme::TEvDescribeSchemeResult DescribePrivatePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false);
     NKikimrScheme::TEvDescribeSchemeResult DescribePrivatePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false);
-    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false, bool returnBackupMetaInfo = false);
-    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false, bool returnBackupMetaInfo = false);
+    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false);
+    NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false);
     TPathVersion ExtractPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& describe);
     TPathVersion TestDescribeResult(const NKikimrScheme::TEvDescribeSchemeResult& describe, TVector<NLs::TCheckFunc> checks = {});
 

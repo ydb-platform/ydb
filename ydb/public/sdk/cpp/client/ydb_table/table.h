@@ -586,9 +586,6 @@ public:
     // Returns read replicas settings of the table
     TMaybe<TReadReplicasSettings> GetReadReplicasSettings() const;
 
-    // Is this a backup table
-    bool IsIncrementalBackup() const;
-
     // Fills CreateTableRequest proto from this description
     void SerializeTo(Ydb::Table::CreateTableRequest& request) const;
 

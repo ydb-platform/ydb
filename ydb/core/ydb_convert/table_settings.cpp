@@ -241,10 +241,6 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
 
     tableDesc.SetTemporary(proto.Gettemporary());
 
-    if (proto.incremental_backup()) {
-        tableDesc.SetIncrementalBackup(proto.incremental_backup());
-    }
-
     return true;
 }
 

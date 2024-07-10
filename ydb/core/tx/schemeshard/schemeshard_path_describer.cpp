@@ -230,17 +230,15 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnBoundaries = false;
     bool returnRangeKey = true;
     bool returnSetVal = Params.GetOptions().GetReturnSetVal();
-    bool returnBackupMetaInfo = false;
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();
         returnBackupInfo = Params.GetOptions().GetBackupInfo();
         returnBoundaries = Params.GetOptions().GetReturnBoundaries();
         returnRangeKey = Params.GetOptions().GetReturnRangeKey();
-        returnBackupMetaInfo = Params.GetOptions().GetReturnBackupMetaInfo();
     }
 
-    Self->DescribeTable(tableInfo, typeRegistry, returnConfig, returnBoundaries, returnBackupMetaInfo, entry);
+    Self->DescribeTable(tableInfo, typeRegistry, returnConfig, returnBoundaries, entry);
     entry->SetName(pathEl->Name);
 
     if (returnPartitioning) {
@@ -1125,8 +1123,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
 }
 
 void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
-                                 bool fillConfig, bool fillBoundaries, bool fillBackupMetaInfo,
-                                 NKikimrSchemeOp::TTableDescription* entry) const
+                                     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const
 {
     Y_UNUSED(typeRegistry);
     THashMap<ui32, TString> familyNames;
@@ -1208,10 +1205,6 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     }
 
     entry->SetIsBackup(tableInfo->IsBackup);
-
-    if (fillBackupMetaInfo) {
-        entry->SetIncrementalBackup(tableInfo->IsIncrementalBackup);
-    }
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,

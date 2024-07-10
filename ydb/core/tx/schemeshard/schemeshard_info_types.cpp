@@ -541,7 +541,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     alterData->IsBackup = op.GetIsBackup();
-    alterData->IsIncrementalBackup = op.GetIncrementalBackup();
 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
@@ -1904,10 +1903,6 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         return false;
     }
 
-    if (IsIncrementalBackup) {
-        return false;
-    }
-
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(shardIdx)) {
         return false;
@@ -1957,9 +1952,6 @@ bool TTableInfo::CheckSplitByLoad(
 {
     // Don't split/merge backup tables
     if (IsBackup)
-        return false;
-
-    if (IsIncrementalBackup)
         return false;
 
     if (!splitSettings.SplitByLoadEnabled)

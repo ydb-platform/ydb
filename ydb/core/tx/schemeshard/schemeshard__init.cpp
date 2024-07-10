@@ -307,7 +307,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, bool> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -323,8 +323,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IsIncrementalBackup>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
         );
     }
 
@@ -1831,7 +1830,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
-                tableInfo->IsIncrementalBackup = std::get<12>(rec);
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);

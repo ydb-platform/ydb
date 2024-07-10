@@ -137,12 +137,4 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
 void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
-// out
-void FillBackupDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in);
-
-// out
-void FillBackupDescription(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TTableDescription& in);
-
 } // namespace NKikimr

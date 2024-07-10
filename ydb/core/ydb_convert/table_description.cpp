@@ -1423,10 +1423,6 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         return false;
     }
 
-    if (in.incremental_backup()) {
-        tableDesc->SetIncrementalBackup(true);
-    }
-
     return true;
 }
 
@@ -1475,18 +1471,6 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
             }
             default: break;
         }
-    }
-}
-
-void FillBackupDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in) {
-    if (in.GetIncrementalBackup()) {
-        out.set_incremental_backup(true);
-    }
-}
-
-void FillBackupDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TTableDescription& in) {
-    if (in.GetIncrementalBackup()) {
-        out.set_incremental_backup(true);
     }
 }
 

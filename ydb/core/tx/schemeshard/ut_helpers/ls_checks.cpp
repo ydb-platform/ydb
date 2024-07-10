@@ -1294,9 +1294,16 @@ void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, 
 
 TCheckFunc IncrementalBackup(bool flag) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        NKikimrSchemeOp::TTableDescription table = record.GetPathDescription().GetTable();
-        bool isIncrBackup = table.GetIncrementalBackup();
-        UNIT_ASSERT_VALUES_EQUAL(isIncrBackup, flag);
+        const auto& attrs = record.GetPathDescription().GetUserAttributes();
+        TMap<TString, TString> attrsMap;
+        for (const auto& attr : attrs) {
+            attrsMap[attr.GetKey()] = attr.GetValue();
+        }
+        if (flag) {
+            UNIT_ASSERT(attrsMap["__incremental_backup"] == "{}");
+        } else {
+            UNIT_ASSERT(!attrsMap.contains("__incremental_backup") || attrsMap["__incremental_backup"] == "null");
+        }
     };
 }
 

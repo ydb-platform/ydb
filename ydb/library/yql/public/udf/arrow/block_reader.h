@@ -40,6 +40,8 @@ public:
             if (IsNull(data, index)) {
                 return {};
             }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(!data.MayHaveNulls());
         }
         return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
     }
@@ -129,6 +131,8 @@ public:
             if (IsNull(data, index)) {
                 return {};
             }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(!data.MayHaveNulls());
         }
 
         const TOffset* offsets = data.GetValues<TOffset>(1);
@@ -210,6 +214,8 @@ public:
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return {};
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!data.MayHaveNulls());
             }
         }
         return static_cast<TDerived*>(this)->GetChildrenItems(data, index);

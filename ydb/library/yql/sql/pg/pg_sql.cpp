@@ -2774,6 +2774,9 @@ public:
                     if (defElem->arg) {
                         switch (NodeTag(defElem->arg))
                         {
+                            case T_Boolean:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(boolVal(defElem->arg)))));
+                                break;
                             case T_Integer:
                                 options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
                                 break;
@@ -2846,6 +2849,9 @@ public:
                     if (defElem->arg) {
                         switch (NodeTag(defElem->arg))
                         {
+                            case T_Boolean:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(boolVal(defElem->arg)))));
+                                break;
                             case T_Integer:
                                 options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
                                 break;

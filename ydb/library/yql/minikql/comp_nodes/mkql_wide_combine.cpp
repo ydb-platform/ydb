@@ -682,7 +682,12 @@ private:
             case EOperatingMode::Spilling: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
-                auto spiller = Ctx.SpillerFactory->CreateSpiller();
+                MKQL_ENSURE(false, "Internal logic error");
+                const auto errorCallback = [&](const TString& error) {
+                    YQL_LOG(ERROR) << error;
+                    MKQL_ENSURE(false, "Internal logic error");
+                };
+                auto spiller = Ctx.SpillerFactory->CreateSpiller(errorCallback);
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
@@ -710,7 +715,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        return true;
         // TODO: YQL-18033
         // return !HasMemoryForProcessing();
     }

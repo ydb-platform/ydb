@@ -3,7 +3,9 @@
 #include "hullds_heap_it.h"
 #include "hullds_ut.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice_it.h>
 
 #include <util/stream/null.h>
 

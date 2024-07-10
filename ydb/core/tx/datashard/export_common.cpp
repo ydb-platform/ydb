@@ -55,11 +55,11 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
 
     try {
         FillTableBoundary(scheme, tableDesc, mkqlKeyType);
+        FillIndexDescription(scheme, tableDesc);
     } catch (const yexception&) {
         return Nothing();
     }
 
-    FillIndexDescription(scheme, tableDesc);
     FillStorageSettings(scheme, tableDesc);
     FillColumnFamilies(scheme, tableDesc);
     FillAttributes(scheme, pathDesc);

@@ -226,9 +226,9 @@
     "test.test[aggregate-avg_interval-default.txt-Results]": [],
     "test.test[aggregate-count_distinct_with_filter--Debug]": [
         {
-            "checksum": "39c6724153b6ff760e6e6b3100036415",
-            "size": 2444,
-            "uri": "https://{canondata_backend}/937458/c1365f21ada77805f3ca6623e256eeadb801d609/resource.tar.gz#test.test_aggregate-count_distinct_with_filter--Debug_/opt.yql"
+            "checksum": "40aaf01a890261001aab014439974eee",
+            "size": 2500,
+            "uri": "https://{canondata_backend}/1936842/ddede0029e66540c52d466906d6ae5607e09706d/resource.tar.gz#test.test_aggregate-count_distinct_with_filter--Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-count_distinct_with_filter--Plan]": [
@@ -579,6 +579,20 @@
             "checksum": "c6c52838091f95a75967641f85713dcb",
             "size": 915,
             "uri": "https://{canondata_backend}/1775059/59a8dbe71df1bdc11b3f063ab535eee737c36649/resource.tar.gz#test.test_case-case_then_else-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[column_group-hint_dup_col_fail--Debug]": [],
+    "test.test[column_group-hint_dup_col_fail--Plan]": [],
+    "test.test[column_group-hint_dup_col_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_dup_col_fail--Results_/extracted"
+        }
+    ],
+    "test.test[column_group-hint_short_grp_fail--Debug]": [],
+    "test.test[column_group-hint_short_grp_fail--Plan]": [],
+    "test.test[column_group-hint_short_grp_fail--Results]": [
+        {
+            "uri": "file://test.test_column_group-hint_short_grp_fail--Results_/extracted"
         }
     ],
     "test.test[column_order-ordered_plus_native--Debug]": [
@@ -1354,9 +1368,9 @@
     ],
     "test.test[key_filter-contains_tuples-default.txt-Debug]": [
         {
-            "checksum": "41daa0dd0529ed553a39902bbfeb9eb2",
+            "checksum": "a1243cacd6a255009cea1b46502efab9",
             "size": 3441,
-            "uri": "https://{canondata_backend}/1773845/e6ef6218fd731b77a48497caab7ec520bea725fa/resource.tar.gz#test.test_key_filter-contains_tuples-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1775319/08270e2c8088fb96250d94bd90fa1e4aed207ab9/resource.tar.gz#test.test_key_filter-contains_tuples-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[key_filter-contains_tuples-default.txt-Plan]": [

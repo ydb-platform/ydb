@@ -175,18 +175,20 @@ public:
         return NKikimrServices::TActivity::BS_GROUP_REQUEST;
     }
 
+    template<typename TEv>
     TBlobStorageGroupRequestActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TGroupQueues> groupQueues,
             TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie,
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter,
-            NWilson::TSpan&& span, std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
+            NWilson::TTraceId&& traceId, const char *name, const TEv *event,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
         : TActor<TDerived>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
         , Info(std::move(info))
         , GroupQueues(std::move(groupQueues))
         , Mon(std::move(mon))
         , PoolCounters(storagePoolCounters)
         , LogCtx(logComponent, logAccEnabled)
-        , Span(std::move(span))
+        , ParentSpan(TWilson::BlobStorage, std::move(traceId), name)
         , RestartCounter(restartCounter)
         , CostModel(GroupQueues->CostModel)
         , Source(source)
@@ -197,9 +199,16 @@ public:
         , ExecutionRelay(std::move(executionRelay))
     {
         TDerived::ActiveCounter(Mon)->Inc();
-        Span
-            .Attribute("GroupId", Info->GroupID)
-            .Attribute("RestartCounter", RestartCounter);
+
+        if (ParentSpan) {
+            const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
+            Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
+                parentTraceId.GetTimeToLive()), ParentSpan.GetName());
+            ParentSpan.Link(Span.GetTraceId());
+            Span.Attribute("GroupId", Info->GroupID.GetRawId());
+            Span.Attribute("RestartCounter", RestartCounter);
+            event->ToSpan(Span);
+        }
 
         Y_ABORT_UNLESS(CostModel);
     }
@@ -306,7 +315,7 @@ public:
             std::optional<NKikimrBlobStorage::TGroupInfo> group;
             if (record.HasRecentGroup()) {
                 group = record.GetRecentGroup();
-                if (group->GetGroupID() != Info->GroupID || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
+                if (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
                     return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
                 }
             }
@@ -392,6 +401,17 @@ public:
 
     template<typename T>
     void SendToQueue(std::unique_ptr<T> event, ui64 cookie, bool timeStatsEnabled = false) {
+        if constexpr (
+            !std::is_same_v<T, TEvBlobStorage::TEvVGetBlock>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVBlock>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVStatus>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVCollectGarbage>
+            && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>
+        ) {
+            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
+            event->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
+        }
+
         if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
             event->MessageRelevanceTracker = MessageRelevanceTracker;
             ui64 cost;
@@ -423,8 +443,6 @@ public:
         for (auto& request : vGets) {
             const ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
-            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
         }
     }
@@ -459,12 +477,10 @@ public:
         for (auto& request : events) {
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
-            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             TLogoBlobID id = GetBlobId(request);
             TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
             LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),
-                    Info->GroupID, id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
+                    Info->GroupID.GetRawId(), id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
             SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
         }
     }
@@ -554,8 +570,10 @@ public:
 
         if (term) {
             if (status == NKikimrProto::OK) {
+                ParentSpan.EndOk();
                 Span.EndOk();
             } else {
+                ParentSpan.EndError(errorReason);
                 Span.EndError(std::move(errorReason));
             }
         }
@@ -601,6 +619,7 @@ protected:
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;
     TLogContext LogCtx;
+    NWilson::TSpan ParentSpan;
     NWilson::TSpan Span;
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
     TString ErrorReason;

@@ -464,6 +464,13 @@ void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeView);
 }
 
+void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
                         NKikimrSchemeOp::EPathState pathState) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -898,6 +905,14 @@ TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
 TCheckFunc StreamAwsRegion(const TString& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetAwsRegion(), value);
+    };
+}
+
+TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& scanProgress = record.GetPathDescription().GetCdcStreamDescription().GetScanProgress();
+        UNIT_ASSERT_VALUES_EQUAL(total, scanProgress.GetShardsTotal());
+        UNIT_ASSERT_VALUES_EQUAL(completed, scanProgress.GetShardsCompleted());
     };
 }
 

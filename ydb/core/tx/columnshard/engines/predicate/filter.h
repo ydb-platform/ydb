@@ -42,7 +42,7 @@ public:
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
-    bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo) Y_WARN_UNUSED_RESULT;
+    [[nodiscard]] bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo);
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;

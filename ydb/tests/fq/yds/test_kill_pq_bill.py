@@ -24,8 +24,9 @@ class TestKillPqBill(TestYdsBase):
             FROM yds.`{self.input_topic}`;'''
 
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING,
-                                       vcpu_time_limit=1).result.query_id
+        query_id = client.create_query(
+            "simple", sql, type=fq.QueryContent.QueryType.STREAMING, vcpu_time_limit=1
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 

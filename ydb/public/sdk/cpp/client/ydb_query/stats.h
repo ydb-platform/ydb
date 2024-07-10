@@ -22,6 +22,8 @@ class TExecStats {
     friend class NYdb::TProtoAccessor;
 
 public:
+    TExecStats() = default;
+
     explicit TExecStats(Ydb::TableStats::QueryStats&& proto);
     explicit TExecStats(const Ydb::TableStats::QueryStats& proto);
 

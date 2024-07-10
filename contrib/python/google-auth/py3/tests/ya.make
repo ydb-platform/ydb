@@ -42,21 +42,30 @@ TEST_SRCS(
     oauth2/test_service_account.py
     oauth2/test_sts.py
     oauth2/test_utils.py
+    oauth2/test_webauthn_handler.py
+    oauth2/test_webauthn_handler_factory.py
+    oauth2/test_webauthn_types.py
     test__cloud_sdk.py
     test__default.py
+    test__exponential_backoff.py
     test__helpers.py
     test__oauth2client.py
+    test__refresh_worker.py
     test__service_account_info.py
+    test_api_key.py
     test_app_engine.py
     test_aws.py
     test_credentials.py
     test_downscoped.py
+    test_exceptions.py
     test_external_account.py
     test_external_account_authorized_user.py
     test_iam.py
     test_identity_pool.py
     test_impersonated_credentials.py
     test_jwt.py
+    test_metrics.py
+    test_packaging.py
     test_pluggable.py
     # transport/test__custom_tls_signer.py
     transport/test__http_client.py

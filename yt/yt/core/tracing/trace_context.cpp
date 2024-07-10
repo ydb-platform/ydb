@@ -25,6 +25,14 @@
 #include <atomic>
 #include <mutex>
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT::NConcurrency::NDetail {
+
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
+
+} // NYT::NConcurrency::NDetail
+
 namespace NYT::NTracing {
 
 using namespace NConcurrency;
@@ -116,10 +124,20 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
 {
+    if (NConcurrency::NDetail::PerThreadFls() && newContext) {
+        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
+            loc);
+    }
+
     auto& propagatingStorage = GetCurrentPropagatingStorage();
-    auto oldContext = propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr);
+
+    auto oldContext = newContext
+        ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
+        : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
+
+    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -237,7 +255,6 @@ TTraceContext::TTraceContext(
     , State_(parentTraceContext
         ? parentTraceContext->State_.load()
         : (parentSpanContext.Sampled ? ETraceContextState::Sampled : ETraceContextState::Disabled))
-    , Propagated_(true)
     , ParentContext_(std::move(parentTraceContext))
     , SpanName_(std::move(spanName))
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
@@ -337,8 +354,8 @@ void TTraceContext::SetAllocationTags(TAllocationTags::TTags&& tags)
 
 void TTraceContext::SetRecorded()
 {
-    auto disabled = ETraceContextState::Disabled;
-    State_.compare_exchange_strong(disabled, ETraceContextState::Recorded);
+    auto expected = ETraceContextState::Disabled;
+    State_.compare_exchange_strong(expected, ETraceContextState::Recorded);
 }
 
 void TTraceContext::SetPropagated(bool value)
@@ -377,11 +394,7 @@ TDuration TTraceContext::GetElapsedTime() const
 
 void TTraceContext::SetSampled(bool value)
 {
-    if (!value) {
-        State_ = ETraceContextState::Disabled;
-    } else {
-        State_ = ETraceContextState::Sampled;
-    }
+    State_ = value ? ETraceContextState::Sampled : ETraceContextState::Disabled;
 }
 
 TInstant TTraceContext::GetStartTime() const
@@ -391,8 +404,9 @@ TInstant TTraceContext::GetStartTime() const
 
 TDuration TTraceContext::GetDuration() const
 {
-    YT_ASSERT(Finished_.load());
-    return NProfiling::CpuDurationToDuration(Duration_.load());
+    auto finishTime = FinishTime_.load();
+    YT_VERIFY(finishTime != 0);
+    return NProfiling::CpuDurationToDuration(finishTime - StartTime_);
 }
 
 TTraceContext::TTagList TTraceContext::GetTags() const
@@ -514,69 +528,73 @@ void TTraceContext::AddLogEntry(TCpuInstant at, TString message)
     Logs_.push_back(TTraceLogEntry{at, std::move(message)});
 }
 
-bool TTraceContext::IsFinished()
+bool TTraceContext::IsFinished() const
 {
-    return Finished_.load();
+    return FinishTime_.load() != 0;
 }
 
 bool TTraceContext::IsSampled() const
 {
-    auto traceContext = this;
-    while (traceContext) {
-        auto state = traceContext->State_.load(std::memory_order::relaxed);
-        if (state == ETraceContextState::Sampled) {
-            return true;
-        } else if (state == ETraceContextState::Disabled) {
-            return false;
+    auto* currentTraceContext = this;
+    while (currentTraceContext) {
+        switch (currentTraceContext->State_.load(std::memory_order::relaxed)) {
+            case ETraceContextState::Sampled:
+                return true;
+            case ETraceContextState::Disabled:
+                return false;
+            case ETraceContextState::Recorded:
+                break;
         }
-
-        traceContext = traceContext->ParentContext_.Get();
+        currentTraceContext = currentTraceContext->ParentContext_.Get();
     }
 
     return false;
 }
 
-void TTraceContext::SetDuration()
+void TTraceContext::Finish()
 {
-    if (Duration_.load() == 0) {
-        Duration_ = GetCpuInstant() - StartTime_;
+    auto expectedFinishTime = TCpuInstant(0);
+    if (!FinishTime_.compare_exchange_strong(expectedFinishTime, GetCpuInstant())) {
+        return;
+    }
+
+    switch (State_.load(std::memory_order::relaxed)) {
+        case ETraceContextState::Disabled:
+            break;
+
+        case ETraceContextState::Sampled:
+            if (auto tracer = GetGlobalTracer()) {
+                SubmitToTracer(tracer);
+            }
+            break;
+
+        case ETraceContextState::Recorded:
+            if (!IsSampled()) {
+                break;
+            }
+
+            if (auto tracer = GetGlobalTracer()) {
+                auto* currentTraceContext = this;
+                while (currentTraceContext) {
+                    if (currentTraceContext->State_.load() != ETraceContextState::Recorded) {
+                        break;
+                    }
+
+                    if (currentTraceContext->IsFinished()) {
+                        currentTraceContext->SubmitToTracer(tracer);
+                    }
+
+                    currentTraceContext = currentTraceContext->ParentContext_.Get();
+                }
+            }
+            break;
     }
 }
 
-void TTraceContext::Finish()
+void TTraceContext::SubmitToTracer(const ITracerPtr& tracer)
 {
-    if (Finished_.exchange(true)) {
-        return;
-    }
-    SetDuration();
-
-    auto state = State_.load(std::memory_order::relaxed);
-    if (state == ETraceContextState::Disabled) {
-        return;
-    } else if (state == ETraceContextState::Sampled) {
-        if (auto tracer = GetGlobalTracer(); tracer) {
-            tracer->Enqueue(MakeStrong(this));
-        }
-    } else if (state == ETraceContextState::Recorded) {
-        if (!IsSampled()) {
-            return;
-        }
-
-        if (auto tracer = GetGlobalTracer(); tracer) {
-            auto traceContext = this;
-            while (traceContext) {
-                if (traceContext->State_.load() != ETraceContextState::Recorded) {
-                    break;
-                }
-
-                if (traceContext->Finished_.load() && !traceContext->Submitted_.exchange(true)) {
-                    traceContext->SetDuration();
-                    tracer->Enqueue(MakeStrong(traceContext));
-                }
-
-                traceContext = traceContext->ParentContext_.Get();
-            }
-        }
+    if (!Submitted_.exchange(true)) {
+        tracer->Enqueue(this);
     }
 }
 
@@ -686,8 +704,8 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
 
 void TTraceContext::IncrementElapsedCpuTime(NProfiling::TCpuDuration delta)
 {
-    for (auto* current = this; current; current = current->ParentContext_.Get()) {
-        current->ElapsedCpuTime_ += delta;
+    for (auto* currentTraceContext = this; currentTraceContext; currentTraceContext = currentTraceContext->ParentContext_.Get()) {
+        currentTraceContext->ElapsedCpuTime_ += delta;
     }
 }
 
@@ -723,6 +741,32 @@ Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcu
 {
     auto result = storage.Find<TTraceContextPtr>();
     return result ? result->Get() : nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTraceContextHandler::TTraceContextHandler()
+    : TraceContext_(NTracing::TryGetCurrentTraceContext())
+{ }
+
+NTracing::TCurrentTraceContextGuard TTraceContextHandler::MakeTraceContextGuard() const
+{
+    return NTracing::TCurrentTraceContextGuard(TraceContext_);
+}
+
+void TTraceContextHandler::UpdateTraceContext()
+{
+    TraceContext_ = NTracing::TryGetCurrentTraceContext();
+}
+
+std::optional<TTracingAttributes> TTraceContextHandler::GetTracingAttributes() const
+{
+    return TraceContext_
+        ? std::make_optional<TTracingAttributes>({
+            .TraceId = TraceContext_->GetTraceId(),
+            .SpanId = TraceContext_->GetSpanId()
+        })
+        : std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

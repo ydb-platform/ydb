@@ -16,6 +16,10 @@ struct TStatisticsAggregator::TTxScheduleScan : public TTxBase {
 
         Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
 
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
         if (Self->ScanTableId.PathId) {
             return true; // scan is in progress
         }

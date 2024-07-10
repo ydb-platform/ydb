@@ -152,6 +152,12 @@ protected:
             return NJson::TJsonValue(TInstant::MicroSeconds(cell.AsValue<ui64>()).ToString());
         case NScheme::NTypeIds::Interval:
             return NJson::TJsonValue(cell.AsValue<i64>());
+        case NScheme::NTypeIds::Date32:
+            return NJson::TJsonValue(cell.AsValue<i32>());
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Interval64:
+        case NScheme::NTypeIds::Timestamp64:
+            return NJson::TJsonValue(cell.AsValue<i64>());            
         case NScheme::NTypeIds::Decimal:
             return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>()));
         case NScheme::NTypeIds::DyNumber:
@@ -364,6 +370,9 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
             } else if (name.StartsWith("__Hash_")) {
                 bool indexed = false;
                 for (const auto& [_, index] : schema->Indexes) {
+                    if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
+                        continue;
+                    }
                     Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
                     if (index.KeyColumnIds.at(0) == tag) {
                         indexed = true;

@@ -509,8 +509,8 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         return out;
     }
 
-    for (const auto& [indexKey, keyPortions] : spg->GroupOrderedPortionsByPK()) {
-        for (auto&& [_, portionInfo] : keyPortions) {
+    for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
+        for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
             if (!portionInfo->IsVisible(snapshot)) {
                 continue;
             }

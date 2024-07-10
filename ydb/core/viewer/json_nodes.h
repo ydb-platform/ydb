@@ -694,8 +694,8 @@ public:
     }
 
     static double GetLoadAverage(const NKikimrWhiteboard::TSystemStateInfo& sysInfo) {
-        if (sysInfo.LoadAverageSize() > 0) {
-            return sysInfo.GetLoadAverage(0);
+        if (sysInfo.LoadAverageSize() > 0 && sysInfo.GetNumberOfCpus() > 0) {
+            return sysInfo.GetLoadAverage(0) * 100 / sysInfo.GetNumberOfCpus();
         }
         return 0;
     }
@@ -749,6 +749,9 @@ public:
             }
         }
 
+        bool noDC = true;
+        bool noRack = true;
+
         for (TNodeId nodeId : NodeIds) {
             if (!CheckNodeFilters(nodeId)) {
                 continue;
@@ -798,6 +801,19 @@ public:
                         tabletInfo = std::move(viewerTabletInfo);
                     }
                 }
+            }
+
+            if (!nodeInfo.GetSystemState().GetLocation().GetDataCenter().empty()) {
+                noDC = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetDataCenter() != 0) {
+                noDC = false;
+            }
+            if (!nodeInfo.GetSystemState().GetLocation().GetRack().empty()) {
+                noRack = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetRack() != 0) {
+                noRack = false;
             }
         }
 
@@ -882,6 +898,12 @@ public:
 
         if (MaximumDisksPerNode.has_value()) {
             result.SetMaximumDisksPerNode(MaximumDisksPerNode.value());
+        }
+        if (noDC) {
+            result.SetNoDC(true);
+        }
+        if (noRack) {
+            result.SetNoRack(true);
         }
 
         TStringStream json;

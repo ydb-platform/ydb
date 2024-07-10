@@ -784,6 +784,8 @@ namespace NYql {
 
                 return AllVirtualColumns_;
             }
+
+            static constexpr bool ProvidesBlocks = false;
         };
 
         /**
@@ -827,6 +829,8 @@ namespace NYql {
             void SetOutputColumnsFilter(const TMaybe<THashSet<TString>>& outputColumnsFilter) {
                 OutputColumnsFilter_ = outputColumnsFilter;
             }
+
+            static constexpr bool AcceptsBlocks = false;
         };
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////

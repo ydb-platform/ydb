@@ -10,6 +10,7 @@ PY3TEST()
 
     TEST_SRCS (
         test_clickbench.py
+        test_tpcds.py
         test_tpch.py
     )
 
@@ -23,12 +24,13 @@ PY3TEST()
     )
     IF(NOT OPENSOURCE)
         DATA (
-            sbr://6481344827
+            sbr://6581137886
         )
     ENDIF()
 
-    DEPENDS (
-        ydb/apps/ydb
-    )
-
+    IF(NOT NOT_INCLUDE_CLI)
+        DEPENDS (
+            ydb/apps/ydb
+        )
+    ENDIF()
 END()

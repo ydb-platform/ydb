@@ -7,7 +7,7 @@ option go_package = "a.yandex-team.ru/yt/go/proto/client/tablet_client";
 message TLockMask
 {
     repeated uint64 bitmap = 1;
-    required uint32 size = 2;
+    required int32 size = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

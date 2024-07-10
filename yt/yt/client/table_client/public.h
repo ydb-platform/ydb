@@ -123,6 +123,7 @@ extern const TString RangeIndexColumnName;
 extern const TString TabletIndexColumnName;
 extern const TString TimestampColumnName;
 extern const TString TtlColumnName;
+extern const TString TimestampColumnPrefix;
 extern const TString CumulativeDataWeightColumnName;
 extern const TString EmptyValueColumnName;
 extern const TString PrimaryLockName;
@@ -373,6 +374,8 @@ DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
 
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)
+
 class TSaveContext;
 class TLoadContext;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;
@@ -434,6 +437,8 @@ static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTabl
 
 // Function that compares two TUnversionedValue values.
 using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
+
+struct TVersionedReadOptions;
 
 ////////////////////////////////////////////////////////////////////////////////
 

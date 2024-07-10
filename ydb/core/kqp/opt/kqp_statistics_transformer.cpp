@@ -40,6 +40,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path->Content());
     int totalAttrs = tableData.Metadata->Columns.size();
     nRows = tableData.Metadata->RecordsCount;
+
     double byteSize = tableData.Metadata->DataSize * (nAttrs / (double)totalAttrs);
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
@@ -47,6 +48,13 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     if (kqpCtx.Config->OverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path->Content(), *kqpCtx.Config->OverrideStatistics.Get());
     }
+
+    if (stats->ColumnStatistics) {
+        for (const auto& [columnName, metaData]: tableData.Metadata->Columns) {
+            stats->ColumnStatistics->Data[columnName].Type = metaData.Type;
+        }
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols;
 
     typeCtx->SetStats(input.Get(), stats);
@@ -171,6 +179,34 @@ void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotation
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 5, 5, 20, 0.0));
 }
 
+void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto indexRanges = TKqlReadTableIndexRanges(input);
+
+    auto inputStats = typeCtx->GetStats(indexRanges.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
+    
+    TVector<TString> indexColumns;
+    for (auto c : indexRanges.Columns()) {
+        indexColumns.push_back(c.StringValue());
+    }
+
+    auto indexColumnsPtr = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(indexColumns));
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        inputStats->Type, 
+        inputStats->Nrows, 
+        inputStats->Ncols, 
+        inputStats->ByteSize, 
+        inputStats->Cost, 
+        indexColumnsPtr);
+
+    typeCtx->SetStats(input.Get(), stats);
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for index: nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols << ", nKeyColumns: " << stats->KeyColumns->Data.size();
+
+}
+
 /***
  * Infer statistics for result binding of a stage
  */
@@ -265,7 +301,10 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     Y_UNUSED(ctx);
     bool matched = true;
     // KQP Matchers
-    if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
+    if(TKqlReadTableIndexRanges::Match(input.Get())) {
+        InferStatisticsForReadTableIndexRanges(input, TypeCtx);
+    }
+    else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
     }
     else if(TKqlLookupTableBase::Match(input.Get())) {

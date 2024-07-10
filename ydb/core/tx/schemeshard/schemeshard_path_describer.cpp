@@ -8,6 +8,16 @@
 
 #include <util/stream/format.h>
 
+namespace {
+
+void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSchemeOp::TPartitionConfig& out) {
+    out.CopyFrom(in);
+    NKikimr::NSchemeShard::TPartitionConfigMerger::DeduplicateColumnFamiliesById(out);
+    out.MutableStorageRooms()->Clear();
+}
+
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -364,7 +374,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
         switch (childPath->PathType) {
         case NKikimrSchemeOp::EPathTypeTableIndex:
-            Self->DescribeTableIndex(childPathId, childName, *entry->AddTableIndexes());
+            Self->DescribeTableIndex(childPathId, childName, returnConfig, false, *entry->AddTableIndexes());
             break;
         case NKikimrSchemeOp::EPathTypeCdcStream:
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
@@ -586,8 +596,12 @@ void TPathDescriber::DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathE
 }
 
 void TPathDescriber::DescribeTableIndex(const TPath& path) {
-    Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name,
-        *Result->Record.MutablePathDescription()->MutableTableIndex());
+    bool returnConfig = Params.GetReturnPartitionConfig();
+    bool returnBoundaries = Params.HasOptions() && Params.GetOptions().GetReturnBoundaries();
+
+    Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name, returnConfig, returnBoundaries,
+        *Result->Record.MutablePathDescription()->MutableTableIndex()
+    );
     DescribeChildren(path);
 }
 
@@ -905,6 +919,18 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
     entry->SetQueryText(viewInfo->QueryText);
 }
 
+void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->ResourcePools.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "ResourcePools is not found");
+    TResourcePoolInfo::TPtr resourcePoolInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(resourcePoolInfo->AlterVersion);
+    entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1056,6 +1082,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeView:
             DescribeView(ctx, base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeResourcePool:
+            DescribeResourcePool(base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1160,9 +1189,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     }
 
     if (fillConfig) {
-        entry->MutablePartitionConfig()->CopyFrom(tableInfo->PartitionConfig());
-        TPartitionConfigMerger::DeduplicateColumnFamiliesById(*entry->MutablePartitionConfig());
-        entry->MutablePartitionConfig()->MutableStorageRooms()->Clear();
+        FillPartitionConfig(tableInfo->PartitionConfig(), *entry->MutablePartitionConfig());
     }
 
     if (fillBoundaries) {
@@ -1181,17 +1208,17 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TIndexDescription& entry)
+    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     auto it = Indexes.FindPtr(pathId);
     Y_ABORT_UNLESS(it, "TableIndex is not found");
     TTableIndexInfo::TPtr indexInfo = *it;
 
-    DescribeTableIndex(pathId, name, indexInfo, entry);
+    DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
-        NKikimrSchemeOp::TIndexDescription& entry)
+    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
 
@@ -1211,17 +1238,24 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         *entry.MutableDataColumnNames()->Add() = dataColumns;
     }
 
-    Y_ABORT_UNLESS(PathsById.contains(pathId));
-    auto indexPath = PathsById.at(pathId);
+    auto* indexPath = PathsById.FindPtr(pathId);
+    Y_ABORT_UNLESS(indexPath);
+    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == 1);
+    const auto& indexImplTablePathId = (*indexPath)->GetChildren().begin()->second;
 
-    Y_ABORT_UNLESS(indexPath->GetChildren().size() == 1);
-    const auto& indexImplPathId = indexPath->GetChildren().begin()->second;
+    auto* tableInfo = Tables.FindPtr(indexImplTablePathId);
+    Y_ABORT_UNLESS(tableInfo);
 
-    Y_ABORT_UNLESS(Tables.contains(indexImplPathId));
-    auto indexImplTable = Tables.at(indexImplPathId);
-
-    const auto& tableStats = indexImplTable->GetStats().Aggregated;
+    const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
     entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
+
+    auto* tableDescription = entry.AddIndexImplTableDescriptions();
+    if (fillConfig) {
+        FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+    }
+    if (fillBoundaries) {
+        FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
+    }
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
@@ -1249,6 +1283,12 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);
+
+    if (info->ScanShards) {
+        auto& scanProgress = *desc.MutableScanProgress();
+        scanProgress.SetShardsTotal(info->ScanShards.size());
+        scanProgress.SetShardsCompleted(info->DoneShards.size());
+    }
 
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);

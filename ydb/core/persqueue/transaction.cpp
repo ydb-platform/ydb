@@ -1,5 +1,6 @@
 #include "transaction.h"
 #include "utils.h"
+#include "partition_log.h"
 
 namespace NKikimr::NPQ {
 
@@ -46,7 +47,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
 
     if (tx.HasWriteId()) {
-        WriteId = tx.GetWriteId();
+        WriteId = GetWriteId(tx);
     }
 }
 
@@ -60,6 +61,10 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
+        if (!o.HasBegin()) {
+            HasWriteOperations = true;
+        }
+
         Operations.push_back(o);
         Partitions.insert(o.GetPartitionId());
     }
@@ -133,8 +138,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
-    if (txBody.HasWriteId()) {
-        WriteId = txBody.GetWriteId();
+    if (txBody.HasWriteId() && HasWriteOperations) {
+        WriteId = GetWriteId(txBody);
     } else {
         WriteId = Nothing();
     }
@@ -319,6 +324,8 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
+    PQ_LOG_D("save tx " << tx.ShortDebugString());
+
     TString value;
     Y_ABORT_UNLESS(tx.SerializeToString(&value));
 
@@ -343,7 +350,7 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
     if (WriteId.Defined()) {
-        tx.SetWriteId(*WriteId);
+        SetWriteId(tx, *WriteId);
     }
 }
 

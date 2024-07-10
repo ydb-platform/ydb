@@ -1164,6 +1164,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             NUdf::TStringRef((const char*)&value, sizeof(value)));
     });
 
+    AddCallable("TzDate32", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto& parts = CutTimezone<i32>(node.Head().Content());
+        return ctx.ProgramBuilder.NewTzDataLiteral<NUdf::TTzDate32>(parts.first, parts.second);
+    });
+
+    AddCallable("TzDatetime64", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto& parts = CutTimezone<i64>(node.Head().Content());
+        return ctx.ProgramBuilder.NewTzDataLiteral<NUdf::TTzDatetime64>(parts.first, parts.second);
+    });
+
+    AddCallable("TzTimestamp64", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto& parts = CutTimezone<i64>(node.Head().Content());
+        return ctx.ProgramBuilder.NewTzDataLiteral<NUdf::TTzTimestamp64>(parts.first, parts.second);
+    });
+
     AddCallable("FoldMap", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         const auto state = MkqlBuildExpr(*node.Child(1), ctx);
@@ -1688,6 +1703,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         });
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+
         return selfJoin
             ? ctx.ProgramBuilder.GraceSelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
             : ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);

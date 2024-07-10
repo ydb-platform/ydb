@@ -2644,8 +2644,8 @@ public:
                     continue;
                 }
                 Add(Y(
-                    "declare", 
-                    new TAstAtomNodeImpl(var.second.first, var.first, TNodeFlags::ArbitraryContent), 
+                    "declare",
+                    new TAstAtomNodeImpl(var.second.first, var.first, TNodeFlags::ArbitraryContent),
                     var.second.second));
             }
 
@@ -2751,6 +2751,11 @@ public:
                 if (ctx.FilterPushdownOverJoinOptionalSide) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "FilterPushdownOverJoinOptionalSide"))));
+                }
+
+                if (!ctx.RotateJoinTree) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "RotateJoinTree"), BuildQuotedAtom(Pos, "false"))));
                 }
 
                 if (ctx.DiscoveryMode) {

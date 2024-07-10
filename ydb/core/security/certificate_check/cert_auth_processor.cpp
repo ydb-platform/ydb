@@ -5,10 +5,12 @@
 #include <openssl/bio.h>
 #include <openssl/objects.h>
 #include <openssl/obj_mac.h>
+#include <openssl/sha.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
+#include <util/string/hex.h>
 
 namespace NKikimr {
 
@@ -96,6 +98,15 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
 TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(const X509Ptr& x509) {
     X509_NAME* name = X509_get_issuer_name(x509.get()); // return internal pointer
     return ReadTerms(name);
+}
+
+TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
+    static constexpr size_t FINGERPRINT_LENGTH = SHA_DIGEST_LENGTH;
+    unsigned char fingerprint[FINGERPRINT_LENGTH];
+    if (X509_digest(x509.get(), EVP_sha1(), fingerprint, nullptr) <= 0) {
+        return "";
+    }
+    return HexEncode(fingerprint, FINGERPRINT_LENGTH);
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, bool requireSameIssuer, const std::vector<TString>& groups)

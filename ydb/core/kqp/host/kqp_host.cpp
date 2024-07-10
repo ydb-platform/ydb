@@ -1061,7 +1061,10 @@ public:
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
-        SessionCtx->SetTempTables(std::move(tempTablesState));
+        if (tempTablesState) {
+            SessionCtx->SetSessionId(tempTablesState->SessionId);
+            SessionCtx->SetTempTables(std::move(tempTablesState));
+        }
 
         if (FederatedQuerySetup) {
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
@@ -1820,6 +1823,7 @@ private:
                 || settingName == "BlockEngine"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
+                || settingName == "RotateJoinTree"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
@@ -1944,7 +1948,7 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings, 
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx)
 {

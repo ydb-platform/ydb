@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/size_literals.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NDq {
 
@@ -50,7 +51,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_,
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_ << "_" << CreateGuidAsString(),
             SelfId(), true);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqChannelStorageActor::WorkState);

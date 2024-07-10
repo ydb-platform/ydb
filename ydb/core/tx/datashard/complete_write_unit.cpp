@@ -84,7 +84,7 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
 
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
             result->SetOrbit(std::move(op->Orbit));
-            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
         }
     }
 

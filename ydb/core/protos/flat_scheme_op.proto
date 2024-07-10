@@ -18,6 +18,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
+import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
 import "google/protobuf/empty.proto";
@@ -421,6 +422,7 @@ message TOlapColumnDiff {
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
+    optional string DefaultValue = 7;
 }
 
 message TOlapColumnDescription {
@@ -439,6 +441,7 @@ message TOlapColumnDescription {
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
+    optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
 }
 
 message TRequestedBloomFilter {
@@ -884,6 +887,11 @@ enum ECdcStreamFormat {
     ECdcStreamFormatDebeziumJson = 4;
 }
 
+message TCdcStreamScanProgress {
+    optional uint32 ShardsTotal = 1;
+    optional uint32 ShardsCompleted = 2;
+}
+
 message TCdcStreamDescription {
     optional string Name = 1;
     optional ECdcStreamMode Mode = 2;
@@ -897,6 +905,7 @@ message TCdcStreamDescription {
     optional string AwsRegion = 9;
     // Set to '0' to disable resolved timestamps
     optional uint64 ResolvedTimestampsIntervalMs = 10;
+    optional TCdcStreamScanProgress ScanProgress = 11;
 }
 
 message TCreateCdcStream {
@@ -987,15 +996,17 @@ message TIndexDescription {
     optional uint64 PathOwnerId = 7;
 
     repeated string DataColumnNames = 8;
+
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
+    repeated TTableDescription IndexImplTableDescriptions = 10;
 }
 
 message TIndexCreationConfig {
     optional string Name = 1;
     repeated string KeyColumnNames = 2;
     optional EIndexType Type = 3;
-    optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
+    repeated TTableDescription IndexImplTableDescriptions = 4; //description for index impl tables
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
 }
@@ -1021,9 +1032,16 @@ message TBuildIndexOutcome {
         optional NKikimrProto.TPathID IndexPathId = 1;
     }
 
+    message TApply {
+        // Path id of the index whose creation was done
+        optional NKikimrProto.TPathID IndexPathId = 1;
+    }
+
+    reserved 1; // Apply type was changed from Empty to TApply
+
     oneof Result {
-        google.protobuf.Empty Apply = 1;
         TCancel Cancel = 2;
+        TApply Apply = 3;
     }
 }
 
@@ -1542,8 +1560,7 @@ enum EOperationType {
     // Move index
     ESchemeOpMoveIndex = 82;
 
-    ESchemeOpAllocatePersQueueGroup = 83;
-    ESchemeOpDeallocatePersQueueGroup = 84;
+    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
 
     // AlterExtSubDomain suboperations
     ESchemeOpAlterExtSubDomainCreateHive = 85;
@@ -1574,6 +1591,11 @@ enum EOperationType {
     ESchemeOpAlterContinuousBackup = 98;
     // Drop
     ESchemeOpDropContinuousBackup = 99;
+
+    // Resource Pool
+    ESchemeOpCreateResourcePool = 100;
+    ESchemeOpDropResourcePool = 101;
+    ESchemeOpAlterResourcePool = 102;
 }
 
 message TApplyIf {
@@ -1741,7 +1763,7 @@ message TModifyScheme {
 
     optional TViewDescription CreateView = 64;
 
-    optional NActorsProto.TActorId TempTableOwnerActorId = 65;
+    optional NActorsProto.TActorId TempDirOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;
@@ -1749,6 +1771,13 @@ message TModifyScheme {
     optional TCreateContinuousBackup CreateContinuousBackup = 68;
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
+
+    // This flag is required for TModifyScheme to create any new objects inside temporary zone.
+    // Reads/Updates can be executed without flag.
+    // Object is in temporary zone if there is a directory with nonempty OwnerActorId on it's path.
+    optional bool AllowCreateInTempDir = 71 [default = false];
+
+    optional TResourcePoolDescription CreateResourcePool = 72;
 }
 
 message TCopySequence {
@@ -1812,6 +1841,7 @@ enum EPathType {
     EPathTypeExternalTable = 18;
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
+    EPathTypeResourcePool = 21;
 }
 
 enum EPathSubType {
@@ -1865,6 +1895,7 @@ message TPathVersion {
     optional uint64 ExternalTableVersion = 27;
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
+    optional uint64 ResourcePoolVersion = 30;
 }
 
 // Describes single path
@@ -1953,6 +1984,7 @@ message TPathDescription {
     optional TExternalTableDescription ExternalTableDescription = 27;
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
+    optional TResourcePoolDescription ResourcePoolDescription = 30;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2080,4 +2112,15 @@ message TViewDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional string QueryText = 4;
+}
+
+message TResourcePoolProperties {
+    map<string, string> Properties = 1;
+}
+
+message TResourcePoolDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TResourcePoolProperties Properties = 4;
 }

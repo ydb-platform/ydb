@@ -30,7 +30,7 @@ and cast(d_date as date) between cast('2001-03-12' as date) and
         (cast('2001-03-12' as date) + DateTime::IntervalFromDays(90))
 and d_date_sk = ws_sold_date_sk
 and ws_ext_discount_amt
-     > 1.3 * bla.bla_ext_discount_amt
+     > $z1_3 * bla.bla_ext_discount_amt
 order by `Excess Discount Amount`
 limit 100;
 

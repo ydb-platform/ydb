@@ -409,14 +409,14 @@ message TPQTabletConfig {
     // Strategy for automatically changing the number of topic partitions depending on the load
     message TPartitionStrategy {
         // The minimum number of partitions that will be supported by the strategy
-        required uint32 MinPartitionCount = 1 [default = 1];
+        optional uint32 MinPartitionCount = 1 [default = 1];
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
-        required uint32 MaxPartitionCount = 2 [default = 1];;
-        required uint32 ScaleThresholdSeconds = 3 [default = 300];
-        required uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
-        required uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
-        required TPartitionStrategyType PartitionStrategyType = 6;
+        optional uint32 MaxPartitionCount = 2 [default = 1];;
+        optional uint32 ScaleThresholdSeconds = 3 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
+        required TPartitionStrategyType PartitionStrategyType = 6 [default = DISABLED];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
@@ -946,6 +946,11 @@ message TPartitionOperation {
     optional uint32 SupportivePartition = 6;
 };
 
+message TWriteId {
+    optional uint64 NodeId = 1;
+    optional fixed64 KeyId = 2;
+};
+
 message TDataTransaction {
     enum ELocksOp {
         Unspecified = 0;
@@ -959,7 +964,7 @@ message TDataTransaction {
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
-    optional fixed64 WriteId = 6;
+    optional TWriteId WriteId = 6;
 }
 
 message TConfigTransaction {
@@ -1116,18 +1121,20 @@ message TTransaction {
     //
     optional NActorsProto.TActorId SourceActor = 14;
 
-    optional uint64 WriteId = 15;
+    optional TWriteId WriteId = 15;
 };
 
 message TTabletTxInfo {
     message TTxWriteInfo {
-        optional uint64 WriteId = 1;
+        optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
     };
 
-    optional uint64 LastStep = 2;
-    optional uint64 LastTxId = 3;
+    optional uint64 PlanStep = 2;
+    optional uint64 PlanTxId = 3;
     repeated TTxWriteInfo TxWrites = 4;
     optional uint64 NextSupportivePartitionId = 5;
+    optional uint64 ExecStep = 6;
+    optional uint64 ExecTxId = 7;
 }

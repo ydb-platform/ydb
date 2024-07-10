@@ -36,6 +36,7 @@
 #include "miscadmin.h"
 #include "postmaster/postmaster.h"
 #include "storage/lwlock.h"
+#include "storage/procarray.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
@@ -89,11 +90,12 @@ typedef struct
 static bool
 TransactionIdInRecentPast(FullTransactionId fxid, TransactionId *extracted_xid)
 {
-	uint32		xid_epoch = EpochFromFullTransactionId(fxid);
 	TransactionId xid = XidFromFullTransactionId(fxid);
 	uint32		now_epoch;
 	TransactionId now_epoch_next_xid;
 	FullTransactionId now_fullxid;
+	TransactionId oldest_xid;
+	FullTransactionId oldest_fxid;
 
 	now_fullxid = ReadNextFullTransactionId();
 	now_epoch_next_xid = XidFromFullTransactionId(now_fullxid);
@@ -127,17 +129,24 @@ TransactionIdInRecentPast(FullTransactionId fxid, TransactionId *extracted_xid)
 	Assert(LWLockHeldByMe(XactTruncationLock));
 
 	/*
-	 * If the transaction ID has wrapped around, it's definitely too old to
-	 * determine the commit status.  Otherwise, we can compare it to
-	 * ShmemVariableCache->oldestClogXid to determine whether the relevant
-	 * CLOG entry is guaranteed to still exist.
+	 * If fxid is not older than ShmemVariableCache->oldestClogXid, the
+	 * relevant CLOG entry is guaranteed to still exist.  Convert
+	 * ShmemVariableCache->oldestClogXid into a FullTransactionId to compare
+	 * it with fxid.  Determine the right epoch knowing that oldest_fxid
+	 * shouldn't be more than 2^31 older than now_fullxid.
 	 */
-	if (xid_epoch + 1 < now_epoch
-		|| (xid_epoch + 1 == now_epoch && xid < now_epoch_next_xid)
-		|| TransactionIdPrecedes(xid, ShmemVariableCache->oldestClogXid))
-		return false;
-
-	return true;
+	oldest_xid = ShmemVariableCache->oldestClogXid;
+	Assert(TransactionIdPrecedesOrEquals(oldest_xid, now_epoch_next_xid));
+	if (oldest_xid <= now_epoch_next_xid)
+	{
+		oldest_fxid = FullTransactionIdFromEpochAndXid(now_epoch, oldest_xid);
+	}
+	else
+	{
+		Assert(now_epoch > 0);
+		oldest_fxid = FullTransactionIdFromEpochAndXid(now_epoch - 1, oldest_xid);
+	}
+	return !FullTransactionIdPrecedes(fxid, oldest_fxid);
 }
 
 /*
@@ -677,29 +686,22 @@ pg_xact_status(PG_FUNCTION_ARGS)
 	{
 		Assert(TransactionIdIsValid(xid));
 
-		if (TransactionIdIsCurrentTransactionId(xid))
+		/*
+		 * Like when doing visiblity checks on a row, check whether the
+		 * transaction is still in progress before looking into the CLOG.
+		 * Otherwise we would incorrectly return "committed" for a transaction
+		 * that is committing and has already updated the CLOG, but hasn't
+		 * removed its XID from the proc array yet. (See comment on that race
+		 * condition at the top of heapam_visibility.c)
+		 */
+		if (TransactionIdIsInProgress(xid))
 			status = "in progress";
 		else if (TransactionIdDidCommit(xid))
 			status = "committed";
-		else if (TransactionIdDidAbort(xid))
-			status = "aborted";
 		else
 		{
-			/*
-			 * The xact is not marked as either committed or aborted in clog.
-			 *
-			 * It could be a transaction that ended without updating clog or
-			 * writing an abort record due to a crash. We can safely assume
-			 * it's aborted if it isn't committed and is older than our
-			 * snapshot xmin.
-			 *
-			 * Otherwise it must be in-progress (or have been at the time we
-			 * checked commit/abort status).
-			 */
-			if (TransactionIdPrecedes(xid, GetActiveSnapshot()->xmin))
-				status = "aborted";
-			else
-				status = "in progress";
+			/* it must have aborted or crashed */
+			status = "aborted";
 		}
 	}
 	else

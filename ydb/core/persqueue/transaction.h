@@ -49,7 +49,7 @@ struct TDistributedTransaction {
     THashSet<ui64> Senders;        // список отправителей TEvReadSet
     THashSet<ui64> Receivers;      // список получателей TEvReadSet
     TVector<NKikimrPQ::TPartitionOperation> Operations;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
 
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
@@ -109,6 +109,8 @@ struct TDistributedTransaction {
     void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
     const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
+
+    bool HasWriteOperations = false;
 };
 
 }

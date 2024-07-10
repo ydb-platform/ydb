@@ -114,7 +114,7 @@ RESOURCE(
 PEERDIR(
     ydb/library/accessor
     library/cpp/resource
-    ydb/library/workload/benchmark_base
+    ydb/library/workload/tpc_base
 )
 
 END()

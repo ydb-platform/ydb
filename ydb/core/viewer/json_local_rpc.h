@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -206,12 +207,15 @@ public:
     void ReplyAndPassAway() {
         if (Result && Result->Status) {
             if (!Result->Status->IsSuccess()) {
+                NJson::TJsonValue json;
+                TString message;
+                MakeErrorReply(json, message, Result->Status.value());
+                TStringStream stream;
+                NJson::WriteJson(&stream, &json);
                 if (Result->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    return ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get()));
+                    return ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get(), "application/json", stream.Str()));
                 } else {
-                    TStringStream error;
-                    Result->Status->Out(error);
-                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error.Str()));
+                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json", stream.Str()));
                 }
             } else {
                 TStringStream json;

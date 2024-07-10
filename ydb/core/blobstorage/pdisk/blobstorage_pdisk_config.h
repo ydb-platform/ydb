@@ -128,7 +128,6 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferCount = 256;
     ui32 MaxQueuedCompletionActions = 128; // BufferPoolBufferCount / 2;
     bool UseSpdkNvmeDriver;
-    TControlWrapper UseT1ha0HashInFooter;
 
     ui64 ExpectedSlotCount = 0;
 
@@ -161,7 +160,6 @@ struct TPDiskConfig : public TThrRefBase {
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
-        , UseT1ha0HashInFooter(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING, 0, 1)
     {
         Initialize();
     }

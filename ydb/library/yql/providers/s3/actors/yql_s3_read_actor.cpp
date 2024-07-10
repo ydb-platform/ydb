@@ -37,6 +37,7 @@
 #endif
 
 #include "yql_arrow_column_converters.h"
+#include "yql_arrow_push_down.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
@@ -169,6 +170,7 @@ struct TReadSpec {
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
+    NYql::NConnector::NApi::TPredicate Predicate;
 };
 
 struct TRetryStuff {
@@ -377,6 +379,7 @@ public:
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
+            
         }
 
         auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(
@@ -388,7 +391,7 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -429,7 +432,7 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -609,10 +612,12 @@ public:
         THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
         THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
-        ui64 numGroups = readers[0]->num_row_groups();
+
+        bool hasPredicate = ReadSpec->Predicate.payload_case() != NYql::NConnector::NApi::TPredicate::PayloadCase::PAYLOAD_NOT_SET;
+        auto matchedRowGroups = hasPredicate ? MatchedRowGroups(fileMetadata, ReadSpec->Predicate) : TVector<ui64>();
+        ui64 numGroups = hasPredicate ? matchedRowGroups.size() : readers[0]->num_row_groups();
 
         if (numGroups) {
-
             std::shared_ptr<arrow::Schema> schema;
             THROW_ARROW_NOT_OK(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
@@ -661,7 +666,7 @@ public:
             for (ui64 i = 0; i < readerCount; i++) {
                 if (!columnIndices.empty()) {
                     CurrentRowGroupIndex = i;
-                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ static_cast<int>(i) }, columnIndices));
+                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
                     SourceContext->IncChunkCount();
                 }
                 RowGroupReaderIndex[i] = i;
@@ -703,7 +708,7 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -739,7 +744,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ static_cast<int>(nextGroup) }, columnIndices));
+                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -1012,6 +1017,12 @@ private:
         return currentIngressBytes;
     }
 
+    ui64 TakeIngressDecompressedDelta(ui64 current) {
+        ui64 delta = current - TotalIngressDecompressedBytes;
+        TotalIngressDecompressedBytes = current;
+        return delta;
+    }
+
     TDuration TakeCpuTimeDelta() {
         auto currentCpuTime = CpuTime;
         CpuTime = TDuration::Zero();
@@ -1156,6 +1167,7 @@ private:
     std::size_t LastOffset = 0;
     TString LastData;
     ui64 IngressBytes = 0;
+    ui64 TotalIngressDecompressedBytes = 0;
     TDuration CpuTime;
     ui64 StartCycleCount = 0;
     TString InputBuffer;
@@ -1640,6 +1652,7 @@ private:
         YQL_ENSURE(!ReadSpec->Arrow);
         auto rows = next->Get()->Block.rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.DecompressedBytes += next->Get()->IngressDecompressedDelta;
         IngressStats.Rows += rows;
         IngressStats.Chunks++;
         IngressStats.Resume();
@@ -2067,6 +2080,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();
+        readSpec->Predicate = params.GetPredicate();
 
         if (rowsLimitHint && *rowsLimitHint <= 1000) {
             readSpec->ParallelRowGroupCount = 1;

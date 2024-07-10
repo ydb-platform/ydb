@@ -78,7 +78,7 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
     updateCounters();
     UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
 
-    actor->SetGroupId(groupId);
+    actor->SetGroupId(TGroupId::FromValue(groupId));
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(5));
 
@@ -225,7 +225,7 @@ void TestBurst(ui32 requests, ui32 inflight, TDuration delay, ELoadDistribution 
     SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, burstThresholdNs,
             diskTimeAvailableScale);
 
-    actor->SetGroupId(groupId);
+    actor->SetGroupId(TGroupId::FromValue(groupId));
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(10));
 

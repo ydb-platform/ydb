@@ -459,6 +459,54 @@ public:
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
+        Parsers[NYql::EDatabaseType::MySQL] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
+            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
+            TVector<TString> aliveHosts;
+
+            const auto& hostsArray = databaseInfo.GetMap().at("hosts").GetArraySafe();
+
+            for (const auto& host : hostsArray) {
+                const auto& hostMap = host.GetMap();
+
+                if (!hostMap.contains("services")) {
+                    // indicates that cluster is down
+                    continue;
+                }
+
+                // check if all services of a particular host are alive
+                const bool alive = std::all_of(
+                    hostMap.at("services").GetArraySafe().begin(),
+                    hostMap.at("services").GetArraySafe().end(),
+                    [](const auto& service) {
+                        return service["health"].GetString() == "ALIVE";
+                    }
+                );
+
+                if (alive) {
+                    aliveHosts.push_back(host["name"].GetString());
+                }
+            }
+
+            if (aliveHosts.empty()) {
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE MySQL hosts found";
+            }
+
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::MySQL,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        };
     }
 
     static constexpr char ActorName[] = "YQ_DATABASE_RESOLVER";
@@ -538,7 +586,7 @@ private:
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
-                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL}, databaseType)) {
+                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL, NYql::EDatabaseType::MySQL}, databaseType)) {
                     YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(
                         ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")

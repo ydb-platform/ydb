@@ -2782,7 +2782,7 @@ public:
                                 if (ListLength(typeName->names) > 0) {
                                     options.emplace_back(QL(QAX(nameElem),
                                         QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
-                                    }
+                                }
                                 break;
                             }
                             default:
@@ -2917,16 +2917,26 @@ public:
                                 return nullptr;
                             }
                             const auto* rawArg = ListNodeNth(newDefault->args, 0);
-                            if (NodeTag(rawArg) != T_A_Const) {
-                                NodeNotImplemented(newDefault, rawArg);
+                            if (NodeTag(rawArg) != T_TypeCast && NodeTag(rawArg) != T_A_Const) {
+                                AddError(TStringBuilder() << "Expected type cast node or a_const, but got something wrong: " << NodeTag(rawArg));
                                 return nullptr;
                             }
-                            const auto* arg = CAST_NODE(A_Const, rawArg);
-                            if (NodeTag(arg->val) != T_String) {
-                                ValueNotImplemented(newDefault, arg->val);
+                            const A_Const* localConst = nullptr;
+                            if (NodeTag(rawArg) == T_TypeCast) { 
+                                auto localCast = CAST_NODE(TypeCast, rawArg)->arg;
+                                if (NodeTag(localCast) != T_A_Const) {
+                                    AddError(TStringBuilder() << "Expected a_const in cast, but got something wrong: " << NodeTag(localCast));
+                                    return nullptr;
+                                }
+                                localConst = CAST_NODE(A_Const, localCast);
+                            } else {
+                                localConst = CAST_NODE(A_Const, rawArg);
+                            }
+                            if (NodeTag(localConst->val) != T_String) {
+                                AddError(TStringBuilder() << "Expected string in const, but got something wrong: " << NodeTag(localConst->val));
                                 return nullptr;
                             }
-                            auto seqName = StrVal(arg->val);
+                            auto seqName = StrVal(localConst->val);
 
                             alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("nextval"), QA(seqName)))));
                             break;

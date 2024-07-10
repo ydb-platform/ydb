@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-
+#include <ydb/core/base/blobstorage_common.h>
 namespace NKikimr {
 
     // inline table specifier
@@ -33,6 +33,23 @@ namespace NKikimr {
         template<size_t Index, typename... TableKeyTypes>
         struct TGetTableKeyColumn<Index, std::tuple<TableKeyTypes...>> : TGetTableKeyColumnImpl<Index, TableKeyTypes...> {};
 
+        template<typename T, typename = void>
+        struct HasGetRawId : std::false_type {};
+
+        template<typename T>
+        struct HasGetRawId<T, std::void_t<decltype(std::declval<T>().GetRawId())>> : std::true_type {};
+
+        template<typename T>
+        auto GetValue(T& item) -> std::enable_if_t<HasGetRawId<T>::value, decltype(item.GetRawId())> {
+            return item.GetRawId();
+        }
+
+        template<typename T>
+        auto GetValue(T& item) -> std::enable_if_t<!HasGetRawId<T>::value, T> {
+            return item;
+        }
+
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // KEY MAPPER
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -43,7 +60,7 @@ namespace NKikimr {
 
             template<typename... TArgs>
             static auto PrepareKeyTuple(const std::tuple<TKeyItems...> *items, std::tuple<TArgs...> &&tuple) {
-                TMaybe<typename NIceDb::NSchemeTypeMapper<TColumn::ColumnType>::Type> value(std::get<Index>(*items));
+                TMaybe<typename NIceDb::NSchemeTypeMapper<TColumn::ColumnType>::Type> value(GetValue(std::get<Index>(*items)));
                 return TTupleKeyMapper<Table, Index + 1, Count, TKeyItems...>::PrepareKeyTuple(items,
                     std::tuple_cat(std::forward<std::tuple<TArgs...>>(tuple), std::make_tuple(std::move(value))));
             }
@@ -104,6 +121,11 @@ namespace NKikimr {
             return std::make_tuple(item);
         }
 
+        template<typename T>
+        auto WrapTuple(const T &item, std::enable_if_t<std::is_same_v<T, TIdWrapper<typename T::Type, typename T::TTag>>>* = nullptr) {
+            return std::make_tuple(item);
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // CELL
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -119,6 +141,11 @@ namespace NKikimr {
 
         inline void Cast(const TDuration& from, TMaybe<ui64>& to) {
             to.ConstructInPlace(from.GetValue());
+        }
+
+        template<typename T, typename Tag>
+        inline void Cast(const TIdWrapper<T, Tag>& from, TMaybe<T>& to){
+            to.ConstructInPlace(from.GetRawId());
         }
 
         template<typename TRow, typename TColumn>
@@ -375,6 +402,11 @@ namespace NKikimr {
             return TKey(rowset.GetKey());
         }
 
+        template<typename TKey, typename TRowset>
+        auto CreateFromRowset(const TRowset &rowset) -> decltype(TKey::FromValue(std::declval<TRowset>().GetKey())) {
+            return TKey::FromValue(rowset.GetKey());
+        }
+        
         template<typename TKey, typename TRowset>
         auto CreateFromRowset(const TRowset &rowset) -> decltype(TKey::CreateFromRowset(std::declval<const TRowset&>())) {
             return TKey::CreateFromRowset(rowset);

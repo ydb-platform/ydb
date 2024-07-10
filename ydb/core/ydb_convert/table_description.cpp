@@ -735,7 +735,9 @@ void FillTableBoundaryImpl(TYdbProto& out,
 
             if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
                 ydbValue = out.add_shard_key_bounds();
-            } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value) {
+            } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value
+                || std::is_same<TYdbProto, Ydb::Table::GlobalIndexSettings>::value
+            ) {
                 ydbValue = out.mutable_partition_at_keys()->add_split_points();
             } else {
                 Y_ABORT("Unknown proto type");
@@ -767,8 +769,87 @@ void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
 }
 
 template <typename TYdbProto>
-void FillIndexDescriptionImpl(TYdbProto& out,
+static void FillDefaultPartitioningSettings(TYdbProto& out) {
+    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure.
+    out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+    out.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+}
+
+template <typename TYdbProto>
+void FillPartitioningSettings(TYdbProto& out, const NKikimrSchemeOp::TPartitioningPolicy& policy) {
+    if (policy.HasSizeToSplit()) {
+        if (policy.GetSizeToSplit()) {
+            out.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
+            out.set_partition_size_mb(policy.GetSizeToSplit() / (1 << 20));
+        } else {
+            out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+        }
+    } else {
+        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure.
+        out.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+    }
+
+    if (policy.HasSplitByLoadSettings()) {
+        bool enabled = policy.GetSplitByLoadSettings().GetEnabled();
+        out.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    } else {
+        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
+        out.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+    }
+
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount()) {
+        out.set_min_partitions_count(policy.GetMinPartitionsCount());
+    }
+
+    if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
+        out.set_max_partitions_count(policy.GetMaxPartitionsCount());
+    }
+}
+
+template <typename TYdbProto>
+void FillPartitioningSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+
+    auto& outPartSettings = *out.mutable_partitioning_settings();
+
+    if (!in.HasPartitionConfig()) {
+        FillDefaultPartitioningSettings(outPartSettings);
+        return;
+    }
+
+    const auto& partConfig = in.GetPartitionConfig();
+    if (!partConfig.HasPartitioningPolicy()) {
+        FillDefaultPartitioningSettings(outPartSettings);
+        return;
+    }
+
+    FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
+}
+
+void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTableDescription>& indexImplTables
+) {
+    if (indexImplTables.empty()) {
+        return;
+    }
+    const auto& indexImplTableDescription = indexImplTables.Get(0);
+
+    if (indexImplTableDescription.SplitBoundarySize()) {
+        NKikimrMiniKQL::TType splitKeyType;
+        Ydb::Table::DescribeTableResult unused;
+        FillColumnDescription(unused, splitKeyType, indexImplTableDescription);
+        FillTableBoundaryImpl(
+            *settings.mutable_partition_at_keys(),
+            indexImplTableDescription,
+            splitKeyType
+        );
+    }
+
+    FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+}
+
+template <typename TYdbProto>
+void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& tableIndex : in.GetTableIndexes()) {
         auto index = out.add_indexes();
@@ -787,13 +868,22 @@ void FillIndexDescriptionImpl(TYdbProto& out,
 
         switch (tableIndex.GetType()) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            *index->mutable_global_index() = Ydb::Table::GlobalIndex();
+            FillGlobalIndexSettings(
+                *index->mutable_global_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions()
+            );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            *index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+            FillGlobalIndexSettings(
+                *index->mutable_global_async_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions()
+            );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
-            *index->mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+            FillGlobalIndexSettings(
+                *index->mutable_global_unique_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions()
+            );
             break;
         default:
             break;
@@ -867,24 +957,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
         }
 
-        //Disabled for a while. Probably we need to allow set this profile to user
-/*
-        auto indexTableDesc = indexDesc->MutableIndexImplTableDescription();
-        if (index.has_global_index() && index.global_index().has_table_profile()) {
-            auto indexTableProfile = index.global_index().table_profile();
-            // Copy to common table profile to reuse common ApplyTableProfile method
-            Ydb::Table::TableProfile profile;
-            profile.mutable_partitioning_policy()->CopyFrom(indexTableProfile.partitioning_policy());
-
-            StatusIds::StatusCode code;
-            TString error;
-            if (!Profiles.ApplyTableProfile(profile, *indexTableDesc, code, error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
+        if (!FillIndexTablePartitioning(*indexDesc->AddIndexImplTableDescriptions(), index, status, error)) {
+            return false;
         }
-*/
     }
 
     return true;
@@ -950,6 +1025,12 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
             break;
         default:
             break;
+        }
+
+        if (stream.HasScanProgress()) {
+            auto& scanProgress = *changefeed->mutable_initial_scan_progress();
+            scanProgress.set_parts_total(stream.GetScanProgress().GetShardsTotal());
+            scanProgress.set_parts_completed(stream.GetScanProgress().GetShardsCompleted());
         }
 
         FillAttributesImpl(*changefeed, stream);
@@ -1204,60 +1285,6 @@ void FillAttributes(Ydb::Table::DescribeTableResult& out,
 void FillAttributes(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
-}
-
-template <typename TYdbProto>
-static void FillDefaultPartitioningSettings(TYdbProto& out) {
-    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure.
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-}
-
-template <typename TYdbProto>
-void FillPartitioningSettingsImpl(TYdbProto& out,
-        const NKikimrSchemeOp::TTableDescription& in) {
-
-    if (!in.HasPartitionConfig()) {
-        FillDefaultPartitioningSettings(out);
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (!partConfig.HasPartitioningPolicy()) {
-        FillDefaultPartitioningSettings(out);
-        return;
-    }
-
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    const auto& inPartPolicy = partConfig.GetPartitioningPolicy();
-    if (inPartPolicy.HasSizeToSplit()) {
-        if (inPartPolicy.GetSizeToSplit()) {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-            outPartSettings.set_partition_size_mb(inPartPolicy.GetSizeToSplit() / (1 << 20));
-        } else {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-        }
-    } else {
-        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    }
-
-    if (inPartPolicy.HasSplitByLoadSettings()) {
-        bool enabled = inPartPolicy.GetSplitByLoadSettings().GetEnabled();
-        outPartSettings.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
-    } else {
-        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-    }
-
-    if (inPartPolicy.HasMinPartitionsCount() && inPartPolicy.GetMinPartitionsCount()) {
-        outPartSettings.set_min_partitions_count(inPartPolicy.GetMinPartitionsCount());
-    }
-
-    if (inPartPolicy.HasMaxPartitionsCount() && inPartPolicy.GetMaxPartitionsCount()) {
-        outPartSettings.set_max_partitions_count(inPartPolicy.GetMaxPartitionsCount());
-    }
 }
 
 void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,

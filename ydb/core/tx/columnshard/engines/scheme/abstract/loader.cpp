@@ -18,10 +18,11 @@ TString TColumnLoader::DebugString() const {
 }
 
 TColumnLoader::TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer& serializer,
-    const std::shared_ptr<arrow::Schema>& expectedSchema, const ui32 columnId)
+    const std::shared_ptr<arrow::Schema>& expectedSchema, const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
     : Transformer(transformer)
     , Serializer(serializer)
     , ExpectedSchema(expectedSchema)
+    , DefaultValue(defaultValue)
     , ColumnId(columnId) {
     Y_ABORT_UNLESS(ExpectedSchema);
     auto fieldsCountStr = ::ToString(ExpectedSchema->num_fields());

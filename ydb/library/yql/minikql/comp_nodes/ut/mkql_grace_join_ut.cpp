@@ -672,25 +672,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "C");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "C");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "B");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "A");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("C"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), TString("C"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("B"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString("A"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 6);
 
         }
 
@@ -749,17 +746,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "C");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "A");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "B");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
 
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString("A"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString("B"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("C"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 3);
         }
 
 
@@ -824,17 +823,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
 
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 3);
         }
 
 
@@ -900,10 +901,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 1);
 
         }
 
@@ -975,13 +983,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B2");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B1");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B2"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B1"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
 
         }
 
@@ -1053,13 +1066,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B2B2B2B2B2B2B2B2");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "YYYYYYYYYYYYYYYY");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B1B1B1B1B1B1B1B1");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "XXXXXXXXXXXXXXXX");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(
+                        TString("B2B2B2B2B2B2B2B2"),
+                        TString("YYYYYYYYYYYYYYYY")
+                        )], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(
+                        TString("B1B1B1B1B1B1B1B1"),
+                        TString("XXXXXXXXXXXXXXXX")
+                        )], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
 
         }
 
@@ -1120,16 +1144,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 3);
 
         }
 
@@ -1189,20 +1216,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
+            std::map<std::pair<TString, TString>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), TString(t1.AsStringRef()) )];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 4);
         }
     }
 
@@ -1257,24 +1284,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
+            std::map<std::pair<TString, TString>, ui32> u;
+            // use empty TString as replacement for NULL
 
-            for (ui32 i = 0; i < 3; i++) {
-                iterator.Next(tuple);
-                const auto cell = (tuple.GetElement(0));
-                if (cell.AsStringRef() == "A") {
-                    UNIT_ASSERT(!tuple.GetElement(1));
-                }
-                if (cell.AsStringRef() == "B") {
-                    UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-                }
-                if (cell.AsStringRef() == "C") {
-                    UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-                }
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
             }
-
-            UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
 
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 3);
         }
     }
 
@@ -1330,24 +1355,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
+            std::map<std::pair<TString, TString>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNIT_ASSERT(!tuple.GetElement(1));
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 5);
         }
     }
 
@@ -1403,14 +1427,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
+            std::map<std::pair<TString, ui32>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -1468,16 +1496,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "D");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 4);
+            std::map<std::pair<TString, ui32>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 1);
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
+            UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("D"), 4)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), 1)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -1535,14 +1565,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
+            std::map<std::pair<TString, ui32>, ui32> u;
+
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -1599,15 +1633,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, ui64>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 1);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNIT_ASSERT(!tuple.GetElement(1));
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : std::numeric_limits<ui64>::max())];
+                // replace NULL with <ui64>::max()
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), 1)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), std::numeric_limits<ui64>::max())], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
+
         }
     }
 
@@ -1661,24 +1700,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, TString>, ui32> u;
 
-
-            for (ui32 i = 0; i < 3; i++) {
-                iterator.Next(tuple);
-                const auto cell = (tuple.GetElement(1));
-                if (cell.AsStringRef() == "Z") {
-                    UNIT_ASSERT(!tuple.GetElement(0));
-                }
-                if (cell.AsStringRef() == "X") {
-                    UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-                }
-                if (cell.AsStringRef() == "Y") {
-                    UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-                }
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
             }
+            UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 3);
 
         }
     }
@@ -1732,12 +1768,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, ui32>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Z");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 3);
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Z"), 3)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 1);
         }
     }
 
@@ -1794,15 +1835,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, ui32>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Y");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Y"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -1858,25 +1902,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, TString>, ui32> u;
 
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
+            }
+            UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNIT_ASSERT(!tuple.GetElement(0));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 5);
         }
     }
 
@@ -1934,15 +1976,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, ui32>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Y");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 2);
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1.Get<ui32>())];
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Y"), 2)], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -1999,15 +2044,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, ui64>, ui32> u;
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Z");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 3);
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNIT_ASSERT(!tuple.GetElement(1));
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : std::numeric_limits<ui64>::max())];
+                // replace NULL with <ui64>::max()
+            }
             UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Z"), 3)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), std::numeric_limits<ui64>::max())], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 
@@ -2062,28 +2111,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, TString>, ui32> u;
 
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
+            }
+            UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(!tuple.GetElement(0));
-            UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 6);
         }
     }
 
@@ -2139,16 +2184,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
+            std::map<std::pair<TString, TString>, ui32> u;
 
+            while (iterator.Next(tuple)) {
+                auto t0 = tuple.GetElement(0);
+                auto t1 = tuple.GetElement(1);
+                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
+                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
+                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
+            }
+            UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
-            UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(!tuple.GetElement(0));
-            UNIT_ASSERT(!iterator.Next(tuple));
-            UNIT_ASSERT(!iterator.Next(tuple));
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
+            UNIT_ASSERT_EQUAL(u.size(), 2);
         }
     }
 

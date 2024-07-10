@@ -21,8 +21,13 @@ except ImportError:
         from ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
         from ydb.public.api.client.yc_public.iam import iam_token_service_pb2
     except ImportError:
-        iam_token_service_pb2_grpc = None
-        iam_token_service_pb2 = None
+        try:
+            # This attempt is to enable the IAM auth inside the YDB repository on Arcadia
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2
+        except ImportError:
+            iam_token_service_pb2_grpc = None
+            iam_token_service_pb2 = None
 
 try:
     import requests
@@ -104,14 +109,20 @@ class BaseJWTCredentials(abc.ABC):
     @classmethod
     def from_file(cls, key_file, iam_endpoint=None, iam_channel_credentials=None):
         with open(os.path.expanduser(key_file), "r") as r:
-            output = json.loads(r.read())
-        account_id = output.get("service_account_id", None)
+            key = r.read()
+
+        return cls.from_content(key, iam_endpoint=iam_endpoint, iam_channel_credentials=iam_channel_credentials)
+
+    @classmethod
+    def from_content(cls, key, iam_endpoint=None, iam_channel_credentials=None):
+        key_json = json.loads(key)
+        account_id = key_json.get("service_account_id", None)
         if account_id is None:
-            account_id = output.get("user_account_id", None)
+            account_id = key_json.get("user_account_id", None)
         return cls(
             account_id,
-            output["id"],
-            output["private_key"],
+            key_json["id"],
+            key_json["private_key"],
             iam_endpoint=iam_endpoint,
             iam_channel_credentials=iam_channel_credentials,
         )

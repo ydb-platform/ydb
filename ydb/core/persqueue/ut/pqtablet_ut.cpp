@@ -29,10 +29,11 @@ namespace NHelpers {
 
 struct TTxOperation {
     ui32 Partition;
-    TString Consumer;
-    ui64 Begin = 0;
-    ui64 End = 0;
+    TMaybe<TString> Consumer;
+    TMaybe<ui64> Begin;
+    TMaybe<ui64> End;
     TString Path;
+    TMaybe<ui32> SupportivePartition;
 };
 
 struct TConfigParams {
@@ -46,7 +47,7 @@ struct TProposeTransactionParams {
     TVector<ui64> Receivers;
     TVector<TTxOperation> TxOps;
     TMaybe<TConfigParams> Configs;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
 };
 
 struct TPlanStepParams {
@@ -73,7 +74,7 @@ struct TCancelTransactionProposalParams {
 struct TGetOwnershipRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<ui64> MsgNo;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
     TMaybe<bool> NeedSupportivePartition;
     TMaybe<TString> Owner; // o
     TMaybe<ui64> Cookie;
@@ -84,7 +85,7 @@ struct TWriteRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<TString> Owner;
     TMaybe<ui64> MsgNo;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
     TMaybe<TString> SourceId; // w
     TMaybe<ui64> SeqNo;       // w
     TMaybe<TString> Data;     // w
@@ -307,10 +308,15 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         for (auto& txOp : params.TxOps) {
             auto* operation = body->MutableOperations()->Add();
             operation->SetPartitionId(txOp.Partition);
-            operation->SetBegin(txOp.Begin);
-            operation->SetEnd(txOp.End);
-            operation->SetConsumer(txOp.Consumer);
+            if (txOp.Begin.Defined()) {
+                operation->SetBegin(*txOp.Begin);
+                operation->SetEnd(*txOp.End);
+                operation->SetConsumer(*txOp.Consumer);
+            }
             operation->SetPath(txOp.Path);
+            if (txOp.SupportivePartition.Defined()) {
+                operation->SetSupportivePartition(*txOp.SupportivePartition);
+            }
 
             partitions.insert(txOp.Partition);
         }
@@ -321,7 +327,7 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             body->AddReceivingShards(tabletId);
         }
         if (params.WriteId) {
-            body->SetWriteId(*params.WriteId);
+            SetWriteId(*body, *params.WriteId);
         }
         body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
     }
@@ -342,7 +348,9 @@ void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionR
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT_EQUAL(*matcher.Status, event->Record.GetStatus());
+        UNIT_ASSERT_EQUAL_C(*matcher.Status, event->Record.GetStatus(),
+                            "expected: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(*matcher.Status) <<
+                            ", received " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()));
     }
 }
 
@@ -549,7 +557,7 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequ
         request->SetMessageNo(*params.MsgNo);
     }
     if (params.WriteId.Defined()) {
-        request->SetWriteId(*params.WriteId);
+        SetWriteId(*request, *params.WriteId);
     }
     if (params.NeedSupportivePartition.Defined()) {
         request->SetNeedSupportivePartition(*params.NeedSupportivePartition);
@@ -634,7 +642,7 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
         request->SetMessageNo(*params.MsgNo);
     }
     if (params.WriteId.Defined()) {
-        request->SetWriteId(*params.WriteId);
+        SetWriteId(*request, *params.WriteId);
     }
     if (params.Cookie.Defined()) {
         request->SetCookie(*params.Cookie);
@@ -1245,7 +1253,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
 
     SendProposeTransactionRequest({.TxId=txId,
                                   .TxOps={{.Partition=0, .Path="/topic"}},
@@ -1259,7 +1267,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
     PQTabletPrepare({.partitions=2}, {}, *Ctx);
 
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
     const ui64 cookie = 4;
 
     SendGetOwnershipRequest({.Partition=0,
@@ -1281,7 +1289,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     const ui32 partitionId = 0;
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
@@ -1292,7 +1300,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
                      .Status=NMsgBusProxy::MSTATUS_OK});
 
     SendProposeTransactionRequest({.TxId=txId,
-                                  .TxOps={{.Partition=partitionId, .Path="/topic"}},
+                                  .TxOps={{.Partition=partitionId, .Path="/topic", .SupportivePartition=100'000}},
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});

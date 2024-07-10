@@ -218,6 +218,13 @@ get_call_result_type(FunctionCallInfo fcinfo,
 /*
  * get_expr_result_type
  *		As above, but work from a calling expression node tree
+ *
+ * Beware of using this on the funcexpr of a RTE that has a coldeflist.
+ * The correct conclusion in such cases is always that the function returns
+ * RECORD with the columns defined by the coldeflist fields (funccolnames etc).
+ * If it does not, it's the executor's responsibility to catch the discrepancy
+ * at runtime; but code processing the query in advance of that point might
+ * come to inconsistent conclusions if it checks the actual expression.
  */
 TypeFuncClass
 get_expr_result_type(Node *expr,
@@ -269,6 +276,40 @@ get_expr_result_type(Node *expr,
 		if (resultTupleDesc)
 			*resultTupleDesc = BlessTupleDesc(tupdesc);
 		return TYPEFUNC_COMPOSITE;
+	}
+	else if (expr && IsA(expr, Const) &&
+			 ((Const *) expr)->consttype == RECORDOID &&
+			 !((Const *) expr)->constisnull)
+	{
+		/*
+		 * When EXPLAIN'ing some queries with SEARCH/CYCLE clauses, we may
+		 * need to resolve field names of a RECORD-type Const.  The datum
+		 * should contain a typmod that will tell us that.
+		 */
+		HeapTupleHeader rec;
+		Oid			tupType;
+		int32		tupTypmod;
+
+		rec = DatumGetHeapTupleHeader(((Const *) expr)->constvalue);
+		tupType = HeapTupleHeaderGetTypeId(rec);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+		if (resultTypeId)
+			*resultTypeId = tupType;
+		if (tupType != RECORDOID || tupTypmod >= 0)
+		{
+			/* Should be able to look it up */
+			if (resultTupleDesc)
+				*resultTupleDesc = lookup_rowtype_tupdesc_copy(tupType,
+															   tupTypmod);
+			return TYPEFUNC_COMPOSITE;
+		}
+		else
+		{
+			/* This shouldn't really happen ... */
+			if (resultTupleDesc)
+				*resultTupleDesc = NULL;
+			return TYPEFUNC_RECORD;
+		}
 	}
 	else
 	{
@@ -434,7 +475,8 @@ internal_get_result_type(Oid funcid,
  * if noError is true, else throws error.
  *
  * This is a simpler version of get_expr_result_type() for use when the caller
- * is only interested in determinate rowtype results.
+ * is only interested in determinate rowtype results.  As with that function,
+ * beware of using this on the funcexpr of a RTE that has a coldeflist.
  */
 TupleDesc
 get_expr_result_tupdesc(Node *expr, bool noError)

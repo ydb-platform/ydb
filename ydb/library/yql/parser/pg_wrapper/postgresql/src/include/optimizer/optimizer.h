@@ -24,11 +24,6 @@
 
 #include "nodes/parsenodes.h"
 
-/* Test if an expression node represents a SRF call.  Beware multiple eval! */
-#define IS_SRF_CALL(node) \
-	((IsA(node, FuncExpr) && ((FuncExpr *) (node))->funcretset) || \
-	 (IsA(node, OpExpr) && ((OpExpr *) (node))->opretset))
-
 /*
  * We don't want to include nodes/pathnodes.h here, because non-planner
  * code should generally treat PlannerInfo as an opaque typedef.
@@ -141,7 +136,9 @@ extern Expr *canonicalize_qual(Expr *qual, bool is_check);
 /* in util/clauses.c: */
 
 extern bool contain_mutable_functions(Node *clause);
+extern bool contain_mutable_functions_after_planning(Expr *expr);
 extern bool contain_volatile_functions(Node *clause);
+extern bool contain_volatile_functions_after_planning(Expr *expr);
 extern bool contain_volatile_functions_not_nextval(Node *clause);
 
 extern Node *eval_const_expressions(PlannerInfo *root, Node *node);

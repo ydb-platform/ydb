@@ -24,8 +24,8 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
-            TVector<TPageId> GroupIndexes;
-            TVector<TPageId> HistoricIndexes;
+            TVector<TPageId> FlatGroupIndexes;
+            TVector<TPageId> FlatHistoricIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
             TData *Scheme;

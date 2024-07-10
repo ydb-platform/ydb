@@ -215,6 +215,11 @@ enum ESimpleCounters {
     
     COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD = 171      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnSsd"}];
     COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD = 172      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnHdd"}];
+
+    COUNTER_RESOURCE_POOL_COUNT = 173                        [(CounterOpts) = {Name: "ResourcePoolCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateResourcePool = 174         [(CounterOpts) = {Name: "InFlightOps/CreateResourcePool"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropResourcePool = 175           [(CounterOpts) = {Name: "InFlightOps/DropResourcePool"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
 }
 
 enum ECumulativeCounters {
@@ -342,6 +347,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateContinuousBackup = 100           [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackup"}];
     COUNTER_FINISHED_OPS_TxAlterContinuousBackup = 101            [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackup"}];
     COUNTER_FINISHED_OPS_TxDropContinuousBackup = 102             [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackup"}];
+
+    COUNTER_FINISHED_OPS_TxCreateResourcePool = 103  [(CounterOpts) = {Name: "FinishedOps/CreateResourcePool"}];
+    COUNTER_FINISHED_OPS_TxDropResourcePool = 104    [(CounterOpts) = {Name: "FinishedOps/DropResourcePool"}];
+    COUNTER_FINISHED_OPS_TxAlterResourcePool = 105   [(CounterOpts) = {Name: "FinishedOps/AlterResourcePool"}];
 }
 
 enum EPercentileCounters {

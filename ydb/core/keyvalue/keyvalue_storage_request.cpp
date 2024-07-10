@@ -164,7 +164,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvPatchResult::TPtr &ev, const TActorContext &ctx) {
         auto groupId = ev->Get()->GroupId;
-        CheckYellow(ev->Get()->StatusFlags, groupId);
+        CheckYellow(ev->Get()->StatusFlags, groupId.GetRawId());
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
@@ -211,8 +211,8 @@ public:
         }
         patch->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
         ++PatchRequestsReplied;
-        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
-        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1;
+        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += ev->Get()->Id.BlobSize();
+        IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId.GetRawId())] += 1;
         UpdateRequest(ctx);
     }
 

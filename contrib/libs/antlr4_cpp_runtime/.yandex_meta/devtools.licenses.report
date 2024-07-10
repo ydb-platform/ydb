@@ -1,0 +1,410 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         077d9b4e5ae285fbec3b8860269fa41e
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/license-BSD-blue.svg)](https://raw.githubusercontent.com/antlr/antlr4/master/LICENSE.txt)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [4:4]
+
+KEEP     BSD-3-Clause         161cbda9544ea07f3f423c41526fe353
+BELONGS ya.make
+FILE_INCLUDE LICENSE.txt found in files: src/ANTLRErrorListener.cpp at line 3, src/ANTLRErrorListener.h at line 3, src/ANTLRErrorStrategy.cpp at line 3, src/ANTLRErrorStrategy.h at line 3, src/ANTLRFileStream.cpp at line 3, src/ANTLRFileStream.h at line 3, src/ANTLRInputStream.cpp at line 3, src/ANTLRInputStream.h at line 3, src/BailErrorStrategy.cpp at line 3, src/BailErrorStrategy.h at line 3, src/BaseErrorListener.cpp at line 3, src/BaseErrorListener.h at line 3, src/BufferedTokenStream.cpp at line 3, src/BufferedTokenStream.h at line 3, src/CharStream.cpp at line 3, src/CharStream.h at line 3, src/CommonToken.cpp at line 3, src/CommonToken.h at line 3, src/CommonTokenFactory.cpp at line 3, src/CommonTokenFactory.h at line 3, src/CommonTokenStream.cpp at line 3, src/CommonTokenStream.h at line 3, src/ConsoleErrorListener.cpp at line 3, src/ConsoleErrorListener.h at line 3, src/DefaultErrorStrategy.cpp at line 3, src/DefaultErrorStrategy.h at line 3, src/DiagnosticErrorListener.cpp at line 3, src/DiagnosticErrorListener.h at line 3, src/Exceptions.cpp at line 3, src/Exceptions.h at line 3, src/FailedPredicateException.cpp at line 3, src/FailedPredicateException.h at line 3, src/InputMismatchException.cpp at line 3, src/InputMismatchException.h at line 3, src/IntStream.cpp at line 3, src/IntStream.h at line 3, src/InterpreterRuleContext.cpp at line 3, src/InterpreterRuleContext.h at line 3, src/Lexer.cpp at line 3, src/Lexer.h at line 3, src/LexerInterpreter.cpp at line 3, src/LexerInterpreter.h at line 3, src/LexerNoViableAltException.cpp at line 3, src/LexerNoViableAltException.h at line 3, src/ListTokenSource.cpp at line 3, src/ListTokenSource.h at line 3, src/NoViableAltException.cpp at line 3, src/NoViableAltException.h at line 3, src/Parser.cpp at line 3, src/Parser.h at line 3, src/ParserInterpreter.cpp at line 3, src/ParserInterpreter.h at line 3, src/ParserRuleContext.cpp at line 3, src/ParserRuleContext.h at line 3, src/ProxyErrorListener.cpp at line 3, src/ProxyErrorListener.h at line 3, src/RecognitionException.cpp at line 3, src/RecognitionException.h at line 3, src/Recognizer.cpp at line 3, src/Recognizer.h at line 3, src/RuleContext.cpp at line 3, src/RuleContext.h at line 3, src/RuleContextWithAltNum.cpp at line 3, src/RuleContextWithAltNum.h at line 3, src/RuntimeMetaData.cpp at line 3, src/RuntimeMetaData.h at line 3, src/Token.cpp at line 3, src/Token.h at line 3, src/TokenFactory.h at line 3, src/TokenSource.cpp at line 3, src/TokenSource.h at line 3, src/TokenStream.cpp at line 3, src/TokenStream.h at line 3, src/TokenStreamRewriter.cpp at line 3, src/TokenStreamRewriter.h at line 3, src/UnbufferedCharStream.cpp at line 3, src/UnbufferedCharStream.h at line 3, src/UnbufferedTokenStream.cpp at line 3, src/UnbufferedTokenStream.h at line 3, src/Vocabulary.cpp at line 3, src/Vocabulary.h at line 3, src/WritableToken.cpp at line 3, src/WritableToken.h at line 3, src/antlr4-common.h at line 3, src/antlr4-runtime.h at line 3, src/atn/ATN.cpp at line 3, src/atn/ATN.h at line 3, src/atn/ATNConfig.cpp at line 3, src/atn/ATNConfig.h at line 3, src/atn/ATNConfigSet.cpp at line 3, src/atn/ATNConfigSet.h at line 3, src/atn/ATNDeserializationOptions.cpp at line 3, src/atn/ATNDeserializationOptions.h at line 3, src/atn/ATNDeserializer.cpp at line 3, src/atn/ATNDeserializer.h at line 3, src/atn/ATNSimulator.cpp at line 3, src/atn/ATNSimulator.h at line 3, src/atn/ATNState.cpp at line 3, src/atn/ATNState.h at line 3, src/atn/ATNStateType.h at line 3, src/atn/ATNType.h at line 3, src/atn/ActionTransition.cpp at line 3, src/atn/ActionTransition.h at line 3, src/atn/AmbiguityInfo.cpp at line 3, src/atn/AmbiguityInfo.h at line 3, src/atn/ArrayPredictionContext.cpp at line 3, src/atn/ArrayPredictionContext.h at line 4, src/atn/AtomTransition.cpp at line 3, src/atn/AtomTransition.h at line 3, src/atn/BasicBlockStartState.h at line 3, src/atn/BasicState.h at line 3, src/atn/BlockEndState.h at line 3, src/atn/BlockStartState.h at line 3, src/atn/ContextSensitivityInfo.cpp at line 3, src/atn/ContextSensitivityInfo.h at line 3, src/atn/DecisionEventInfo.cpp at line 3, src/atn/DecisionEventInfo.h at line 3, src/atn/DecisionInfo.cpp at line 3, src/atn/DecisionInfo.h at line 3, src/atn/DecisionState.cpp at line 3, src/atn/DecisionState.h at line 3, src/atn/EpsilonTransition.cpp at line 3, src/atn/EpsilonTransition.h at line 3, src/atn/ErrorInfo.cpp at line 3, src/atn/ErrorInfo.h at line 3, src/atn/LL1Analyzer.cpp at line 3, src/atn/LL1Analyzer.h at line 3, src/atn/LexerATNConfig.cpp at line 3, src/atn/LexerATNConfig.h at line 3, src/atn/LexerATNSimulator.cpp at line 3, src/atn/LexerATNSimulator.h at line 3, src/atn/LexerAction.h at line 3, src/atn/LexerActionExecutor.cpp at line 3, src/atn/LexerActionExecutor.h at line 3, src/atn/LexerActionType.h at line 3, src/atn/LexerChannelAction.cpp at line 3, src/atn/LexerChannelAction.h at line 3, src/atn/LexerCustomAction.cpp at line 3, src/atn/LexerCustomAction.h at line 3, src/atn/LexerIndexedCustomAction.cpp at line 3, src/atn/LexerIndexedCustomAction.h at line 3, src/atn/LexerModeAction.cpp at line 3, src/atn/LexerModeAction.h at line 3, src/atn/LexerMoreAction.cpp at line 3, src/atn/LexerMoreAction.h at line 3, src/atn/LexerPopModeAction.cpp at line 3, src/atn/LexerPopModeAction.h at line 3, src/atn/LexerPushModeAction.cpp at line 3, src/atn/LexerPushModeAction.h at line 3, src/atn/LexerSkipAction.cpp at line 3, src/atn/LexerSkipAction.h at line 3, src/atn/LexerTypeAction.cpp at line 3, src/atn/LexerTypeAction.h at line 3, src/atn/LookaheadEventInfo.cpp at line 3, src/atn/LookaheadEventInfo.h at line 3, src/atn/LoopEndState.h at line 3, src/atn/NotSetTransition.cpp at line 3, src/atn/NotSetTransition.h at line 3, src/atn/OrderedATNConfigSet.cpp at line 3, src/atn/OrderedATNConfigSet.h at line 3, src/atn/ParseInfo.cpp at line 3, src/atn/ParseInfo.h at line 3, src/atn/ParserATNSimulator.cpp at line 3, src/atn/ParserATNSimulator.h at line 3, src/atn/PlusBlockStartState.h at line 3, src/atn/PlusLoopbackState.h at line 3, src/atn/PrecedencePredicateTransition.cpp at line 3, src/atn/PrecedencePredicateTransition.h at line 3, src/atn/PredicateEvalInfo.cpp at line 3, src/atn/PredicateEvalInfo.h at line 3, src/atn/PredicateTransition.cpp at line 3, src/atn/PredicateTransition.h at line 3, src/atn/PredictionContext.cpp at line 3, src/atn/PredictionContext.h at line 3, src/atn/PredictionContextType.h at line 3, src/atn/PredictionMode.cpp at line 3, src/atn/PredictionMode.h at line 3, src/atn/ProfilingATNSimulator.cpp at line 3, src/atn/ProfilingATNSimulator.h at line 3, src/atn/RangeTransition.cpp at line 3, src/atn/RangeTransition.h at line 3, src/atn/RuleStartState.h at line 3, src/atn/RuleStopState.h at line 3, src/atn/RuleTransition.cpp at line 3, src/atn/RuleTransition.h at line 3, src/atn/SemanticContext.cpp at line 3, src/atn/SemanticContext.h at line 3, src/atn/SemanticContextType.h at line 3, src/atn/SerializedATNView.h at line 3, src/atn/SetTransition.cpp at line 3, src/atn/SetTransition.h at line 3, src/atn/SingletonPredictionContext.cpp at line 3, src/atn/SingletonPredictionContext.h at line 3, src/atn/StarBlockStartState.h at line 3, src/atn/StarLoopEntryState.h at line 3, src/atn/StarLoopbackState.cpp at line 3, src/atn/StarLoopbackState.h at line 3, src/atn/TokensStartState.h at line 3, src/atn/Transition.cpp at line 3, src/atn/Transition.h at line 3, src/atn/TransitionType.h at line 3, src/atn/WildcardTransition.cpp at line 3, src/atn/WildcardTransition.h at line 3, src/dfa/DFA.cpp at line 3, src/dfa/DFA.h at line 3, src/dfa/DFASerializer.cpp at line 3, src/dfa/DFASerializer.h at line 3, src/dfa/DFAState.cpp at line 3, src/dfa/DFAState.h at line 3, src/dfa/LexerDFASerializer.cpp at line 3, src/dfa/LexerDFASerializer.h at line 3, src/misc/InterpreterDataReader.cpp at line 3, src/misc/InterpreterDataReader.h at line 3, src/misc/Interval.cpp at line 3, src/misc/Interval.h at line 3, src/misc/IntervalSet.cpp at line 3, src/misc/IntervalSet.h at line 3, src/misc/MurmurHash.cpp at line 3, src/misc/MurmurHash.h at line 3, src/misc/Predicate.h at line 3, src/support/Any.cpp at line 3, src/support/Any.h at line 3, src/support/Arrays.cpp at line 3, src/support/Arrays.h at line 3, src/support/BitSet.h at line 3, src/support/CPPUtils.cpp at line 3, src/support/CPPUtils.h at line 3, src/support/Casts.h at line 3, src/support/Declarations.h at line 3, src/support/StringUtils.cpp at line 3, src/support/StringUtils.h at line 3, src/support/Unicode.h at line 3, src/support/Utf8.cpp at line 3, src/support/Utf8.h at line 3, src/tree/AbstractParseTreeVisitor.h at line 3, src/tree/ErrorNode.h at line 3, src/tree/ErrorNodeImpl.cpp at line 3, src/tree/ErrorNodeImpl.h at line 3, src/tree/IterativeParseTreeWalker.cpp at line 3, src/tree/ParseTree.cpp at line 3, src/tree/ParseTree.h at line 3, src/tree/ParseTreeListener.cpp at line 3, src/tree/ParseTreeListener.h at line 3, src/tree/ParseTreeProperty.h at line 3, src/tree/ParseTreeType.h at line 3, src/tree/ParseTreeVisitor.cpp at line 3, src/tree/ParseTreeVisitor.h at line 3, src/tree/ParseTreeWalker.cpp at line 3, src/tree/ParseTreeWalker.h at line 3, src/tree/TerminalNode.h at line 3, src/tree/TerminalNodeImpl.cpp at line 3, src/tree/TerminalNodeImpl.h at line 3, src/tree/Trees.cpp at line 3, src/tree/Trees.h at line 3, src/tree/pattern/Chunk.cpp at line 3, src/tree/pattern/Chunk.h at line 3, src/tree/pattern/ParseTreeMatch.cpp at line 3, src/tree/pattern/ParseTreeMatch.h at line 3, src/tree/pattern/ParseTreePattern.cpp at line 3, src/tree/pattern/ParseTreePattern.h at line 3, src/tree/pattern/ParseTreePatternMatcher.cpp at line 3, src/tree/pattern/ParseTreePatternMatcher.h at line 3, src/tree/pattern/RuleTagToken.cpp at line 3, src/tree/pattern/RuleTagToken.h at line 3, src/tree/pattern/TagChunk.cpp at line 3, src/tree/pattern/TagChunk.h at line 3, src/tree/pattern/TextChunk.cpp at line 3, src/tree/pattern/TextChunk.h at line 3, src/tree/pattern/TokenTagToken.cpp at line 3, src/tree/pattern/TokenTagToken.h at line 3, src/tree/xpath/XPath.cpp at line 3, src/tree/xpath/XPath.h at line 3, src/tree/xpath/XPathElement.cpp at line 3, src/tree/xpath/XPathElement.h at line 3, src/tree/xpath/XPathLexerErrorListener.cpp at line 3, src/tree/xpath/XPathLexerErrorListener.h at line 3, src/tree/xpath/XPathRuleAnywhereElement.cpp at line 3, src/tree/xpath/XPathRuleAnywhereElement.h at line 3, src/tree/xpath/XPathRuleElement.cpp at line 3, src/tree/xpath/XPathRuleElement.h at line 3, src/tree/xpath/XPathTokenAnywhereElement.cpp at line 3, src/tree/xpath/XPathTokenAnywhereElement.h at line 3, src/tree/xpath/XPathTokenElement.cpp at line 3, src/tree/xpath/XPathTokenElement.h at line 3, src/tree/xpath/XPathWildcardAnywhereElement.cpp at line 3, src/tree/xpath/XPathWildcardAnywhereElement.h at line 3, src/tree/xpath/XPathWildcardElement.cpp at line 3, src/tree/xpath/XPathWildcardElement.h at line 3
+    License text:
+         * Use of this file is governed by the BSD 3-clause license that
+         * can be found in the LICENSE.txt file in the project root.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 65.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/ANTLRErrorListener.cpp [2:3]
+        src/ANTLRErrorListener.h [2:3]
+        src/ANTLRErrorStrategy.cpp [2:3]
+        src/ANTLRErrorStrategy.h [2:3]
+        src/ANTLRFileStream.cpp [2:3]
+        src/ANTLRFileStream.h [2:3]
+        src/ANTLRInputStream.cpp [2:3]
+        src/ANTLRInputStream.h [2:3]
+        src/BailErrorStrategy.cpp [2:3]
+        src/BailErrorStrategy.h [2:3]
+        src/BaseErrorListener.cpp [2:3]
+        src/BaseErrorListener.h [2:3]
+        src/BufferedTokenStream.cpp [2:3]
+        src/BufferedTokenStream.h [2:3]
+        src/CharStream.cpp [2:3]
+        src/CharStream.h [2:3]
+        src/CommonToken.cpp [2:3]
+        src/CommonToken.h [2:3]
+        src/CommonTokenFactory.cpp [2:3]
+        src/CommonTokenFactory.h [2:3]
+        src/CommonTokenStream.cpp [2:3]
+        src/CommonTokenStream.h [2:3]
+        src/ConsoleErrorListener.cpp [2:3]
+        src/ConsoleErrorListener.h [2:3]
+        src/DefaultErrorStrategy.cpp [2:3]
+        src/DefaultErrorStrategy.h [2:3]
+        src/DiagnosticErrorListener.cpp [2:3]
+        src/DiagnosticErrorListener.h [2:3]
+        src/Exceptions.cpp [2:3]
+        src/Exceptions.h [2:3]
+        src/FailedPredicateException.cpp [2:3]
+        src/FailedPredicateException.h [2:3]
+        src/InputMismatchException.cpp [2:3]
+        src/InputMismatchException.h [2:3]
+        src/IntStream.cpp [2:3]
+        src/IntStream.h [2:3]
+        src/InterpreterRuleContext.cpp [2:3]
+        src/InterpreterRuleContext.h [2:3]
+        src/Lexer.cpp [2:3]
+        src/Lexer.h [2:3]
+        src/LexerInterpreter.cpp [2:3]
+        src/LexerInterpreter.h [2:3]
+        src/LexerNoViableAltException.cpp [2:3]
+        src/LexerNoViableAltException.h [2:3]
+        src/ListTokenSource.cpp [2:3]
+        src/ListTokenSource.h [2:3]
+        src/NoViableAltException.cpp [2:3]
+        src/NoViableAltException.h [2:3]
+        src/Parser.cpp [2:3]
+        src/Parser.h [2:3]
+        src/ParserInterpreter.cpp [2:3]
+        src/ParserInterpreter.h [2:3]
+        src/ParserRuleContext.cpp [2:3]
+        src/ParserRuleContext.h [2:3]
+        src/ProxyErrorListener.cpp [2:3]
+        src/ProxyErrorListener.h [2:3]
+        src/RecognitionException.cpp [2:3]
+        src/RecognitionException.h [2:3]
+        src/Recognizer.cpp [2:3]
+        src/Recognizer.h [2:3]
+        src/RuleContext.cpp [2:3]
+        src/RuleContext.h [2:3]
+        src/RuleContextWithAltNum.cpp [2:3]
+        src/RuleContextWithAltNum.h [2:3]
+        src/RuntimeMetaData.cpp [2:3]
+        src/RuntimeMetaData.h [2:3]
+        src/Token.cpp [2:3]
+        src/Token.h [2:3]
+        src/TokenFactory.h [2:3]
+        src/TokenSource.cpp [2:3]
+        src/TokenSource.h [2:3]
+        src/TokenStream.cpp [2:3]
+        src/TokenStream.h [2:3]
+        src/TokenStreamRewriter.cpp [2:3]
+        src/TokenStreamRewriter.h [2:3]
+        src/UnbufferedCharStream.cpp [2:3]
+        src/UnbufferedCharStream.h [2:3]
+        src/UnbufferedTokenStream.cpp [2:3]
+        src/UnbufferedTokenStream.h [2:3]
+        src/Vocabulary.cpp [2:3]
+        src/Vocabulary.h [2:3]
+        src/WritableToken.cpp [2:3]
+        src/WritableToken.h [2:3]
+        src/antlr4-common.h [2:3]
+        src/antlr4-runtime.h [2:3]
+        src/atn/ATN.cpp [2:3]
+        src/atn/ATN.h [2:3]
+        src/atn/ATNConfig.cpp [2:3]
+        src/atn/ATNConfig.h [2:3]
+        src/atn/ATNConfigSet.cpp [2:3]
+        src/atn/ATNConfigSet.h [2:3]
+        src/atn/ATNDeserializationOptions.cpp [2:3]
+        src/atn/ATNDeserializationOptions.h [2:3]
+        src/atn/ATNDeserializer.cpp [2:3]
+        src/atn/ATNDeserializer.h [2:3]
+        src/atn/ATNSimulator.cpp [2:3]
+        src/atn/ATNSimulator.h [2:3]
+        src/atn/ATNState.cpp [2:3]
+        src/atn/ATNState.h [2:3]
+        src/atn/ATNStateType.h [2:3]
+        src/atn/ATNType.h [2:3]
+        src/atn/ActionTransition.cpp [2:3]
+        src/atn/ActionTransition.h [2:3]
+        src/atn/AmbiguityInfo.cpp [2:3]
+        src/atn/AmbiguityInfo.h [2:3]
+        src/atn/ArrayPredictionContext.cpp [2:3]
+        src/atn/ArrayPredictionContext.h [3:4]
+        src/atn/AtomTransition.cpp [2:3]
+        src/atn/AtomTransition.h [2:3]
+        src/atn/BasicBlockStartState.h [2:3]
+        src/atn/BasicState.h [2:3]
+        src/atn/BlockEndState.h [2:3]
+        src/atn/BlockStartState.h [2:3]
+        src/atn/ContextSensitivityInfo.cpp [2:3]
+        src/atn/ContextSensitivityInfo.h [2:3]
+        src/atn/DecisionEventInfo.cpp [2:3]
+        src/atn/DecisionEventInfo.h [2:3]
+        src/atn/DecisionInfo.cpp [2:3]
+        src/atn/DecisionInfo.h [2:3]
+        src/atn/DecisionState.cpp [2:3]
+        src/atn/DecisionState.h [2:3]
+        src/atn/EpsilonTransition.cpp [2:3]
+        src/atn/EpsilonTransition.h [2:3]
+        src/atn/ErrorInfo.cpp [2:3]
+        src/atn/ErrorInfo.h [2:3]
+        src/atn/LL1Analyzer.cpp [2:3]
+        src/atn/LL1Analyzer.h [2:3]
+        src/atn/LexerATNConfig.cpp [2:3]
+        src/atn/LexerATNConfig.h [2:3]
+        src/atn/LexerATNSimulator.cpp [2:3]
+        src/atn/LexerATNSimulator.h [2:3]
+        src/atn/LexerAction.h [2:3]
+        src/atn/LexerActionExecutor.cpp [2:3]
+        src/atn/LexerActionExecutor.h [2:3]
+        src/atn/LexerActionType.h [2:3]
+        src/atn/LexerChannelAction.cpp [2:3]
+        src/atn/LexerChannelAction.h [2:3]
+        src/atn/LexerCustomAction.cpp [2:3]
+        src/atn/LexerCustomAction.h [2:3]
+        src/atn/LexerIndexedCustomAction.cpp [2:3]
+        src/atn/LexerIndexedCustomAction.h [2:3]
+        src/atn/LexerModeAction.cpp [2:3]
+        src/atn/LexerModeAction.h [2:3]
+        src/atn/LexerMoreAction.cpp [2:3]
+        src/atn/LexerMoreAction.h [2:3]
+        src/atn/LexerPopModeAction.cpp [2:3]
+        src/atn/LexerPopModeAction.h [2:3]
+        src/atn/LexerPushModeAction.cpp [2:3]
+        src/atn/LexerPushModeAction.h [2:3]
+        src/atn/LexerSkipAction.cpp [2:3]
+        src/atn/LexerSkipAction.h [2:3]
+        src/atn/LexerTypeAction.cpp [2:3]
+        src/atn/LexerTypeAction.h [2:3]
+        src/atn/LookaheadEventInfo.cpp [2:3]
+        src/atn/LookaheadEventInfo.h [2:3]
+        src/atn/LoopEndState.h [2:3]
+        src/atn/NotSetTransition.cpp [2:3]
+        src/atn/NotSetTransition.h [2:3]
+        src/atn/OrderedATNConfigSet.cpp [2:3]
+        src/atn/OrderedATNConfigSet.h [2:3]
+        src/atn/ParseInfo.cpp [2:3]
+        src/atn/ParseInfo.h [2:3]
+        src/atn/ParserATNSimulator.cpp [2:3]
+        src/atn/ParserATNSimulator.h [2:3]
+        src/atn/PlusBlockStartState.h [2:3]
+        src/atn/PlusLoopbackState.h [2:3]
+        src/atn/PrecedencePredicateTransition.cpp [2:3]
+        src/atn/PrecedencePredicateTransition.h [2:3]
+        src/atn/PredicateEvalInfo.cpp [2:3]
+        src/atn/PredicateEvalInfo.h [2:3]
+        src/atn/PredicateTransition.cpp [2:3]
+        src/atn/PredicateTransition.h [2:3]
+        src/atn/PredictionContext.cpp [2:3]
+        src/atn/PredictionContext.h [2:3]
+        src/atn/PredictionContextType.h [2:3]
+        src/atn/PredictionMode.cpp [2:3]
+        src/atn/PredictionMode.h [2:3]
+        src/atn/ProfilingATNSimulator.cpp [2:3]
+        src/atn/ProfilingATNSimulator.h [2:3]
+        src/atn/RangeTransition.cpp [2:3]
+        src/atn/RangeTransition.h [2:3]
+        src/atn/RuleStartState.h [2:3]
+        src/atn/RuleStopState.h [2:3]
+        src/atn/RuleTransition.cpp [2:3]
+        src/atn/RuleTransition.h [2:3]
+        src/atn/SemanticContext.cpp [2:3]
+        src/atn/SemanticContext.h [2:3]
+        src/atn/SemanticContextType.h [2:3]
+        src/atn/SerializedATNView.h [2:3]
+        src/atn/SetTransition.cpp [2:3]
+        src/atn/SetTransition.h [2:3]
+        src/atn/SingletonPredictionContext.cpp [2:3]
+        src/atn/SingletonPredictionContext.h [2:3]
+        src/atn/StarBlockStartState.h [2:3]
+        src/atn/StarLoopEntryState.h [2:3]
+        src/atn/StarLoopbackState.cpp [2:3]
+        src/atn/StarLoopbackState.h [2:3]
+        src/atn/TokensStartState.h [2:3]
+        src/atn/Transition.cpp [2:3]
+        src/atn/Transition.h [2:3]
+        src/atn/TransitionType.h [2:3]
+        src/atn/WildcardTransition.cpp [2:3]
+        src/atn/WildcardTransition.h [2:3]
+        src/dfa/DFA.cpp [2:3]
+        src/dfa/DFA.h [2:3]
+        src/dfa/DFASerializer.cpp [2:3]
+        src/dfa/DFASerializer.h [2:3]
+        src/dfa/DFAState.cpp [2:3]
+        src/dfa/DFAState.h [2:3]
+        src/dfa/LexerDFASerializer.cpp [2:3]
+        src/dfa/LexerDFASerializer.h [2:3]
+        src/misc/InterpreterDataReader.cpp [2:3]
+        src/misc/InterpreterDataReader.h [2:3]
+        src/misc/Interval.cpp [2:3]
+        src/misc/Interval.h [2:3]
+        src/misc/IntervalSet.cpp [2:3]
+        src/misc/IntervalSet.h [2:3]
+        src/misc/MurmurHash.cpp [2:3]
+        src/misc/MurmurHash.h [2:3]
+        src/misc/Predicate.h [2:3]
+        src/support/Any.cpp [2:3]
+        src/support/Any.h [2:3]
+        src/support/Arrays.cpp [2:3]
+        src/support/Arrays.h [2:3]
+        src/support/BitSet.h [2:3]
+        src/support/CPPUtils.cpp [2:3]
+        src/support/CPPUtils.h [2:3]
+        src/support/Casts.h [2:3]
+        src/support/Declarations.h [2:3]
+        src/support/StringUtils.cpp [2:3]
+        src/support/StringUtils.h [2:3]
+        src/support/Unicode.h [2:3]
+        src/support/Utf8.cpp [2:3]
+        src/support/Utf8.h [2:3]
+        src/tree/AbstractParseTreeVisitor.h [2:3]
+        src/tree/ErrorNode.h [2:3]
+        src/tree/ErrorNodeImpl.cpp [2:3]
+        src/tree/ErrorNodeImpl.h [2:3]
+        src/tree/IterativeParseTreeWalker.cpp [2:3]
+        src/tree/ParseTree.cpp [2:3]
+        src/tree/ParseTree.h [2:3]
+        src/tree/ParseTreeListener.cpp [2:3]
+        src/tree/ParseTreeListener.h [2:3]
+        src/tree/ParseTreeProperty.h [2:3]
+        src/tree/ParseTreeType.h [2:3]
+        src/tree/ParseTreeVisitor.cpp [2:3]
+        src/tree/ParseTreeVisitor.h [2:3]
+        src/tree/ParseTreeWalker.cpp [2:3]
+        src/tree/ParseTreeWalker.h [2:3]
+        src/tree/TerminalNode.h [2:3]
+        src/tree/TerminalNodeImpl.cpp [2:3]
+        src/tree/TerminalNodeImpl.h [2:3]
+        src/tree/Trees.cpp [2:3]
+        src/tree/Trees.h [2:3]
+        src/tree/pattern/Chunk.cpp [2:3]
+        src/tree/pattern/Chunk.h [2:3]
+        src/tree/pattern/ParseTreeMatch.cpp [2:3]
+        src/tree/pattern/ParseTreeMatch.h [2:3]
+        src/tree/pattern/ParseTreePattern.cpp [2:3]
+        src/tree/pattern/ParseTreePattern.h [2:3]
+        src/tree/pattern/ParseTreePatternMatcher.cpp [2:3]
+        src/tree/pattern/ParseTreePatternMatcher.h [2:3]
+        src/tree/pattern/RuleTagToken.cpp [2:3]
+        src/tree/pattern/RuleTagToken.h [2:3]
+        src/tree/pattern/TagChunk.cpp [2:3]
+        src/tree/pattern/TagChunk.h [2:3]
+        src/tree/pattern/TextChunk.cpp [2:3]
+        src/tree/pattern/TextChunk.h [2:3]
+        src/tree/pattern/TokenTagToken.cpp [2:3]
+        src/tree/pattern/TokenTagToken.h [2:3]
+        src/tree/xpath/XPath.cpp [2:3]
+        src/tree/xpath/XPath.h [2:3]
+        src/tree/xpath/XPathElement.cpp [2:3]
+        src/tree/xpath/XPathElement.h [2:3]
+        src/tree/xpath/XPathLexerErrorListener.cpp [2:3]
+        src/tree/xpath/XPathLexerErrorListener.h [2:3]
+        src/tree/xpath/XPathRuleAnywhereElement.cpp [2:3]
+        src/tree/xpath/XPathRuleAnywhereElement.h [2:3]
+        src/tree/xpath/XPathRuleElement.cpp [2:3]
+        src/tree/xpath/XPathRuleElement.h [2:3]
+        src/tree/xpath/XPathTokenAnywhereElement.cpp [2:3]
+        src/tree/xpath/XPathTokenAnywhereElement.h [2:3]
+        src/tree/xpath/XPathTokenElement.cpp [2:3]
+        src/tree/xpath/XPathTokenElement.h [2:3]
+        src/tree/xpath/XPathWildcardAnywhereElement.cpp [2:3]
+        src/tree/xpath/XPathWildcardAnywhereElement.h [2:3]
+        src/tree/xpath/XPathWildcardElement.cpp [2:3]
+        src/tree/xpath/XPathWildcardElement.h [2:3]
+
+KEEP     BSD-3-Clause         214ed1e625b23c4c4e6d272eeb55b035
+BELONGS ya.make
+    License text:
+        // obligations required by the BSD 3-clause license that governs this file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/support/Utf8.cpp [16:16]
+
+KEEP     BSD-3-Clause         6d96a20c86c6ae929c48a02c32d9e9cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/tree/IterativeParseTreeWalker.h [7:28]
+
+KEEP     BSD-3-Clause         ea24a35dd8063a467fd9230e248036d4
+BELONGS ya.make
+    License text:
+         * [The "BSD license"]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/tree/IterativeParseTreeWalker.h [2:2]
+
+KEEP     BSD-3-Clause         efbc6616f9881a16cddbd0b5b6daf42d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/FlatHashMap.h [3:24]
+        src/FlatHashSet.h [3:24]
+        src/Version.h [3:24]
+        src/atn/ParserATNSimulatorOptions.h [3:24]
+        src/atn/PredictionContextCache.cpp [3:24]
+        src/atn/PredictionContextCache.h [3:24]
+        src/atn/PredictionContextMergeCache.cpp [3:24]
+        src/atn/PredictionContextMergeCache.h [3:24]
+        src/atn/PredictionContextMergeCacheOptions.h [3:24]
+        src/internal/Synchronization.cpp [3:24]
+        src/internal/Synchronization.h [3:24]
+
+KEEP     BSD-3-Clause         faa7e07f6be9a0fefe2c84867370314b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [3:28]

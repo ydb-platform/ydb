@@ -5,6 +5,8 @@
 namespace NYT::NChaosClient {
 namespace {
 
+using namespace NTabletClient;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReplicationCardFetchOptionsTest
@@ -89,6 +91,104 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeHistory = true,
                 .IncludeReplicatedTableOptions = false,
             },
+            false)
+));
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationCardIsReplicaReallySyncTest
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        ETableReplicaMode,
+        ETableReplicaState,
+        const std::vector<TReplicaHistoryItem>,
+        bool>>
+{ };
+
+TEST_P(TReplicationCardIsReplicaReallySyncTest, IsReplicaReallySync)
+{
+    const auto& params = GetParam();
+    auto mode = std::get<0>(params);
+    auto state = std::get<1>(params);
+    const auto& history = std::get<2>(params);
+    auto expected = std::get<3>(params);
+
+    auto actual = IsReplicaReallySync(mode, state, history);
+
+    EXPECT_EQ(actual, expected)
+        << "progress: " << ToString(mode) << std::endl
+        << "update: " << ToString(state) << std::endl
+        << "history: " << ToString(history) << std::endl
+        << "actual: " << actual << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationCardIsReplicaReallySyncTest,
+    TReplicationCardIsReplicaReallySyncTest,
+    ::testing::Values(
+        std::tuple(
+            ETableReplicaMode::Sync,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>(),
+            true),
+        std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>{
+                TReplicaHistoryItem{
+                    .Era = 0,
+                    .Timestamp = 0,
+                    .Mode = ETableReplicaMode::Sync,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+            true),
+        std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>{
+                TReplicaHistoryItem{
+                    .Era = 0,
+                    .Timestamp = 0,
+                    .Mode = ETableReplicaMode::Sync,
+                    .State = ETableReplicaState::Disabled,
+                },
+                TReplicaHistoryItem{
+                    .Era = 1,
+                    .Timestamp = 1,
+                    .Mode = ETableReplicaMode::Sync,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+            true),
+        std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>{
+                TReplicaHistoryItem{
+                    .Era = 0,
+                    .Timestamp = 0,
+                    .Mode = ETableReplicaMode::Async,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+            false),
+        std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>{
+                TReplicaHistoryItem{
+                    .Era = 0,
+                    .Timestamp = 0,
+                    .Mode = ETableReplicaMode::Sync,
+                    .State = ETableReplicaState::Disabled,
+                }
+            },
+            false),
+        std::tuple(
+            ETableReplicaMode::Async,
+            ETableReplicaState::Enabled,
+            std::vector<TReplicaHistoryItem>(),
             false)
 ));
 

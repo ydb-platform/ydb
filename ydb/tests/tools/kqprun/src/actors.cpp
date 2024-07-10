@@ -76,7 +76,7 @@ public:
 
         Send(ev->Sender, response.Release());
     }
-    
+
     void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         Promise_.SetValue(TQueryResponse{.Response = std::move(ev), .ResultSets = std::move(ResultSets_)});
         PassAway();

@@ -9,6 +9,17 @@
 
 namespace NKikimr::NCms {
 
+namespace {
+
+template<typename T>
+bool ParseFromStringSafe(const TString& input, T* output) {
+    google::protobuf::TextFormat::Parser parser;
+    parser.AllowUnknownField(true);
+    return parser.ParseFromString(input, output);
+}
+
+} // anonymous namespace
+
 class TCms::TTxLoadState : public TTransactionBase<TCms> {
 public:
     TTxLoadState(TCms *self)
@@ -91,7 +102,7 @@ public:
             request.Owner = owner;
             request.Order = order;
             request.Priority = priority;
-            google::protobuf::TextFormat::ParseFromString(requestStr, &request.Request);
+            ParseFromStringSafe(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
                       id.data(), owner.data(), requestStr.data());
@@ -123,12 +134,14 @@ public:
             TString taskId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::TaskID>();
             TString requestId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::RequestID>();
             TString owner = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::Owner>();
+            bool hasSingleCompositeActionGroup = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>();
 
             state->MaintenanceRequests.emplace(requestId, taskId);
             state->MaintenanceTasks.emplace(taskId, TTaskInfo{
                 .TaskId = taskId,
                 .RequestId = requestId,
                 .Owner = owner,
+                .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup
             });
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",
@@ -149,7 +162,7 @@ public:
             permission.PermissionId = id;
             permission.RequestId = requestId;
             permission.Owner = owner;
-            google::protobuf::TextFormat::ParseFromString(actionStr, &permission.Action);
+            ParseFromStringSafe(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
@@ -185,7 +198,7 @@ public:
             TNotificationInfo notification;
             notification.NotificationId = id;
             notification.Owner = owner;
-            google::protobuf::TextFormat::ParseFromString(notificationStr, &notification.Notification);
+            ParseFromStringSafe(notificationStr, &notification.Notification);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
                       id.data(), owner.data(), notificationStr.data());

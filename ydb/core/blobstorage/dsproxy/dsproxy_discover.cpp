@@ -299,7 +299,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", success);
+                TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", success);
         SendResponseAndDie(std::move(result));
     }
 
@@ -884,8 +884,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_DISCOVER, true, {}, now, storagePoolCounters, ev->RestartCounter,
-                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover"),
-                std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.Discover", ev, std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , ReadBody(ev->ReadBody)

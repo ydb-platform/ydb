@@ -69,6 +69,12 @@ $to_update = (
 UPDATE table1 ON SELECT * FROM $to_update
 ```
 
+{% note info %}
+
+Currently, data updating is possible only using a synchronous secondary index. This limitation exists because data modification is permitted only in [Serializable](../concepts/transactions.md#modes) transactions, and accessing asynchronous indices would violate the guarantees of this transaction mode.
+
+{% endnote %}
+
 ## Deleting data using a secondary index {#delete}
 
 To delete data by secondary index, use `SELECT` with a predicate by secondary index and then call `DELETE ON`.
@@ -81,6 +87,12 @@ SELECT series_id
 FROM series VIEW views_index
 WHERE views = 0;
 ```
+
+{% note info %}
+
+Currently, deleting data is possible only using a synchronous secondary index. This is because data removal is permitted only in [Serializable](../concepts/transactions.md#modes) transactions, and accessing asynchronous indices would violate the guarantees of this transaction mode.
+
+{% endnote %}
 
 ## Atomic replacement of a secondary index {#atomic-index-replacement}
 

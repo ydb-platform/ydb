@@ -1,3 +1,5 @@
+# TODO: not used, delete it
+
 name: Build (ya make)
 description: Build targets
 inputs:

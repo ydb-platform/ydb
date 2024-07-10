@@ -66,7 +66,6 @@ public:
                 hFunc(TEvSinkDataRequest, OnSinkDataRequest);
                 hFunc(TEvLoadTaskRunnerFromState, OnLoadTaskRunnerFromState);
                 hFunc(TEvStatistics, OnStatisticsRequest);
-                hFunc(TEvError, OnError);
                 default: {
                     Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
                 }
@@ -460,10 +459,6 @@ private:
             event.Release(),
             /*flags=*/0,
             ev->Cookie);
-    }
-
-    void OnError(TEvError::TPtr& ev) {
-        throw yexception() << ev->ToString();
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException& e) {

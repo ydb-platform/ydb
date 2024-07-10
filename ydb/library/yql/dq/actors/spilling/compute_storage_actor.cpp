@@ -40,11 +40,10 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString&)> errorCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback),
-        ErrorCallback_(errorCallback)
+        WakeupCallback_(wakeupCallback)
     {
     }
 
@@ -62,19 +61,20 @@ public:
     }
 
 protected:
-    void FailWithError(const TString& error) {
-        if (!ErrorCallback_) {
-            Y_ABORT("Error: %s", error.c_str());
-        }
 
-        ErrorCallback_(error);
+    void FailWithError(const TString& error) {
+        LOG_E("Error: " << error);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
+
+        // Currently there is no better way to handle the error.
+        // Since the message was not sent from the actor system, there is no one to send the error message to.
+        Y_ABORT("Error: %s", error.c_str());
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        if (!Send(recipient, ev, flags)) {
-            FailWithError("Failed to send event");
-        }
+        bool isSent = Send(recipient, ev, flags);
+        Y_ABORT_UNLESS(isSent, "Event was not sent");
     }
 
 private:
@@ -95,6 +95,7 @@ private:
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr&) {
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
 
@@ -223,12 +224,7 @@ private:
         StoredBlobs_.erase(blobId);
     }
 
-    void PassAway() override {
-        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
-        TBase::PassAway();
-    }
-
-protected:
+    protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
@@ -249,15 +245,14 @@ protected:
     bool IsInitialized_ = false;
 
     std::function<void()> WakeupCallback_;
-    std::function<void(const TString&)> ErrorCallback_;
 
     TSet<TKey> StoredBlobs_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString&)> errorCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
 }
 
 } // namespace NYql::NDq 

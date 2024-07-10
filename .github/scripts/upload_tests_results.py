@@ -248,8 +248,7 @@ def main():
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        #return 0
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]="/home/kirrysin/fork/ydb/.github/scripts/my-robot-key.json"
+        return 0
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally

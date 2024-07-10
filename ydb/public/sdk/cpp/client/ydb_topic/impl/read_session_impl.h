@@ -209,6 +209,8 @@ public:
     void PlanDecompressionTasks(double averageCompressionRatio,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
 
+    void OnDestroyReadSession();
+
     bool IsReady() const {
         return SourceDataNotProcessed == 0;
     }
@@ -289,12 +291,6 @@ private:
 
     struct TDecompressionTask {
         TDecompressionTask(TDataDecompressionInfo::TPtr parent, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, TReadyMessageThreshold* ready);
-        TDecompressionTask(const TDecompressionTask&) = default;
-        TDecompressionTask(TDecompressionTask&&) = default;
-        ~TDecompressionTask();
-
-        TDecompressionTask& operator=(const TDecompressionTask&) = default;
-        TDecompressionTask& operator=(TDecompressionTask&&) = default;
 
         // Decompress and notify about memory consumption changes.
         void operator()();
@@ -311,6 +307,8 @@ private:
         i64 GetEstimatedDecompressedSize() const {
             return EstimatedDecompressedSize;
         }
+
+        void ClearParent();
 
     private:
         TDataDecompressionInfo::TPtr Parent;
@@ -1297,12 +1295,8 @@ private:
             , PartitionStream(std::move(partitionStream))
         {
         }
-        TDecompressionQueueItem(const TDecompressionQueueItem&) = default;
-        TDecompressionQueueItem(TDecompressionQueueItem&&) = default;
-        ~TDecompressionQueueItem();
 
-        TDecompressionQueueItem& operator=(const TDecompressionQueueItem&) = default;
-        TDecompressionQueueItem& operator=(TDecompressionQueueItem&&) = default;
+        void OnDestroyReadSession();
 
         TDataDecompressionInfoPtr<UseMigrationProtocol> BatchInfo;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;

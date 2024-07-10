@@ -44,7 +44,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 #include <thread>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -3377,6 +3376,54 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         DumpCounters("End");
     }
 
+    Y_UNIT_TEST(NoDecompressionMemoryLeaks) {
+
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        settings.MaxMemoryUsageBytes(5_MB);
+        settings.Decompress(true);
+
+        auto reader = CreateReader(*driver, settings);
+
+        //
+        // there should be 1 TCreatePartitionStreamEvent events in the queue
+        //
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << ">>>> message: " << NYdb::NPersQueue::DebugString(*msg) << Endl;
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < 10; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+
+            std::string message(1_MB - 1_KB, 'x');
+
+            bool res = writer->Write(message, 1);
+            UNIT_ASSERT(res);
+
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        decompressor->StartFuncs({0, 1, 2});
+        Sleep(TDuration::Seconds(1));
+    }
+
     enum WhenTheTopicIsDeletedMode {
         AFTER_WRITES,
         AFTER_START_TASKS,
@@ -3384,12 +3431,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
     };
 
     void WhenTheTopicIsDeletedImpl(WhenTheTopicIsDeletedMode mode, i64 maxMemoryUsageSize, bool decompress, i64 decompressedSize, i64 compressedSize) {
-        DBGTRACE("WhenTheTopicIsDeletedImpl");
-        DBGTRACE_LOG("maxMemoryUsageSize=" << maxMemoryUsageSize <<
-                     ", decompress=" << decompress <<
-                     ", decompressedSize=" << decompressedSize <<
-                     ", compressedSize=" << compressedSize);
-
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
@@ -3417,7 +3458,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
 
-        DBGTRACE_LOG("checkpoint");
         //
         // there should be 1 TCreatePartitionStreamEvent events in the queue
         //
@@ -3433,7 +3473,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             ev->Confirm();
         }
 
-        DBGTRACE_LOG("checkpoint");
         for (ui32 i = 0; i < 2; ++i) {
             std::optional<TString> codec;
             if (!decompress) {
@@ -3451,19 +3490,15 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             UNIT_ASSERT(res);
         }
 
-        DBGTRACE_LOG("checkpoint");
         Sleep(TDuration::Seconds(1));
 
-        DBGTRACE_LOG("checkpoint");
         DumpCounters("write");
 
-        DBGTRACE_LOG("checkpoint");
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
 
-        DBGTRACE_LOG("checkpoint");
         if (mode == AFTER_WRITES) {
             Cerr << ">>>> Delete topic" << Endl;
             server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
@@ -3484,10 +3519,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             return;
         }
 
-        DBGTRACE_LOG("checkpoint");
         ui32 dataEv = 0;
 
-        DBGTRACE_LOG("checkpoint");
         auto doRead = [&]() {
             auto msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
@@ -3499,43 +3532,32 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             ++dataEv;
         };
 
-        DBGTRACE_LOG("checkpoint");
         decompressor->StartFuncs({0});
-        DBGTRACE_LOG("checkpoint");
         Sleep(TDuration::Seconds(1));
 
-        DBGTRACE_LOG("checkpoint");
         DumpCounters("task #0");
 
-        DBGTRACE_LOG("checkpoint");
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize + decompressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), decompressedSize);
 
-        DBGTRACE_LOG("checkpoint");
         if (mode == AFTER_START_TASKS) {
-            DBGTRACE_LOG("checkpoint");
             Cerr << ">>>> Delete topic" << Endl;
             server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
             Cerr << ">>>> Topic deleted" << Endl;
 
-            DBGTRACE_LOG("checkpoint");
             auto msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
             UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*msg));
 
-            DBGTRACE_LOG("checkpoint");
             msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
             UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg));
 
-            DBGTRACE_LOG("checkpoint");
             decompressor->RunAllTasks();
-            DBGTRACE_LOG("checkpoint");
             Sleep(TDuration::Seconds(1));
 
-            DBGTRACE_LOG("checkpoint");
             UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
@@ -3544,24 +3566,18 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             return;
         }
 
-        DBGTRACE_LOG("checkpoint");
         doRead();
-        DBGTRACE_LOG("checkpoint");
         Sleep(TDuration::Seconds(1));
 
-        DBGTRACE_LOG("checkpoint");
         UNIT_ASSERT_VALUES_EQUAL(dataEv, 1);
 
-        DBGTRACE_LOG("checkpoint");
         DumpCounters("read");
 
-        DBGTRACE_LOG("checkpoint");
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
 
-        DBGTRACE_LOG("checkpoint");
         if (mode == AFTER_DOREAD) {
             Cerr << ">>>> Delete topic" << Endl;
             server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
@@ -3582,7 +3598,6 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             return;
         }
 
-        DBGTRACE_LOG("checkpoint");
         UNIT_FAIL("incorrect mode");
     }
 

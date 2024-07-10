@@ -33,7 +33,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic/common
     ydb/public/sdk/cpp/client/ydb_topic/include
     ydb/public/sdk/cpp/client/ydb_proto
-    ydb/library/dbgtrace
 )
 
 END()

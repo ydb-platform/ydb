@@ -51,7 +51,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/services/persqueue_v1
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

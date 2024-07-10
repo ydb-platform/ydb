@@ -1195,7 +1195,8 @@ namespace NActors {
                     isEmpty = true;
                     auto mboxIt = startWithMboxIt;
                     TDeque<TEventMailboxId> suspectedBoxes;
-                    while (true) {
+                    bool customStop = false;
+                    while (!customStop) {
                         auto& mbox = *mboxIt;
                         bool isIgnored = true;
                         if (!mbox.second->IsEmpty()) {
@@ -1264,6 +1265,9 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                            if (options.CustomFinalCondition && options.CustomFinalCondition()) {
+                                                customStop = true;
+                                            }
                                             break;
                                         case EEventAction::DROP:
                                             // do nothing
@@ -1304,6 +1308,10 @@ namespace NActors {
                                 it->second->IsActive(TInstant::MicroSeconds(CurrentTimestamp))) {
                             currentMailboxes.erase(it);
                         }
+                    }
+
+                    if (customStop) {
+                        return true;
                     }
                 }
             }

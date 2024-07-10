@@ -56,7 +56,6 @@ namespace {
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
-        FillBackupDescription(scheme, tableDesc);
 
         TString result;
         UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(scheme, &result));

@@ -42,7 +42,7 @@ namespace {
         : public TUnaryKernelExec<T##udfName##KernelExec>                              \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             const TString input(arg1.AsStringRef());                                   \
             const auto& result = function(input);                                      \
             sink(TBlockItem(result));                                                  \
@@ -69,7 +69,7 @@ namespace {
         : public TUnaryKernelExec<T##udfName##KernelExec>                              \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             if (!arg1) {                                                               \
                 return sink(TBlockItem());                                             \
             }                                                                          \
@@ -126,7 +126,7 @@ namespace {
         : public TUnaryKernelExec<T##udfName##KernelExec>                              \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             TString input(arg1.AsStringRef());                                         \
             if (input.function()) {                                                    \
                 sink(TBlockItem(input));                                               \
@@ -185,7 +185,7 @@ namespace {
         : public TUnaryKernelExec<T##function##KernelExec>                             \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             if (arg1) {                                                                \
                 const TStringBuf input(arg1.AsStringRef());                            \
                 bool result = true;                                                    \
@@ -231,7 +231,7 @@ namespace {
         : public TGenericKernelExec<T##function##KernelExec, 3>                                      \
     {                                                                                                \
         template <typename TSink>                                                                    \
-        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {              \
+        static void Process(const IValueBuilder*, TBlockItem args, const TSink& sink) {              \
             TStringStream result;                                                                    \
             const TStringBuf input(args.GetElement(0).AsStringRef());                                \
             char paddingSymbol = ' ';                                                                \
@@ -264,7 +264,7 @@ namespace {
         : public TUnaryKernelExec<T##function##KernelExec>                             \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             TStringStream result;                                                      \
             result << function(arg1.Get<argType>());                                   \
             sink(TBlockItem(TStringRef(result.Data(), result.Size())));                \
@@ -285,7 +285,7 @@ namespace {
         : public TUnaryKernelExec<T##function##KernelExec>                             \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             TStringStream result;                                                      \
             const TStringBuf input(arg1.AsStringRef());                                \
             result << function(input);                                                 \
@@ -307,7 +307,7 @@ namespace {
         : public TUnaryKernelExec<T##udfName##KernelExec>                              \
     {                                                                                  \
         template <typename TSink>                                                      \
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {\
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {\
             TStringStream result;                                                      \
             result << HumanReadableSize(arg1.Get<ui64>(), hrSize);                     \
             sink(TBlockItem(TStringRef(result.Data(), result.Size())));                \
@@ -414,7 +414,7 @@ namespace {
         : public TBinaryKernelExec<TCollapseTextKernelExec>
     {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             TString input(arg1.AsStringRef());
             ui64 maxLength = arg2.Get<ui64>();
             CollapseText(input, maxLength);
@@ -437,7 +437,7 @@ namespace {
 
     struct TContainsKernelExec : public TBinaryKernelExec<TContainsKernelExec> {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             if (!arg1)
                 return sink(TBlockItem(false));
 
@@ -461,7 +461,7 @@ namespace {
         : public TGenericKernelExec<TReplaceAllKernelExec, 3>
     {
         template <typename TSink>
-        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem args, const TSink& sink) {
             TString result(args.GetElement(0).AsStringRef());
             const TStringBuf what(args.GetElement(1).AsStringRef());
             const TStringBuf with(args.GetElement(2).AsStringRef());
@@ -490,7 +490,7 @@ namespace {
         : public TGenericKernelExec<TReplaceFirstKernelExec, 3>
     {
         template <typename TSink>
-        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem args, const TSink& sink) {
             std::string result(args.GetElement(0).AsStringRef());
             const std::string_view what(args.GetElement(1).AsStringRef());
             const std::string_view with(args.GetElement(2).AsStringRef());
@@ -519,7 +519,7 @@ namespace {
         : public TGenericKernelExec<TReplaceLastKernelExec, 3>
     {
         template <typename TSink>
-        static void Process(TBlockItem args, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem args, const TSink& sink) {
             std::string result(args.GetElement(0).AsStringRef());
             const std::string_view what(args.GetElement(1).AsStringRef());
             const std::string_view with(args.GetElement(2).AsStringRef());
@@ -558,7 +558,7 @@ namespace {
         : public TBinaryKernelExec<TRemoveAllKernelExec>
     {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
@@ -602,7 +602,7 @@ namespace {
         : public TBinaryKernelExec<TRemoveFirstKernelExec>
     {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
@@ -642,7 +642,7 @@ namespace {
         : public TBinaryKernelExec<TRemoveLastKernelExec>
     {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
@@ -789,7 +789,7 @@ namespace {
 
     struct TLevensteinDistanceKernelExec : public TBinaryKernelExec<TLevensteinDistanceKernelExec> {
     template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             const std::string_view left(arg1.AsStringRef());
             const std::string_view right(arg2.AsStringRef());
             const ui64 result = NLevenshtein::Distance(left, right);
@@ -811,7 +811,7 @@ namespace {
         : public TUnaryKernelExec<THumanReadableDurationKernelExec>
     {
         template <typename TSink>
-        static void Process(TBlockItem arg1, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {
             TStringStream result;
             result << HumanReadable(TDuration::MicroSeconds(arg1.Get<ui64>()));
             sink(TBlockItem(TStringRef(result.Data(), result.Size())));
@@ -829,7 +829,7 @@ namespace {
 
     struct TPrecKernelExec : public TBinaryKernelExec<TPrecKernelExec> {
         template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const IValueBuilder&, const TSink& sink) {
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             TStringStream result;
             result << Prec(arg1.Get<double>(), arg2.Get<ui64>());
             sink(TBlockItem(TStringRef(result.Data(), result.Size())));

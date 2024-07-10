@@ -530,7 +530,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
         auto parentIdColumn = implTableDesc.AddColumns();
         parentIdColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint8);
+        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
         parentIdColumn->SetId(0);
     }
 
@@ -557,7 +557,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
         auto parentIdColumn = implTableDesc.AddColumns();
         parentIdColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint8);
+        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
         parentIdColumn->SetId(0);
     }
 

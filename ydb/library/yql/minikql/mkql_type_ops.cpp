@@ -848,10 +848,13 @@ public:
                 });
         dayOfYear = 1 + date;
         dayOfWeek = 1 + (3 + solarDate) % 7;
-        weekOfYear = 1 + (date - cache->WeekOffset) / 7;
-            // 1 + date / 7 + (((date % 7) >= i32(dayOfWeek)) ? 1 : 0);
-        weekOfYearIso8601 = DaysCache_[solarDate].WeekOfYearIso8601;
-
+        weekOfYear = (date + cache->WeekOffset) / 7;
+        weekOfYearIso8601 = (date + cache->Iso8601WeekOffset) / 7;
+        if (weekOfYearIso8601 == 0) {
+            weekOfYearIso8601 = cache->FirstIsoWeek53 ? 53 : 52;
+        } else if (weekOfYearIso8601 == 53 && cache->LastDayOfWeek < 3) {
+                weekOfYearIso8601 = 1;
+        }
     }
 
     bool GetDateOffset(ui32 year, ui32 month, ui32 day, ui16& value) const {
@@ -983,6 +986,8 @@ private:
         ui32 CumulatveDays : 18; // max SOLAR_CYCLE_DAYS
         ui32 WeekOffset: 4;
         ui32 Iso8601WeekOffset: 4;
+        ui32 LastDayOfWeek: 3;
+        ui32 FirstIsoWeek53: 1;
     };
 
     std::array<ui16, NUdf::MAX_YEAR - NUdf::MIN_YEAR + 1> YearsOffsets_; // start of linear date for each year
@@ -1028,15 +1033,18 @@ private:
         ui32 weekOfYearIso8601 = 1;
         for (auto yearIdx = 0u; yearIdx < Years_.size(); ++yearIdx) {
             Years_[yearIdx] = date;
-            YearsCache_[yearIdx] = TYearCache(date, 7 - dayOfWeek, (7 - dayOfWeek) % 7);
             i32 year = yearIdx + NUdf::MIN_YEAR;
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
-if (yearIdx <= 5) {
+            auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
+            YearsCache_[yearIdx] = TYearCache(date, 7 + dayOfWeek, (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7, lastDayOfWeek, weekOfYearIso8601 == 53);
+if (yearIdx <= 15) {
     Cerr
         << " year " << year
         << " days " << YearsCache_[yearIdx].CumulatveDays
         << " weekOffset " << YearsCache_[yearIdx].WeekOffset
         << " isoWeekOffset " << YearsCache_[yearIdx].Iso8601WeekOffset
+        << " lastDayOfWeek " << YearsCache_[yearIdx].LastDayOfWeek
+        << " firstIsoWeek " << YearsCache_[yearIdx].FirstIsoWeek53
         << Endl;
 }
             ui32 weekOfYear = 1;

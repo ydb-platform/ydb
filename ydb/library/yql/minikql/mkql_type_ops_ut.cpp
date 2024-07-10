@@ -86,13 +86,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         }
     }
 
-    Y_UNIT_TEST(FullSplitDate32) {
-            i32 year;
-            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-
-            FullSplitDate32(4, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
-    }
-
     Y_UNIT_TEST(GmTime) {
         // time_t t = time(NULL);
         time_t t = 4294967295ul;
@@ -138,7 +131,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
             
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            EnrichDate32(date32, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            ui32 y, m, d;
+            FullSplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
 
             if (date32 == NUdf::MAX_DATE32) {

@@ -507,6 +507,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     if (op.HasTTLSettings()) {
+        for (const auto& indexDescription : op.GetTableIndexes()) {
+            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                errStr = "Table with vector indexes doesn't support TTL";
+                return nullptr;                
+            }
+        }
+
         const auto& ttl = op.GetTTLSettings();
 
         if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {

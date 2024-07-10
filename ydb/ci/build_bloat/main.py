@@ -363,6 +363,35 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
     return tree
 
 
+def time_consume_objects(build_output_dir: str, result_dir: str, base_src_dir: str) -> dict:
+    time_trace_paths = gather_time_traces(build_output_dir)
+
+    object_to_stat = {}  # header path -> (total_duration, count)
+    total_time = 0
+    total = len(time_trace_paths)
+    for i, time_trace_path in enumerate(time_trace_paths):
+        if i % 10 == 0:
+            print("[{}/{}]".format(i, total))
+        with open(time_trace_path) as f:
+            obj = json.load(f)
+
+        for event in obj["traceEvents"]:
+            if event["name"] == "ParseClass":
+                name = event["args"]["detail"]
+                duration_us = event["dur"]
+                if name not in object_to_stat:
+                    object_to_stat[name] = [0, 0]
+                duration_s = duration_us / 1000000.0
+                total_time += duration_s
+                object_to_stat[name][0] += duration_s
+                object_to_stat[name][1] += 1
+
+    print ("Total time = ", total_time)
+
+    for name, (count, duration) in sorted(object_to_stat.items(), key=lambda val: -val[1][0]):
+        print(name, duration, count)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="""A tool for analyzing build time\n
@@ -393,8 +422,14 @@ will be generated in output_dir"""
     return parser.parse_args()
 
 
+
+
 def main():
+
     args = parse_args()
+    
+    time_consume_objects(args.build_dir, 0, 0)
+    return
 
     actions = []
 

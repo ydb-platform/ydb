@@ -1060,7 +1060,6 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     auto it = ChangesQueue.find(order);
     if (it == ChangesQueue.end()) {
-        Y_VERIFY_DEBUG_S(false, "Trying to remove non-enqueud record: " << order);
         return;
     }
 
@@ -1111,7 +1110,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie, bool afterMove) {
     if (!records) {
         return;
     }
@@ -1131,10 +1130,13 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     const auto now = AppData()->TimeProvider->Now();
     TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
-        forward.emplace_back(record.Order, record.PathId, record.BodySize);
-
         auto it = ChangesQueue.find(record.Order);
-        Y_ABORT_UNLESS(it != ChangesQueue.end());
+        if (it == ChangesQueue.end()) {
+            Y_ABORT_UNLESS(afterMove);
+            continue;
+        }
+
+        forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
         it->second.EnqueuedAt = now;
         it->second.ReservationCookie = cookie;
@@ -1143,8 +1145,9 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         Y_ABORT_UNLESS(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
         ChangesQueueBytes += record.BodySize;
     }
- 
+
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        Y_ABORT_UNLESS(!afterMove);
         ChangeQueueReservedCapacity -= it->second;
         ChangeQueueReservedCapacity += records.size();
     }

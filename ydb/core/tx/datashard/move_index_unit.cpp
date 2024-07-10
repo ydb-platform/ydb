@@ -106,7 +106,7 @@ public:
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords));
+        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
     }
 };
 

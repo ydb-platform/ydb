@@ -69,7 +69,6 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
         kikimr.SetSecurityToken(config.SecurityToken);
     }
 
-
     if (!config.StaticCredentials.User.empty()) {
         NYdb::TDriverConfig driverConfig;
         driverConfig.SetEndpoint(config.Address);
@@ -79,27 +78,14 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
         auto credentialsProviderFactory = NYdb::CreateLoginCredentialsProviderFactory(config.StaticCredentials);
         auto loginProvider = credentialsProviderFactory->CreateProvider(client.GetCoreFacility());
         try {
-            const TString token = loginProvider->GetAuthInfo();
-            kikimr.SetSecurityToken(token);
-            config.SecurityToken = token;
+            config.SecurityToken = loginProvider->GetAuthInfo();
         } catch (yexception& ex) {
             Cerr << ex.what() << Endl;
             connection.Stop();
             return 1;
         }
         connection.Stop();
-
-        // TAutoPtr<NMsgBusProxy::TBusLoginRequest> request = new NMsgBusProxy::TBusLoginRequest();
-        // request.Get()->Record.SetUser(config.StaticCredentials.User);
-        // request.Get()->Record.SetPassword(config.StaticCredentials.Password);
-        // NClient::TResult result = kikimr.ExecuteRequest(request.Release()).GetValueSync();
-        // if (result.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
-        //     kikimr.SetSecurityToken(result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken());
-        //     config.SecurityToken = result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken();
-        // } else {
-        //     Cerr << result.GetError().GetMessage() << Endl;
-        //     return 1;
-        // }
+        kikimr.SetSecurityToken(config.SecurityToken);
     }
 
     return handler(kikimr);

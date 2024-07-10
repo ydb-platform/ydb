@@ -869,6 +869,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
+        case EYtSettingType::SecurityTags: {
+            return true;
+        }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false);
         }

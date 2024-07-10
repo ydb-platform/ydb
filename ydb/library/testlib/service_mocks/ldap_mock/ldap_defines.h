@@ -77,7 +77,7 @@ struct TSearchRequestInfo {
         TString Attribute;
         TString Value;
         TString MatchingRule;
-        bool DnAttributes;
+        bool DnAttributes = false;
 
         std::vector<std::shared_ptr<TSearchFilter>> NestedFilters;
     };

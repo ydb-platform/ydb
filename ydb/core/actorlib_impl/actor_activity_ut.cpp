@@ -32,6 +32,7 @@ Y_UNIT_TEST_SUITE(TActorActivity) {
         const ui32 activityIndex = actor->GetActivityType();
 
         UNIT_ASSERT_VALUES_EQUAL(TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetIndexByName("ASYNC_DESTROYER"), activityIndex);
+        UNIT_ASSERT_VALUES_EQUAL(42, 42);
 
         Cerr << TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(activityIndex) << Endl;
         UNIT_ASSERT(TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(activityIndex) == "ASYNC_DESTROYER");

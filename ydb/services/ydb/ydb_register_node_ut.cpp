@@ -103,7 +103,7 @@ private:
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TRegisterNodeOverDiscoveryService) {
+Y_UNIT_TEST_SUITE(TRegisterNodeTest) {
 
 NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings() {
     NDiscovery::TNodeRegistrationSettings settings;

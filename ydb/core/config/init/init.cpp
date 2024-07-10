@@ -192,7 +192,7 @@ class TDefaultNodeBrokerClient
         }
     };
 
-    static NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNodeViaDiscoveryService(
+    static NYdb::NDiscovery::TNodeRegistrationResult TryToRegisterDynamicNode(
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
@@ -220,7 +220,7 @@ class TDefaultNodeBrokerClient
         return result;
     }
 
-   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(
+   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeImpl(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
@@ -228,18 +228,15 @@ class TDefaultNodeBrokerClient
         IInitLogger& logger)
     {
         NYdb::NDiscovery::TNodeRegistrationResult result;
-        const size_t maxNumberReceivedCallUnimplemented = 5;
-        size_t currentNumberReceivedCallUnimplemented = 0;
-        while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberReceivedCallUnimplemented) {
+        while (!result.IsSuccess()) {
             for (const auto& addr : addrs) {
                 logger.Out() << "Trying to register dynamic node to " << addr << Endl;
-                result = TryToRegisterDynamicNodeViaDiscoveryService(
-                    grpcSettings,
-                    addr,
-                    settings,
-                    env);
+                result = TryToRegisterDynamicNode(grpcSettings,
+                                                  addr,
+                                                  settings,
+                                                  env);
                 if (result.IsSuccess()) {
-                    logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
+                    logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
                     logger.Out() << "Node name: ";
                     if (result.HasNodeName()) {
                         logger.Out() << result.GetNodeName();
@@ -251,9 +248,6 @@ class TDefaultNodeBrokerClient
             }
             if (!result.IsSuccess()) {
                 env.Sleep(TDuration::Seconds(1));
-                if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
-                    currentNumberReceivedCallUnimplemented++;
-                }
             }
         }
         return result;
@@ -292,12 +286,11 @@ public:
     {
         auto newRegSettings = GetNodeRegistrationSettings(regSettings);
 
-       NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeViaDiscoveryService(
-                grpcSettings,
-                addrs,
-                newRegSettings,
-                env,
-                logger);
+       NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
+                                                                                  addrs,
+                                                                                  newRegSettings,
+                                                                                  env,
+                                                                                  logger);
 
         return std::make_shared<TResult>(std::move(result));
     }

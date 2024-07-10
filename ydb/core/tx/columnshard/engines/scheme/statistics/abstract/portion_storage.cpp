@@ -1,5 +1,6 @@
 #include "portion_storage.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
@@ -85,7 +86,10 @@ std::shared_ptr<arrow::Scalar> TPortionStorage::ProtoToScalar(const NKikimrColum
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(proto.GetTimestamp().GetUnit());
         return std::make_shared<arrow::TimestampScalar>(proto.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
     } else if (proto.HasBinary()) {
-        return std::make_shared<arrow::FixedSizeBinaryScalar>(proto.GetBinary(), std::make_shared<arrow::FixedSizeBinaryType>());
+        auto buffer = std::make_shared<arrow::Buffer>(std::string(proto.GetBinary()));
+        size_t countMinSketchSize = sizeof(TCountMinSketch) + 256 * 32 * sizeof(ui32);
+        AFL_VERIFY(proto.GetBinary().Size() == countMinSketchSize);
+        return std::make_shared<arrow::FixedSizeBinaryScalar>(buffer, std::make_shared<arrow::FixedSizeBinaryType>(countMinSketchSize));
     }
     AFL_VERIFY(false)("problem", "incorrect statistics proto")("proto", proto.DebugString());
     return nullptr;

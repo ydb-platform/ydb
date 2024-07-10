@@ -18,13 +18,17 @@ LLVM_BC(
     arrow_binary_upgrade_set_missing_value
     arrow_binary_upgrade_set_next_array_pg_type_oid
     arrow_binary_upgrade_set_next_heap_pg_class_oid
+    arrow_binary_upgrade_set_next_heap_relfilenode
     arrow_binary_upgrade_set_next_index_pg_class_oid
+    arrow_binary_upgrade_set_next_index_relfilenode
     arrow_binary_upgrade_set_next_multirange_array_pg_type_oid
     arrow_binary_upgrade_set_next_multirange_pg_type_oid
     arrow_binary_upgrade_set_next_pg_authid_oid
     arrow_binary_upgrade_set_next_pg_enum_oid
+    arrow_binary_upgrade_set_next_pg_tablespace_oid
     arrow_binary_upgrade_set_next_pg_type_oid
     arrow_binary_upgrade_set_next_toast_pg_class_oid
+    arrow_binary_upgrade_set_next_toast_relfilenode
     arrow_binary_upgrade_set_record_init_privs
     arrow_btnametextcmp
     arrow_bttext_pattern_cmp

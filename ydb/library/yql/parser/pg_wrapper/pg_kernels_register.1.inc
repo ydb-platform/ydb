@@ -140,3 +140,6 @@ RegisterExec(6156, arrow_multirange_gist_compress());
 RegisterExec(6199, arrow_extract_date());
 RegisterExec(6200, arrow_extract_time());
 RegisterExec(6201, arrow_extract_timetz());
+RegisterExec(6233, arrow_window_row_number_support());
+RegisterExec(6234, arrow_window_rank_support());
+RegisterExec(6235, arrow_window_dense_rank_support());

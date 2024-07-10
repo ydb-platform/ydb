@@ -4,7 +4,7 @@
  *	  definitions for executor state nodes
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/execnodes.h
@@ -41,6 +41,7 @@ struct ExprContext;
 struct RangeTblEntry;			/* avoid including parsenodes.h here */
 struct ExprEvalStep;			/* avoid including execExpr.h everywhere */
 struct CopyMultiInsertBuffer;
+struct LogicalTapeSet;
 
 
 /* ----------------
@@ -60,7 +61,7 @@ typedef Datum (*ExprStateEvalFunc) (struct ExprState *expression,
 
 typedef struct ExprState
 {
-	NodeTag		tag;
+	NodeTag		type;
 
 	uint8		flags;			/* bitmask of EEO_FLAG_* bits, see above */
 
@@ -141,6 +142,8 @@ typedef struct ExprState
  *		Unique				is it a unique index?
  *		OpclassOptions		opclass-specific options, or NULL if none
  *		ReadyForInserts		is it valid for inserts?
+ *		CheckedUnchanged	IndexUnchanged status determined yet?
+ *		IndexUnchanged		aminsert hint, cached for retail inserts
  *		Concurrent			are we doing a concurrent index build?
  *		BrokenHotChain		did we detect any broken HOT chains?
  *		ParallelWorkers		# of workers requested (excludes leader)
@@ -170,7 +173,10 @@ typedef struct IndexInfo
 	uint16	   *ii_UniqueStrats;	/* array with one entry per column */
 	Datum	   *ii_OpclassOptions;	/* array with one entry per column */
 	bool		ii_Unique;
+	bool		ii_NullsNotDistinct;
 	bool		ii_ReadyForInserts;
+	bool		ii_CheckedUnchanged;
+	bool		ii_IndexUnchanged;
 	bool		ii_Concurrent;
 	bool		ii_BrokenHotChain;
 	int			ii_ParallelWorkers;
@@ -383,6 +389,22 @@ typedef struct OnConflictSetState
 	ExprState  *oc_WhereClause; /* state for the WHERE clause */
 } OnConflictSetState;
 
+/* ----------------
+ *	 MergeActionState information
+ *
+ *	Executor state for a MERGE action.
+ * ----------------
+ */
+typedef struct MergeActionState
+{
+	NodeTag		type;
+
+	MergeAction *mas_action;	/* associated MergeAction node */
+	ProjectionInfo *mas_proj;	/* projection of the action's targetlist for
+								 * this rel */
+	ExprState  *mas_whenqual;	/* WHEN [NOT] MATCHED AND conditions */
+} MergeActionState;
+
 /*
  * ResultRelInfo
  *
@@ -494,6 +516,10 @@ typedef struct ResultRelInfo
 	/* ON CONFLICT evaluation state */
 	OnConflictSetState *ri_onConflict;
 
+	/* for MERGE, lists of MergeActionState */
+	List	   *ri_matchedMergeAction;
+	List	   *ri_notMatchedMergeAction;
+
 	/* partition check expression state (NULL if not set up yet) */
 	ExprState  *ri_PartitionCheckExpr;
 
@@ -524,6 +550,12 @@ typedef struct ResultRelInfo
 
 	/* for use by copyfrom.c when performing multi-inserts */
 	struct CopyMultiInsertBuffer *ri_CopyMultiInsertBuffer;
+
+	/*
+	 * Used when a leaf partition is involved in a cross-partition update of
+	 * one of its ancestors; see ExecCrossPartitionUpdateForeignKey().
+	 */
+	List	   *ri_ancestorResultRels;
 } ResultRelInfo;
 
 /*
@@ -675,8 +707,8 @@ typedef struct EState
  * ExecRowMark -
  *	   runtime representation of FOR [KEY] UPDATE/SHARE clauses
  *
- * When doing UPDATE, DELETE, or SELECT FOR [KEY] UPDATE/SHARE, we will have an
- * ExecRowMark for each non-target relation in the query (except inheritance
+ * When doing UPDATE/DELETE/MERGE/SELECT FOR [KEY] UPDATE/SHARE, we will have
+ * an ExecRowMark for each non-target relation in the query (except inheritance
  * parent RTEs, which can be ignored at runtime).  Virtual relations such as
  * subqueries-in-FROM will have an ExecRowMark with relation == NULL.  See
  * PlanRowMark for details about most of the fields.  In addition to fields
@@ -1221,6 +1253,12 @@ typedef struct ProjectSetState
 	MemoryContext argcontext;	/* context for SRF arguments */
 } ProjectSetState;
 
+
+/* flags for mt_merge_subcommands */
+#define MERGE_INSERT	0x01
+#define MERGE_UPDATE	0x02
+#define MERGE_DELETE	0x04
+
 /* ----------------
  *	 ModifyTableState information
  * ----------------
@@ -1228,7 +1266,7 @@ typedef struct ProjectSetState
 typedef struct ModifyTableState
 {
 	PlanState	ps;				/* its first field is NodeTag */
-	CmdType		operation;		/* INSERT, UPDATE, or DELETE */
+	CmdType		operation;		/* INSERT, UPDATE, DELETE, or MERGE */
 	bool		canSetTag;		/* do we set the command tag/es_processed? */
 	bool		mt_done;		/* are we done? */
 	int			mt_nrels;		/* number of entries in resultRelInfo[] */
@@ -1270,6 +1308,14 @@ typedef struct ModifyTableState
 
 	/* controls transition table population for INSERT...ON CONFLICT UPDATE */
 	struct TransitionCaptureState *mt_oc_transition_capture;
+
+	/* Flags showing which subcommands are present INS/UPD/DEL/DO NOTHING */
+	int			mt_merge_subcommands;
+
+	/* tuple counters for MERGE */
+	double		mt_merge_inserted;
+	double		mt_merge_updated;
+	double		mt_merge_deleted;
 } ModifyTableState;
 
 /* ----------------
@@ -2159,8 +2205,8 @@ typedef struct MemoizeState
 								 * by bit, false when using hash equality ops */
 	MemoizeInstrumentation stats;	/* execution statistics */
 	SharedMemoizeInfo *shared_info; /* statistics for parallel workers */
-	Bitmapset	   *keyparamids; /* Param->paramids of expressions belonging to
-								  * param_exprs */
+	Bitmapset  *keyparamids;	/* Param->paramids of expressions belonging to
+								 * param_exprs */
 } MemoizeState;
 
 /* ----------------
@@ -2202,6 +2248,7 @@ typedef struct SortState
 	int64		bound_Done;		/* value of bound we did the sort with */
 	void	   *tuplesortstate; /* private state of tuplesort.c */
 	bool		am_worker;		/* are we a worker? */
+	bool		datumSort;		/* Datum sort instead of tuple sort? */
 	SharedSortInfo *shared_info;	/* one entry per worker */
 } SortState;
 
@@ -2366,7 +2413,7 @@ typedef struct AggState
 	bool		table_filled;	/* hash table filled yet? */
 	int			num_hashes;
 	MemoryContext hash_metacxt; /* memory for hash table itself */
-	struct HashTapeInfo *hash_tapeinfo; /* metadata for spill tapes */
+	struct LogicalTapeSet *hash_tapeset;	/* tape set for hash spill tapes */
 	struct HashAggSpill *hash_spills;	/* HashAggSpill for each grouping set,
 										 * exists only during first pass */
 	TupleTableSlot *hash_spill_rslot;	/* for reading spill files */
@@ -2406,6 +2453,18 @@ typedef struct AggState
 typedef struct WindowStatePerFuncData *WindowStatePerFunc;
 typedef struct WindowStatePerAggData *WindowStatePerAgg;
 
+/*
+ * WindowAggStatus -- Used to track the status of WindowAggState
+ */
+typedef enum WindowAggStatus
+{
+	WINDOWAGG_DONE,				/* No more processing to do */
+	WINDOWAGG_RUN,				/* Normal processing of window funcs */
+	WINDOWAGG_PASSTHROUGH,		/* Don't eval window funcs */
+	WINDOWAGG_PASSTHROUGH_STRICT	/* Pass-through plus don't store new
+									 * tuples during spool */
+} WindowAggStatus;
+
 typedef struct WindowAggState
 {
 	ScanState	ss;				/* its first field is NodeTag */
@@ -2432,6 +2491,7 @@ typedef struct WindowAggState
 	struct WindowObjectData *agg_winobj;	/* winobj for aggregate fetches */
 	int64		aggregatedbase; /* start row for current aggregates */
 	int64		aggregatedupto; /* rows before this one are aggregated */
+	WindowAggStatus status;		/* run status of WindowAggState */
 
 	int			frameOptions;	/* frame_clause options, see WindowDef */
 	ExprState  *startOffset;	/* expression for starting bound offset */
@@ -2458,8 +2518,17 @@ typedef struct WindowAggState
 	MemoryContext curaggcontext;	/* current aggregate's working data */
 	ExprContext *tmpcontext;	/* short-term evaluation context */
 
+	ExprState  *runcondition;	/* Condition which must remain true otherwise
+								 * execution of the WindowAgg will finish or
+								 * go into pass-through mode.  NULL when there
+								 * is no such condition. */
+
+	bool		use_pass_through;	/* When false, stop execution when
+									 * runcondition is no longer true.  Else
+									 * just stop evaluating window funcs. */
+	bool		top_window;		/* true if this is the top-most WindowAgg or
+								 * the only WindowAgg in this query level */
 	bool		all_first;		/* true if the scan is starting */
-	bool		all_done;		/* true if the scan is finished */
 	bool		partition_spooled;	/* true if all tuples in current partition
 									 * have been spooled into tuplestore */
 	bool		more_partitions;	/* true if there's more partitions after

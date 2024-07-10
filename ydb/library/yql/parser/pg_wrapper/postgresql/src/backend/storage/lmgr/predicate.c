@@ -135,7 +135,7 @@
  *		- Protects both PredXact and SerializableXidHash.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -494,7 +494,7 @@ static void ReleasePredicateLocksLocal(void);
 static inline bool
 PredicateLockingNeededForRelation(Relation relation)
 {
-	return !(relation->rd_id < FirstBootstrapObjectId ||
+	return !(relation->rd_id < FirstUnpinnedObjectId ||
 			 RelationUsesLocalBuffers(relation) ||
 			 relation->rd_rel->relkind == RELKIND_MATVIEW);
 }
@@ -1277,6 +1277,7 @@ InitPredicateLocks(void)
 		PredXact->OldCommittedSxact->xmin = InvalidTransactionId;
 		PredXact->OldCommittedSxact->flags = SXACT_FLAG_COMMITTED;
 		PredXact->OldCommittedSxact->pid = 0;
+		PredXact->OldCommittedSxact->pgprocno = INVALID_PGPROCNO;
 	}
 	/* This never changes, so let's keep a local copy. */
 	OldCommittedSxact = PredXact->OldCommittedSxact;
@@ -1858,6 +1859,7 @@ GetSerializableTransactionSnapshotInt(Snapshot snapshot,
 	sxact->finishedBefore = InvalidTransactionId;
 	sxact->xmin = snapshot->xmin;
 	sxact->pid = MyProcPid;
+	sxact->pgprocno = MyProc->pgprocno;
 	SHMQueueInit(&(sxact->predicateLocks));
 	SHMQueueElemInit(&(sxact->finishedLink));
 	sxact->flags = 0;
@@ -3684,7 +3686,7 @@ ReleasePredicateLocks(bool isCommit, bool isReadOnlySafe)
 			 */
 			if (SxactIsDeferrableWaiting(roXact) &&
 				(SxactIsROUnsafe(roXact) || SxactIsROSafe(roXact)))
-				ProcSendSignal(roXact->pid);
+				ProcSendSignal(roXact->pgprocno);
 
 			possibleUnsafeConflict = nextConflict;
 		}
@@ -5031,6 +5033,7 @@ PostPrepare_PredicateLocks(TransactionId xid)
 	Assert(SxactIsPrepared(MySerializableXact));
 
 	MySerializableXact->pid = 0;
+	MySerializableXact->pgprocno = INVALID_PGPROCNO;
 
 	hash_destroy(LocalPredicateLockHash);
 	LocalPredicateLockHash = NULL;
@@ -5106,6 +5109,7 @@ predicatelock_twophase_recover(TransactionId xid, uint16 info,
 		sxact->vxid.backendId = InvalidBackendId;
 		sxact->vxid.localTransactionId = (LocalTransactionId) xid;
 		sxact->pid = 0;
+		sxact->pgprocno = INVALID_PGPROCNO;
 
 		/* a prepared xact hasn't committed yet */
 		sxact->prepareSeqNo = RecoverySerCommitSeqNo;

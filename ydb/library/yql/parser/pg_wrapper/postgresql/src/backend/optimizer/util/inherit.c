@@ -3,12 +3,12 @@
  * inherit.c
  *	  Routines to process child relations in inheritance trees
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
  * IDENTIFICATION
- *	  src/backend/optimizer/path/inherit.c
+ *	  src/backend/optimizer/util/inherit.c
  *
  *-------------------------------------------------------------------------
  */
@@ -348,7 +348,7 @@ expand_partitioned_rtentry(PlannerInfo *root, RelOptInfo *relinfo,
 	 * that survive pruning.  Below, we will initialize child objects for the
 	 * surviving partitions.
 	 */
-	live_parts = prune_append_rel_partitions(relinfo);
+	relinfo->live_parts = live_parts = prune_append_rel_partitions(relinfo);
 
 	/* Expand simple_rel_array and friends to hold child objects. */
 	num_live_parts = bms_num_members(live_parts);
@@ -606,7 +606,7 @@ expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
 
 	/*
 	 * If we are creating a child of the query target relation (only possible
-	 * in UPDATE/DELETE), add it to all_result_relids, as well as
+	 * in UPDATE/DELETE/MERGE), add it to all_result_relids, as well as
 	 * leaf_result_relids if appropriate, and make sure that we generate
 	 * required row-identity data.
 	 */

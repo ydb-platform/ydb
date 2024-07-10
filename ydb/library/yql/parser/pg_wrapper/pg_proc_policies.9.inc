@@ -234,6 +234,18 @@ struct TArgs_has_language_privilege_name_name_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
 };
+struct TArgs_has_parameter_privilege_id_name_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
+};
+struct TArgs_has_parameter_privilege_name_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_has_parameter_privilege_name_name_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
+};
 struct TArgs_has_schema_privilege_id_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,false};
@@ -629,6 +641,10 @@ struct TArgs_int8inc_any_Policy {
 struct TArgs_int8inc_float8_float8_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_int8inc_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_int8larger_Policy {
     static constexpr bool VarArgs = false;

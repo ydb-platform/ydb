@@ -4,7 +4,7 @@
  *	  various support functions for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -753,7 +753,6 @@ spgoptions(Datum reloptions, bool validate)
 									  RELOPT_KIND_SPGIST,
 									  sizeof(SpGistOptions),
 									  tab, lengthof(tab));
-
 }
 
 /*
@@ -1259,8 +1258,8 @@ SpGistPageAddNewItem(SpGistState *state, Page page, Item item, Size size,
 					*startOffset = offnum + 1;
 			}
 			else
-				elog(PANIC, "failed to add item of size %u to SPGiST index page",
-					 (int) size);
+				elog(PANIC, "failed to add item of size %zu to SPGiST index page",
+					 size);
 
 			return offnum;
 		}
@@ -1271,8 +1270,8 @@ SpGistPageAddNewItem(SpGistState *state, Page page, Item item, Size size,
 						 InvalidOffsetNumber, false, false);
 
 	if (offnum == InvalidOffsetNumber && !errorOK)
-		elog(ERROR, "failed to add item of size %u to SPGiST index page",
-			 (int) size);
+		elog(ERROR, "failed to add item of size %zu to SPGiST index page",
+			 size);
 
 	return offnum;
 }

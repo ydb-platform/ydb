@@ -142,6 +142,10 @@ struct TArgs_regexnesel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
+struct TArgs_text_starts_with_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
 struct TArgs_texticlike_support_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};

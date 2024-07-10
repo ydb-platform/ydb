@@ -68,7 +68,7 @@ ALTER TABLE pg_statistic_ext ADD PRIMARY KEY USING INDEX pg_statistic_ext_oid_in
 
 ALTER TABLE pg_statistic_ext ADD UNIQUE USING INDEX pg_statistic_ext_name_index;
 
-ALTER TABLE pg_statistic_ext_data ADD PRIMARY KEY USING INDEX pg_statistic_ext_data_stxoid_index;
+ALTER TABLE pg_statistic_ext_data ADD PRIMARY KEY USING INDEX pg_statistic_ext_data_stxoid_inh_index;
 
 ALTER TABLE pg_rewrite ADD PRIMARY KEY USING INDEX pg_rewrite_oid_index;
 
@@ -182,6 +182,10 @@ ALTER TABLE pg_collation ADD UNIQUE USING INDEX pg_collation_name_enc_nsp_index;
 
 ALTER TABLE pg_collation ADD PRIMARY KEY USING INDEX pg_collation_oid_index;
 
+ALTER TABLE pg_parameter_acl ADD UNIQUE USING INDEX pg_parameter_acl_parname_index;
+
+ALTER TABLE pg_parameter_acl ADD PRIMARY KEY USING INDEX pg_parameter_acl_oid_index;
+
 ALTER TABLE pg_partitioned_table ADD PRIMARY KEY USING INDEX pg_partitioned_table_partrelid_index;
 
 ALTER TABLE pg_range ADD PRIMARY KEY USING INDEX pg_range_rngtypid_index;
@@ -197,6 +201,10 @@ ALTER TABLE pg_sequence ADD PRIMARY KEY USING INDEX pg_sequence_seqrelid_index;
 ALTER TABLE pg_publication ADD PRIMARY KEY USING INDEX pg_publication_oid_index;
 
 ALTER TABLE pg_publication ADD UNIQUE USING INDEX pg_publication_pubname_index;
+
+ALTER TABLE pg_publication_namespace ADD PRIMARY KEY USING INDEX pg_publication_namespace_oid_index;
+
+ALTER TABLE pg_publication_namespace ADD UNIQUE USING INDEX pg_publication_namespace_pnnspid_pnpubid_index;
 
 ALTER TABLE pg_publication_rel ADD PRIMARY KEY USING INDEX pg_publication_rel_oid_index;
 

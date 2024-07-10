@@ -27,6 +27,7 @@ LLVM_BC(
     arrow_multirange_adjacent_range
     arrow_multirange_after_multirange
     arrow_multirange_after_range
+    arrow_multirange_agg_transfn
     arrow_multirange_before_multirange
     arrow_multirange_before_range
     arrow_multirange_cmp

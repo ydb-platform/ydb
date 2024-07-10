@@ -1198,6 +1198,26 @@ auto MakePgAgg_range_intersect_agg_4450() {
                      false, false, false, false
                      >({}, {}, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_max_5099() {
+    return TGenericAgg<
+                     TPgDirectFunc<&xid8_larger>, true, TArgs_xid8_larger_Policy,
+                     TPgDirectFunc<&xid8_larger>, true, TArgs_xid8_larger_Policy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >({}, {}, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_min_5100() {
+    return TGenericAgg<
+                     TPgDirectFunc<&xid8_smaller>, true, TArgs_xid8_smaller_Policy,
+                     TPgDirectFunc<&xid8_smaller>, true, TArgs_xid8_smaller_Policy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >({}, {}, nullptr, nullptr, nullptr);
+}
 auto MakePgAgg_bit_xor_6164() {
     return TGenericAgg<
                      TPgDirectFunc<&int2xor>, true, TArgs_int2xor_Policy,

@@ -631,9 +631,9 @@
     ],
     "test.test[blocks-combine_hashed_pg--Debug]": [
         {
-            "checksum": "b900910e9ac814b08c0c142b23172113",
+            "checksum": "97dd9272e7f17080401295fadec8142e",
             "size": 14746,
-            "uri": "https://{canondata_backend}/1942173/93f715b822feb505dc8e1414f77e95370014ff2e/resource.tar.gz#test.test_blocks-combine_hashed_pg--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1936947/b2a18b57448ea3af13fca68af5ba965519208b69/resource.tar.gz#test.test_blocks-combine_hashed_pg--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-combine_hashed_pg--Plan]": [

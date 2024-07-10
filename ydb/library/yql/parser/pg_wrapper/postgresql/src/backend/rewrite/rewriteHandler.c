@@ -3,7 +3,7 @@
  * rewriteHandler.c
  *		Primary module of query rewriter.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1660,6 +1660,10 @@ matchLocks(CmdType event,
 	if (rulelocks == NULL)
 		return NIL;
 
+	/* No rule support for MERGE */
+	if (parsetree->commandType == CMD_MERGE)
+		return NIL;
+
 	if (parsetree->commandType != CMD_SELECT)
 	{
 		if (parsetree->resultRelation != varno)
@@ -3274,18 +3278,24 @@ rewriteTargetView(Query *parsetree, Relation view)
 				   0);
 
 	/*
-	 * Mark the new target RTE for the permissions checks that we want to
-	 * enforce against the view owner, as distinct from the query caller.  At
-	 * the relation level, require the same INSERT/UPDATE/DELETE permissions
-	 * that the query caller needs against the view.  We drop the ACL_SELECT
-	 * bit that is presumably in new_rte->requiredPerms initially.
+	 * If the view has "security_invoker" set, mark the new target RTE for the
+	 * permissions checks that we want to enforce against the query caller.
+	 * Otherwise we want to enforce them against the view owner.
+	 *
+	 * At the relation level, require the same INSERT/UPDATE/DELETE
+	 * permissions that the query caller needs against the view.  We drop the
+	 * ACL_SELECT bit that is presumably in new_rte->requiredPerms initially.
 	 *
 	 * Note: the original view RTE remains in the query's rangetable list.
 	 * Although it will be unused in the query plan, we need it there so that
 	 * the executor still performs appropriate permissions checks for the
 	 * query caller's use of the view.
 	 */
-	new_rte->checkAsUser = view->rd_rel->relowner;
+	if (RelationHasSecurityInvoker(view))
+		new_rte->checkAsUser = InvalidOid;
+	else
+		new_rte->checkAsUser = view->rd_rel->relowner;
+
 	new_rte->requiredPerms = view_rte->requiredPerms;
 
 	/*
@@ -3701,8 +3711,8 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length)
 	}
 
 	/*
-	 * If the statement is an insert, update, or delete, adjust its targetlist
-	 * as needed, and then fire INSERT/UPDATE/DELETE rules on it.
+	 * If the statement is an insert, update, delete, or merge, adjust its
+	 * targetlist as needed, and then fire INSERT/UPDATE/DELETE rules on it.
 	 *
 	 * SELECT rules are handled later when we have all the queries that should
 	 * get executed.  Also, utilities aren't rewritten at all (do we still
@@ -3808,12 +3818,49 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length)
 		}
 		else if (event == CMD_UPDATE)
 		{
+			Assert(parsetree->override == OVERRIDING_NOT_SET);
 			parsetree->targetList =
 				rewriteTargetListIU(parsetree->targetList,
 									parsetree->commandType,
 									parsetree->override,
 									rt_entry_relation,
 									NULL, 0, NULL);
+		}
+		else if (event == CMD_MERGE)
+		{
+			Assert(parsetree->override == OVERRIDING_NOT_SET);
+
+			/*
+			 * Rewrite each action targetlist separately
+			 */
+			foreach(lc1, parsetree->mergeActionList)
+			{
+				MergeAction *action = (MergeAction *) lfirst(lc1);
+
+				switch (action->commandType)
+				{
+					case CMD_NOTHING:
+					case CMD_DELETE:	/* Nothing to do here */
+						break;
+					case CMD_UPDATE:
+					case CMD_INSERT:
+
+						/*
+						 * MERGE actions do not permit multi-row INSERTs, so
+						 * there is no VALUES RTE to deal with here.
+						 */
+						action->targetList =
+							rewriteTargetListIU(action->targetList,
+												action->commandType,
+												action->override,
+												rt_entry_relation,
+												NULL, 0, NULL);
+						break;
+					default:
+						elog(ERROR, "unrecognized commandType: %d", action->commandType);
+						break;
+				}
+			}
 		}
 		else if (event == CMD_DELETE)
 		{

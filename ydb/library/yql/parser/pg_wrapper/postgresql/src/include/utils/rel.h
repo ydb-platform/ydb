@@ -4,7 +4,7 @@
  *	  POSTGRES relation descriptor (a/k/a relcache entry) definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/rel.h
@@ -160,7 +160,7 @@ typedef struct RelationData
 	Bitmapset  *rd_pkattr;		/* cols included in primary key */
 	Bitmapset  *rd_idattr;		/* included in replica identity index */
 
-	PublicationActions *rd_pubactions;	/* publication actions */
+	PublicationDesc *rd_pubdesc;	/* publication descriptor, or NULL */
 
 	/*
 	 * rd_options is set whenever rd_rel is loaded into the relcache entry.
@@ -245,6 +245,7 @@ typedef struct RelationData
 	 */
 	Oid			rd_toastoid;	/* Real TOAST table's OID, or InvalidOid */
 
+	bool		pgstat_enabled; /* should relation stats be counted */
 	/* use "struct" here to avoid needing to include pgstat.h: */
 	struct PgStat_TableStatus *pgstat_info; /* statistics collection area */
 } RelationData;
@@ -396,6 +397,7 @@ typedef struct ViewOptions
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
 	bool		security_barrier;
+	bool		security_invoker;
 	ViewOptCheckOption check_option;
 } ViewOptions;
 
@@ -408,6 +410,16 @@ typedef struct ViewOptions
 	(AssertMacro(relation->rd_rel->relkind == RELKIND_VIEW),				\
 	 (relation)->rd_options ?												\
 	  ((ViewOptions *) (relation)->rd_options)->security_barrier : false)
+
+/*
+ * RelationHasSecurityInvoker
+ *		Returns true if the relation has the security_invoker property set.
+ *		Note multiple eval of argument!
+ */
+#define RelationHasSecurityInvoker(relation)								\
+	(AssertMacro(relation->rd_rel->relkind == RELKIND_VIEW),				\
+	 (relation)->rd_options ?												\
+	  ((ViewOptions *) (relation)->rd_options)->security_invoker : false)
 
 /*
  * RelationHasCheckOption
@@ -548,19 +560,6 @@ RelationGetSmgr(Relation rel)
 	return rel->rd_smgr;
 }
 #endif							/* !FRONTEND */
-
-/*
- * RelationOpenSmgr
- *		Open the relation at the smgr level, if not already done.
- *
- * XXX this is now deprecated, and should not be used in new code.
- * Instead, call RelationGetSmgr in place of fetching rd_smgr directly.
- */
-#define RelationOpenSmgr(relation) \
-	do { \
-		if ((relation)->rd_smgr == NULL) \
-			smgrsetowner(&((relation)->rd_smgr), smgropen((relation)->rd_node, (relation)->rd_backend)); \
-	} while (0)
 
 /*
  * RelationCloseSmgr

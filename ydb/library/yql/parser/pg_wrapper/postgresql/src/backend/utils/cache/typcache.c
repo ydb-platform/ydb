@@ -31,7 +31,7 @@
  * constraint changes are also tracked properly.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -60,6 +60,7 @@
 #include "executor/executor.h"
 #include "lib/dshash.h"
 #include "optimizer/optimizer.h"
+#include "port/pg_bitutils.h"
 #include "storage/lwlock.h"
 #include "utils/builtins.h"
 #include "utils/catcache.h"
@@ -1730,10 +1731,7 @@ ensure_record_cache_typmod_slot_exists(int32 typmod)
 
 	if (typmod >= RecordCacheArrayLen)
 	{
-		int32		newlen = RecordCacheArrayLen * 2;
-
-		while (typmod >= newlen)
-			newlen *= 2;
+		int32		newlen = pg_nextpower2_32(typmod + 1);
 
 		RecordCacheArray = (RecordCacheArrayEntry *)
 			repalloc(RecordCacheArray,
@@ -1838,8 +1836,11 @@ lookup_rowtype_tupdesc_internal(Oid type_id, int32 typmod, bool noError)
  * for example from record_in().)
  *
  * Note: on success, we increment the refcount of the returned TupleDesc,
- * and log the reference in CurrentResourceOwner.  Caller should call
- * ReleaseTupleDesc or DecrTupleDescRefCount when done using the tupdesc.
+ * and log the reference in CurrentResourceOwner.  Caller must call
+ * ReleaseTupleDesc when done using the tupdesc.  (There are some
+ * cases in which the returned tupdesc is not refcounted, in which
+ * case PinTupleDesc/ReleaseTupleDesc are no-ops; but in these cases
+ * the tupdesc is guaranteed to live till process exit.)
  */
 TupleDesc
 lookup_rowtype_tupdesc(Oid type_id, int32 typmod)

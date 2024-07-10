@@ -3,7 +3,7 @@
  * parse_clause.c
  *	  handle clauses in parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -153,7 +153,7 @@ transformFromClause(ParseState *pstate, List *frmList)
 
 /*
  * setTargetTable
- *	  Add the target relation of INSERT/UPDATE/DELETE to the range table,
+ *	  Add the target relation of INSERT/UPDATE/DELETE/MERGE to the range table,
  *	  and make the special links to it in the ParseState.
  *
  *	  We also open the target relation and acquire a write lock on it.
@@ -163,7 +163,9 @@ transformFromClause(ParseState *pstate, List *frmList)
  *
  *	  If alsoSource is true, add the target to the query's joinlist and
  *	  namespace.  For INSERT, we don't want the target to be joined to;
- *	  it's a destination of tuples, not a source.   For UPDATE/DELETE,
+ *	  it's a destination of tuples, not a source.  MERGE is actually
+ *	  both, but we'll add it separately to joinlist and namespace, so
+ *	  doing nothing (like INSERT) is correct here.  For UPDATE/DELETE,
  *	  we do need to scan or join the target.  (NOTE: we do not bother
  *	  to check for namespace conflict; we assume that the namespace was
  *	  initially empty in these cases.)
@@ -852,7 +854,7 @@ transformRangeTableFunc(ParseState *pstate, RangeTableFunc *rtf)
 			{
 				foreach(lc2, ns_names)
 				{
-					Value	   *ns_node = (Value *) lfirst(lc2);
+					String	   *ns_node = lfirst_node(String, lc2);
 
 					if (ns_node == NULL)
 						continue;
@@ -1243,7 +1245,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 			foreach(lx, l_colnames)
 			{
 				char	   *l_colname = strVal(lfirst(lx));
-				Value	   *m_name = NULL;
+				String	   *m_name = NULL;
 
 				if (l_colname[0] == '\0')
 					continue;	/* ignore dropped columns */
@@ -1773,7 +1775,7 @@ transformLimitClause(ParseState *pstate, Node *clause,
 	 * unadorned NULL that's not accepted back by the grammar.
 	 */
 	if (exprKind == EXPR_KIND_LIMIT && limitOption == LIMIT_OPTION_WITH_TIES &&
-		IsA(clause, A_Const) && ((A_Const *) clause)->val.type == T_Null)
+		IsA(clause, A_Const) && castNode(A_Const, clause)->isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_ROW_COUNT_IN_LIMIT_CLAUSE),
 				 errmsg("row count cannot be null in FETCH FIRST ... WITH TIES clause")));
@@ -1986,20 +1988,19 @@ findTargetlistEntrySQL92(ParseState *pstate, Node *node, List **tlist,
 	}
 	if (IsA(node, A_Const))
 	{
-		Value	   *val = &((A_Const *) node)->val;
-		int			location = ((A_Const *) node)->location;
+		A_Const    *aconst = castNode(A_Const, node);
 		int			targetlist_pos = 0;
 		int			target_pos;
 
-		if (!IsA(val, Integer))
+		if (!IsA(&aconst->val, Integer))
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 			/* translator: %s is name of a SQL construct, eg ORDER BY */
 					 errmsg("non-integer constant in %s",
 							ParseExprKindName(exprKind)),
-					 parser_errposition(pstate, location)));
+					 parser_errposition(pstate, aconst->location)));
 
-		target_pos = intVal(val);
+		target_pos = intVal(&aconst->val);
 		foreach(tl, *tlist)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(tl);
@@ -2019,7 +2020,7 @@ findTargetlistEntrySQL92(ParseState *pstate, Node *node, List **tlist,
 		/* translator: %s is name of a SQL construct, eg ORDER BY */
 				 errmsg("%s position %d is not in select list",
 						ParseExprKindName(exprKind), target_pos),
-				 parser_errposition(pstate, location)));
+				 parser_errposition(pstate, aconst->location)));
 	}
 
 	/*
@@ -2795,7 +2796,7 @@ transformWindowDefinitions(ParseState *pstate,
 						(errcode(ERRCODE_WINDOWING_ERROR),
 						 errmsg("RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column"),
 						 parser_errposition(pstate, windef->location)));
-			sortcl = castNode(SortGroupClause, linitial(wc->orderClause));
+			sortcl = linitial_node(SortGroupClause, wc->orderClause);
 			sortkey = get_sortgroupclause_expr(sortcl, *targetlist);
 			/* Find the sort operator in pg_amop */
 			if (!get_ordering_op_properties(sortcl->sortop,
@@ -2829,6 +2830,7 @@ transformWindowDefinitions(ParseState *pstate,
 											 rangeopfamily, rangeopcintype,
 											 &wc->endInRangeFunc,
 											 windef->endOffset);
+		wc->runCondition = NIL;
 		wc->winref = winref;
 
 		result = lappend(result, wc);

@@ -3,7 +3,7 @@
  * parse_target.c
  *	  handle target lists
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1322,6 +1322,7 @@ ExpandAllTables(ParseState *pstate, int location)
 							 expandNSItemAttrs(pstate,
 											   nsitem,
 											   0,
+											   true,
 											   location));
 	}
 
@@ -1384,7 +1385,7 @@ ExpandSingleTable(ParseState *pstate, ParseNamespaceItem *nsitem,
 	if (make_target_entry)
 	{
 		/* expandNSItemAttrs handles permissions marking */
-		return expandNSItemAttrs(pstate, nsitem, sublevels_up, location);
+		return expandNSItemAttrs(pstate, nsitem, sublevels_up, true, location);
 	}
 	else
 	{

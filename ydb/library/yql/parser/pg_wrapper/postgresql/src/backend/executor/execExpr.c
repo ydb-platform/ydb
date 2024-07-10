@@ -19,7 +19,7 @@
  *	and "Expression Evaluation" sections.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -366,7 +366,7 @@ ExecBuildProjectionInfo(List *targetList,
 
 	projInfo->pi_exprContext = econtext;
 	/* We embed ExprState into ProjectionInfo instead of doing extra palloc */
-	projInfo->pi_state.tag = T_ExprState;
+	projInfo->pi_state.type = T_ExprState;
 	state = &projInfo->pi_state;
 	state->expr = (Expr *) targetList;
 	state->parent = parent;
@@ -534,7 +534,7 @@ ExecBuildUpdateProjection(List *targetList,
 
 	projInfo->pi_exprContext = econtext;
 	/* We embed ExprState into ProjectionInfo instead of doing extra palloc */
-	projInfo->pi_state.tag = T_ExprState;
+	projInfo->pi_state.type = T_ExprState;
 	state = &projInfo->pi_state;
 	if (evalTargetList)
 		state->expr = (Expr *) targetList;
@@ -1191,21 +1191,34 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				FmgrInfo   *finfo;
 				FunctionCallInfo fcinfo;
 				AclResult	aclresult;
-				FmgrInfo   *hash_finfo;
-				FunctionCallInfo hash_fcinfo;
+				Oid			cmpfuncid;
+
+				/*
+				 * Select the correct comparison function.  When we do hashed
+				 * NOT IN clauses, the opfuncid will be the inequality
+				 * comparison function and negfuncid will be set to equality.
+				 * We need to use the equality function for hash probes.
+				 */
+				if (OidIsValid(opexpr->negfuncid))
+				{
+					Assert(OidIsValid(opexpr->hashfuncid));
+					cmpfuncid = opexpr->negfuncid;
+				}
+				else
+					cmpfuncid = opexpr->opfuncid;
 
 				Assert(list_length(opexpr->args) == 2);
 				scalararg = (Expr *) linitial(opexpr->args);
 				arrayarg = (Expr *) lsecond(opexpr->args);
 
 				/* Check permission to call function */
-				aclresult = pg_proc_aclcheck(opexpr->opfuncid,
+				aclresult = pg_proc_aclcheck(cmpfuncid,
 											 GetUserId(),
 											 ACL_EXECUTE);
 				if (aclresult != ACLCHECK_OK)
 					aclcheck_error(aclresult, OBJECT_FUNCTION,
-								   get_func_name(opexpr->opfuncid));
-				InvokeFunctionExecuteHook(opexpr->opfuncid);
+								   get_func_name(cmpfuncid));
+				InvokeFunctionExecuteHook(cmpfuncid);
 
 				if (OidIsValid(opexpr->hashfuncid))
 				{
@@ -1221,7 +1234,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				/* Set up the primary fmgr lookup information */
 				finfo = palloc0(sizeof(FmgrInfo));
 				fcinfo = palloc0(SizeForFunctionCallInfo(2));
-				fmgr_info(opexpr->opfuncid, finfo);
+				fmgr_info(cmpfuncid, finfo);
 				fmgr_info_set_expr((Node *) node, finfo);
 				InitFunctionCallInfoData(*fcinfo, finfo, 2,
 										 opexpr->inputcollid, NULL, NULL);
@@ -1235,18 +1248,6 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				 */
 				if (OidIsValid(opexpr->hashfuncid))
 				{
-					hash_finfo = palloc0(sizeof(FmgrInfo));
-					hash_fcinfo = palloc0(SizeForFunctionCallInfo(1));
-					fmgr_info(opexpr->hashfuncid, hash_finfo);
-					fmgr_info_set_expr((Node *) node, hash_finfo);
-					InitFunctionCallInfoData(*hash_fcinfo, hash_finfo,
-											 1, opexpr->inputcollid, NULL,
-											 NULL);
-
-					scratch.d.hashedscalararrayop.hash_finfo = hash_finfo;
-					scratch.d.hashedscalararrayop.hash_fcinfo_data = hash_fcinfo;
-					scratch.d.hashedscalararrayop.hash_fn_addr = hash_finfo->fn_addr;
-
 					/* Evaluate scalar directly into left function argument */
 					ExecInitExprRec(scalararg, state,
 									&fcinfo->args[0].value, &fcinfo->args[0].isnull);
@@ -1262,13 +1263,11 @@ ExecInitExprRec(Expr *node, ExprState *state,
 
 					/* And perform the operation */
 					scratch.opcode = EEOP_HASHED_SCALARARRAYOP;
+					scratch.d.hashedscalararrayop.inclause = opexpr->useOr;
 					scratch.d.hashedscalararrayop.finfo = finfo;
 					scratch.d.hashedscalararrayop.fcinfo_data = fcinfo;
-					scratch.d.hashedscalararrayop.fn_addr = finfo->fn_addr;
+					scratch.d.hashedscalararrayop.saop = opexpr;
 
-					scratch.d.hashedscalararrayop.hash_finfo = hash_finfo;
-					scratch.d.hashedscalararrayop.hash_fcinfo_data = hash_fcinfo;
-					scratch.d.hashedscalararrayop.hash_fn_addr = hash_finfo->fn_addr;
 
 					ExprEvalPushStep(state, &scratch);
 				}
@@ -1452,7 +1451,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				/* find out the number of columns in the composite type */
 				tupDesc = lookup_rowtype_tupdesc(fstore->resulttype, -1);
 				ncolumns = tupDesc->natts;
-				DecrTupleDescRefCount(tupDesc);
+				ReleaseTupleDesc(tupDesc);
 
 				/* create workspace for column values */
 				values = (Datum *) palloc(sizeof(Datum) * ncolumns);

@@ -3,7 +3,7 @@
  * readfuncs.c
  *	  Reader functions for Postgres tree nodes.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -32,13 +32,11 @@
 
 #include <math.h>
 
-#include "fmgr.h"
 #include "miscadmin.h"
 #include "nodes/extensible.h"
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
 #include "nodes/readfuncs.h"
-#include "utils/builtins.h"
 
 
 /*
@@ -80,7 +78,7 @@
 #define READ_UINT64_FIELD(fldname) \
 	token = pg_strtok(&length);		/* skip :fldname */ \
 	token = pg_strtok(&length);		/* get field value */ \
-	local_node->fldname = pg_strtouint64(token, NULL, 10)
+	local_node->fldname = strtou64(token, NULL, 10)
 
 /* Read a long integer field (anything written as ":fldname %ld") */
 #define READ_LONG_FIELD(fldname) \
@@ -285,6 +283,8 @@ _readQuery(void)
 	READ_NODE_FIELD(setOperations);
 	READ_NODE_FIELD(constraintDeps);
 	READ_NODE_FIELD(withCheckOptions);
+	READ_NODE_FIELD(mergeActionList);
+	READ_BOOL_FIELD(mergeUseOuterJoin);
 	READ_LOCATION_FIELD(stmt_location);
 	READ_INT_FIELD(stmt_len);
 
@@ -384,6 +384,7 @@ _readWindowClause(void)
 	READ_INT_FIELD(frameOptions);
 	READ_NODE_FIELD(startOffset);
 	READ_NODE_FIELD(endOffset);
+	READ_NODE_FIELD(runCondition);
 	READ_OID_FIELD(startInRangeFunc);
 	READ_OID_FIELD(endInRangeFunc);
 	READ_OID_FIELD(inRangeColl);
@@ -470,6 +471,42 @@ _readCommonTableExpr(void)
 	READ_NODE_FIELD(ctecoltypes);
 	READ_NODE_FIELD(ctecoltypmods);
 	READ_NODE_FIELD(ctecolcollations);
+
+	READ_DONE();
+}
+
+/*
+ * _readMergeWhenClause
+ */
+static MergeWhenClause *
+_readMergeWhenClause(void)
+{
+	READ_LOCALS(MergeWhenClause);
+
+	READ_BOOL_FIELD(matched);
+	READ_ENUM_FIELD(commandType, CmdType);
+	READ_ENUM_FIELD(override, OverridingKind);
+	READ_NODE_FIELD(condition);
+	READ_NODE_FIELD(targetList);
+	READ_NODE_FIELD(values);
+
+	READ_DONE();
+}
+
+/*
+ * _readMergeAction
+ */
+static MergeAction *
+_readMergeAction(void)
+{
+	READ_LOCALS(MergeAction);
+
+	READ_BOOL_FIELD(matched);
+	READ_ENUM_FIELD(commandType, CmdType);
+	READ_ENUM_FIELD(override, OverridingKind);
+	READ_NODE_FIELD(qual);
+	READ_NODE_FIELD(targetList);
+	READ_NODE_FIELD(updateColnos);
 
 	READ_DONE();
 }
@@ -577,7 +614,7 @@ _readVar(void)
 {
 	READ_LOCALS(Var);
 
-	READ_UINT_FIELD(varno);
+	READ_INT_FIELD(varno);
 	READ_INT_FIELD(varattno);
 	READ_OID_FIELD(vartype);
 	READ_INT_FIELD(vartypmod);
@@ -832,6 +869,7 @@ _readScalarArrayOpExpr(void)
 	READ_OID_FIELD(opno);
 	READ_OID_FIELD(opfuncid);
 	READ_OID_FIELD(hashfuncid);
+	READ_OID_FIELD(negfuncid);
 	READ_BOOL_FIELD(useOr);
 	READ_OID_FIELD(inputcollid);
 	READ_NODE_FIELD(args);
@@ -1701,6 +1739,7 @@ _readModifyTable(void)
 	READ_NODE_FIELD(onConflictWhere);
 	READ_UINT_FIELD(exclRelRTI);
 	READ_NODE_FIELD(exclRelTlist);
+	READ_NODE_FIELD(mergeActionLists);
 
 	READ_DONE();
 }
@@ -1832,7 +1871,7 @@ _readSeqScan(void)
 {
 	READ_LOCALS_NO_FIELDS(SeqScan);
 
-	ReadCommonScan(local_node);
+	ReadCommonScan(&local_node->scan);
 
 	READ_DONE();
 }
@@ -1967,6 +2006,7 @@ _readSubqueryScan(void)
 	ReadCommonScan(&local_node->scan);
 
 	READ_NODE_FIELD(subplan);
+	READ_ENUM_FIELD(scanstatus, SubqueryScanStatus);
 
 	READ_DONE();
 }
@@ -2348,11 +2388,14 @@ _readWindowAgg(void)
 	READ_INT_FIELD(frameOptions);
 	READ_NODE_FIELD(startOffset);
 	READ_NODE_FIELD(endOffset);
+	READ_NODE_FIELD(runCondition);
+	READ_NODE_FIELD(runConditionOrig);
 	READ_OID_FIELD(startInRangeFunc);
 	READ_OID_FIELD(endInRangeFunc);
 	READ_OID_FIELD(inRangeColl);
 	READ_BOOL_FIELD(inRangeAsc);
 	READ_BOOL_FIELD(inRangeNullsFirst);
+	READ_BOOL_FIELD(topWindow);
 
 	READ_DONE();
 }
@@ -2745,6 +2788,10 @@ parseNodeString(void)
 		return_value = _readCTECycleClause();
 	else if (MATCH("COMMONTABLEEXPR", 15))
 		return_value = _readCommonTableExpr();
+	else if (MATCH("MERGEWHENCLAUSE", 15))
+		return_value = _readMergeWhenClause();
+	else if (MATCH("MERGEACTION", 11))
+		return_value = _readMergeAction();
 	else if (MATCH("SETOPERATIONSTMT", 16))
 		return_value = _readSetOperationStmt();
 	else if (MATCH("ALIAS", 5))
@@ -2797,23 +2844,23 @@ parseNodeString(void)
 		return_value = _readArrayCoerceExpr();
 	else if (MATCH("CONVERTROWTYPEEXPR", 18))
 		return_value = _readConvertRowtypeExpr();
-	else if (MATCH("COLLATE", 7))
+	else if (MATCH("COLLATEEXPR", 11))
 		return_value = _readCollateExpr();
-	else if (MATCH("CASE", 4))
+	else if (MATCH("CASEEXPR", 8))
 		return_value = _readCaseExpr();
-	else if (MATCH("WHEN", 4))
+	else if (MATCH("CASEWHEN", 8))
 		return_value = _readCaseWhen();
 	else if (MATCH("CASETESTEXPR", 12))
 		return_value = _readCaseTestExpr();
-	else if (MATCH("ARRAY", 5))
+	else if (MATCH("ARRAYEXPR", 9))
 		return_value = _readArrayExpr();
-	else if (MATCH("ROW", 3))
+	else if (MATCH("ROWEXPR", 7))
 		return_value = _readRowExpr();
-	else if (MATCH("ROWCOMPARE", 10))
+	else if (MATCH("ROWCOMPAREEXPR", 14))
 		return_value = _readRowCompareExpr();
-	else if (MATCH("COALESCE", 8))
+	else if (MATCH("COALESCEEXPR", 12))
 		return_value = _readCoalesceExpr();
-	else if (MATCH("MINMAX", 6))
+	else if (MATCH("MINMAXEXPR", 10))
 		return_value = _readMinMaxExpr();
 	else if (MATCH("SQLVALUEFUNCTION", 16))
 		return_value = _readSQLValueFunction();
@@ -2847,17 +2894,17 @@ parseNodeString(void)
 		return_value = _readOnConflictExpr();
 	else if (MATCH("APPENDRELINFO", 13))
 		return_value = _readAppendRelInfo();
-	else if (MATCH("RTE", 3))
+	else if (MATCH("RANGETBLENTRY", 13))
 		return_value = _readRangeTblEntry();
 	else if (MATCH("RANGETBLFUNCTION", 16))
 		return_value = _readRangeTblFunction();
 	else if (MATCH("TABLESAMPLECLAUSE", 17))
 		return_value = _readTableSampleClause();
-	else if (MATCH("NOTIFY", 6))
+	else if (MATCH("NOTIFYSTMT", 10))
 		return_value = _readNotifyStmt();
 	else if (MATCH("DEFELEM", 7))
 		return_value = _readDefElem();
-	else if (MATCH("DECLARECURSOR", 13))
+	else if (MATCH("DECLARECURSORSTMT", 17))
 		return_value = _readDeclareCursorStmt();
 	else if (MATCH("PLANNEDSTMT", 11))
 		return_value = _readPlannedStmt();

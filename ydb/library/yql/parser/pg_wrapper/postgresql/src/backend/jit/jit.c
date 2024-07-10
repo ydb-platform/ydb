@@ -8,7 +8,7 @@
  * should end up here.
  *
  *
- * Copyright (c) 2016-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2016-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/jit/jit.c
@@ -198,7 +198,7 @@ file_exists(const char *name)
 	AssertArg(name != NULL);
 
 	if (stat(name, &st) == 0)
-		return S_ISDIR(st.st_mode) ? false : true;
+		return !S_ISDIR(st.st_mode);
 	else if (!(errno == ENOENT || errno == ENOTDIR))
 		ereport(ERROR,
 				(errcode_for_file_access(),

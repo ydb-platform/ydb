@@ -3,7 +3,7 @@
  * wparser_def.c
  *		Default text search parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -298,11 +298,10 @@ TParserInit(char *str, int len)
 	 */
 	if (prs->charmaxlen > 1)
 	{
-		Oid			collation = DEFAULT_COLLATION_OID;	/* TODO */
 		pg_locale_t mylocale = 0;	/* TODO */
 
 		prs->usewide = true;
-		if (lc_ctype_is_c(collation))
+		if (database_ctype_is_c)
 		{
 			/*
 			 * char2wchar doesn't work for C-locale and sizeof(pg_wchar) could
@@ -1871,7 +1870,7 @@ TParserGet(TParser *prs)
 		}
 	}
 
-	return (item && (item->flags & A_BINGO)) ? true : false;
+	return (item && (item->flags & A_BINGO));
 }
 
 Datum

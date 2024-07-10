@@ -4,7 +4,7 @@
  *	  Post-processing of a completed plan tree: fix references to subplan
  *	  vars, compute regproc values for operators, etc
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -31,7 +31,7 @@
 
 typedef struct
 {
-	Index		varno;			/* RT index of Var */
+	int			varno;			/* RT index of Var */
 	AttrNumber	varattno;		/* attr number of Var */
 	AttrNumber	resno;			/* TLE position of Var */
 } tlist_vinfo;
@@ -66,10 +66,17 @@ typedef struct
 {
 	PlannerInfo *root;
 	indexed_tlist *subplan_itlist;
-	Index		newvarno;
+	int			newvarno;
 	int			rtoffset;
 	double		num_exec;
 } fix_upper_expr_context;
+
+typedef struct
+{
+	PlannerInfo *root;
+	indexed_tlist *subplan_itlist;
+	int			newvarno;
+} fix_windowagg_cond_context;
 
 /*
  * Selecting the best alternative in an AlternativeSubPlan expression requires
@@ -115,7 +122,6 @@ static Plan *set_indexonlyscan_references(PlannerInfo *root,
 static Plan *set_subqueryscan_references(PlannerInfo *root,
 										 SubqueryScan *plan,
 										 int rtoffset);
-static bool trivial_subqueryscan(SubqueryScan *plan);
 static Plan *clean_up_removed_plan_level(Plan *parent, Plan *child);
 static void set_foreignscan_references(PlannerInfo *root,
 									   ForeignScan *fscan,
@@ -143,15 +149,15 @@ static void set_dummy_tlist_references(Plan *plan, int rtoffset);
 static indexed_tlist *build_tlist_index(List *tlist);
 static Var *search_indexed_tlist_for_var(Var *var,
 										 indexed_tlist *itlist,
-										 Index newvarno,
+										 int newvarno,
 										 int rtoffset);
 static Var *search_indexed_tlist_for_non_var(Expr *node,
 											 indexed_tlist *itlist,
-											 Index newvarno);
+											 int newvarno);
 static Var *search_indexed_tlist_for_sortgroupref(Expr *node,
 												  Index sortgroupref,
 												  indexed_tlist *itlist,
-												  Index newvarno);
+												  int newvarno);
 static List *fix_join_expr(PlannerInfo *root,
 						   List *clauses,
 						   indexed_tlist *outer_itlist,
@@ -163,7 +169,7 @@ static Node *fix_join_expr_mutator(Node *node,
 static Node *fix_upper_expr(PlannerInfo *root,
 							Node *node,
 							indexed_tlist *subplan_itlist,
-							Index newvarno,
+							int newvarno,
 							int rtoffset, double num_exec);
 static Node *fix_upper_expr_mutator(Node *node,
 									fix_upper_expr_context *context);
@@ -172,6 +178,9 @@ static List *set_returning_clause_references(PlannerInfo *root,
 											 Plan *topplan,
 											 Index resultRelation,
 											 int rtoffset);
+static List *set_windowagg_runcondition_references(PlannerInfo *root,
+												   List *runcondition,
+												   Plan *plan);
 
 
 /*****************************************************************************
@@ -506,16 +515,6 @@ add_rte_to_flat_rtable(PlannerGlobal *glob, RangeTblEntry *rte)
 	glob->finalrtable = lappend(glob->finalrtable, newrte);
 
 	/*
-	 * Check for RT index overflow; it's very unlikely, but if it did happen,
-	 * the executor would get confused by varnos that match the special varno
-	 * values.
-	 */
-	if (IS_SPECIAL_VARNO(list_length(glob->finalrtable)))
-		ereport(ERROR,
-				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-				 errmsg("too many range table entries")));
-
-	/*
 	 * If it's a plain relation RTE, add the table to relationOids.
 	 *
 	 * We do this even though the RTE might be unreferenced in the plan tree;
@@ -553,12 +552,12 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 			{
 				SeqScan    *splan = (SeqScan *) plan;
 
-				splan->scanrelid += rtoffset;
-				splan->plan.targetlist =
-					fix_scan_list(root, splan->plan.targetlist,
+				splan->scan.scanrelid += rtoffset;
+				splan->scan.plan.targetlist =
+					fix_scan_list(root, splan->scan.plan.targetlist,
 								  rtoffset, NUM_EXEC_TLIST(plan));
-				splan->plan.qual =
-					fix_scan_list(root, splan->plan.qual,
+				splan->scan.plan.qual =
+					fix_scan_list(root, splan->scan.plan.qual,
 								  rtoffset, NUM_EXEC_QUAL(plan));
 			}
 			break;
@@ -896,6 +895,18 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 			{
 				WindowAgg  *wplan = (WindowAgg *) plan;
 
+				/*
+				 * Adjust the WindowAgg's run conditions by swapping the
+				 * WindowFuncs references out to instead reference the Var in
+				 * the scan slot so that when the executor evaluates the
+				 * runCondition, it receives the WindowFunc's value from the
+				 * slot that the result has just been stored into rather than
+				 * evaluating the WindowFunc all over again.
+				 */
+				wplan->runCondition = set_windowagg_runcondition_references(root,
+																			wplan->runCondition,
+																			(Plan *) wplan);
+
 				set_upper_references(root, plan, rtoffset);
 
 				/*
@@ -907,6 +918,14 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 					fix_scan_expr(root, wplan->startOffset, rtoffset, 1);
 				wplan->endOffset =
 					fix_scan_expr(root, wplan->endOffset, rtoffset, 1);
+				wplan->runCondition = fix_scan_list(root,
+													wplan->runCondition,
+													rtoffset,
+													NUM_EXEC_TLIST(plan));
+				wplan->runConditionOrig = fix_scan_list(root,
+														wplan->runConditionOrig,
+														rtoffset,
+														NUM_EXEC_TLIST(plan));
 			}
 			break;
 		case T_Result:
@@ -962,6 +981,7 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 		case T_ModifyTable:
 			{
 				ModifyTable *splan = (ModifyTable *) plan;
+				Plan	   *subplan = outerPlan(splan);
 
 				Assert(splan->plan.targetlist == NIL);
 				Assert(splan->plan.qual == NIL);
@@ -973,7 +993,6 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 				if (splan->returningLists)
 				{
 					List	   *newRL = NIL;
-					Plan	   *subplan = outerPlan(splan);
 					ListCell   *lcrl,
 							   *lcrr;
 
@@ -1038,6 +1057,68 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 
 					splan->exclRelTlist =
 						fix_scan_list(root, splan->exclRelTlist, rtoffset, 1);
+				}
+
+				/*
+				 * The MERGE statement produces the target rows by performing
+				 * a right join between the target relation and the source
+				 * relation (which could be a plain relation or a subquery).
+				 * The INSERT and UPDATE actions of the MERGE statement
+				 * require access to the columns from the source relation. We
+				 * arrange things so that the source relation attributes are
+				 * available as INNER_VAR and the target relation attributes
+				 * are available from the scan tuple.
+				 */
+				if (splan->mergeActionLists != NIL)
+				{
+					ListCell   *lca,
+							   *lcr;
+
+					/*
+					 * Fix the targetList of individual action nodes so that
+					 * the so-called "source relation" Vars are referenced as
+					 * INNER_VAR.  Note that for this to work correctly during
+					 * execution, the ecxt_innertuple must be set to the tuple
+					 * obtained by executing the subplan, which is what
+					 * constitutes the "source relation".
+					 *
+					 * We leave the Vars from the result relation (i.e. the
+					 * target relation) unchanged i.e. those Vars would be
+					 * picked from the scan slot. So during execution, we must
+					 * ensure that ecxt_scantuple is setup correctly to refer
+					 * to the tuple from the target relation.
+					 */
+					indexed_tlist *itlist;
+
+					itlist = build_tlist_index(subplan->targetlist);
+
+					forboth(lca, splan->mergeActionLists,
+							lcr, splan->resultRelations)
+					{
+						List	   *mergeActionList = lfirst(lca);
+						Index		resultrel = lfirst_int(lcr);
+
+						foreach(l, mergeActionList)
+						{
+							MergeAction *action = (MergeAction *) lfirst(l);
+
+							/* Fix targetList of each action. */
+							action->targetList = fix_join_expr(root,
+															   action->targetList,
+															   NULL, itlist,
+															   resultrel,
+															   rtoffset,
+															   NUM_EXEC_TLIST(plan));
+
+							/* Fix quals too. */
+							action->qual = (Node *) fix_join_expr(root,
+																  (List *) action->qual,
+																  NULL, itlist,
+																  resultrel,
+																  rtoffset,
+																  NUM_EXEC_QUAL(plan));
+						}
+					}
 				}
 
 				splan->nominalRelation += rtoffset;
@@ -1267,13 +1348,40 @@ set_subqueryscan_references(PlannerInfo *root,
  *
  * We can delete it if it has no qual to check and the targetlist just
  * regurgitates the output of the child plan.
+ *
+ * This can be called from mark_async_capable_plan(), a helper function for
+ * create_append_plan(), before set_subqueryscan_references(), to determine
+ * triviality of a SubqueryScan that is a child of an Append node.  So we
+ * cache the result in the SubqueryScan node to avoid repeated computation.
+ *
+ * Note: when called from mark_async_capable_plan(), we determine the result
+ * before running finalize_plan() on the SubqueryScan node (if needed) and
+ * set_plan_references() on the subplan tree, but this would be safe, because
+ * 1) finalize_plan() doesn't modify the tlist or quals for the SubqueryScan
+ *	  node (or that for any plan node in the subplan tree), and
+ * 2) set_plan_references() modifies the tlist for every plan node in the
+ *	  subplan tree, but keeps const/resjunk columns as const/resjunk ones and
+ *	  preserves the length and order of the tlist, and
+ * 3) set_plan_references() might delete the topmost plan node like an Append
+ *	  or MergeAppend from the subplan tree and pull up the child plan node,
+ *	  but in that case, the tlist for the child plan node exactly matches the
+ *	  parent.
  */
-static bool
+bool
 trivial_subqueryscan(SubqueryScan *plan)
 {
 	int			attrno;
 	ListCell   *lp,
 			   *lc;
+
+	/* We might have detected this already; in which case reuse the result */
+	if (plan->scanstatus == SUBQUERY_SCAN_TRIVIAL)
+		return true;
+	if (plan->scanstatus == SUBQUERY_SCAN_NONTRIVIAL)
+		return false;
+	Assert(plan->scanstatus == SUBQUERY_SCAN_UNKNOWN);
+	/* Initially, mark the SubqueryScan as non-deletable from the plan tree */
+	plan->scanstatus = SUBQUERY_SCAN_NONTRIVIAL;
 
 	if (plan->scan.plan.qual != NIL)
 		return false;
@@ -1315,6 +1423,9 @@ trivial_subqueryscan(SubqueryScan *plan)
 
 		attrno++;
 	}
+
+	/* Re-mark the SubqueryScan as deletable from the plan tree */
+	plan->scanstatus = SUBQUERY_SCAN_TRIVIAL;
 
 	return true;
 }
@@ -1777,6 +1888,9 @@ fix_expr_common(PlannerInfo *root, Node *node)
 
 		if (OidIsValid(saop->hashfuncid))
 			record_plan_function_dependency(root, saop->hashfuncid);
+
+		if (OidIsValid(saop->negfuncid))
+			record_plan_function_dependency(root, saop->negfuncid);
 	}
 	else if (IsA(node, Const))
 	{
@@ -1997,10 +2111,8 @@ fix_scan_expr_mutator(Node *node, fix_scan_expr_context *context)
 	{
 		CurrentOfExpr *cexpr = (CurrentOfExpr *) copyObject(node);
 
-		Assert(cexpr->cvarno != INNER_VAR);
-		Assert(cexpr->cvarno != OUTER_VAR);
-		if (!IS_SPECIAL_VARNO(cexpr->cvarno))
-			cexpr->cvarno += context->rtoffset;
+		Assert(!IS_SPECIAL_VARNO(cexpr->cvarno));
+		cexpr->cvarno += context->rtoffset;
 		return (Node *) cexpr;
 	}
 	if (IsA(node, PlaceHolderVar))
@@ -2497,7 +2609,7 @@ build_tlist_index(List *tlist)
  * (so nothing other than Vars and PlaceHolderVars can be matched).
  */
 static indexed_tlist *
-build_tlist_index_other_vars(List *tlist, Index ignore_rel)
+build_tlist_index_other_vars(List *tlist, int ignore_rel)
 {
 	indexed_tlist *itlist;
 	tlist_vinfo *vinfo;
@@ -2549,9 +2661,9 @@ build_tlist_index_other_vars(List *tlist, Index ignore_rel)
  */
 static Var *
 search_indexed_tlist_for_var(Var *var, indexed_tlist *itlist,
-							 Index newvarno, int rtoffset)
+							 int newvarno, int rtoffset)
 {
-	Index		varno = var->varno;
+	int			varno = var->varno;
 	AttrNumber	varattno = var->varattno;
 	tlist_vinfo *vinfo;
 	int			i;
@@ -2589,7 +2701,7 @@ search_indexed_tlist_for_var(Var *var, indexed_tlist *itlist,
  */
 static Var *
 search_indexed_tlist_for_non_var(Expr *node,
-								 indexed_tlist *itlist, Index newvarno)
+								 indexed_tlist *itlist, int newvarno)
 {
 	TargetEntry *tle;
 
@@ -2631,7 +2743,7 @@ static Var *
 search_indexed_tlist_for_sortgroupref(Expr *node,
 									  Index sortgroupref,
 									  indexed_tlist *itlist,
-									  Index newvarno)
+									  int newvarno)
 {
 	ListCell   *lc;
 
@@ -2663,7 +2775,7 @@ search_indexed_tlist_for_sortgroupref(Expr *node,
  *	   relation target lists.  Also perform opcode lookup and add
  *	   regclass OIDs to root->glob->relationOids.
  *
- * This is used in three different scenarios:
+ * This is used in four different scenarios:
  * 1) a normal join clause, where all the Vars in the clause *must* be
  *	  replaced by OUTER_VAR or INNER_VAR references.  In this case
  *	  acceptable_rel should be zero so that any failure to match a Var will be
@@ -2678,6 +2790,11 @@ search_indexed_tlist_for_sortgroupref(Expr *node,
  *	  to-be-updated relation) alone. Correspondingly inner_itlist is to be
  *	  EXCLUDED elements, outer_itlist = NULL and acceptable_rel the target
  *	  relation.
+ * 4) MERGE.  In this case, references to the source relation are to be
+ *    replaced with INNER_VAR references, leaving Vars of the target
+ *    relation (the to-be-modified relation) alone.  So inner_itlist is to be
+ *    the source relation elements, outer_itlist = NULL and acceptable_rel
+ *    the target relation.
  *
  * 'clauses' is the targetlist or list of join clauses
  * 'outer_itlist' is the indexed target list of the outer join relation,
@@ -2849,7 +2966,7 @@ static Node *
 fix_upper_expr(PlannerInfo *root,
 			   Node *node,
 			   indexed_tlist *subplan_itlist,
-			   Index newvarno,
+			   int newvarno,
 			   int rtoffset,
 			   double num_exec)
 {
@@ -3009,6 +3126,78 @@ set_returning_clause_references(PlannerInfo *root,
 	return rlist;
 }
 
+/*
+ * fix_windowagg_condition_expr_mutator
+ *		Mutator function for replacing WindowFuncs with the corresponding Var
+ *		in the targetlist which references that WindowFunc.
+ */
+static Node *
+fix_windowagg_condition_expr_mutator(Node *node,
+									 fix_windowagg_cond_context *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, WindowFunc))
+	{
+		Var		   *newvar;
+
+		newvar = search_indexed_tlist_for_non_var((Expr *) node,
+												  context->subplan_itlist,
+												  context->newvarno);
+		if (newvar)
+			return (Node *) newvar;
+		elog(ERROR, "WindowFunc not found in subplan target lists");
+	}
+
+	return expression_tree_mutator(node,
+								   fix_windowagg_condition_expr_mutator,
+								   (void *) context);
+}
+
+/*
+ * fix_windowagg_condition_expr
+ *		Converts references in 'runcondition' so that any WindowFunc
+ *		references are swapped out for a Var which references the matching
+ *		WindowFunc in 'subplan_itlist'.
+ */
+static List *
+fix_windowagg_condition_expr(PlannerInfo *root,
+							 List *runcondition,
+							 indexed_tlist *subplan_itlist)
+{
+	fix_windowagg_cond_context context;
+
+	context.root = root;
+	context.subplan_itlist = subplan_itlist;
+	context.newvarno = 0;
+
+	return (List *) fix_windowagg_condition_expr_mutator((Node *) runcondition,
+														 &context);
+}
+
+/*
+ * set_windowagg_runcondition_references
+ *		Converts references in 'runcondition' so that any WindowFunc
+ *		references are swapped out for a Var which references the matching
+ *		WindowFunc in 'plan' targetlist.
+ */
+static List *
+set_windowagg_runcondition_references(PlannerInfo *root,
+									  List *runcondition,
+									  Plan *plan)
+{
+	List	   *newlist;
+	indexed_tlist *itlist;
+
+	itlist = build_tlist_index(plan->targetlist);
+
+	newlist = fix_windowagg_condition_expr(root, runcondition, itlist);
+
+	pfree(itlist);
+
+	return newlist;
+}
 
 /*****************************************************************************
  *					QUERY DEPENDENCY MANAGEMENT
@@ -3028,11 +3217,11 @@ record_plan_function_dependency(PlannerInfo *root, Oid funcid)
 	 * For performance reasons, we don't bother to track built-in functions;
 	 * we just assume they'll never change (or at least not in ways that'd
 	 * invalidate plans using them).  For this purpose we can consider a
-	 * built-in function to be one with OID less than FirstBootstrapObjectId.
+	 * built-in function to be one with OID less than FirstUnpinnedObjectId.
 	 * Note that the OID generator guarantees never to generate such an OID
 	 * after startup, even at OID wraparound.
 	 */
-	if (funcid >= (Oid) FirstBootstrapObjectId)
+	if (funcid >= (Oid) FirstUnpinnedObjectId)
 	{
 		PlanInvalItem *inval_item = makeNode(PlanInvalItem);
 
@@ -3068,7 +3257,7 @@ record_plan_type_dependency(PlannerInfo *root, Oid typid)
 	 * As in record_plan_function_dependency, ignore the possibility that
 	 * someone would change a built-in domain.
 	 */
-	if (typid >= (Oid) FirstBootstrapObjectId)
+	if (typid >= (Oid) FirstUnpinnedObjectId)
 	{
 		PlanInvalItem *inval_item = makeNode(PlanInvalItem);
 

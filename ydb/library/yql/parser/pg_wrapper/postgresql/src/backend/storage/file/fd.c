@@ -3,7 +3,7 @@
  * fd.c
  *	  Virtual file descriptor code.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -92,10 +92,12 @@
 #include "catalog/pg_tablespace.h"
 #include "common/file_perm.h"
 #include "common/file_utils.h"
+#include "common/pg_prng.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "port/pg_iovec.h"
 #include "portability/mem.h"
+#include "postmaster/startup.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
 #include "utils/guc.h"
@@ -231,6 +233,11 @@ static __thread bool have_xact_temporary_files = false;
  */
 static __thread uint64 temporary_files_size = 0;
 
+/* Temporary file access initialized and not yet shut down? */
+#ifdef USE_ASSERT_CHECKING
+static bool temporary_files_allowed = false;
+#endif
+
 /*
  * List of OS handles opened with AllocateFile, AllocateDir and
  * OpenTransientFile.
@@ -327,7 +334,7 @@ static File OpenTemporaryFileInTablespace(Oid tblspcOid, bool rejectError);
 static bool reserveAllocatedDesc(void);
 static int	FreeDesc(AllocateDesc *desc);
 
-static void AtProcExit_Files(int code, Datum arg);
+static void BeforeShmemExit_Files(int code, Datum arg);
 static void CleanupTempFiles(bool isCommit, bool isProcExit);
 static void RemovePgTempRelationFiles(const char *tsdirname);
 static void RemovePgTempRelationFilesInDbspace(const char *dbspacedirname);
@@ -834,10 +841,7 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 		ereport(elevel,
 				(errcode_for_file_access(),
 				 errmsg("could not link file \"%s\" to \"%s\": %m",
-						oldfile, newfile),
-				 (AmCheckpointerProcess() ?
-				  errhint("This is known to fail occasionally during archive recovery, where it is harmless.") :
-				  0)));
+						oldfile, newfile)));
 		return -1;
 	}
 	unlink(oldfile);
@@ -847,10 +851,7 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 		ereport(elevel,
 				(errcode_for_file_access(),
 				 errmsg("could not rename file \"%s\" to \"%s\": %m",
-						oldfile, newfile),
-				 (AmCheckpointerProcess() ?
-				  errhint("This is known to fail occasionally during archive recovery, where it is harmless.") :
-				  0)));
+						oldfile, newfile)));
 		return -1;
 	}
 #endif
@@ -874,6 +875,9 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
  *
  * This is called during either normal or standalone backend start.
  * It is *not* called in the postmaster.
+ *
+ * Note that this does not initialize temporary file access, that is
+ * separately initialized via InitTemporaryFileAccess().
  */
 void
 InitFileAccess(void)
@@ -891,9 +895,35 @@ InitFileAccess(void)
 	VfdCache->fd = VFD_CLOSED;
 
 	SizeVfdCache = 1;
+}
 
-	/* register proc-exit hook to ensure temp files are dropped at exit */
-	on_proc_exit(AtProcExit_Files, 0);
+/*
+ * InitTemporaryFileAccess --- initialize temporary file access during startup
+ *
+ * This is called during either normal or standalone backend start.
+ * It is *not* called in the postmaster.
+ *
+ * This is separate from InitFileAccess() because temporary file cleanup can
+ * cause pgstat reporting. As pgstat is shut down during before_shmem_exit(),
+ * our reporting has to happen before that. Low level file access should be
+ * available for longer, hence the separate initialization / shutdown of
+ * temporary file handling.
+ */
+void
+InitTemporaryFileAccess(void)
+{
+	Assert(SizeVfdCache != 0);	/* InitFileAccess() needs to have run */
+	Assert(!temporary_files_allowed);	/* call me only once */
+
+	/*
+	 * Register before-shmem-exit hook to ensure temp files are dropped while
+	 * we can still report stats.
+	 */
+	before_shmem_exit(BeforeShmemExit_Files, 0);
+
+#ifdef USE_ASSERT_CHECKING
+	temporary_files_allowed = true;
+#endif
 }
 
 /*
@@ -1065,10 +1095,54 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	int			fd;
 
 tryAgain:
+#ifdef PG_O_DIRECT_USE_F_NOCACHE
+
+	/*
+	 * The value we defined to stand in for O_DIRECT when simulating it with
+	 * F_NOCACHE had better not collide with any of the standard flags.
+	 */
+	StaticAssertStmt((PG_O_DIRECT &
+					  (O_APPEND |
+					   O_CREAT |
+					   O_EXCL |
+					   O_RDWR |
+					   O_RDONLY |
+					   O_SYNC |
+					   O_TRUNC |
+					   O_WRONLY)) == 0,
+					 "PG_O_DIRECT value collides with standard flag");
+#if defined(O_CLOEXEC)
+	StaticAssertStmt((PG_O_DIRECT & O_CLOEXEC) == 0,
+					 "PG_O_DIRECT value collides with O_CLOEXEC");
+#endif
+#if defined(O_DSYNC)
+	StaticAssertStmt((PG_O_DIRECT & O_DSYNC) == 0,
+					 "PG_O_DIRECT value collides with O_DSYNC");
+#endif
+
+	fd = open(fileName, fileFlags & ~PG_O_DIRECT, fileMode);
+#else
 	fd = open(fileName, fileFlags, fileMode);
+#endif
 
 	if (fd >= 0)
+	{
+#ifdef PG_O_DIRECT_USE_F_NOCACHE
+		if (fileFlags & PG_O_DIRECT)
+		{
+			if (fcntl(fd, F_NOCACHE, 1) < 0)
+			{
+				int			save_errno = errno;
+
+				close(fd);
+				errno = save_errno;
+				return -1;
+			}
+		}
+#endif
+
 		return fd;				/* success! */
+	}
 
 	if (errno == EMFILE || errno == ENFILE)
 	{
@@ -1634,6 +1708,8 @@ OpenTemporaryFile(bool interXact)
 {
 	File		file = 0;
 
+	Assert(temporary_files_allowed);	/* check temp file access is up */
+
 	/*
 	 * Make sure the current resource owner has space for this File before we
 	 * open it, if we'll be registering it below.
@@ -1769,6 +1845,8 @@ PathNameCreateTemporaryFile(const char *path, bool error_on_failure)
 {
 	File		file;
 
+	Assert(temporary_files_allowed);	/* check temp file access is up */
+
 	ResourceOwnerEnlargeFiles(CurrentResourceOwner);
 
 	/*
@@ -1806,6 +1884,8 @@ File
 PathNameOpenTemporaryFile(const char *path, int mode)
 {
 	File		file;
+
+	Assert(temporary_files_allowed);	/* check temp file access is up */
 
 	ResourceOwnerEnlargeFiles(CurrentResourceOwner);
 
@@ -1845,7 +1925,7 @@ PathNameDeleteTemporaryFile(const char *path, bool error_on_failure)
 
 	/*
 	 * Unlike FileClose's automatic file deletion code, we tolerate
-	 * non-existence to support BufFileDeleteShared which doesn't know how
+	 * non-existence to support BufFileDeleteFileSet which doesn't know how
 	 * many segments it has to delete until it runs out.
 	 */
 	if (stat_errno == ENOENT)
@@ -2860,7 +2940,8 @@ SetTempTablespaces(Oid *tableSpaces, int numSpaces)
 	 * available tablespaces.
 	 */
 	if (numSpaces > 1)
-		nextTempTableSpace = random() % numSpaces;
+		nextTempTableSpace = pg_prng_uint64_range(&pg_global_prng_state,
+												  0, numSpaces - 1);
 	else
 		nextTempTableSpace = 0;
 }
@@ -2968,15 +3049,20 @@ AtEOXact_Files(bool isCommit)
 }
 
 /*
- * AtProcExit_Files
+ * BeforeShmemExit_Files
  *
- * on_proc_exit hook to clean up temp files during backend shutdown.
+ * before_shmem_access hook to clean up temp files during backend shutdown.
  * Here, we want to clean up *all* temp files including interXact ones.
  */
 static void
-AtProcExit_Files(int code, Datum arg)
+BeforeShmemExit_Files(int code, Datum arg)
 {
 	CleanupTempFiles(false, true);
+
+	/* prevent further temp files from being created */
+#ifdef USE_ASSERT_CHECKING
+	temporary_files_allowed = false;
+#endif
 }
 
 /*
@@ -3298,6 +3384,9 @@ do_syncfs(const char *path)
 {
 	int			fd;
 
+	ereport_startup_progress("syncing data directory (syncfs), elapsed time: %ld.%02d s, current path: %s",
+							 path);
+
 	fd = OpenTransientFile(path, O_RDONLY);
 	if (fd < 0)
 	{
@@ -3382,6 +3471,9 @@ SyncDataDirectory(void)
 		 * directories.
 		 */
 
+		/* Prepare to report progress syncing the data directory via syncfs. */
+		begin_startup_progress_phase();
+
 		/* Sync the top level pgdata directory. */
 		do_syncfs(".");
 		/* If any tablespaces are configured, sync each of those. */
@@ -3404,17 +3496,23 @@ SyncDataDirectory(void)
 	}
 #endif							/* !HAVE_SYNCFS */
 
+#ifdef PG_FLUSH_DATA_WORKS
+	/* Prepare to report progress of the pre-fsync phase. */
+	begin_startup_progress_phase();
+
 	/*
 	 * If possible, hint to the kernel that we're soon going to fsync the data
 	 * directory and its contents.  Errors in this step are even less
 	 * interesting than normal, so log them only at DEBUG1.
 	 */
-#ifdef PG_FLUSH_DATA_WORKS
 	walkdir(".", pre_sync_fname, false, DEBUG1);
 	if (xlog_is_symlink)
 		walkdir("pg_wal", pre_sync_fname, false, DEBUG1);
 	walkdir("pg_tblspc", pre_sync_fname, true, DEBUG1);
 #endif
+
+	/* Prepare to report progress syncing the data directory via fsync. */
+	begin_startup_progress_phase();
 
 	/*
 	 * Now we do the fsync()s in the same order.
@@ -3518,6 +3616,9 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 	if (isdir)
 		return;
 
+	ereport_startup_progress("syncing data directory (pre-fsync), elapsed time: %ld.%02d s, current path: %s",
+							 fname);
+
 	fd = OpenTransientFile(fname, O_RDONLY | PG_BINARY);
 
 	if (fd < 0)
@@ -3547,6 +3648,9 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 static void
 datadir_fsync_fname(const char *fname, bool isdir, int elevel)
 {
+	ereport_startup_progress("syncing data directory (fsync), elapsed time: %ld.%02d s, current path: %s",
+							 fname);
+
 	/*
 	 * We want to silently ignoring errors about unreadable files.  Pass that
 	 * desire on to fsync_fname_ext().

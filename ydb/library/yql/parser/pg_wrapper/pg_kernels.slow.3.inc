@@ -34,6 +34,7 @@ TExecFunc arrow_regexeqjoinsel() { return MakeIndirectExec<true, true>(&regexeqj
 TExecFunc arrow_regexeqsel() { return MakeIndirectExec<true, true>(&regexeqsel); }
 TExecFunc arrow_regexnejoinsel() { return MakeIndirectExec<true, true>(&regexnejoinsel); }
 TExecFunc arrow_regexnesel() { return MakeIndirectExec<true, true>(&regexnesel); }
+TExecFunc arrow_text_starts_with_support() { return MakeIndirectExec<true, true>(&text_starts_with_support); }
 TExecFunc arrow_texticlike_support() { return MakeIndirectExec<true, true>(&texticlike_support); }
 TExecFunc arrow_texticregexeq_support() { return MakeIndirectExec<true, true>(&texticregexeq_support); }
 TExecFunc arrow_textlike_support() { return MakeIndirectExec<true, true>(&textlike_support); }

@@ -478,7 +478,7 @@ PGSharedMemoryAttach(IpcMemoryId shmId,
  * Returns the (real, assumed or config provided) page size into *hugepagesize,
  * and the hugepage-related mmap flags to use into *mmap_flags.
  */
-static void
+void
 GetHugePageSize(Size *hugepagesize, int *mmap_flags)
 {
 	Size		default_hugepagesize = 0;

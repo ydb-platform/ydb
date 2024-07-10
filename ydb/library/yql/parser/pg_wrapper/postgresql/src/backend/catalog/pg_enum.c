@@ -3,7 +3,7 @@
  * pg_enum.c
  *	  routines to support manipulation of the pg_enum relation
  *
- * Copyright (c) 2006-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2006-2022, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -55,7 +55,7 @@ static int	sort_order_cmp(const void *p1, const void *p2);
  * EnumValuesCreate
  *		Create an entry in pg_enum for each of the supplied enum values.
  *
- * vals is a list of Value strings.
+ * vals is a list of String values.
  */
 void
 EnumValuesCreate(Oid enumTypeOid, List *vals)

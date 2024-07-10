@@ -3,7 +3,7 @@
  * arrayfuncs.c
  *	  Support functions for arrays.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -4037,7 +4037,8 @@ hash_array(PG_FUNCTION_ARGS)
 
 			/*
 			 * Make fake type cache entry structure.  Note that we can't just
-			 * modify typentry, since that points directly into the type cache.
+			 * modify typentry, since that points directly into the type
+			 * cache.
 			 */
 			record_typentry = palloc0(sizeof(*record_typentry));
 			record_typentry->type_id = element_type;

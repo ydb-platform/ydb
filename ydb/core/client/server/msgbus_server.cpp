@@ -117,7 +117,6 @@ public:
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
-            MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -538,8 +537,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
     case MTYPE_CLIENT_SQS_REQUEST:
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
-    case MTYPE_CLIENT_WHOAMI:
-        return ClientActorRequest(CreateMessageBusWhoAmI, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:

@@ -175,8 +175,7 @@ private:
         YQL_ENSURE(PerStatementResult);
 
         const auto prepareSettings = PrepareCompilationSettings(ctx);
-
-        auto result = KqpHost->SplitQuery(QueryId.Text, prepareSettings);
+        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));
@@ -594,7 +593,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpScanQueryStreamLookup = serviceConfig.GetEnableKqpScanQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
     kqpConfig.EnablePreparedDdl = serviceConfig.GetEnablePreparedDdl();
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();

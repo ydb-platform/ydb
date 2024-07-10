@@ -36,9 +36,8 @@ public:
 
     std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const;
 
-    std::shared_ptr<arrow::Scalar> GetDefaultWriteValueVerified(const std::string& columnName) const;
-    std::shared_ptr<arrow::Scalar> GetDefaultWriteValueVerified(const ui32 columnId) const;
-    std::shared_ptr<arrow::Scalar> GetDefaultReadValueVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow::Scalar> GetDefaultValueVerified(const std::string& columnName) const;
+    std::shared_ptr<arrow::Scalar> GetDefaultValueVerified(const ui32 columnId) const;
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
     TConclusion<std::shared_ptr<arrow::RecordBatch>> AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const;

@@ -183,7 +183,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 } else {
                     AFL_VERIFY(dataSchema->IsSpecialColumnId(columnId));
                 }
-                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetDefaultReadValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
+                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetDefaultValueVerified(columnId), resultSchema->GetColumnSaver(columnId)));
                 records = { nullptr };
             }
             AFL_VERIFY(!!loader);
@@ -270,16 +270,17 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, true);
-            AppendedPortions.emplace_back(TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), GranuleMeta->GetPathId(),
-                resultSchema->GetVersion(), resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
-            AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
+            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups), GranuleMeta->GetPathId(),
+                resultSchema->GetVersion(), resultSchema->GetSnapshot(), SaverContext.GetStoragesManager());
+            constructor.FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            AppendedPortions.back().GetPortionConstructor().AddMetadata(*resultSchema, deletionsCount, primaryKeys, snapshotKeys);
-            AppendedPortions.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+            constructor.GetPortionConstructor().AddMetadata(*resultSchema, deletionsCount, primaryKeys, snapshotKeys);
+            constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             if (shardingActual) {
-                AppendedPortions.back().GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
+                constructor.GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
             }
+            AppendedPortions.emplace_back(std::move(constructor));
             recordIdx += slice.GetRecordsCount();
         }
     }

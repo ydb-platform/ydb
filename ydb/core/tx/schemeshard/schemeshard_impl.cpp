@@ -6538,6 +6538,12 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             *patch);
     }
 
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {
+        proto->MutableReplicationConfig()->CopyFrom(alterData->TableDescriptionFull->GetReplicationConfig());
+    } else if (tableInfo->HasReplicationConfig()) {
+        proto->MutableReplicationConfig()->CopyFrom(tableInfo->ReplicationConfig());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -6675,7 +6681,9 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
             case NKikimrSchemeOp::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(Indexes.contains(childPathId));
                 auto info = Indexes.at(childPathId);
-                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, *tableDescr->MutableTableIndexes()->Add());
+                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, false, false,
+                    *tableDescr->MutableTableIndexes()->Add()
+                );
                 break;
             }
 

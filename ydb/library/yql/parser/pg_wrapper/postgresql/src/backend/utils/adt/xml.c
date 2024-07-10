@@ -65,6 +65,16 @@
 #if LIBXML_VERSION >= 20704
 #define HAVE_XMLSTRUCTUREDERRORCONTEXT 1
 #endif
+
+/*
+ * libxml2 2.12 decided to insert "const" into the error handler API.
+ */
+#if LIBXML_VERSION >= 21200
+#define PgXmlErrorPtr const xmlError *
+#else
+#define PgXmlErrorPtr xmlErrorPtr
+#endif
+
 #endif							/* USE_LIBXML */
 
 #include "access/htup_details.h"
@@ -119,7 +129,7 @@ struct PgXmlErrorContext
 
 static xmlParserInputPtr xmlPgEntityLoader(const char *URL, const char *ID,
 										   xmlParserCtxtPtr ctxt);
-static void xml_errorHandler(void *data, xmlErrorPtr error);
+static void xml_errorHandler(void *data, PgXmlErrorPtr error);
 static void xml_ereport_by_code(int level, int sqlcode,
 								const char *msg, int errcode);
 static void chopStringInfoNewlines(StringInfo str);
@@ -1750,7 +1760,7 @@ xml_ereport(PgXmlErrorContext *errcxt, int level, int sqlcode, const char *msg)
  * Error handler for libxml errors and warnings
  */
 static void
-xml_errorHandler(void *data, xmlErrorPtr error)
+xml_errorHandler(void *data, PgXmlErrorPtr error)
 {
 	PgXmlErrorContext *xmlerrcxt = (PgXmlErrorContext *) data;
 	xmlParserCtxtPtr ctxt = (xmlParserCtxtPtr) error->ctxt;
@@ -2762,6 +2772,10 @@ cursor_to_xmlschema(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CURSOR),
 				 errmsg("cursor \"%s\" does not exist", name)));
+	if (portal->tupDesc == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_CURSOR_STATE),
+				 errmsg("portal \"%s\" does not return tuples", name)));
 
 	xmlschema = _SPI_strdup(map_sql_table_to_xmlschema(portal->tupDesc,
 													   InvalidOid, nulls,
@@ -3659,7 +3673,7 @@ map_sql_type_to_xmlschema_type(Oid typeoid, int typmod)
 			case TIMEOID:
 			case TIMETZOID:
 				{
-					const char *tz = (typeoid == TIMETZOID ? "(+|-)\\p{Nd}{2}:\\p{Nd}{2}" : "");
+					const char *tz = (typeoid == TIMETZOID ? "(\\+|-)\\p{Nd}{2}:\\p{Nd}{2}" : "");
 
 					if (typmod == -1)
 						appendStringInfo(&result,
@@ -3682,7 +3696,7 @@ map_sql_type_to_xmlschema_type(Oid typeoid, int typmod)
 			case TIMESTAMPOID:
 			case TIMESTAMPTZOID:
 				{
-					const char *tz = (typeoid == TIMESTAMPTZOID ? "(+|-)\\p{Nd}{2}:\\p{Nd}{2}" : "");
+					const char *tz = (typeoid == TIMESTAMPTZOID ? "(\\+|-)\\p{Nd}{2}:\\p{Nd}{2}" : "");
 
 					if (typmod == -1)
 						appendStringInfo(&result,

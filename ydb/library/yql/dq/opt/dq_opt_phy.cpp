@@ -2666,7 +2666,8 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-    if (joinAlgo == EJoinAlgoType::MapJoin) {
+    const bool mapJoinCanBeApplied = joinType != "Full"sv && joinType != "Exclusion"sv;
+    if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
     } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
         hashJoin = EHashJoinMode::GraceAndSelf;

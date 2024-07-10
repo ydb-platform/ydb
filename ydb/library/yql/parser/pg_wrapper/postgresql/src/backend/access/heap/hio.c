@@ -387,7 +387,7 @@ RelationGetBufferForTuple(Relation relation, Size len,
 	 * on, as cached in the BulkInsertState or relcache entry.  If that
 	 * doesn't work, we ask the Free Space Map to locate a suitable page.
 	 * Since the FSM's info might be out of date, we have to be prepared to
-	 * loop around and retry multiple times. (To insure this isn't an infinite
+	 * loop around and retry multiple times. (To ensure this isn't an infinite
 	 * loop, we must update the FSM with the correct amount of free space on
 	 * each page that proves not to be suitable.)  If the FSM has no record of
 	 * a page with enough free space, we give up and extend the relation.
@@ -678,29 +678,34 @@ loop:
 			LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 			LockBuffer(otherBuffer, BUFFER_LOCK_EXCLUSIVE);
 			LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
+		}
 
-			/*
-			 * Because the buffers were unlocked for a while, it's possible,
-			 * although unlikely, that an all-visible flag became set or that
-			 * somebody used up the available space in the new page.  We can
-			 * use GetVisibilityMapPins to deal with the first case.  In the
-			 * second case, just retry from start.
-			 */
-			GetVisibilityMapPins(relation, otherBuffer, buffer,
-								 otherBlock, targetBlock, vmbuffer_other,
-								 vmbuffer);
+		/*
+		 * Because the buffers were unlocked for a while, it's possible,
+		 * although unlikely, that an all-visible flag became set or that
+		 * somebody used up the available space in the new page.  We can use
+		 * GetVisibilityMapPins to deal with the first case.  In the second
+		 * case, just retry from start.
+		 */
+		GetVisibilityMapPins(relation, otherBuffer, buffer,
+							 otherBlock, targetBlock, vmbuffer_other,
+							 vmbuffer);
 
-			if (len > PageGetHeapFreeSpace(page))
-			{
-				LockBuffer(otherBuffer, BUFFER_LOCK_UNLOCK);
-				UnlockReleaseBuffer(buffer);
+		/*
+		 * Note that we have to check the available space even if our
+		 * conditional lock succeeded, because GetVisibilityMapPins might've
+		 * transiently released lock on the target buffer to acquire a VM pin
+		 * for the otherBuffer.
+		 */
+		if (len > PageGetHeapFreeSpace(page))
+		{
+			LockBuffer(otherBuffer, BUFFER_LOCK_UNLOCK);
+			UnlockReleaseBuffer(buffer);
 
-				goto loop;
-			}
+			goto loop;
 		}
 	}
-
-	if (len > PageGetHeapFreeSpace(page))
+	else if (len > PageGetHeapFreeSpace(page))
 	{
 		/* We should not get here given the test at the top */
 		elog(PANIC, "tuple is too big: size %zu", len);

@@ -637,16 +637,12 @@ namespace NKikimr {
         void StorePayload(TRope&& buffer);
 
         ui64 GetBufferBytes() const {
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui64 sizeBytes = 0;
-                const ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    sizeBytes += GetPayload(i).GetSize();
-                }
-                return sizeBytes;
-            } else {
-                return Record.GetBuffer().size();
+            ui64 sizeBytes = 0;
+            const ui32 size = GetPayloadCount();
+            for (ui32 i = 0; i < size; ++i) {
+                sizeBytes += GetPayload(i).GetSize();
             }
+            return sizeBytes;
         }
 
         bool Validate(TString& errorReason) {
@@ -865,24 +861,14 @@ namespace NKikimr {
 
         ui64 GetBufferBytes(ui64 idx) const {
             Y_DEBUG_ABORT_UNLESS(idx < Record.ItemsSize());
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                return GetPayload(idx).GetSize();
-            } else {
-                return Record.GetItems(idx).GetBuffer().size();
-            }
+            return GetPayload(idx).GetSize();
         }
 
         ui64 GetBufferBytes() const {
             ui64 bytes = 0;
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    bytes += GetPayload(i).GetSize();
-                }
-            } else {
-                for (const auto &item : Record.GetItems()) {
-                    bytes += item.GetBuffer().size();
-                }
+            ui32 size = GetPayloadCount();
+            for (ui32 i = 0; i < size; ++i) {
+                bytes += GetPayload(i).GetSize();
             }
             return bytes;
         }
@@ -896,7 +882,7 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TRcBuf &buffer);
+        void StorePayload(const TRcBuf &buffer);
 
 
         TRope GetItemBuffer(ui64 itemIdx) const;
@@ -906,7 +892,7 @@ namespace NKikimr {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(*item, buffer);
+            StorePayload(buffer);
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);

@@ -132,7 +132,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
 }
 
 
-TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoscalingSupport) {
+TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoPartitioningSupport) {
     Impl = std::make_shared<TImpl>(name, autoCommit);
 
     Impl->Acquire();
@@ -140,7 +140,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
         .AppendTopics(TEST_TOPIC)
-        .AutoscalingSupport(autoscalingSupport);
+        .AutoPartitioningSupport(autoPartitioningSupport);
     for (auto partitionId : partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }

@@ -1813,7 +1813,8 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 || TCoForwardList::Match(node.Get())
                 || TCoApply::Match(node.Get())
                 || TCoSwitch::Match(node.Get())
-                || node->IsCallable("DqReplicate");
+                || node->IsCallable("DqReplicate")
+                || TCoPartitionsByKeys::Match(node.Get());
         }
     );
 
@@ -1850,6 +1851,11 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
                 if (auto node = FindNonYieldTransparentNodeImpl(candidate->Child(i)->TailPtr(), udfSupportsYield, TNodeSet{&candidate->Child(i)->Head().Head()})) {
                     return node;
                 }
+            }
+        } else if (TCoPartitionsByKeys::Match(candidate.Get())) {
+            const auto handlerChild = candidate->Child(TCoPartitionsByKeys::idx_ListHandlerLambda);
+            if (auto node = FindNonYieldTransparentNodeImpl(handlerChild->TailPtr(), udfSupportsYield, TNodeSet{&handlerChild->Head().Head()})) {
+                return node;
             }
         }
     }
@@ -1896,7 +1902,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 }
 
 TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
-    if (node.IsCallable({"Unwrap", "Ensure", "ScripUdf", "Error", "ErrorType"})) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
         return false;
     }
     if (node.IsCallable("Udf")) {
@@ -2180,5 +2186,35 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 
 template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& body, const TExprNode& arg);
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
+
+TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
+    YQL_ENSURE(prefix.StartsWith("_yql"));
+    TSet<size_t> existing;
+    for (auto& item : source.GetItems()) {
+        TStringBuf column = item->GetName();
+        if (column.SkipPrefix(prefix)) {
+            size_t idx;
+            if (TryFromString(column, idx)) {
+                existing.insert(idx);
+            }
+        }
+    }
+
+    size_t current = 0;
+    TVector<TString> result;
+    auto it = existing.cbegin();
+    while (count) {
+        if (it == existing.cend() || current < *it) {
+            result.push_back(TStringBuilder() << prefix << current);
+            --count;
+        } else {
+            ++it;
+        }
+        YQL_ENSURE(!count || (current + 1 > current));
+        ++current;
+    }
+    return result;
+}
+
 
 }

@@ -31,9 +31,7 @@ std::shared_ptr<arrow::RecordBatch> TReadPortionInfoWithBlobs::GetBatch(const IS
         for (auto&& i : columnNames) {
             columnNamesString.emplace_back(i.data(), i.size());
         }
-        auto result = NArrow::ExtractColumns(*CachedBatch, columnNamesString);
-        Y_ABORT_UNLESS(result);
-        return result;
+        return NArrow::TColumnOperator().VerifyIfAbsent().Extract(*CachedBatch, columnNamesString);
     } else {
         auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
         THashMap<TChunkAddress, TString> blobs;
@@ -107,7 +105,7 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(const ui32 entityId, std::ve
     return true;
 }
 
-std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
+std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
     std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
     if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
@@ -165,8 +163,7 @@ std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion
     }
     constructor.MutableMeta().ResetStatisticsStorage(std::move(storage));
 
-    TWritePortionInfoWithBlobs result = TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), std::move(constructor), storages);
-    return result;
+    return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups), std::move(constructor), storages);
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

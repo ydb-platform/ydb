@@ -1,7 +1,7 @@
 /* Declaration for error-reporting function for Bison.
 
-   Copyright (C) 2000-2002, 2004-2006, 2009-2013 Free Software
-   Foundation, Inc.
+   Copyright (C) 2000-2002, 2004-2006, 2009-2015, 2018-2019 Free
+   Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@
 
 #include "complain.h"
 #include "files.h"
+#include "fixits.h"
 #include "getargs.h"
 #include "quote.h"
 
@@ -35,14 +36,25 @@ err_status complaint_status = status_none;
 
 bool warnings_are_errors = false;
 
+/** Whether -Werror/-Wno-error was applied to a warning.  */
+typedef enum
+  {
+    errority_unset = 0,     /** No explict status.  */
+    errority_disabled = 1,  /** Explictly disabled with -Wno-error=foo.  */
+    errority_enabled = 2    /** Explictly enabled with -Werror=foo. */
+  } errority;
+
+/** For each warning type, its errority.  */
+static errority errority_flag[warnings_size];
+
 /** Diagnostics severity.  */
 typedef enum
   {
-    severity_disabled = 0,
-    severity_unset = 1,
-    severity_warning = 2,
-    severity_error = 3,
-    severity_fatal = 4
+    severity_disabled = 0, /**< Explicitly disabled via -Wno-foo.  */
+    severity_unset = 1,    /**< Unspecified status.  */
+    severity_warning = 2,  /**< A warning.  */
+    severity_error = 3,    /**< An error (continue, but die soon).  */
+    severity_fatal = 4     /**< Fatal error (die now).  */
   } severity;
 
 
@@ -72,7 +84,7 @@ static const char * const warnings_args[] =
   0
 };
 
-static const int warnings_types[] =
+static const warnings warnings_types[] =
 {
   Wnone,
   Wmidrule_values,
@@ -103,32 +115,25 @@ warning_argmatch (char const *arg, size_t no, size_t err)
       no = !no;
     }
 
-  if (no)
-    {
-      size_t b;
-      for (b = 0; b < warnings_size; ++b)
-        if (value & 1 << b)
+  for (size_t b = 0; b < warnings_size; ++b)
+    if (value & 1 << b)
+      {
+        if (err && no)
+          /* -Wno-error=foo.  */
+          errority_flag[b] = errority_disabled;
+        else if (err && !no)
           {
-            if (err)
-              {
-                /* -Wno-error=foo: if foo enabled as an error,
-                   make it a warning.  */
-                if (warnings_flag[b] == severity_error)
-                  warnings_flag[b] = severity_warning;
-              }
-            else
-              /* -Wno-foo.  */
-              warnings_flag[b] = severity_disabled;
+            /* -Werror=foo: enables -Wfoo. */
+            errority_flag[b] = errority_enabled;
+            warnings_flag[b] = severity_warning;
           }
-    }
-  else
-    {
-      size_t b;
-      for (b = 0; b < warnings_size; ++b)
-        if (value & 1 << b)
-          /* -Wfoo and -Werror=foo. */
-          warnings_flag[b] = err ? severity_error : severity_warning;
-    }
+        else if (no)
+          /* -Wno-foo.  */
+          warnings_flag[b] = severity_disabled;
+        else
+          /* -Wfoo. */
+          warnings_flag[b] = severity_warning;
+      }
 }
 
 /** Decode a comma-separated list of arguments from -W.
@@ -145,13 +150,13 @@ warnings_argmatch (char *args)
       if (STREQ (args, "error"))
         warnings_are_errors = true;
       else if (STREQ (args, "no-error"))
-        {
-          warnings_are_errors = false;
-          warning_argmatch ("no-error=everything", 3, 6);
-        }
+        warnings_are_errors = false;
       else
         {
+          /* The length of the possible 'no-' prefix: 3, or 0.  */
           size_t no = STRPREFIX_LIT ("no-", args) ? 3 : 0;
+          /* The length of the possible 'error=' (possibly after
+             'no-') prefix: 6, or 0. */
           size_t err = STRPREFIX_LIT ("error=", args + no) ? 6 : 0;
 
           warning_argmatch (args, no, err);
@@ -171,29 +176,46 @@ complain_init (void)
   warnings warnings_default =
     Wconflicts_sr | Wconflicts_rr | Wdeprecated | Wother;
 
-  size_t b;
-  for (b = 0; b < warnings_size; ++b)
-    warnings_flag[b] = (1 << b & warnings_default
-                        ? severity_warning
-                        : severity_unset);
+  for (size_t b = 0; b < warnings_size; ++b)
+    {
+      warnings_flag[b] = (1 << b & warnings_default
+                          ? severity_warning
+                          : severity_unset);
+      errority_flag[b] = errority_unset;
+    }
 }
+
+
+/* A diagnostic with FLAGS is about to be issued.  With what severity?
+   (severity_fatal, severity_error, severity_disabled, or
+   severity_warning.) */
 
 static severity
 warning_severity (warnings flags)
 {
   if (flags & fatal)
+    /* Diagnostics about fatal errors.  */
     return severity_fatal;
   else if (flags & complaint)
+    /* Diagnostics about errors.  */
     return severity_error;
   else
     {
+      /* Diagnostics about warnings.  */
       severity res = severity_disabled;
-      size_t b;
-      for (b = 0; b < warnings_size; ++b)
+      for (size_t b = 0; b < warnings_size; ++b)
         if (flags & 1 << b)
-          res = res < warnings_flag[b] ? warnings_flag[b] : res;
-      if (res == severity_warning && warnings_are_errors)
-        res = severity_error;
+          {
+            res = res < warnings_flag[b] ? warnings_flag[b] : res;
+            /* If the diagnostic is enabled, and -Werror is enabled,
+               and -Wno-error=foo was not explicitly requested, this
+               is an error. */
+            if (res == severity_warning
+                && (errority_flag[b] == errority_enabled
+                    || (warnings_are_errors
+                        && errority_flag[b] != errority_disabled)))
+              res = severity_error;
+          }
       return res;
     }
 }
@@ -201,8 +223,7 @@ warning_severity (warnings flags)
 bool
 warning_is_unset (warnings flags)
 {
-  size_t b;
-  for (b = 0; b < warnings_size; ++b)
+  for (size_t b = 0; b < warnings_size; ++b)
     if (flags & 1 << b && warnings_flag[b] != severity_unset)
       return false;
   return true;
@@ -214,8 +235,7 @@ static void
 warnings_print_categories (warnings warn_flags, FILE *f)
 {
   /* Display only the first match, the second is "-Wall".  */
-  size_t i;
-  for (i = 0; warnings_args[i]; ++i)
+  for (size_t i = 0; warnings_args[i]; ++i)
     if (warn_flags & warnings_types[i])
       {
         severity s = warning_severity (warnings_types[i]);
@@ -259,15 +279,18 @@ error_message (const location *loc, warnings flags, const char *prefix,
         *indent_ptr = pos;
       else if (*indent_ptr > pos)
         fprintf (stderr, "%*s", *indent_ptr - pos, "");
-      indent_ptr = 0;
+      indent_ptr = NULL;
     }
 
   if (prefix)
     fprintf (stderr, "%s: ", prefix);
 
   vfprintf (stderr, message, args);
-  if (! (flags & silent))
+  /* Print the type of warning, only if this is not a sub message
+     (in which case the prefix is null).  */
+  if (! (flags & silent) && prefix)
     warnings_print_categories (flags, stderr);
+
   {
     size_t l = strlen (message);
     if (l < 2 || message[l - 2] != ':' || message[l - 1] != ' ')
@@ -355,6 +378,14 @@ complain_args (location const *loc, warnings w, unsigned *indent,
   }
 }
 
+
+void
+bison_directive (location const *loc, char const *directive)
+{
+  complain (loc, Wyacc,
+            _("POSIX Yacc does not support %s"), directive);
+}
+
 void
 deprecated_directive (location const *loc, char const *old, char const *upd)
 {
@@ -366,6 +397,9 @@ deprecated_directive (location const *loc, char const *old, char const *upd)
     complain (loc, Wdeprecated,
               _("deprecated directive: %s, use %s"),
               quote (old), quote_n (1, upd));
+  /* Register updates only if -Wdeprecated is enabled.  */
+  if (warnings_flag[warning_deprecated] != severity_disabled)
+    fixits_register (loc, upd);
 }
 
 void
@@ -373,7 +407,24 @@ duplicate_directive (char const *directive,
                      location first, location second)
 {
   unsigned i = 0;
-  complain (&second, complaint, _("only one %s allowed per rule"), directive);
+  if (feature_flag & feature_caret)
+    complain_indent (&second, Wother, &i, _("duplicate directive"));
+  else
+    complain_indent (&second, Wother, &i, _("duplicate directive: %s"), quote (directive));
   i += SUB_INDENT;
-  complain_indent (&first, complaint, &i, _("previous declaration"));
+  complain_indent (&first, Wother, &i, _("previous declaration"));
+  fixits_register (&second, "");
+}
+
+void
+duplicate_rule_directive (char const *directive,
+                          location first, location second)
+{
+  unsigned i = 0;
+  complain_indent (&second, complaint, &i,
+                   _("only one %s allowed per rule"), directive);
+  i += SUB_INDENT;
+  complain_indent (&first, complaint, &i,
+                   _("previous declaration"));
+  fixits_register (&second, "");
 }

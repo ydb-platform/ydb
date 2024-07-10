@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
                             }
                         })");
         env.TestWaitNotification(runtime, txId);
-        env.SimulateSleep(runtime, TDuration::Seconds(30));
+        env.SimulateSleep(runtime, TDuration::Seconds(60));
 
         simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
         UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 5UL);

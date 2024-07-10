@@ -407,7 +407,6 @@
   - __algorithm/sift_down.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/sift_down.h
   - __algorithm/sort.h:                                    contrib/libs/cxxsupp/libcxx/include/__algorithm/sort.h
   - __algorithm/sort_heap.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/sort_heap.h
-  - __algorithm/sort_old.h:                                contrib/libs/cxxsupp/libcxx/include/__algorithm/sort_old.h
   - __algorithm/stable_partition.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/stable_partition.h
   - __algorithm/stable_sort.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/stable_sort.h
   - __algorithm/swap_ranges.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/swap_ranges.h

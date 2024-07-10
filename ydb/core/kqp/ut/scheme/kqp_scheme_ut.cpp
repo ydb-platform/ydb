@@ -29,22 +29,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto& tableSettings = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         auto result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
-            useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/NonExistent`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
-            useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(UseNonexistentTable) {
@@ -1625,14 +1622,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Datetime64Column Datetime64,
                 PRIMARY KEY (Key)
             ) WITH (
-                TTL = Interval("P1D") ON Datetime64Column 
-            ))";   
-            Cerr << query << Endl;             
+                TTL = Interval("P1D") ON Datetime64Column
+            ))";
+            Cerr << query << Endl;
         {
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-    }    
+    }
 
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
@@ -2468,7 +2465,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );
             auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            
+
             // It was discovered that TModifyACL scheme operation returns successfully without waiting for
             // SchemeBoard replicas to acknowledge the path updates. This can cause the SchemeCache to reply
             // with outdated entries, even if the SyncVersion flag is enabled.
@@ -5485,7 +5482,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateAsyncReplicationWithSecret) {
+        using namespace NReplication;
+
         TKikimrRunner kikimr("root@builtin");
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -5528,6 +5528,34 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
 
             Sleep(TDuration::Seconds(1));
+        }
+
+        while (true) {
+            auto settings = TDescribeReplicationSettings().IncludeStats(true);
+            const auto result = repl.DescribeReplication("/Root/replication", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& desc = result.GetReplicationDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState(), TReplicationDescription::EState::Running);
+
+            const auto& total = desc.GetRunningState().GetStats();
+            if (!total.GetInitialScanProgress() || *total.GetInitialScanProgress() < 100) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+
+            UNIT_ASSERT(total.GetInitialScanProgress());
+            UNIT_ASSERT_DOUBLES_EQUAL(*total.GetInitialScanProgress(), 100.0, 0.01);
+
+            const auto& items = desc.GetItems();
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+            const auto& item = items.at(0).Stats;
+
+            UNIT_ASSERT(item.GetInitialScanProgress());
+            UNIT_ASSERT_DOUBLES_EQUAL(*item.GetInitialScanProgress(), *total.GetInitialScanProgress(), 0.01);
+
+            // TODO: check lag too
+            break;
         }
     }
 

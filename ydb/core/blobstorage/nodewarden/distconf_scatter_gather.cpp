@@ -128,7 +128,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(m == 1);
                 CheckCompleteScatterTask(jt);
             } else {
-                Y_DEBUG_ABORT_UNLESS(false);
+                Y_DEBUG_ABORT_UNLESS(!info.ScatterTasks.contains(cookie));
             }
         }
     }

@@ -258,7 +258,7 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, con
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
-bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
@@ -278,12 +278,12 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64
 void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
     std::vector<TWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
-        if (!RemoveLongTxWrite(db, writeId)) {
+        if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);
         }
     }
     if (failedAborts.size()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
     }
     for (auto& writeId : failedAborts) {
         writesToAbort.erase(writeId);
@@ -510,7 +510,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     CSCounters.OnStartBackground();
-    SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
@@ -537,7 +536,7 @@ private:
     TString ClassId;
     NOlap::TSnapshot LastCompletedTx;
 protected:
-    virtual bool DoExecute() override {
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
             NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
@@ -547,7 +546,7 @@ protected:
             }
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-        return true;
+        return TConclusionStatus::Success();
     }
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -589,7 +588,8 @@ protected:
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
+        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())
+            ("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
             ("debug", TxEvent->IndexChanges->DebugString());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         Counters.ReadErrors->Add(1);
@@ -864,7 +864,6 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    // TODO
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();

@@ -138,7 +138,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
-    bool PlacedInWorkloadPool = false;
+    TMaybe<TActorId> PoolHandlerActor;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
@@ -349,8 +349,6 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(TxCtx->EnableImmediateEffects);
-
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects

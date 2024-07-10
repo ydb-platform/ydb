@@ -218,7 +218,7 @@ void TColumnShard::UpdateInsertTableCounters() {
     SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
     SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
 
-    LOG_S_INFO("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
+    LOG_S_TRACE("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
         << " records, committed: " << committed.Bytes << " in " << committed.Rows
         << " records at tablet " << TabletID());
 }

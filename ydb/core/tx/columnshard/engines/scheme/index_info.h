@@ -47,7 +47,6 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
-    TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
@@ -64,17 +63,8 @@ public:
         return !it->second.NotNull;
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const;
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const ui32 colId) const;
-
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const std::string& colName) const {
-        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
-        return features.GetDefaultReadValue();
-    }
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const ui32 colId) const {
-        auto& features = GetColumnFeaturesVerified(colId);
-        return features.GetDefaultReadValue();
-    }
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const std::string& colName) const;
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const ui32 colId) const;
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;

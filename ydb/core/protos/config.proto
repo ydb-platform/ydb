@@ -1514,6 +1514,8 @@ message TColumnShardConfig {
         optional string Description = 2;
     }
     repeated TRepairInfo Repairs = 15;
+
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
 }
 
 message TSchemeShardConfig {

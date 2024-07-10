@@ -437,9 +437,9 @@ SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data)
 	uint64		size;
 
 #ifdef SH_RAW_ALLOCATOR
-	tb = SH_RAW_ALLOCATOR(sizeof(SH_TYPE));
+	tb = (SH_TYPE *) SH_RAW_ALLOCATOR(sizeof(SH_TYPE));
 #else
-	tb = MemoryContextAllocZero(ctx, sizeof(SH_TYPE));
+	tb = (SH_TYPE *) MemoryContextAllocZero(ctx, sizeof(SH_TYPE));
 	tb->ctx = ctx;
 #endif
 	tb->private_data = private_data;
@@ -449,7 +449,7 @@ SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data)
 
 	SH_COMPUTE_PARAMETERS(tb, size);
 
-	tb->data = SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
+	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
 
 	return tb;
 }
@@ -494,7 +494,7 @@ SH_GROW(SH_TYPE * tb, uint64 newsize)
 	/* compute parameters for new table */
 	SH_COMPUTE_PARAMETERS(tb, newsize);
 
-	tb->data = SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
+	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
 
 	newdata = tb->data;
 
@@ -965,7 +965,6 @@ SH_DELETE_ITEM(SH_TYPE * tb, SH_ELEMENT_TYPE * entry)
 SH_SCOPE void
 SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter)
 {
-	int			i;
 	uint64		startelem = PG_UINT64_MAX;
 
 	/*
@@ -973,7 +972,7 @@ SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter)
 	 * supported, we want to start/end at an element that cannot be affected
 	 * by elements being shifted.
 	 */
-	for (i = 0; i < tb->size; i++)
+	for (uint32 i = 0; i < tb->size; i++)
 	{
 		SH_ELEMENT_TYPE *entry = &tb->data[i];
 
@@ -984,6 +983,7 @@ SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter)
 		}
 	}
 
+	/* we should have found an empty element */
 	Assert(startelem < SH_MAX_SIZE);
 
 	/*
@@ -1060,7 +1060,7 @@ SH_STAT(SH_TYPE * tb)
 	double		fillfactor;
 	uint32		i;
 
-	uint32	   *collisions = palloc0(tb->size * sizeof(uint32));
+	uint32	   *collisions = (uint32 *) palloc0(tb->size * sizeof(uint32));
 	uint32		total_collisions = 0;
 	uint32		max_collisions = 0;
 	double		avg_collisions;
@@ -1101,6 +1101,9 @@ SH_STAT(SH_TYPE * tb)
 		if (curcoll > max_collisions)
 			max_collisions = curcoll;
 	}
+
+	/* large enough to be worth freeing, even if just used for debugging */
+	pfree(collisions);
 
 	if (tb->members > 0)
 	{

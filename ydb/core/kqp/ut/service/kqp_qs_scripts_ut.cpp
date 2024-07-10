@@ -1,7 +1,5 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
-#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -37,9 +35,9 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
         UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).name(), "column0");
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).type().type_id(), Ydb::Type::PrimitiveTypeId::Type_PrimitiveTypeId_INT32);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns[0].Name, "column0");
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns[0].Type.GetProto().type_id(), Ydb::Type::PrimitiveTypeId::Type_PrimitiveTypeId_INT32);
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
@@ -101,10 +99,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
-        NWorkload::TWorkloadManagerConfig workloadManagerConfig;
-        workloadManagerConfig.Pools.insert({"sample_pool_id", NResourcePool::TPoolSettings()});
-        SetWorkloadManagerConfig(workloadManagerConfig);
-
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
@@ -117,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         TExecuteScriptSettings settings;
 
         {  // Existing pool
-            settings.PoolId("sample_pool_id");
+            settings.PoolId("default");
 
             auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
@@ -133,16 +127,17 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
             UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Resource pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Failed to resolve pool id another_pool");
             UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
         }
     }
 
-    void ValidatePlan(const TString& plan) {
-        UNIT_ASSERT(!plan.empty());
+    void ValidatePlan(const TMaybe<TString>& plan) {
+        UNIT_ASSERT(plan);
         UNIT_ASSERT(plan != "{}");
         NJson::TJsonValue jsonPlan;
-        NJson::ReadJsonTree(plan, &jsonPlan, true);
+        NJson::ReadJsonTree(plan.GetRef(), &jsonPlan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(jsonPlan));
     }
 
@@ -150,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_EXPLAIN);
+        auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Explain);
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
@@ -163,15 +158,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
 
-        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
-        UNIT_ASSERT(readyOp.Metadata().ExecStats.query_ast());
+        ValidatePlan(readyOp.Metadata().ExecStats.GetPlan());
+        UNIT_ASSERT(readyOp.Metadata().ExecStats.GetAst());
     }
 
     Y_UNIT_TEST(ParseScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_PARSE);
+        auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Parse);
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
@@ -187,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_VALIDATE);
+        auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Validate);
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
@@ -202,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
                 auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_UNSPECIFIED);
+        auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Unspecified);
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
@@ -217,7 +212,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings()
-            .Syntax(Ydb::Query::SYNTAX_PG);
+            .Syntax(ESyntax::Pg);
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT * FROM (VALUES
@@ -273,7 +268,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         ])", FormatResultSetYson(results.GetResultSet()));
     }
 
-    void ExecuteScriptWithStatsMode(Ydb::Query::StatsMode statsMode) {
+    void ExecuteScriptWithStatsMode(EStatsMode statsMode) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
@@ -292,36 +287,36 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
 
-        if (statsMode == Ydb::Query::STATS_MODE_NONE) {
+        if (statsMode == EStatsMode::None) {
             return;
         }
 
         // TODO: more checks?
-        UNIT_ASSERT_C(readyOp.Metadata().ExecStats.query_phases_size() == 1, readyOp.Metadata().ExecStats);
-        UNIT_ASSERT_C(readyOp.Metadata().ExecStats.total_duration_us() > 0, readyOp.Metadata().ExecStats);
+        UNIT_ASSERT_C(TProtoAccessor().GetProto(readyOp.Metadata().ExecStats).query_phases_size() == 1, readyOp.Metadata().ExecStats.ToString());
+        UNIT_ASSERT_C(readyOp.Metadata().ExecStats.GetTotalDuration() > TDuration::Zero(), readyOp.Metadata().ExecStats.ToString());
 
-        if (statsMode == Ydb::Query::STATS_MODE_BASIC) {
+        if (statsMode == EStatsMode::Basic) {
             return;
         }
 
-        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
-        UNIT_ASSERT(readyOp.Metadata().ExecStats.query_ast());
+        ValidatePlan(readyOp.Metadata().ExecStats.GetPlan());
+        UNIT_ASSERT(readyOp.Metadata().ExecStats.GetAst());
     }
 
     Y_UNIT_TEST(ExecuteScriptStatsBasic) {
-        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_BASIC);
+        ExecuteScriptWithStatsMode(EStatsMode::Basic);
     }
 
     Y_UNIT_TEST(ExecuteScriptStatsFull) {
-        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_FULL);
+        ExecuteScriptWithStatsMode(EStatsMode::Full);
     }
 
     Y_UNIT_TEST(ExecuteScriptStatsProfile) {
-        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_PROFILE);
+        ExecuteScriptWithStatsMode(EStatsMode::Profile);
     }
 
     Y_UNIT_TEST(ExecuteScriptStatsNone) {
-        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_NONE);
+        ExecuteScriptWithStatsMode(EStatsMode::None);
     }
 
     Y_UNIT_TEST(ListScriptExecutions) {
@@ -661,7 +656,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
 
         TExecuteScriptSettings settings;
-        settings.StatsMode(Ydb::Query::StatsMode::STATS_MODE_FULL);
+        settings.StatsMode(EStatsMode::Full);
 
         auto scriptExecutionOperation = db.ExecuteScript(sql, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
@@ -825,7 +820,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto db = kikimr.GetQueryClient();
         auto scriptExecutionOperation = CreateScriptExecutionOperation(1, db, kikimr.GetDriver());
 
-        UNIT_ASSERT_STRING_CONTAINS(scriptExecutionOperation.Metadata().ExecStats.query_ast(), "\"idx\" (DataType 'Int32)");
+        UNIT_ASSERT_STRING_CONTAINS(scriptExecutionOperation.Metadata().ExecStats.GetAst().GetRef(), "\"idx\" (DataType 'Int32)");
     }
 }
 

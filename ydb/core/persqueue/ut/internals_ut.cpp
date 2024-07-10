@@ -75,7 +75,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     ui32 maxBlobSize = 8 << 20;
     TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
-    TVector<std::pair<TKey, TString>> formed;
+    TVector<TPartitionedBlob::TFormedBlobInfo> formed;
 
     TString error;
     for (ui32 i = 0; i < parts; ++i) {
@@ -88,23 +88,23 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         );
         all.push_back(clientBlob);
         auto res = blob.Add(std::move(clientBlob));
-        if (res && !res->second.empty())
-            formed.push_back(*res);
+        if (res && !res->Value.empty())
+            formed.emplace_back(*res);
     }
     UNIT_ASSERT(blob.IsComplete());
     UNIT_ASSERT(formed.size() == blob.GetFormedBlobs().size());
     for (ui32 i = 0; i < formed.size(); ++i) {
-        UNIT_ASSERT(formed[i].first == blob.GetFormedBlobs()[i].first);
-        UNIT_ASSERT(formed[i].second.size() == blob.GetFormedBlobs()[i].second);
-        UNIT_ASSERT(formed[i].second.size() <= 8_MB);
-        UNIT_ASSERT(formed[i].second.size() > 6_MB);
+        UNIT_ASSERT(formed[i].Key == blob.GetFormedBlobs()[i].OldKey);
+        UNIT_ASSERT(formed[i].Value.size() == blob.GetFormedBlobs()[i].Size);
+        UNIT_ASSERT(formed[i].Value.size() <= 8_MB);
+        UNIT_ASSERT(formed[i].Value.size() > 6_MB);
     }
     TVector<TClientBlob> real;
     ui32 nextOffset = headCompacted ? newHead.Offset : head.Offset;
     for (auto& p : formed) {
-        const char* data = p.second.c_str();
-        const char* end = data + p.second.size();
-        ui64 offset = p.first.GetOffset();
+        const char* data = p.Value.c_str();
+        const char* end = data + p.Value.size();
+        ui64 offset = p.Key.GetOffset();
         UNIT_ASSERT(offset == nextOffset);
         while(data < end) {
             auto header = ExtractHeader(data, end - data);
@@ -265,13 +265,42 @@ Y_UNIT_TEST(TestAsInt) {
         v128 <<= 112;
         UNIT_ASSERT_EQUAL(v128, r128);
     }
+
+    {
+        NYql::NDecimal::TUint128 v128 = 0x0102030405060708ull;
+        v128 <<= 64;
+        v128 += 0x0910111213141516ull;
+        NYql::NDecimal::TUint128 r128 = AsInt<NYql::NDecimal::TUint128>(AsKeyBound(v128));
+        UNIT_ASSERT_EQUAL(v128, r128);
+    }
+}
+
+Y_UNIT_TEST(TestAsIntWide) {
+    {
+        ui32 v = 0x00001234;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+    {
+        ui32 v = 0x12345678;
+        NYql::TWide<ui16> r = AsInt<NYql::TWide<ui16>>(AsKeyBound(v));
+        ui32 r32 = ui32(r);
+        UNIT_ASSERT_VALUES_EQUAL_C(v, r32, TStringBuilder() << NPQ::ToHex(v) << " != " << NPQ::ToHex(r32));
+    }
+}
+
+Y_UNIT_TEST(TestToHex) {
+    ui64 v = 0x0102030405060708;
+    TString r = NPQ::ToHex<ui64>(v);
+    UNIT_ASSERT_VALUES_EQUAL(r, "0x0102030405060708");
 }
 
 Y_UNIT_TEST(StoreKeys) {
     TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
     UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
 
-    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, 1, 9}, 8, 7, 6, 5, false);
+    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, TWriteId{0, 1}, 9}, 8, 7, 6, 5, false);
     UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
 
     keyNew.SetType(TKeyPrefix::TypeInfo);

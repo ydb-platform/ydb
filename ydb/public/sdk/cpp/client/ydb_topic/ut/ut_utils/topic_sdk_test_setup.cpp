@@ -39,8 +39,8 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
         topics
             .BeginConfigurePartitioningSettings()
-            .BeginConfigureAutoscalingSettings()
-            .Strategy(EAutoscalingStrategy::ScaleUp);
+            .BeginConfigureAutoPartitioningSettings()
+            .Strategy(EAutoPartitioningStrategy::ScaleUp);
     }
 
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);

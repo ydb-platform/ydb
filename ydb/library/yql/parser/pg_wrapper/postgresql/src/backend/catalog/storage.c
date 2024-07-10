@@ -282,16 +282,16 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	ForkNumber	forks[MAX_FORKNUM];
 	BlockNumber blocks[MAX_FORKNUM];
 	int			nforks = 0;
-
-	/* Open it at the smgr level if not already done */
-	RelationOpenSmgr(rel);
+	SMgrRelation reln;
 
 	/*
-	 * Make sure smgr_targblock etc aren't pointing somewhere past new end
+	 * Make sure smgr_targblock etc aren't pointing somewhere past new end.
+	 * (Note: don't rely on this reln pointer below this loop.)
 	 */
-	rel->rd_smgr->smgr_targblock = InvalidBlockNumber;
+	reln = RelationGetSmgr(rel);
+	reln->smgr_targblock = InvalidBlockNumber;
 	for (int i = 0; i <= MAX_FORKNUM; ++i)
-		rel->rd_smgr->smgr_cached_nblocks[i] = InvalidBlockNumber;
+		reln->smgr_cached_nblocks[i] = InvalidBlockNumber;
 
 	/* Prepare for truncation of MAIN fork of the relation */
 	forks[nforks] = MAIN_FORKNUM;
@@ -299,7 +299,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	nforks++;
 
 	/* Prepare for truncation of the FSM if it exists */
-	fsm = smgrexists(rel->rd_smgr, FSM_FORKNUM);
+	fsm = smgrexists(RelationGetSmgr(rel), FSM_FORKNUM);
 	if (fsm)
 	{
 		blocks[nforks] = FreeSpaceMapPrepareTruncateRel(rel, nblocks);
@@ -312,7 +312,7 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	}
 
 	/* Prepare for truncation of the visibility map too if it exists */
-	vm = smgrexists(rel->rd_smgr, VISIBILITYMAP_FORKNUM);
+	vm = smgrexists(RelationGetSmgr(rel), VISIBILITYMAP_FORKNUM);
 	if (vm)
 	{
 		blocks[nforks] = visibilitymap_prepare_truncate(rel, nblocks);
@@ -324,6 +324,22 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	}
 
 	RelationPreTruncate(rel);
+
+	/*
+	 * Make sure that a concurrent checkpoint can't complete while truncation
+	 * is in progress.
+	 *
+	 * The truncation operation might drop buffers that the checkpoint
+	 * otherwise would have flushed. If it does, then it's essential that
+	 * the files actually get truncated on disk before the checkpoint record
+	 * is written. Otherwise, if reply begins from that checkpoint, the
+	 * to-be-truncated blocks might still exist on disk but have older
+	 * contents than expected, which can cause replay to fail. It's OK for
+	 * the blocks to not exist on disk at all, but not for them to have the
+	 * wrong contents.
+	 */
+	Assert(!MyProc->delayChkptEnd);
+	MyProc->delayChkptEnd = true;
 
 	/*
 	 * We WAL-log the truncation before actually truncating, which means
@@ -363,13 +379,24 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 			XLogFlush(lsn);
 	}
 
-	/* Do the real work to truncate relation forks */
-	smgrtruncate(rel->rd_smgr, forks, nforks, blocks);
+	/*
+	 * This will first remove any buffers from the buffer pool that should no
+	 * longer exist after truncation is complete, and then truncate the
+	 * corresponding files on disk.
+	 */
+	smgrtruncate(RelationGetSmgr(rel), forks, nforks, blocks);
+
+	/* We've done all the critical work, so checkpoints are OK now. */
+	MyProc->delayChkptEnd = false;
 
 	/*
 	 * Update upper-level FSM pages to account for the truncation. This is
 	 * important because the just-truncated pages were likely marked as
 	 * all-free, and would be preferentially selected.
+	 *
+	 * NB: There's no point in delaying checkpoints until this is done.
+	 * Because the FSM is not WAL-logged, we have to be prepared for the
+	 * possibility of corruption after a crash anyway.
 	 */
 	if (need_fsm_vacuum)
 		FreeSpaceMapVacuumRange(rel, nblocks, InvalidBlockNumber);
@@ -389,9 +416,9 @@ RelationPreTruncate(Relation rel)
 
 	if (!pendingSyncHash)
 		return;
-	RelationOpenSmgr(rel);
 
-	pending = hash_search(pendingSyncHash, &(rel->rd_smgr->smgr_rnode.node),
+	pending = hash_search(pendingSyncHash,
+						  &(RelationGetSmgr(rel)->smgr_rnode.node),
 						  HASH_FIND, NULL);
 	if (pending)
 		pending->is_truncated = true;
@@ -403,6 +430,12 @@ RelationPreTruncate(Relation rel)
  * Note that this requires that there is no dirty data in shared buffers. If
  * it's possible that there are, callers need to flush those using
  * e.g. FlushRelationBuffers(rel).
+ *
+ * Also note that this is frequently called via locutions such as
+ *		RelationCopyStorage(RelationGetSmgr(rel), ...);
+ * That's safe only because we perform only smgr and WAL operations here.
+ * If we invoked anything else, a relcache flush could cause our SMgrRelation
+ * argument to become a dangling pointer.
  */
 void
 RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
@@ -445,13 +478,23 @@ RelationCopyStorage(SMgrRelation src, SMgrRelation dst,
 
 		if (!PageIsVerifiedExtended(page, blkno,
 									PIV_LOG_WARNING | PIV_REPORT_STAT))
+		{
+			/*
+			 * For paranoia's sake, capture the file path before invoking the
+			 * ereport machinery.  This guards against the possibility of a
+			 * relcache flush caused by, e.g., an errcontext callback.
+			 * (errcontext callbacks shouldn't be risking any such thing, but
+			 * people have been known to forget that rule.)
+			 */
+			char	   *relpath = relpathbackend(src->smgr_rnode.node,
+												 src->smgr_rnode.backend,
+												 forkNum);
+
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg("invalid page in block %u of relation %s",
-							blkno,
-							relpathbackend(src->smgr_rnode.node,
-										   src->smgr_rnode.backend,
-										   forkNum))));
+							blkno, relpath)));
+		}
 
 		/*
 		 * WAL-log the copied page. Unfortunately we don't know what kind of a

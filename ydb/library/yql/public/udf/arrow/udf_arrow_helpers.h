@@ -147,11 +147,11 @@ public:
                     argDatums[i] = scalar;
                 } else {
                     TVector<std::shared_ptr<arrow::Array>> imported(chunkCount);
-                    for (ui32 i = 0; i < chunkCount; ++i) {
+                    for (ui32 k = 0; k < chunkCount; ++k) {
                         ArrowArray a;
-                        valueBuilder->ExportArrowBlock(args[i], i, &a);
+                        valueBuilder->ExportArrowBlock(args[i], k, &a);
                         auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgArrowTypes_[i]));
-                        imported[i] = arr;
+                        imported[k] = arr;
                     }
 
                     if (chunkCount == 1) {

@@ -243,7 +243,21 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
-                NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
+                NYDS_V1::TCreateStreamSettings()
+                    .ShardCount(3)
+                    /*
+                    .BeginConfigurePartitioningSettings()
+                        .MinActivePartitions(3)
+                        .MaxActivePartitions(7)
+                        .BeginConfigureAutoPartitioningSettings()
+                            .Strategy(NYdb::NDataStreams::V1::EAutoPartitioningStrategy::ScaleUpAndDown)
+                            .StabilizationWindow(TDuration::Seconds(123))
+                            .UpUtilizationPercent(97)
+                            .DownUtilizationPercent(13)
+                        .EndConfigureAutoPartitioningSettings()
+                    .EndConfigurePartitioningSettings()
+                    */
+                ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
@@ -257,21 +271,28 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
-                                     YDS_V1::StreamDescription::ACTIVE);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_name(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_arn(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1_KB);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
+            auto& d = result.GetResult().stream_description();
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_status(), YDS_V1::StreamDescription::ACTIVE);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_name(), streamName);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_arn(), streamName);
+            UNIT_ASSERT_VALUES_EQUAL(d.write_quota_kb_per_sec(), 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(d.retention_period_hours(), 24);
 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards().size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).sequence_number_range().starting_sequence_number(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().starting_hash_key(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).sequence_number_range().starting_sequence_number(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().starting_hash_key(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().min_active_partitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().max_active_partitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().strategy(), ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().stabilization_window().seconds(), 300);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().up_utilization_percent(), 90);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().down_utilization_percent(), 30);
         }
 
         {
@@ -1341,6 +1362,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Sleep(TDuration::Seconds(1));
         }
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken(""));
@@ -2682,6 +2705,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         SET_YDS_LOCALS;
 
         TString streamName = "test-topic";
+        TString streamName2 = "test-topic-2";
 
         {
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
@@ -2689,9 +2713,12 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 .BeginConfigurePartitioningSettings()
                     .MinActivePartitions(3)
                     .MaxActivePartitions(7)
-                    .BeginConfigureAutoscalingSettings()
-                        .Strategy(NYdb::NTopic::EAutoscalingStrategy::ScaleUpAndDown)
-                    .EndConfigureAutoscalingSettings()
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown)
+                        .StabilizationWindow(TDuration::Seconds(123))
+                        .UpUtilizationPercent(97)
+                        .DownUtilizationPercent(13)
+                    .EndConfigureAutoPartitioningSettings()
                 .EndConfigurePartitioningSettings()
                 ;
             auto result = pqClient.CreateTopic(streamName, settings).ExtractValueSync();
@@ -2720,6 +2747,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(description.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
             UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
             UNIT_ASSERT_VALUES_EQUAL(description.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().min_active_partitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().max_active_partitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().auto_partitioning_settings().strategy(), ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().auto_partitioning_settings().partition_write_speed().stabilization_window().seconds(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().auto_partitioning_settings().partition_write_speed().up_utilization_percent(), 97);
+            UNIT_ASSERT_VALUES_EQUAL(description.partitioning_settings().auto_partitioning_settings().partition_write_speed().down_utilization_percent(), 13);
         }
 
         {
@@ -2758,6 +2792,110 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(description.shards(4).parent_shard_id(), "shard-000001");
         }
 
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName2,
+                NYDS_V1::TCreateStreamSettings()
+                    //.ShardCount(3)
+                    .BeginConfigurePartitioningSettings()
+                        .MinActivePartitions(3)
+                        .MaxActivePartitions(7)
+                        .BeginConfigureAutoPartitioningSettings()
+                            .Strategy(NYdb::NDataStreams::V1::EAutoPartitioningStrategy::ScaleUpAndDown)
+                            .StabilizationWindow(TDuration::Seconds(123))
+                            .UpUtilizationPercent(97)
+                            .DownUtilizationPercent(13)
+                        .EndConfigureAutoPartitioningSettings()
+                    .EndConfigurePartitioningSettings()
+                ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->DescribeStream(streamName2).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& d = result.GetResult().stream_description();
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_status(), YDS_V1::StreamDescription::ACTIVE);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_name(), streamName2);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_arn(), streamName2);
+            UNIT_ASSERT_VALUES_EQUAL(d.write_quota_kb_per_sec(), 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(d.retention_period_hours(), 24);
+
+            UNIT_ASSERT_VALUES_EQUAL(d.shards().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).sequence_number_range().starting_sequence_number(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().starting_hash_key(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().min_active_partitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().max_active_partitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().strategy(), ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().stabilization_window().seconds(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().up_utilization_percent(), 97);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().down_utilization_percent(), 13);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->UpdateStream(streamName2,
+                 NYDS_V1::TUpdateStreamSettings()
+                    //.TargetShardCount(3)
+                    .BeginConfigurePartitioningSettings()
+                        .MinActivePartitions(2)
+                        .MaxActivePartitions(11)
+                        .BeginConfigureAutoPartitioningSettings()
+                            .Strategy(NYdb::NDataStreams::V1::EAutoPartitioningStrategy::ScaleUp)
+                            .StabilizationWindow(TDuration::Seconds(121))
+                            .UpUtilizationPercent(93)
+                            .DownUtilizationPercent(17)
+                        .EndConfigureAutoPartitioningSettings()
+                    .EndConfigurePartitioningSettings()
+                ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->DescribeStream(streamName2).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& d = result.GetResult().stream_description();
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_status(), YDS_V1::StreamDescription::ACTIVE);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_name(), streamName2);
+            UNIT_ASSERT_VALUES_EQUAL(d.stream_arn(), streamName2);
+            UNIT_ASSERT_VALUES_EQUAL(d.write_quota_kb_per_sec(), 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(d.retention_period_hours(), 24);
+
+            UNIT_ASSERT_VALUES_EQUAL(d.shards().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).sequence_number_range().starting_sequence_number(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().starting_hash_key(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
+            UNIT_ASSERT_VALUES_EQUAL(d.shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().min_active_partitions(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().max_active_partitions(), 11);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().strategy(), ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().stabilization_window().seconds(), 121);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().up_utilization_percent(), 93);
+            UNIT_ASSERT_VALUES_EQUAL(d.partitioning_settings().auto_partitioning_settings().partition_write_speed().down_utilization_percent(), 17);
+        }
     }
 
 }

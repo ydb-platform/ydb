@@ -1551,11 +1551,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroyImpl(i64 compressedSize,
-                                                                                         i64 decompressedSize,
-                                                                                         i64 messagesCount,
-                                                                                         i64 serverBytesSize,
-                                                                                         TDeferredActions<UseMigrationProtocol>& deferred)
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
 {
 
     *Settings.Counters_->MessagesInflight -= messagesCount;
@@ -1563,28 +1559,20 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDes
     *Settings.Counters_->BytesInflightCompressed -= compressedSize;
     *Settings.Counters_->BytesInflightTotal -= (compressedSize + decompressedSize);
 
-    UpdateMemoryUsageStatisticsImpl();
-
-    CompressedDataSize -= compressedSize;
-    DecompressedDataSize -= decompressedSize;
-
-    if constexpr (!UseMigrationProtocol) {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
-        ReadSizeBudget += serverBytesSize;
-    }
-
-    ContinueReadingDataImpl();
-
-    StartDecompressionTasksImpl(deferred);
-}
-
-template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
-{
-
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
-	OnDecompressionInfoDestroyImpl(compressedSize, decompressedSize, messagesCount, serverBytesSize, deferred);
+        UpdateMemoryUsageStatisticsImpl();
+
+        CompressedDataSize -= compressedSize;
+        DecompressedDataSize -= decompressedSize;
+
+        if constexpr (!UseMigrationProtocol) {
+            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
+            ReadSizeBudget += serverBytesSize;
+        }
+
+        ContinueReadingDataImpl();
+        StartDecompressionTasksImpl(deferred);
     }
 }
 

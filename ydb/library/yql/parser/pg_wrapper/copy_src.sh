@@ -46,6 +46,8 @@ for i in $(find postgresql -name "*.o" | sed -e 's/o$/c/'); do if [ -f $i ]; the
 echo collecting *.h file list
 find postgresql -type f -name "*.h" | sort >> src_files
 find postgresql -type f -name "*_scanner.c" | sort >> src_files
+find postgresql -type f -name "*.funcs.c" | sort >> src_files
+find postgresql -type f -name "*.switch.c" | sort >> src_files
 sort src_files > src_files.s
 mv src_files.s src_files
 

@@ -461,9 +461,9 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
-    const TTableColumns &implTableColumns,
-    const NKikimrSchemeOp::TTableDescription &indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 

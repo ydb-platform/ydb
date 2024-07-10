@@ -191,12 +191,10 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    if (!indexKeys.DataColumns.empty()) {
-        if (!AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-            status = NKikimrScheme::EStatus::StatusPreconditionFailed;
-            error = "It is not allowed to create index with data column";
-            return false;
-        }
+    if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
+        status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+        error = "It is not allowed to create index with data column";
+        return false;
     }
 
     if (!IsCompatibleIndex(indexDesc.GetType(), baseTableColumns, indexKeys, error)) {

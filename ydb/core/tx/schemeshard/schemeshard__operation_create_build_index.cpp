@@ -117,7 +117,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = implTableDesc;
 
-        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
         result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx));
@@ -127,7 +126,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexDesc.GetIndexImplTableDescriptions(0)));
         createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexDesc.GetIndexImplTableDescriptions(1)));
     } else {
-        createIndexImplTable(CalcImplTableDesc(tableInfo, implTableColumns, indexDesc.GetIndexImplTableDescriptions(0)));
+        NKikimrSchemeOp::TTableDescription implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexDesc.GetIndexImplTableDescriptions(0));
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+        createIndexImplTable(std::move(implTableDesc));
     }
 
     return result;

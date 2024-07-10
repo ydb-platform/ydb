@@ -936,30 +936,35 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+            indexImplTableDescriptionsVector.resize(1);
             break;
 
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
+            indexImplTableDescriptionsVector.resize(1);
             break;
 
         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
+            indexImplTableDescriptionsVector.resize(1);
             break;
 
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+            indexImplTableDescriptionsVector.resize(2);
             break;
 
         default:
             // pass through
             // TODO: maybe return BAD_REQUEST?
+            indexImplTableDescriptionsVector.resize(1);
             break;
         }
 
-        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector(indexDesc->MutableIndexImplTableDescriptions()->begin(), indexDesc->MutableIndexImplTableDescriptions()->end());
         if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
             return false;
         }

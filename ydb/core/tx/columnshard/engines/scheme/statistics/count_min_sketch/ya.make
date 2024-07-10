@@ -10,7 +10,6 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/abstract
     ydb/core/tx/columnshard/splitter/abstract
     ydb/core/formats/arrow
-    ydb/core/util
 )
 
 END()

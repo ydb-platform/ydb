@@ -2,8 +2,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
-#include <ydb/core/util/count_min_sketch.h>
-
+#include <ydb/library/minsketch/count_min_sketch.h>
 
 namespace NKikimr::NOlap::NStatistics::NCountMinSketch {
 

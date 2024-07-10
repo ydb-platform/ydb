@@ -11,7 +11,43 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    using TBlobIdQueue = std::deque<TLogoBlobID>;
+    struct TBlobIdQueue {
+        std::deque<TLogoBlobID> Queue;
+        ui64 WorkUnits = 0;
+
+        void Push(const TLogoBlobID& id) {
+            WorkUnits += id.BlobSize();
+            Queue.push_back(id);
+        }
+
+        void PopFront() {
+            WorkUnits -= Queue.front().BlobSize();
+            Queue.pop_front();
+        }
+
+        bool IsEmpty() const {
+            return Queue.empty();
+        }
+
+        TLogoBlobID Front() const {
+            return Queue.front();
+        }
+
+        size_t GetNumItems() const {
+            return Queue.size();
+        }
+
+        ui64 GetNumWorkUnits() const {
+            return WorkUnits;
+        }
+
+        void Sort() {
+            if (!std::is_sorted(Queue.begin(), Queue.end())) {
+                std::sort(Queue.begin(), Queue.end());
+            }
+        }
+    };
+
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
     struct TUnreplicatedBlobRecord { // for monitoring purposes

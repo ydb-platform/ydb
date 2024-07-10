@@ -1862,7 +1862,7 @@ enum EPathSubType {
     EPathSubTypeSyncIndexImplTable = 1;
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
-    EPathSubTypeVectorIndexImplTable = 4;
+    EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
 }
 
 enum EPathState {

@@ -137,7 +137,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-                return TPathElement::EPathSubType::EPathSubTypeVectorIndexImplTable;
+                return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             default:
                 Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;

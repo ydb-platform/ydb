@@ -2861,6 +2861,20 @@ private:
     bool OutChangeSenderSuspended = false;
     THolder<IChangeRecordSerializer> ChangeRecordDebugSerializer;
 
+    struct TCommittingChangeRecordsKey: std::tuple<ui64, ui64, ui64> {
+        explicit TCommittingChangeRecordsKey(ui64 group, ui64 step, ui64 txId)
+            : std::tuple<ui64, ui64, ui64>(group, step, txId)
+        {}
+
+        static TCommittingChangeRecordsKey FromRecord(const TChangeRecord& record) {
+            return TCommittingChangeRecordsKey(record.GetGroup(), record.GetStep(), record.GetTxId());
+        }
+
+        explicit operator size_t() const noexcept {
+            return THash<std::tuple<ui64, ui64, ui64>>()(*this);
+        }
+    };
+
     struct TUncommittedLockChangeRecords {
         TVector<IDataShardChangeCollector::TChange> Changes;
         size_t PersistentCount = 0;
@@ -2876,6 +2890,7 @@ private:
         size_t Count = 0;
     };
 
+    THashMap<TCommittingChangeRecordsKey, TVector<ui64>> CommittingChangeRecords;
     THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;

@@ -864,19 +864,36 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
                 TSchemaSnapshotKey(res.first->second.TableId, res.first->second.SchemaVersion));
         }
 
-        db.GetDatabase().OnRollback([this, order = record.GetOrder()] {
-            auto it = ChangesQueue.find(order);
-            Y_VERIFY_S(it != ChangesQueue.end(), "Cannot find change record: " << order);
+        const auto key = TCommittingChangeRecordsKey::FromRecord(record);
+        if (!CommittingChangeRecords.contains(key)) {
+            db.GetDatabase().OnCommit([this, key] {
+                auto it = CommittingChangeRecords.find(key);
+                Y_ABORT_UNLESS(it != CommittingChangeRecords.end());
+                CommittingChangeRecords.erase(it);
+            });
+            db.GetDatabase().OnRollback([this, key] {
+                auto it = CommittingChangeRecords.find(key);
+                Y_ABORT_UNLESS(it != CommittingChangeRecords.end());
 
-            if (it->second.SchemaSnapshotAcquired) {
-                const auto snapshotKey = TSchemaSnapshotKey(it->second.TableId, it->second.SchemaVersion);
-                if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
-                    ScheduleRemoveSchemaSnapshot(snapshotKey);
+                for (const auto order : it->second) {
+                    auto cIt = ChangesQueue.find(order);
+                    Y_VERIFY_S(cIt != ChangesQueue.end(), "Cannot find change record: " << order);
+
+                    if (cIt->second.SchemaSnapshotAcquired) {
+                        const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
+                        if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                            ScheduleRemoveSchemaSnapshot(snapshotKey);
+                        }
+                    }
+
+                    ChangesQueue.erase(cIt);
                 }
-            }
 
-            ChangesQueue.erase(it);
-        });
+                CommittingChangeRecords.erase(it);
+            });
+        }
+
+        CommittingChangeRecords[key].push_back(record.GetOrder());
     } else {
         auto& state = LockChangeRecords[lockId];
         Y_ABORT_UNLESS(state.Changes.empty() || state.Changes.back().LockOffset < record.GetLockOffset(),

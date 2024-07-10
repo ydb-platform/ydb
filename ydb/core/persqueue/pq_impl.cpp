@@ -815,7 +815,7 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     switch (read.GetStatus()) {
     case NKikimrProto::OK: {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " has a tx info");
+        PQ_LOG_D("has a tx info");
 
         NKikimrPQ::TTabletTxInfo info;
         Y_ABORT_UNLESS(info.ParseFromString(read.GetValue()));
@@ -825,7 +825,7 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
         break;
     }
     case NKikimrProto::NODATA: {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " doesn't have tx info");
+        PQ_LOG_D("doesn't have tx info");
 
         InitPlanStep();
 
@@ -1027,7 +1027,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Y_ABORT_UNLESS(TopicName.size(), "Need topic name here");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
+        PQ_LOG_D("no config, start with empty partitions and default config");
     } else {
         PQ_LOG_ERROR_AND_DIE("Unexpected config read status: " << read.GetStatus());
         return;
@@ -3048,8 +3048,7 @@ void TPersQueue::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     MediatorTimeCastEntry = message->Entry;
     Y_ABORT_UNLESS(MediatorTimeCastEntry);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() <<
-                "Registered with mediator time cast");
+    PQ_LOG_D("Registered with mediator time cast");
 
     TryWriteTxs(ctx);
 }
@@ -3132,7 +3131,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << ev->Get()->Record.DebugString());
+    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << ev->Get()->Record.ShortDebugString());
 
     NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
     switch (event.GetTxBodyCase()) {
@@ -4100,8 +4099,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
             case NKikimrPQ::TTransaction::KIND_CONFIG:
-                SendEvReadSetToReceivers(ctx, tx);
-
                 WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
@@ -4146,6 +4143,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // from TEvProposeTransaction
         //
         Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.Senders.size());
+
+        SendEvReadSetToReceivers(ctx, tx);
 
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
@@ -4411,7 +4410,6 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
     TxQueue.clear();
 
     std::deque<std::pair<ui64, ui64>> plannedTxs;
-    const auto& ctx = ActorContext();
 
     for (size_t i = 0; i < readRange.PairSize(); ++i) {
         auto& pair = readRange.GetPair(i);
@@ -4419,8 +4417,7 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
         NKikimrPQ::TTransaction tx;
         Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " " <<
-                    "Tx: " << tx.DebugString());
+        PQ_LOG_D("Load tx " << tx.ShortDebugString());
 
         Txs.emplace(tx.GetTxId(), tx);
 

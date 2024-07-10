@@ -61,6 +61,90 @@ def print_stat(f, d):
         print("    " + s, file=f)
 
 
+def add_to_tree(tree, path, value, count):
+    tree["name"] = path[0]
+    if "children" not in tree:
+        tree["children"] = {}
+    if len(path) == 1:
+        # paths can be the same, but return value differs
+        # assert "size" not in tree
+        if "size" not in tree:
+            tree["size"] = 0
+        tree["size"] += value
+        tree["type"] = "cpp"
+        tree["count"] = count
+    else:
+        tree["type"] = "dir"
+        if path[1] not in tree["children"]:
+            tree["children"][path[1]] = {}
+        add_to_tree(tree["children"][path[1]], path[1:], value, count)
+
+def children_to_list(tree):
+    if "children" not in tree:
+        return
+    tree["children"] = list(tree["children"].values())
+    for child in tree["children"]:
+        children_to_list(child)
+
+def propogate_size(tree):
+    if "size" not in tree:
+        tree["size"] = 0
+    for child in tree.get("children", []):
+        tree["size"] += propogate_size(child)
+    return tree["size"]
+
+def enrich_names_with_sec(tree):
+    area = 0
+    for child_ in tree.get("children", []):
+        enrich_names_with_sec(child_)
+
+    tree["name"] = tree["name"] + " " + "{:_} KiB".format(int(tree["size"]/1024))
+    if "count" in tree:
+        tree["name"] += ", {} times".format(tree["count"])
+
+def build_tree(items):
+    tree = {}
+    total_size = 0
+    for name, (size, count, obj_files, avg, min, max) in items:
+        # use braces only for args
+        if size < 25000:
+            continue
+        name = name.replace("(anonymous namespace)", "[anonymous namespace]")
+        total_size += size
+
+        if '(' in name:
+            # use only rightmost '(' because of 'std::__y1::__function::__func<>::operator()(std::__y1::vector<>&)'
+            prefix, args = name.split('(', 1)
+            args = "(" + args
+        else: 
+            # some unmagled symbols present such as 
+            # _ZN17NPrivateExceptionlsI10yexceptionA25_cEENSt4__y19enable_ifIXsr3std10is_base_ofINS_10yexceptionEu7__decayIT_EEE5valueEOS6_E4typeES8_RKT0_ 
+            # for now i don't have any idea
+            prefix, args = name, ""
+        
+        path = prefix.split("::")
+        path[-1] += args
+
+        if ' ' in path[0]:
+            # sometimes return value specified, so strip it 
+            # signed 'char* NKikimr::NCHash::TListPool<>::GetList<>(unsigned long)'
+            path[0] = path[0].rsplit(' ', 1)[1]
+
+        path = ["root"] + path
+
+        print(path)
+        add_to_tree(tree, path, size, count)
+    children_to_list(tree)
+    propogate_size(tree)
+    enrich_names_with_sec(tree)
+    with open("bloat.json", "w") as f:
+        f.write("kTree = ")
+        json.dump(tree, f, indent=4)
+    print("Total size =", total_size)
+    return tree
+
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="""A tool for analyzing binary size."""
@@ -88,12 +172,15 @@ def main():
         data = json.load(f)
     walker = Walker()
     walker.process(data["tree"])
+    items = walker.stats.items()  # [name, (size, count, avg, min, max)]
     with open(output_prefix + ".by_size.txt","w") as f:
-        for p in sorted(walker.stats.items(), key=lambda p: p[1][0], reverse=True):
+        for p in sorted(items, key=lambda p: p[1][0], reverse=True):
             print_stat(f, p)
     with open(output_prefix + ".by_count.txt","w") as f:
-        for p in sorted(walker.stats.items(), key=lambda p: p[1][1], reverse=True):
+        for p in sorted(items, key=lambda p: p[1][1], reverse=True):
             print_stat(f, p)
+
+    build_tree(items)
     return 0
 
 if __name__ == "__main__":

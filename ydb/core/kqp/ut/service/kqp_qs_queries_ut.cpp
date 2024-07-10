@@ -3090,123 +3090,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"sql(
-            CREATE TABLE `/Root/test/alterNullInvalid` (
-                id Int32 NOT NULL,
-                value Int32,
-                PRIMARY KEY (id)
-            );
-        )sql";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto initValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNullInvalid` (id, value)
-                VALUES
-                ( 1, 1 ),
-                ( 2, 10 ),
-                ( 3, 100 ),
-                ( 4, 1000 ),
-                ( 5, NULL ),
-                ( 6, 100000 ),
-                ( 7, 1000000 );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
-        }
-
-        {
-            auto setNotNull = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/alterNullInvalid`
-                ALTER COLUMN value SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"sql(
-            CREATE TABLE `/Root/test/alterNotNull` (
-                id Int32 NOT NULL,
-                value Int32,
-                PRIMARY KEY (id)
-            );
-        )sql";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto initValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, value)
-                VALUES
-                ( 1, 1 ),
-                ( 2, 10 ),
-                ( 3, 100 ),
-                ( 4, 1000 ),
-                ( 5, 10000 ),
-                ( 6, 100000 ),
-                ( 7, 1000000 );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
-        }
-
-        // {
-        //     auto setDefault = client.ExecuteQuery(R"sql(
-        //         ALTER TABLE `/Root/test/alterNotNull`
-        //         ALTER COLUMN value SET DEFAULT 0;
-        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(setDefault.IsSuccess(), setDefault.GetIssues().ToString());
-        // }
-
-        {
-            auto setNotNull = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/alterNotNull`
-                ALTER COLUMN value SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            // change
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-        }
-
-        // {
-        //     auto initNullValues = client.ExecuteQuery(R"sql(
-        //         REPLACE INTO `/Root/test/alterNotNull` (id, value)
-        //         VALUES
-        //         ( 1, NULL ),
-        //         ( 2, NULL );
-        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-        // }
-    }
-
-    Y_UNIT_TEST(AlterTable_SetNull_Valid) {
+    Y_UNIT_TEST(AlterTable_DropNotNull_Valid) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
@@ -3259,7 +3143,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto setNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNull`
-                ALTER COLUMN val SET NULL;
+                ALTER COLUMN val DROP NOT NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
         }
@@ -3275,7 +3159,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(AlterTable_SetNull_WithSetFamily_Valid) {
+    Y_UNIT_TEST(AlterTable_DropNotNull_WithSetFamily_Valid) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
@@ -3338,7 +3222,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto setNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNullwithSetFamily`
-                ALTER COLUMN val1 SET NULL;
+                ALTER COLUMN val1 DROP NOT NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
         }

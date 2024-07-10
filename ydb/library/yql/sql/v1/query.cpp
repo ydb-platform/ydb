@@ -1329,20 +1329,16 @@ public:
         if (Params.AlterColumns) {
             auto columns = Y();
             for (auto& col : Params.AlterColumns) {
-                if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNullConstraint) {
+                if (col.TypeOfChange == TColumnSchema::ETypeOfChange::DropNotNullConstraint) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
 
                     auto columnConstraints = Y();
-
-                    if (!col.Nullable) {
-                        columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
-                    } else {
-                        columnConstraints = L(columnConstraints, Q(Y(Q("null"))));
-                    }
-
-                    columnDesc = L(columnDesc, Q(Y(Q("setColumnConstraints"), Q(columnConstraints))));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("drop_not_null"))));
+                    columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
                     columns = L(columns, Q(columnDesc));
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNotNullConstraint) {
+                    // todo flown4qqqq
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamaly) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));

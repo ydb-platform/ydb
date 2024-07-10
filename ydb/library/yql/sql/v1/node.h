@@ -690,7 +690,8 @@ namespace NSQLTranslationV1 {
     struct TColumnSchema {
         enum class ETypeOfChange {
             Nothing,
-            SetNullConstraint,
+            DropNotNullConstraint,
+            SetNotNullConstraint, // todo flown4qqqq
             SetFamaly
         };
 

@@ -1394,7 +1394,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 << "\". Several column families for a single column are not yet supported"));
                             return TStatus::Error;
                         }
-                    } else if (alterColumnAction == "setColumnConstraints") {
+                    } else if (alterColumnAction == "changeColumnConstraints") {
                         auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
 
                         if (constraintsList.Size() > 1) {
@@ -1411,7 +1411,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
                                 << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                                 << " Column: \"" << name
-                                << "setColumnConstraints can get exactly one token \\in {\"null\", \"not_null\"}"));
+                                << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
                     } else {

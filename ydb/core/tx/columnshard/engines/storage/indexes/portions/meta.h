@@ -53,7 +53,7 @@ protected:
     std::set<ui32> ColumnIds;
     virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
 
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) override;
 
     TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;

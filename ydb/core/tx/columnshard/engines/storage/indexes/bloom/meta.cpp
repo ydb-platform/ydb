@@ -12,22 +12,23 @@ namespace NKikimr::NOlap::NIndexes {
 
 std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     std::set<ui64> hashes;
-    for (ui32 i = 0; i < HashesCount; ++i) {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(3 * i);
+    {
+        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer;
         for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
             hashCalcer.Start();
             for (auto&& i : reader) {
                 NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
             }
-            const ui64 h = hashCalcer.Finish();
-            hashes.emplace(h);
+            hashes.emplace(hashCalcer.Finish());
         }
     }
-    const ui32 bitsCount = hashes.size() / std::log(2);
+
+    const ui32 bitsCount = HashesCount * hashes.size() / std::log(2);
     std::vector<bool> flags(bitsCount, false);
-    for (auto&& i : hashes) {
-        flags[i % flags.size()] = true;
-    }
+    const auto pred = [](const ui64 hash) {
+        flags[hash % flags.size()] = true;
+    };
+    BuildHashesSet(hashes, pred);
 
     arrow::BooleanBuilder builder;
     auto res = builder.Reserve(flags.size());
@@ -57,14 +58,16 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
             continue;
         }
         std::set<ui64> hashes;
+        const auto pred = [&hashes](const ui64 hash) {
+            hashes.emplace(hash);
+        };
         for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(3 * i);
+            NArrow::NHash::NXX64::TStreamStringHashCalcer calcer;
             calcer.Start();
             for (auto&& i : foundColumns) {
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);
             }
-            const ui64 hash = calcer.Finish();
-            hashes.emplace(hash);
+            BuildHashesSet(calcer.Finish(), pred);
         }
         branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }

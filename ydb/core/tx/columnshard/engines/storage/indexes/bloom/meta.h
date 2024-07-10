@@ -20,6 +20,27 @@ private:
         AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
+
+    static const ui64 HashesConstructorP = ((ui64)2 << 31) - 1;
+    static const ui64 HashesConstructorA = (ui64)2 << 16;
+
+    template <class TActor>
+    void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
+        AFL_VERIFY(HashesCount < p);
+        for (ui32 b = 1; b < HashesCount; ++b) {
+            const ui64 hash = (HashesConstructorA * hOriginal + b) % HashesConstructorP;
+            actor(hash);
+        }
+    }
+
+    template <class TContainer, class TActor>
+    void BuildHashesSet(const TContainer& originalHashes, const TActor& actor) const {
+        AFL_VERIFY(HashesCount < HashesConstructorP);
+        for (auto&& hOriginal : originalHashes) {
+            BuildHashesSet(hOriginal, actor);
+        }
+    }
+
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         const auto* bMeta = dynamic_cast<const TBloomIndexMeta*>(&newMeta);

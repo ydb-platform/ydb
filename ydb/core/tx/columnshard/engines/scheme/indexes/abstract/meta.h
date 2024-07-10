@@ -30,7 +30,7 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
@@ -69,17 +69,7 @@ public:
     }
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
-
-    void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
-        AFL_VERIFY(IndexId);
-        proto.SetId(IndexId);
-        AFL_VERIFY(IndexName);
-        proto.SetName(IndexName);
-        if (StorageId) {
-            proto.SetStorageId(StorageId);
-        }
-        return DoSerializeToProto(proto);
-    }
+    void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;
 
     virtual TString GetClassName() const = 0;
 };

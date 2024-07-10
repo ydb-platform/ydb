@@ -150,7 +150,31 @@ struct TYqlOperationOptions {
     TMaybe<NYT::TNode> ParametersYson;
 };
 
-using TColumnOrder = TVector<TString>;
+class TColumnOrder {
+public:
+    TColumnOrder() = default;
+    TColumnOrder(const TColumnOrder&) = default;
+    TColumnOrder(TColumnOrder&&) = default;
+    TColumnOrder& operator=(const TColumnOrder&);
+    explicit TColumnOrder(const TVector<TString>& order);
+    TString AddColumn(const TString& name);
+
+    bool IsDuplicated(const TString& name) const;
+
+    void Shrink(size_t remain);
+
+    void Reserve(size_t);
+    void EraseIf(const std::function<bool(const TString&)>& fn);
+    void EraseIf(const std::function<bool(const std::pair<TString, TString>&)>& fn);
+    void Clear();
+    TString Find(const TString&) const;
+
+    THashMap<TString, TString> GeneratedToOriginal;
+    THashMap<TString, uint64_t> UseCount;
+    // (name, generated_name)
+    TVector<std::pair<TString, TString>> Order;
+};
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
 

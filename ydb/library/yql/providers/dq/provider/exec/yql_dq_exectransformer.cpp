@@ -477,7 +477,7 @@ private:
         if (NCommon::HasResOrPullOption(resOrPull, "type")) {
             TStringStream typeYson;
             NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, resOrPullInput.GetTypeAnn(), *columns);
+            NCommon::WriteResOrPullType(typeWriter, resOrPullInput.GetTypeAnn(), TColumnOrder(*columns));
             *type = typeYson.Str();
         }
     }
@@ -1018,7 +1018,7 @@ private:
             TString skiffType;
             NYT::TNode rowSpec;
             if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
-                auto parsedYtType =  SkiffConverter->ParseYTType(result.Input().Ref(), ctx, columns);
+                auto parsedYtType =  SkiffConverter->ParseYTType(result.Input().Ref(), ctx, TColumnOrder(columns));
 
                 type = parsedYtType.Type;
                 rowSpec = parsedYtType.RowSpec;
@@ -1449,7 +1449,7 @@ private:
         TString skiffType;
         NYT::TNode rowSpec;
         if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {
-            auto parsedYtType = SkiffConverter->ParseYTType(pull.Input().Ref(), ctx, columns);
+            auto parsedYtType = SkiffConverter->ParseYTType(pull.Input().Ref(), ctx, TColumnOrder(columns));
 
             type = parsedYtType.Type;
             rowSpec = parsedYtType.RowSpec;

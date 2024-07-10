@@ -58,13 +58,110 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
 }
 
+TString TColumnOrder::Find(const TString& name) const {
+    auto it = GeneratedToOriginal.find(name);
+    YQL_ENSURE(it != GeneratedToOriginal.end());
+    return it->second;
+}
+
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
+    GeneratedToOriginal = rhs.GeneratedToOriginal;
+    Order = rhs.Order;
+    UseCount = rhs.UseCount;
+    return *this;
+}
+
+TColumnOrder::TColumnOrder(const TVector<TString>& order) {
+    Reserve(order.size());
+    for (auto& e: order) {
+        AddColumn(e);
+    }
+}
+
+TString TColumnOrder::AddColumn(const TString& name) {
+    if (uint64_t count = ++UseCount[name]; count > 1) {
+        TString generated = name + "_generated_" + ToString(count);
+        GeneratedToOriginal[generated] = name;
+        Order.emplace_back(name, generated);
+        return generated;
+    }
+    Order.emplace_back(name, name);
+    GeneratedToOriginal[name] = name;
+    return name;
+}
+
+bool TColumnOrder::IsDuplicated(const TString& name) const {
+    auto it = UseCount.find(name);
+    return it != UseCount.end() && it->second > 1;
+}
+
+void TColumnOrder::Shrink(size_t remain) {
+    for (size_t i = remain; i < Order.size(); ++i) {
+        if (!--UseCount[Order[i].first]) {
+            UseCount.erase(Order[i].first);
+        }
+        GeneratedToOriginal.erase(Order[i].second);
+    }
+    Order.resize(remain);
+}
+
+void TColumnOrder::Reserve(size_t count) {
+    Order.reserve(count);
+}
+
+void TColumnOrder::Clear() {
+    Order.clear();
+    GeneratedToOriginal.clear();
+    UseCount.clear();
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order) {
+        if (!fn(e.first)) {
+            newOrder.AddColumn(e.first);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const std::pair<TString, TString>&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order) {
+        if (!fn(e)) {
+            newOrder.AddColumn(e.first);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns) {
     TStringStream ss;
     if (columnOrder) {
-        if (maxColumns.Defined() && columnOrder->size() > *maxColumns) {
-            ss << "[" << JoinRange(", ", columnOrder->begin(), columnOrder->begin() + *maxColumns) << ", ... ]";
+        if (maxColumns.Defined() && columnOrder->Order.size() > *maxColumns) {
+            size_t i = 0;
+            ss << "[";
+            for (auto& [e, gen_e]: columnOrder->Order) {
+                if (i++ >= *maxColumns) {
+                    break;
+                }
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Order.size()) {
+                    ss << ", ";
+                }
+            }
+            ss << ", ... ]";
         } else {
-            ss << "[" << JoinSeq(", ", *columnOrder) << "]";
+            ss << "[";
+            size_t i = 0;
+            for (auto& [e, gen_e]: columnOrder->Order) {
+                
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Order.size()) {
+                    ss << ", ";
+                }
+            }
+            ss << "]";
         }
     } else {
         ss << "default";
@@ -77,8 +174,8 @@ ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) {
         return hash;
     }
 
-    hash = CombineHashes(hash, NumericHash(columnOrder->size()));
-    for (auto& col : *columnOrder) {
+    hash = CombineHashes(hash, NumericHash(columnOrder->Order.size()));
+    for (auto& [col, gen_col] : columnOrder->Order) {
         hash = CombineHashes(hash, THash<TString>()(col));
     }
 
@@ -125,8 +222,8 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 
     TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*nodeType);
 
-    for (auto& col : columnOrder) {
-        auto it = allColumns.find(col);
+    for (auto& [col, gen_col] : columnOrder.Order) {
+        auto it = allColumns.find(gen_col);
         if (it == allColumns.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
                 TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "

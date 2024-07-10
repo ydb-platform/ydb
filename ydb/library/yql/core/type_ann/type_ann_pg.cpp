@@ -141,14 +141,14 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
 
         if (0 == i) {
             resultColumnOrder = *childColumnOrder;
-            fieldsCnt = resultColumnOrder.size();
+            fieldsCnt = resultColumnOrder.Order.size();
 
             pgTypes.resize(fieldsCnt);
             for (size_t j = 0; j < fieldsCnt; ++j) {
                 pgTypes[j].reserve(setItems->ChildrenSize());
             }
         } else {
-            if ((*childColumnOrder).size() != fieldsCnt) {
+            if (childColumnOrder->Order.size() != fieldsCnt) {
                 TExprNodePtr combinator = FindLeftCombinatorOfNthSetItem(setItems, setOps, i);
                 Y_ENSURE(combinator);
 
@@ -168,8 +168,8 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
         const auto structType = itemType->Cast<TStructExprType>();
         {
             size_t j = 0;
-            for (const auto& col : *childColumnOrder) {
-                auto itemIdx = structType->FindItemI(col, nullptr);
+            for (const auto& [col, gen_col] : childColumnOrder->Order) {
+                auto itemIdx = structType->FindItemI(gen_col, nullptr);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -197,7 +197,7 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
             ctx.Expr.AddError(*issue);
             return IGraphTransformer::TStatus::Error;
         }
-        structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[j],
+        structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder.Order[j].second,
             ctx.Expr.MakeType<TPgExprType>(commonType->TypeId)));
     }
 
@@ -345,7 +345,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             resultColumnOrder.ConstructInPlace();
             TVector<const TItemExprType*> items;
             for (size_t i = 0; i < proc.OutputArgTypes.size(); ++i) {
-                resultColumnOrder->push_back(proc.OutputArgNames[i]);
+                resultColumnOrder->AddColumn(proc.OutputArgNames[i]);
                 items.push_back(ctx.Expr.MakeType<TItemExprType>(
                     proc.OutputArgNames[i], 
                     ctx.Expr.MakeType<TPgExprType>(proc.OutputArgTypes[i])));
@@ -1802,6 +1802,13 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             }
                         }
 
+                        if (x.Order->IsDuplicated(TString(node->Tail().Content()))) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
+                                    TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
+                                isError = true;
+                                return false;
+                        }
+
                         bool isVirtual;
                         auto pos = x.Type->FindItemI(node->Tail().Content(), &isVirtual);
                         if (pos) {
@@ -2004,12 +2011,21 @@ const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx) {
     return ctx.MakeType<TItemExprType>(RemoveAlias(name), item->GetItemType());
 }
 
+const TItemExprType* RenameOnOrder(TExprContext& ctx, TColumnOrder& order, const TItemExprType* item) {
+    if (auto newName = order.AddColumn(TString(item->GetName())); newName != item->GetName()) {
+        return ctx.MakeType<TItemExprType>(newName, item->GetItemType());
+    }
+    return item;
+}
+
 void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TString>& refs,
     const THashMap<TString, THashSet<TString>>* qualifiedRefs,
-    TVector<const TItemExprType*>& items, TExprContext& ctx, const THashMap<TString, TString>& usedInUsing = {}) {
+    TVector<const TItemExprType*>& items, TExprContext& ctx, const THashMap<TString, TString>& usedInUsing = {})
+{
     THashSet<TString> usedRefs;
     THashSet<TString> usedAliases;
     THashSet<TString> present;
+    TColumnOrder order;
     for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
         for (const auto& x : inputs) {
             if (priority != x.Priority) {
@@ -2027,7 +2043,7 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                         TString lcase = to_lower(TString(item->GetName()));
                         if (auto it = usedInUsing.find(lcase); it != usedInUsing.end()) {
                             if (!present.contains(lcase)) {
-                                items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
+                                items.push_back(RenameOnOrder(ctx, order, ctx.MakeType<TItemExprType>(it->second, item->GetItemType())));
                                 present.emplace(lcase);
                             }
                             continue;
@@ -2077,6 +2093,9 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 usedAliases.insert(x.Alias);
             }
         }
+    }
+    for (auto& e: items) {
+        e = RenameOnOrder(ctx, order, e);
     }
 }
 
@@ -2134,7 +2153,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                     }
 
                     if (order) {
-                        for (const auto& o : *order) {
+                        for (const auto& [o, gen_col] : order->Order) {
                             if (!o.StartsWith("_yql_")) {
                                 auto lcase = to_lower(o);
                                 if (usedFromUsing.contains(lcase)) {
@@ -2220,7 +2239,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 ui32 pos = 0;
                                 for (ui32 i = 0; i < matchedAliasInput->Type->GetSize(); ++i) {
                                     auto columnName = matchedAliasInput->Order ?
-                                        matchedAliasInput->Order.GetRef()[i] :
+                                        matchedAliasInput->Order.GetRef().Order[i].second :
                                         matchedAliasInput->Type->GetItems()[i]->GetName();
                                     if (!columnName.StartsWith("_yql_")) {
                                         parent.List(pos++)
@@ -2274,7 +2293,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                     }
 
                     if (order) {
-                        for (const auto& o : *order) {
+                        for (const auto& [o, gen_col] : order->Order) {
                             if (!o.StartsWith("_yql_")) {
                                 orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
                                     NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", o)));
@@ -2790,8 +2809,8 @@ bool ReplaceProjectionRefs(TExprNode::TPtr& lambda, const TStringBuf& scope, con
             auto index = FromString<ui32>(node->Head().Content());
             ui32 current = 0;
             for (ui32 i = 0; i < projectionOrders.size(); ++i) {
-                if (index >= current && index < current + projectionOrders[i]->first.size()) {
-                    TStringBuf column = projectionOrders[i]->first[index - current];
+                if (index >= current && index < current + projectionOrders[i]->first.Order.size()) {
+                    TStringBuf column = projectionOrders[i]->first.Order[index - current].second;
                     TStringBuf alias;
                     column = RemoveAlias(column, alias);
 
@@ -2817,7 +2836,7 @@ bool ReplaceProjectionRefs(TExprNode::TPtr& lambda, const TStringBuf& scope, con
                         .Build();
                 }
 
-                current += projectionOrders[i]->first.size();
+                current += projectionOrders[i]->first.Order.size();
             }
 
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << scope << ": position " << (1 + index) << " is not in select list"));
@@ -3129,7 +3148,7 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
                 const auto& projectionLambda = projection->Tail().Child(projectionIndex)->Tail();
                 TNodeSet equalsVisited;
                 if (ExprNodesEquals(newLambda->Tail(), projectionLambda.Tail(), equalsVisited)) {
-                    auto columnName = projectionOrders->at(projectionIndex)->first.front();
+                    auto columnName = projectionOrders->at(projectionIndex)->first.Order.front().second;
                     newLambda = ctx.Expr.Builder(newLambda->Pos())
                         .Lambda()
                             .Callable("PgColumnRef")
@@ -3475,7 +3494,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 }
 
                                                 YQL_ENSURE(x.Order);
-                                                for (const auto& col : *x.Order) {
+                                                for (const auto& [col, gen_col] : x.Order->Order) {
                                                     if (!col.StartsWith("_yql_")) {
                                                         auto lcase = to_lower(col);
                                                         if (alreadyPresent.contains(lcase)) {
@@ -3484,9 +3503,9 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                         if (repeatedColumnsInUsing.contains(lcase)) {
                                                             alreadyPresent.emplace(lcase);
                                                             // coalesce of two inputs
-                                                            o.push_back(repeatedColumnsInUsing[lcase]);
+                                                            o.AddColumn(repeatedColumnsInUsing[lcase]);
                                                         } else {
-                                                            o.push_back(MakeAliasedColumn(x.Alias, col));
+                                                            o.AddColumn(MakeAliasedColumn(x.Alias, col));
                                                         }
                                                     }
                                                 }
@@ -3507,9 +3526,9 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 }
 
                                                 YQL_ENSURE(x.Order);
-                                                for (const auto& col : *x.Order) {
+                                                for (const auto& [col, gen_col] : x.Order->Order) {
                                                     if (!col.StartsWith("_yql_")) {
-                                                        o.push_back(MakeAliasedColumn(x.Alias, col));
+                                                        o.AddColumn(MakeAliasedColumn(x.Alias, col));
                                                     }
                                                 }
 
@@ -3525,7 +3544,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         YQL_ENSURE(found);
                                     } else {
                                         isExpr = true;
-                                        o.push_back(TString(column->Head().Content()));
+                                        o.AddColumn(TString(column->Head().Content()));
                                     }
 
                                     projectionOrders[index] = std::make_pair(o, isExpr);
@@ -3668,11 +3687,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         TExprNode::TListType projectionOrderItems;
                         for (const auto& x : projectionOrders) {
                             if (x->second) {
-                                YQL_ENSURE(x->first.size() == 1);
-                                projectionOrderItems.push_back(ctx.Expr.NewAtom(options.Pos(), x->first[0]));
+                                YQL_ENSURE(x->first.Order.size() == 1);
+                                projectionOrderItems.push_back(ctx.Expr.NewAtom(options.Pos(), x->first.Order[0].first));
                             } else {
                                 TExprNode::TListType columns;
-                                for (const auto& col : x->first) {
+                                for (const auto& [col, gen_col] : x->first.Order) {
                                     columns.push_back(ctx.Expr.NewAtom(options.Pos(), col));
                                 }
 
@@ -3700,6 +3719,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         if (!hasUnknownsAllowed) {
                             hasUnknownsAllowed = (GetSetting(options, "unknowns_allowed") != nullptr);
                         }
+
+                        TColumnOrder order;
+
+                        for (auto& e: outputItems) {
+                            e = RenameOnOrder(ctx.Expr, order, e);
+                        }
+
                         if (!hasUnknownsAllowed) {
                             AdjustUnknownType(outputItems, ctx.Expr);
                         }
@@ -3800,7 +3826,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     TColumnOrder newOrder;
                                     for (ui32 i = 0; i < inputStructType->GetSize(); ++i) {
                                         auto newName = TString(p->Child(2)->Child(i)->Content());
-                                        newOrder.push_back(newName);
+                                        newOrder.AddColumn(newName);
                                         newItems.push_back(ctx.Expr.MakeType<TItemExprType>(newName, inputStructType->GetItems()[i]->GetItemType()));
                                     }
 
@@ -3822,7 +3848,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 TVector<const TItemExprType*> items;
                                 items.push_back(ctx.Expr.MakeType<TItemExprType>(memberName, itemType));
                                 inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
-                                columnOrder = TColumnOrder({ TString(memberName) });
+                                columnOrder = TColumnOrder();
+                                columnOrder->AddColumn(TString(memberName));
                             }
                         } else {
                             if (p->Head().IsCallable("PgSelf")) {
@@ -3874,10 +3901,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             TVector<const TItemExprType*> newStructItems;
                             TColumnOrder newOrder;
                             for (ui32 i = 0; i < p->Child(2)->ChildrenSize(); ++i) {
-                                auto pos = inputStructType->FindItemI((*columnOrder)[i], nullptr);
+                                auto pos = inputStructType->FindItemI(columnOrder->Order[i].second, nullptr);
                                 YQL_ENSURE(pos);
                                 auto type = inputStructType->GetItems()[*pos]->GetItemType();
-                                newOrder.push_back(TString(p->Child(2)->Child(i)->Content()));
+                                newOrder.AddColumn(TString(p->Child(2)->Child(i)->Content()));
                                 newStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(p->Child(2)->Child(i)->Content(), type));
                             }
 
@@ -4665,7 +4692,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     for (const auto& x : option->Tail().Children()) {
                         if (x->IsAtom()) {
                             TColumnOrder o;
-                            o.push_back(TString(x->Content()));
+                            o.AddColumn(TString(x->Content()));
                             projectionOrders.push_back(std::make_pair(o, true));
                         } else if (x->IsList()) {
                             TColumnOrder o;
@@ -4674,7 +4701,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     return IGraphTransformer::TStatus::Error;
                                 }
 
-                                o.push_back(TString(y->Content()));
+                                o.AddColumn(TString(y->Content()));
                             }
 
                             projectionOrders.push_back(std::make_pair(o, false));
@@ -5157,8 +5184,10 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
         // no effective types yet, scan lambda bodies
         bool hasNewSort = false;
         TProjectionOrders projectionOrders;
-        for (const auto& col : resultColumnOrder) {
-            projectionOrders.push_back(std::make_pair(TColumnOrder{ col }, true));
+        for (const auto& [col, gen_col] : resultColumnOrder.Order) {
+            TColumnOrder clmn;
+            clmn.AddColumn(col);
+            projectionOrders.push_back(std::make_pair(clmn, true));
         }
 
         if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, hasNewSort, newSortTupleItems, false, nullptr, "ORDER BY", &projectionOrders, nullptr)) {

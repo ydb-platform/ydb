@@ -171,7 +171,7 @@ private:
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
                 YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
-                return Types.SetColumnOrder(node.Ref(), tableDesc->Metadata->ColumnOrder, ctx);
+                return Types.SetColumnOrder(node.Ref(), TColumnOrder(tableDesc->Metadata->ColumnOrder), ctx);
             }
 
             case TKikimrKey::Type::TableList:
@@ -490,7 +490,7 @@ private:
         auto op = GetTableOp(node);
         if (NPgTypeAnn::IsPgInsert(node, op)) {
             TExprNode::TPtr newInput;
-            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, table->Metadata->ColumnOrder, ctx, Types);
+            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, TColumnOrder(table->Metadata->ColumnOrder), ctx, Types);
             if (!ok) {
                 return TStatus::Error;
             }

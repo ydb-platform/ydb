@@ -132,6 +132,14 @@ struct TCombinerNodes {
         }
     }
 
+    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
+        for (size_t i = 0U, j = 0U; i < ItemNodes.size(); ++i) {
+            if (values[i]) {
+                keys[i] = *(values[j++]);
+            }
+        }
+    }
+
     void ProcessItem(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* state) const {
         if (keys) {
             std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
@@ -346,6 +354,7 @@ public:
     enum class ETasteResult: i8 {
         Init = -1,
         Update,
+        DataRequired,
         Skip
     };
     TSpillingSupportState(
@@ -445,9 +454,11 @@ public:
         
         // Corresponding bucket is spilled, we don't need a key anymore, full input will be spilled
         BufferForKeyAndState.resize(0);
-        TryToSpillRawData(bucket, bucketId);
+        // Prepare space for raw data
+        BufferForUsedInputItems.resize(ItemNodesSize);
+        Throat = BufferForUsedInputItems.data();
         
-        return ETasteResult::Skip;
+        return ETasteResult::DataRequired;
     }
 
     NUdf::TUnboxedValuePod* Extract() {
@@ -1237,6 +1248,7 @@ public:
         , AllowSpilling(allowSpilling)
     {}
 
+    // MARK: DoCAlculate
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeState(ctx, state);
@@ -1273,6 +1285,9 @@ public:
                             break;
                         case TSpillingSupportState::ETasteResult::Update:
                             Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                            break;
+                        case TSpillingSupportState::ETasteResult::DataRequired:
+                            Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
                         case TSpillingSupportState::ETasteResult::Skip:
                             break;

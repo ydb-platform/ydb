@@ -11,8 +11,6 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        NIceDb::TNiceDb db(txc.DB);
-
         while (!Self->PendingSchemaSnapshotsToRemove.empty()) {
             const auto key = Self->PendingSchemaSnapshotsToRemove.back();
             const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(key);
@@ -38,7 +36,7 @@ public:
                 continue;
             }
 
-            Self->GetSchemaSnapshotManager().RemoveShapshot(db, key);
+            Self->GetSchemaSnapshotManager().RemoveShapshot(txc.DB, key);
             Self->PendingSchemaSnapshotsToRemove.pop_back();
         }
 

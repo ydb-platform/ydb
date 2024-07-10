@@ -80,14 +80,16 @@ const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapsho
     return Snapshots.FindPtr(key);
 }
 
-void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+void TSchemaSnapshotManager::RemoveShapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
         return;
     }
 
     Snapshots.erase(it);
-    PersistRemoveSnapshot(db, key);
+
+    NIceDb::TNiceDb nicedb(db);
+    PersistRemoveSnapshot(nicedb, key);
 }
 
 void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,

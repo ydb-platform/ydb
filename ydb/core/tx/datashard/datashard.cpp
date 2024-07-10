@@ -1495,9 +1495,14 @@ void TDataShard::ScheduleRemoveAbandonedSchemaSnapshots() {
             Y_DEBUG_ABORT_UNLESS(State == TShardState::PreOffline);
             break;
         }
-        if (snapshot.Schema->GetTableSchemaVersion() < it->second->GetTableSchemaVersion()) {
-            PendingSchemaSnapshotsToRemove.push_back(key);
+        if (SchemaSnapshotManager.HasReference(key)) {
+            continue;
         }
+        if (snapshot.Schema->GetTableSchemaVersion() >= it->second->GetTableSchemaVersion()) {
+            continue;
+        }
+
+        PendingSchemaSnapshotsToRemove.push_back(key);
     }
 
     if (wasEmpty && !PendingSchemaSnapshotsToRemove.empty()) {
@@ -1733,8 +1738,18 @@ void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersio
     Y_ABORT_UNLESS(TableInfos.contains(pathId.LocalPathId));
     auto tableInfo = TableInfos[pathId.LocalPathId];
 
-    const auto key = TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tableSchemaVersion);
+    const auto key = TSchemaSnapshotKey(pathId, tableSchemaVersion);
     SchemaSnapshotManager.AddSnapshot(txc.DB, key, TSchemaSnapshot(tableInfo, step, txId));
+
+    const auto& snapshots = SchemaSnapshotManager.GetSnapshots();
+    for (auto it = snapshots.lower_bound(TSchemaSnapshotKey(pathId, 1)); it != snapshots.end(); ++it) {
+        if (it->first == key) {
+            break;
+        }
+        if (!SchemaSnapshotManager.HasReference(it->first)) {
+            ScheduleRemoveSchemaSnapshot(it->first);
+        }
+    }
 }
 
 void TDataShard::PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid) {

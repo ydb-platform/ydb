@@ -178,7 +178,8 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         return;
     }
 
-    double nRows = inputStats->Nrows;
+    double inputRows =  inputStats->Nrows;
+    double nRows = inputRows;
 
     // Check if we have a range expression, in that case just assign a single row to this read
     // We don't currently check the size of an index lookup
@@ -192,8 +193,10 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     }
 
     int nAttrs = sourceSettings.Columns().Size();
+
+    double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
+    double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
     double cost = inputStats->Cost;
-    double byteSize = inputStats->ByteSize * (nAttrs / (double)inputStats->Ncols);
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
         EStatisticsType::BaseTable, 

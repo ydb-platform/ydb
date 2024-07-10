@@ -870,7 +870,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::LAST: {
-            Y_UNREACHABLE();
+            YQL_ENSURE(false);
         }
         }
     }

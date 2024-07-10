@@ -125,13 +125,15 @@ constexpr auto YtSettingTypesCount = static_cast<ui64>(EYtSettingType::LAST);
 class EYtSettingTypes : std::bitset<YtSettingTypesCount> {
 using TBase = std::bitset<YtSettingTypesCount>;
     explicit EYtSettingTypes(const std::bitset<YtSettingTypesCount>& bitset)
-    : TBase(bitset) {}
+        : TBase(bitset)
+    {}
 
 public:
     using ::NYql::EYtSettingTypes::bitset::bitset;
 
     EYtSettingTypes(EYtSettingType type)
-    : TBase(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type)) {}
+        : TBase(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type)) 
+    {}
 
     EYtSettingTypes& operator|=(const EYtSettingTypes& other) {
         TBase::operator|=(other);

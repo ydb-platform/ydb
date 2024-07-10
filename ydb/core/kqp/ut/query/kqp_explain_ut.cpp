@@ -849,10 +849,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(IdxFullscan, Source) {
+    Y_UNIT_TEST(IdxFullscan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(Source);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 

@@ -102,7 +102,7 @@ select  store.s_store_name
      cross join
      (select A2.ca_zip as ca_zip
      from (
-     select ca_zip from $bla1 bla1 left semi join $bla2 bla2 using (ca_zip)
+     select ca_zip from $bla1 bla1 right semi join $bla2 bla2 using (ca_zip)
       )A2) V1
  where ss_store_sk = s_store_sk
   and ss_sold_date_sk = d_date_sk

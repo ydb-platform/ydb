@@ -23,7 +23,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     TTypeAnnotationContext& typesCtx,
     ui32 optLevel,
     IOptimizerNew& opt,
-    const TProviderCollectFunction& providerCollect
+    const TProviderCollectFunction& providerCollect,
+    TString joinHinst = ""
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -33,7 +34,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    int& equiJoinCounter
+    int& equiJoinCounter,
+    TString joinHints = ""
 );
 
 } // namespace NYql::NDq

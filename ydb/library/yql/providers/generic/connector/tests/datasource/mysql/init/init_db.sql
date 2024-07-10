@@ -58,16 +58,16 @@ INSERT INTO primitives VALUES
 
 DROP TABLE IF EXISTS constant;
 CREATE TABLE constant (
-    col_01 INTEGER NOT NULL,
-    PRIMARY KEY (col_01)
+    col_00_id INTEGER NOT NULL,
+    PRIMARY KEY (col_00_id)
 );
 
 INSERT INTO constant VALUES (0), (1), (2);
 
 DROP TABLE IF EXISTS count_rows;
 CREATE TABLE count_rows (
-    col_01 INTEGER NOT NULL,
-    PRIMARY KEY (col_01)
+    col_00_id INTEGER NOT NULL,
+    PRIMARY KEY (col_00_id)
 );
 
 INSERT INTO count_rows VALUES (0), (1), (2);

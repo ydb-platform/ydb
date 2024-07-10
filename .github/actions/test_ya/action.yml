@@ -231,10 +231,21 @@ runs:
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          extra_params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          extra_params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
         fi
-
 
         echo "::debug::get version"
         ./ya --version
@@ -252,11 +263,30 @@ runs:
 
               echo "ya make returned $RC, build failed"
               echo "status=failed" >> $GITHUB_OUTPUT
-              exit $RC
             else
               echo "status=true" >> $GITHUB_OUTPUT
             fi
         )
+
+    - name: comment-build-status
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -x
+        
+        if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
+          echo "Build failed. see the [build logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
+        else
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
+          echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
+        fi
 
     - name: archive unitest reports (orig)
       if: inputs.run_test

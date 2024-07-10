@@ -869,6 +869,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
+        case EYtSettingType::LAST: {
+            Y_UNREACHABLE();
+        }
         }
     }
 
@@ -1219,8 +1222,12 @@ ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type) {
     return 3u;
 }
 
-EYtSettingTypes operator&(EYtSettingType left, const EYtSettingTypes& right) {
-    return right & left;
+EYtSettingTypes operator|(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left |= right;
+}
+
+EYtSettingTypes operator&(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left &= right;
 }
 
 EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right) {

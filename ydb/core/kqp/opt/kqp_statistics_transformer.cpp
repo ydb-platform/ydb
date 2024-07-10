@@ -27,9 +27,17 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     const TExprNode* path;
 
+    bool readRange = false;
+
     if (auto readTable = inputNode.Maybe<TKqlReadTableBase>()) {
         path = readTable.Cast().Table().Path().Raw();
         nAttrs = readTable.Cast().Columns().Size();
+        auto range = readTable.Cast().Range();
+        auto rangeFrom = range.From().Maybe<TKqlKeyTuple>();
+        auto rangeTo = range.To().Maybe<TKqlKeyTuple>();
+        if (rangeFrom && rangeTo) {
+            readRange = true;
+        }
     } else if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
         path = readRanges.Cast().Table().Path().Raw();
         nAttrs = readRanges.Cast().Columns().Size();
@@ -39,14 +47,29 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path->Content());
     int totalAttrs = tableData.Metadata->Columns.size();
-    nRows = tableData.Metadata->RecordsCount;
+    int origRows = tableData.Metadata->RecordsCount;
 
-    double byteSize = tableData.Metadata->DataSize * (nAttrs / (double)totalAttrs);
+    /**
+     * We need index statistics to calculate this in the future
+     * Right now we use very small estimates to make sure CBO picks Lookup Joins
+     * I.e. there can be a chain of lookup joins in OLTP scenario and we want to make
+     * sure the cardinality doesn't blow up and lookup joins are still being picked
+     */
+    nRows = origRows;
+    if (readRange) {
+        nRows = 1;
+    }
+
+    double byteSize = tableData.Metadata->DataSize * (nAttrs / (double)totalAttrs) * nRows/origRows;
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
     if (kqpCtx.Config->OverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path->Content(), *kqpCtx.Config->OverrideStatistics.Get());
+        if (readRange) {
+            stats->Nrows = 1;
+            stats->ByteSize = nAttrs / stats->Ncols / stats->Nrows;
+        }
     }
 
     if (stats->ColumnStatistics) {

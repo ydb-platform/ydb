@@ -48,76 +48,76 @@ constexpr auto YtSettingTypesCount = 64;
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial                     = 0  /* "initial" */,
-    InferScheme                 = 1  /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
-    ForceInferScheme            = 2  /* "force_infer_schema" "forceinferschema" */,
-    DoNotFailOnInvalidSchema    = 3  /* "do_not_fail_on_invalid_schema" */,
-    DirectRead                  = 4  /* "direct_read" "directread"*/,
-    View                        = 5  /* "view" */,
-    Mode                        = 6  /* "mode" */,
-    Scheme                      = 7  /* "scheme" */,
-    WeakConcat                  = 8  /* "weak_concat" */,
-    Anonymous                   = 9  /* "anonymous" */,
-    WithQB                      = 10 /* "with_qb" */,
-    Inline                      = 11 /* "inline" */,
-    Sample                      = 12 /* "sample" */,
-    JoinLabel                   = 13 /* "joinLabel" */,
-    IgnoreNonExisting           = 14 /* "ignore_non_existing" "ignorenonexisting" */,
-    WarnNonExisting             = 15 /* "warn_non_existing" "warnnonexisting" */,
-    XLock                       = 16 /* "xlock" */,
-    Unordered                   = 17 /* "unordered" */,
-    NonUnique                   = 18 /* "nonUnique" */,
-    UserSchema                  = 19 /* "userschema" */,
-    UserColumns                 = 20 /* "usercolumns" */,
-    StatColumns                 = 21 /* "statcolumns" */,
-    SysColumns                  = 22 /* "syscolumns" */,
-    IgnoreTypeV3                = 23 /* "ignoretypev3" "ignore_type_v3" */,
-    // Table content
-    MemUsage                    = 24 /* "memUsage" */,
-    ItemsCount                  = 25 /* "itemsCount" */,
-    RowFactor                   = 26 /* "rowFactor" */,
-    // Operations
-    Ordered                     = 27 /* "ordered" */,                  // hybrid supported
-    KeyFilter                   = 28 /* "keyFilter" */,
-    KeyFilter2                  = 29 /* "keyFilter2" */,
-    Take                        = 30 /* "take" */,
-    Skip                        = 31 /* "skip" */,
-    Limit                       = 32 /* "limit" */,                    // hybrid supported
-    SortLimitBy                 = 33 /* "sortLimitBy" */,              // hybrid supported
-    SortBy                      = 34 /* "sortBy" */,                   // hybrid supported
-    ReduceBy                    = 35 /* "reduceBy" */,                 // hybrid supported
-    ReduceFilterBy              = 36 /* "reduceFilterBy" */,
-    ForceTransform              = 37 /* "forceTransform" */,           // hybrid supported
-    WeakFields                  = 38 /* "weakFields" */,
-    Sharded                     = 39 /* "sharded" */,
-    CombineChunks               = 40 /* "combineChunks" */,
-    JobCount                    = 41 /* "jobCount" */,                 // hybrid supported
-    JoinReduce                  = 42 /* "joinReduce" */,               // hybrid supported
-    FirstAsPrimary              = 43 /* "firstAsPrimary" */,           // hybrid supported
-    Flow                        = 44 /* "flow" */,                     // hybrid supported
-    KeepSorted                  = 45 /* "keepSorted" */,               // hybrid supported
-    KeySwitch                   = 46 /* "keySwitch" */,                // hybrid supported
-    // Out tables
-    UniqueBy                    = 47 /* "uniqueBy" */,
-    OpHash                      = 48 /* "opHash" */,
-    // Operations
-    MapOutputType               = 49 /* "mapOutputType" */,            // hybrid supported
-    ReduceInputType             = 50 /* "reduceInputType" */,          // hybrid supported
-    NoDq                        = 51 /* "noDq" */,
-    // Read
-    Split                       = 52 /* "split" */,
-    // Write hints
-    CompressionCodec            = 53 /* "compression_codec" "compressioncodec"*/,
-    ErasureCodec                = 54 /* "erasure_codec" "erasurecodec" */,
-    Expiration                  = 55 /* "expiration" */,
-    ReplicationFactor           = 56 /* "replication_factor" "replicationfactor" */,
-    UserAttrs                   = 57 /* "user_attrs", "userattrs" */,
-    Media                       = 58 /* "media" */,
-    PrimaryMedium               = 59 /* "primary_medium", "primarymedium" */,
-    KeepMeta                    = 60 /* "keep_meta", "keepmeta" */,
-    MonotonicKeys               = 61 /* "monotonic_keys", "monotonickeys" */,
-    MutationId                  = 62 /* "mutationid", "mutation_id" */,
-    ColumnGroups                = YtSettingTypesCount - 1 /* "column_groups", "columngroups" */,
+    Initial                           = 0  /* "initial" */,
+    InferScheme                       = 1  /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
+    ForceInferScheme                  = 2  /* "force_infer_schema" "forceinferschema" */,
+    DoNotFailOnInvalidSchema          = 3  /* "do_not_fail_on_invalid_schema" */,
+    DirectRead                        = 4  /* "direct_read" "directread"*/,
+    View                              = 5  /* "view" */,
+    Mode                              = 6  /* "mode" */,
+    Scheme                            = 7  /* "scheme" */,
+    WeakConcat                        = 8  /* "weak_concat" */,
+    Anonymous                         = 9  /* "anonymous" */,
+    WithQB                            = 10 /* "with_qb" */,
+    Inline                            = 11 /* "inline" */,
+    Sample                            = 12 /* "sample" */,
+    JoinLabel                         = 13 /* "joinLabel" */,
+    IgnoreNonExisting                 = 14 /* "ignore_non_existing" "ignorenonexisting" */,
+    WarnNonExisting                   = 15 /* "warn_non_existing" "warnnonexisting" */,
+    XLock                             = 16 /* "xlock" */,
+    Unordered                         = 17 /* "unordered" */,
+    NonUnique                         = 18 /* "nonUnique" */,
+    UserSchema                        = 19 /* "userschema" */,
+    UserColumns                       = 20 /* "usercolumns" */,
+    StatColumns                       = 21 /* "statcolumns" */,
+    SysColumns                        = 22 /* "syscolumns" */,
+    IgnoreTypeV3                      = 23 /* "ignoretypev3" "ignore_type_v3" */,
+    // Table content      
+    MemUsage                          = 24 /* "memUsage" */,
+    ItemsCount                        = 25 /* "itemsCount" */,
+    RowFactor                         = 26 /* "rowFactor" */,
+    // Operations      
+    Ordered                           = 27 /* "ordered" */,                  // hybrid supported
+    KeyFilter                         = 28 /* "keyFilter" */,
+    KeyFilter2                        = 29 /* "keyFilter2" */,
+    Take                              = 30 /* "take" */,
+    Skip                              = 31 /* "skip" */,
+    Limit                             = 32 /* "limit" */,                    // hybrid supported
+    SortLimitBy                       = 33 /* "sortLimitBy" */,              // hybrid supported
+    SortBy                            = 34 /* "sortBy" */,                   // hybrid supported
+    ReduceBy                          = 35 /* "reduceBy" */,                 // hybrid supported
+    ReduceFilterBy                    = 36 /* "reduceFilterBy" */,
+    ForceTransform                    = 37 /* "forceTransform" */,           // hybrid supported
+    WeakFields                        = 38 /* "weakFields" */,
+    Sharded                           = 39 /* "sharded" */,
+    CombineChunks                     = 40 /* "combineChunks" */,
+    JobCount                          = 41 /* "jobCount" */,                 // hybrid supported
+    JoinReduce                        = 42 /* "joinReduce" */,               // hybrid supported
+    FirstAsPrimary                    = 43 /* "firstAsPrimary" */,           // hybrid supported
+    Flow                              = 44 /* "flow" */,                     // hybrid supported
+    KeepSorted                        = 45 /* "keepSorted" */,               // hybrid supported
+    KeySwitch                         = 46 /* "keySwitch" */,                // hybrid supported
+    // Out tables      
+    UniqueBy                          = 47 /* "uniqueBy" */,
+    OpHash                            = 48 /* "opHash" */,
+    // Operations      
+    MapOutputType                     = 49 /* "mapOutputType" */,            // hybrid supported
+    ReduceInputType                   = 50 /* "reduceInputType" */,          // hybrid supported
+    NoDq                              = 51 /* "noDq" */,
+    // Read      
+    Split                             = 52 /* "split" */,
+    // Write hints      
+    CompressionCodec                  = 53 /* "compression_codec" "compressioncodec"*/,
+    ErasureCodec                      = 54 /* "erasure_codec" "erasurecodec" */,
+    Expiration                        = 55 /* "expiration" */,
+    ReplicationFactor                 = 56 /* "replication_factor" "replicationfactor" */,
+    UserAttrs                         = 57 /* "user_attrs", "userattrs" */,
+    Media                             = 58 /* "media" */,
+    PrimaryMedium                     = 59 /* "primary_medium", "primarymedium" */,
+    KeepMeta                          = 60 /* "keep_meta", "keepmeta" */,
+    MonotonicKeys                     = 61 /* "monotonic_keys", "monotonickeys" */,
+    MutationId                        = 62 /* "mutationid", "mutation_id" */,
+    ColumnGroups = YtSettingTypesCount - 1 /* "column_groups", "columngroups" */,
 };
 
 class EYtSettingTypes : std::bitset<YtSettingTypesCount> {
@@ -128,29 +128,29 @@ public:
 
     EYtSettingTypes(EYtSettingType type) : ::NYql::EYtSettingTypes::bitset(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type)) {}
 
-    EYtSettingTypes operator|(const EYtSettingTypes &other) const {
+    EYtSettingTypes operator|(const EYtSettingTypes& other) const {
         return EYtSettingTypes {
-            static_cast<const std::bitset<YtSettingTypesCount> &>(*this) | 
-            static_cast<const std::bitset<YtSettingTypesCount> &>(other)
+            static_cast<const std::bitset<YtSettingTypesCount>&>(*this) | 
+            static_cast<const std::bitset<YtSettingTypesCount>&>(other)
         };
     }
 
-    EYtSettingTypes &operator|=(const EYtSettingTypes &other) {
+    EYtSettingTypes& operator|=(const EYtSettingTypes& other) {
         return *this = *this | other;
     }
 
-    EYtSettingTypes operator&(const EYtSettingTypes &other) const {
+    EYtSettingTypes operator&(const EYtSettingTypes& other) const {
         return EYtSettingTypes {
-            static_cast<const std::bitset<YtSettingTypesCount> &>(*this) &
-            static_cast<const std::bitset<YtSettingTypesCount> &>(other)
+            static_cast<const std::bitset<YtSettingTypesCount>&>(*this) &
+            static_cast<const std::bitset<YtSettingTypesCount>&>(other)
         };
     }
 
-    EYtSettingTypes &operator&=(const EYtSettingTypes &other) {
+    EYtSettingTypes& operator&=(const EYtSettingTypes& other) {
         return *this = *this & other;
     }
 
-    bool HasFlags(const EYtSettingTypes &other) {
+    bool HasFlags(const EYtSettingTypes& other) {
         return *this & other;
     }
 
@@ -159,7 +159,7 @@ public:
     }
 };
 
-EYtSettingTypes operator&(EYtSettingType left, const EYtSettingTypes &right);
+EYtSettingTypes operator&(EYtSettingType left, const EYtSettingTypes& right);
 EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;

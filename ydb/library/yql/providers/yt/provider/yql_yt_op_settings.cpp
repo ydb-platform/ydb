@@ -1219,7 +1219,7 @@ ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type) {
     return 3u;
 }
 
-EYtSettingTypes operator&(EYtSettingType left, const EYtSettingTypes &right) {
+EYtSettingTypes operator&(EYtSettingType left, const EYtSettingTypes& right) {
     return right & left;
 }
 

@@ -57,11 +57,11 @@ $$
 Название параметра | Описание | Значение по умолчанию 
 --- | --- | ---
 `disk_time_available_scale_hdd` | [Параметр `DiskTimeAvailableScale`](#diskTimeAvailable) для VDisk'ов, запущенных поверх HDD-устройств. | `1000`
-`disk_time_available_scale_ssd` | [Параметр `DiskTimeAvailableScale`](#diskTimeAvailable) для VDisk'ов, запущенных поверх HDD-устройств. | `1000`
-`disk_time_available_scale_nvme` | [Параметр `DiskTimeAvailableScale`](#diskTimeAvailable) для VDisk'ов, запущенных поверх HDD-устройств. | `1000`
-`burst_threshold_hdd` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх HDD-устройств. | `200000000`
-`burst_threshold_ssd` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх SSD-устройств. | `50000000`
-`burst_threshold_nvme` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх NVME-устройств. | `32000000`
+`disk_time_available_scale_ssd` | [Параметр `DiskTimeAvailableScale`](#diskTimeAvailable) для VDisk'ов, запущенных поверх SSD-устройств. | `1000`
+`disk_time_available_scale_nvme` | [Параметр `DiskTimeAvailableScale`](#diskTimeAvailable) для VDisk'ов, запущенных поверх NVME-устройств. | `1000`
+`burst_threshold_ns_hdd` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх HDD-устройств. | `200000000`
+`burst_threshold_ns_ssd` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх SSD-устройств. | `50000000`
+`burst_threshold_ns_nvme` | [Параметр `BurstThresholdNs`](#burstDetector) для VDisk'ов, запущенных поверх NVME-устройств. | `32000000`
 
 #### Примеры конфигурации метрик
 Если ваша система использует NVME-устройства и обеспечивает на 10% более высокую производительность, чем эталон, то добавьте следующую секцию в настройки `immediate_controls_config` динамической конфигурации кластера:
@@ -73,7 +73,7 @@ vdisk_controls:
 Если вы используете HDD-устройства и в условиях вашей нагрузки максимально допустимое время отклика составляет 500 мс, то добавьте следующую секцию в настройки `immediate_controls_config` динамической конфигурации кластера:
 ```
 vdisk_controls:
-  burst_threshold_hdd: 500000000
+  burst_threshold_ns_hdd: 500000000
 ```
 
 ### Как сравнить производительность своей инсталляции с эталонной

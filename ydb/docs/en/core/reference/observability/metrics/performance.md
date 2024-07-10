@@ -62,9 +62,9 @@ Since the coefficients for the request cost formula were measured on specific ph
 | `disk_time_available_scale_hdd` | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on HDD devices. | `1000` |
 | `disk_time_available_scale_ssd` | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on SSD devices. | `1000` |
 | `disk_time_available_partition_nvme` | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on NVME devices. | `1000` |
-| `burst_threshold_hdd` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on HDD devices. | `200000000` |
-| `burst_threshold_ssd` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on SSD devices. | `50000000` |
-| `burst_threshold_nvme` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on NVME devices. | `32000000` |
+| `burst_threshold_ns_hdd` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on HDD devices. | `200000000` |
+| `burst_threshold_ns_ssd` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on SSD devices. | `50000000` |
+| `burst_threshold_ns_nvme` | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on NVME devices. | `32000000` |
 
 #### Configuration Examples
 
@@ -79,7 +79,7 @@ If you are using HDD devices and under your workload conditions, the maximum tol
 
 ```
 vdisk_controls:
-  burst_threshold_hdd: 500000000
+  burst_threshold_ns_hdd: 500000000
 ```
 
 ### How to Compare the Performance of Your Installation with the Baseline
